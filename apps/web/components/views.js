@@ -499,6 +499,30 @@ export function WorkspacesManagerView({
     }
   }
 
+  async function handleDownloadUploadedDocument(doc) {
+    try {
+      const response = await fetch(WORKSPACES_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "downloadUploadedDocument",
+          payload: {
+            documentId: doc.id
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Download failed");
+      }
+
+      downloadBase64File(data.download.contentBase64, data.download.fileName, data.download.mimeType);
+    } catch (error) {
+      window.alert(String(error.message || error));
+    }
+  }
+
   function renderGeneratedDownloadControls(doc) {
     if (doc.sourceType !== "generated") return null;
     const formats = Array.isArray(doc.availableFormats) && doc.availableFormats.length ? doc.availableFormats : ["txt"];
@@ -519,6 +543,11 @@ export function WorkspacesManagerView({
     );
   }
 
+  function renderUploadedDownloadControl(doc) {
+    if (doc.sourceType === "generated") return null;
+    return <button className="table-btn" type="button" onClick={() => handleDownloadUploadedDocument(doc)} disabled={isWorking}>Download</button>;
+  }
+
   function renderInlineDocumentRow(doc, rowKey) {
     return (
       <div className="doc-inline-row" key={rowKey}>
@@ -531,6 +560,7 @@ export function WorkspacesManagerView({
           ))}
         </div>
         <div className="inline-actions">
+          {renderUploadedDownloadControl(doc)}
           {renderGeneratedDownloadControls(doc)}
           <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
           <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
@@ -592,6 +622,7 @@ export function WorkspacesManagerView({
                 ))}
               </div>
               <div className="inline-actions" style={{ marginTop: "10px" }}>
+                {renderUploadedDownloadControl(doc)}
                 {renderGeneratedDownloadControls(doc)}
                 {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
                 <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
@@ -642,6 +673,7 @@ export function WorkspacesManagerView({
                   <td>{doc.sizeLabel}</td>
                   <td>
                     <div className="inline-actions">
+                      {renderUploadedDownloadControl(doc)}
                       {renderGeneratedDownloadControls(doc)}
                       {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
                       <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>

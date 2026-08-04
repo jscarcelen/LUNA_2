@@ -39,6 +39,7 @@ let workspaceColorSupported;
 let subjectColorSupported;
 
 const GENERATED_QUIZ_NAME_PREFIX = "Generated Quiz - ";
+const GENERATED_DOCUMENT_BUNDLE_VERSION = "generated-document-bundle-v1";
 
 async function ensureTopicTags(client, subjectId, tags) {
   const hasTopicTagColor = await supportsTopicTagColor(client);
@@ -178,6 +179,54 @@ function getGeneratedExportSpec(format) {
 function withFileExtension(name, extension) {
   const baseName = String(name || "Generated Quiz").trim().replace(/\.[^.]+$/, "") || "Generated Quiz";
   return `${baseName}.${extension}`;
+}
+
+function getExtensionFromName(name, fallback = "txt") {
+  const match = String(name || "").trim().toLowerCase().match(/\.([a-z0-9]+)$/i);
+  return match?.[1] || fallback;
+}
+
+function getMimeTypeForExtension(extension) {
+  const normalized = String(extension || "").trim().toLowerCase();
+  if (normalized === "html" || normalized === "htm") return "text/html";
+  if (normalized === "json") return "application/json";
+  if (normalized === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (normalized === "pdf") return "application/pdf";
+  if (normalized === "md") return "text/markdown";
+  if (normalized === "csv") return "text/csv";
+  return "text/plain";
+}
+
+function buildGeneratedDocumentBundle({ plainText, downloads }) {
+  return JSON.stringify({
+    version: GENERATED_DOCUMENT_BUNDLE_VERSION,
+    plainText: String(plainText || ""),
+    downloads: Object.fromEntries(
+      Object.entries(downloads || {}).map(([format, contentBase64]) => {
+        const spec = getGeneratedExportSpec(format);
+        return [spec.format, {
+          mimeType: spec.mimeType,
+          extension: spec.extension,
+          contentBase64: String(contentBase64 || "")
+        }];
+      }).filter(([, entry]) => entry.contentBase64)
+    )
+  });
+}
+
+function parseGeneratedDocumentBundle(content) {
+  const text = String(content || "").trim();
+  if (!text.startsWith("{")) return null;
+
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.version !== GENERATED_DOCUMENT_BUNDLE_VERSION || typeof parsed?.plainText !== "string" || typeof parsed?.downloads !== "object") {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 function inferDocumentSourceType(row) {
@@ -353,16 +402,22 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     const list = docsBySubject.get(doc.subject_id) || [];
     const mappedFolderIds = hasDocumentFolders ? normalizeFolderIds(folderIdsByDocId.get(doc.id) || []) : [];
     const folderIds = mappedFolderIds.length ? mappedFolderIds : normalizeFolderIds([doc.folder_id || ""]);
+    const sourceType = inferDocumentSourceType(doc);
+    const bundle = sourceType === "generated" ? parseGeneratedDocumentBundle(doc.content) : null;
+    const availableFormats = sourceType === "generated"
+      ? Array.from(new Set([...(bundle ? Object.keys(bundle.downloads || {}) : []), ...(exportFormatsByDocId.get(doc.id) || []), "txt"]))
+      : [getExtensionFromName(doc.name, "txt")];
+    const displayContent = bundle?.plainText || doc.content;
     list.push({
       id: doc.id,
       name: doc.name,
-      content: doc.content,
+      content: displayContent,
       preview: doc.preview,
       folderId: folderIds[0] || "",
       folderIds,
       sizeLabel: `${(Number(doc.size_bytes || 0) / 1024).toFixed(1)} KB`,
-      sourceType: inferDocumentSourceType(doc),
-      availableFormats: Array.from(new Set(exportFormatsByDocId.get(doc.id) || ["txt"])),
+      sourceType,
+      availableFormats,
       tags: tagsByDocId.get(doc.id) || []
     });
     docsBySubject.set(doc.subject_id, list);
@@ -676,7 +731,7 @@ async function persistTextDocuments(subjectId, files, options = {}) {
       ? `${GENERATED_QUIZ_NAME_PREFIX}${baseName}`
       : baseName;
     const content = String(file.content || "");
-    const preview = content.trim().slice(0, 180) || "(empty file)";
+    const preview = String(file.preview || content).trim().slice(0, 180) || "(empty file)";
     const sizeBytes = Number(file.sizeBytes || Buffer.byteLength(content, "utf8") || 0);
 
     const row = {
@@ -816,12 +871,25 @@ export async function saveGeneratedQuizDocument(subjectId, file, options = {}) {
 }
 
 export async function saveGeneratedQuizBundle(subjectId, file, downloads, options = {}) {
+  const plainText = String(file.content || "");
+  const bundledFile = {
+    ...file,
+    content: buildGeneratedDocumentBundle({ plainText, downloads }),
+    preview: plainText,
+    sizeBytes: Buffer.byteLength(plainText, "utf8")
+  };
+
   const client = createSupabaseAdminClient();
   const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
-  const saved = await saveGeneratedQuizDocument(subjectId, file, options);
+  const saved = await saveGeneratedQuizDocument(subjectId, bundledFile, options);
 
   if (!saved) return null;
-  if (!hasGeneratedDocumentExports) return saved;
+  if (!hasGeneratedDocumentExports) {
+    return {
+      ...saved,
+      availableFormats: Array.from(new Set(Object.keys(downloads || {}).concat("txt")))
+    };
+  }
 
   const rows = Object.entries(downloads || {}).map(([format, contentBase64]) => {
     const spec = getGeneratedExportSpec(format);
@@ -862,6 +930,29 @@ export async function getGeneratedDocumentDownload(documentId, format) {
     throw new Error("Document not found.");
   }
 
+  const bundle = parseGeneratedDocumentBundle(document.content);
+
+  if (bundle) {
+    if (requested.format === "txt") {
+      return {
+        format: requested.format,
+        fileName: withFileExtension(document.name, requested.extension),
+        mimeType: requested.mimeType,
+        contentBase64: Buffer.from(bundle.plainText, "utf8").toString("base64")
+      };
+    }
+
+    const bundledExport = bundle.downloads?.[requested.format];
+    if (bundledExport?.contentBase64) {
+      return {
+        format: requested.format,
+        fileName: withFileExtension(document.name, bundledExport.extension || requested.extension),
+        mimeType: bundledExport.mimeType || requested.mimeType,
+        contentBase64: bundledExport.contentBase64
+      };
+    }
+  }
+
   if (requested.format === "txt") {
     const content = String(document.content || "");
     return {
@@ -892,6 +983,31 @@ export async function getGeneratedDocumentDownload(documentId, format) {
     fileName: exportRow.file_name || withFileExtension(document.name, requested.extension),
     mimeType: exportRow.mime_type || requested.mimeType,
     contentBase64: exportRow.content_base64
+  };
+}
+
+export async function getUploadedDocumentDownload(documentId) {
+  const client = createSupabaseAdminClient();
+  const { data: document, error } = await client
+    .from("documents")
+    .select("id, name, content")
+    .eq("id", documentId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!document) {
+    throw new Error("Document not found.");
+  }
+
+  const extension = getExtensionFromName(document.name, "txt");
+  const bundle = parseGeneratedDocumentBundle(document.content);
+  const content = bundle?.plainText || String(document.content || "");
+
+  return {
+    format: extension,
+    fileName: document.name || `document.${extension}`,
+    mimeType: getMimeTypeForExtension(extension),
+    contentBase64: Buffer.from(content, "utf8").toString("base64")
   };
 }
 

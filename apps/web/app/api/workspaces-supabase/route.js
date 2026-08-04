@@ -4,6 +4,7 @@ import {
   createSubject,
   createWorkspace,
   getGeneratedDocumentDownload,
+  getUploadedDocumentDownload,
   listWorkspaceTree,
   removeDocument,
   removeFolder,
@@ -168,6 +169,11 @@ export async function POST(request) {
 
     if (action === "downloadGeneratedDocument") {
       const download = await getGeneratedDocumentDownload(payload.documentId, payload.format);
+      return NextResponse.json({ download });
+    }
+
+    if (action === "downloadUploadedDocument") {
+      const download = await getUploadedDocumentDownload(payload.documentId);
       return NextResponse.json({ download });
     }
 

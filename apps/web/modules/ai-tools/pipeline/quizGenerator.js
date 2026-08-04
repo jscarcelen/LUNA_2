@@ -1,8 +1,10 @@
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
+import { isEmbeddingProviderConfigured } from "./embeddings.js";
 import { generateQuizJsonLocal } from "./provider-local.js";
+import { generateQuizJsonWithOpenAi, isQuizLlmConfigured } from "./provider-openai.js";
 import { selectTopChunks } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
-import { listDocumentChunks } from "../../../lib/workspacesRepository.js";
+import { listDocumentChunks, matchDocumentChunksByEmbedding } from "../../../lib/workspacesRepository.js";
 
 function collectWorkspaceDocs(workspaces, scope) {
   const workspaceFilter = String(scope.workspaceId || "").trim();
@@ -92,6 +94,52 @@ async function loadChunksForScope(selectedDocuments, chunking) {
   });
 }
 
+async function loadVectorMatchesForScope(selectedDocuments, config, chunking) {
+  const usesDefaultChunking =
+    Number(chunking.chunkWords) === DEFAULT_CHUNK_WORDS &&
+    Number(chunking.overlapWords) === DEFAULT_OVERLAP_WORDS;
+
+  if (!usesDefaultChunking || !isEmbeddingProviderConfigured()) {
+    return [];
+  }
+
+  const queryText = `${config.topicPrompt || ""} ${config.title || ""}`.trim();
+  if (!queryText) return [];
+
+  const matches = await matchDocumentChunksByEmbedding(
+    selectedDocuments.map((document) => document.id),
+    queryText,
+    {
+      chunkWords: chunking.chunkWords,
+      overlapWords: chunking.overlapWords,
+      matchCount: Math.max(Number(config.questionCount || 6) * 5, 12)
+    }
+  );
+
+  if (!matches.length) return [];
+
+  const byDocumentId = new Map(selectedDocuments.map((document) => [document.id, document]));
+  return matches.map((chunk) => {
+    const document = byDocumentId.get(chunk.documentId);
+    return {
+      id: `${chunk.documentId}-chunk-${chunk.chunkIndex + 1}`,
+      documentId: chunk.documentId,
+      documentName: document?.name || "Untitled document",
+      subjectId: chunk.subjectId || document?.subjectId || "",
+      folderIds: Array.isArray(document?.folderIds) ? document.folderIds : [],
+      tags: Array.isArray(document?.tags) ? document.tags : [],
+      chunkIndex: chunk.chunkIndex,
+      wordCount: chunk.wordCount,
+      startWord: chunk.startWord,
+      endWord: chunk.endWord,
+      content: chunk.content,
+      keywords: chunk.keywords,
+      semanticScore: chunk.semanticScore,
+      vectorSimilarity: chunk.vectorSimilarity || 0
+    };
+  });
+}
+
 export async function runQuizGeneration(config) {
   const workspaces = await loadWorkspaceTreeForAi();
   const selectedDocuments = collectWorkspaceDocs(workspaces, config.scope || {});
@@ -110,16 +158,40 @@ export async function runQuizGeneration(config) {
     throw new Error("Selected documents do not contain enough text to build quiz chunks.");
   }
 
-  const rankedChunks = selectTopChunks(chunks, config);
+  const vectorMatchedChunks = await loadVectorMatchesForScope(selectedDocuments, config, chunking);
+  const rankedChunks = selectTopChunks(vectorMatchedChunks.length ? vectorMatchedChunks : chunks, config);
   const scopeSummary = buildScopeSummary(selectedDocuments);
-  const quizJson = generateQuizJsonLocal({
-    config: {
-      ...config,
-      chunking
-    },
-    chunks: rankedChunks,
-    scopeSummary
-  });
+  const normalizedConfig = {
+    ...config,
+    chunking
+  };
+
+  let quizJson;
+  let generationFallbackReason = "";
+
+  if (isQuizLlmConfigured()) {
+    try {
+      quizJson = await generateQuizJsonWithOpenAi({
+        config: normalizedConfig,
+        chunks: rankedChunks,
+        scopeSummary
+      });
+    } catch (error) {
+      generationFallbackReason = String(error.message || error);
+    }
+  }
+
+  if (!quizJson) {
+    quizJson = generateQuizJsonLocal({
+      config: normalizedConfig,
+      chunks: rankedChunks,
+      scopeSummary
+    });
+
+    if (generationFallbackReason) {
+      quizJson.pipeline.fallbackReason = generationFallbackReason;
+    }
+  }
 
   return {
     quizJson,

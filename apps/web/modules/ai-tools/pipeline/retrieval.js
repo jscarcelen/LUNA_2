@@ -10,7 +10,7 @@ function normalizeTerms(value) {
 
 function scoreChunkAgainstQuery(chunk, queryTerms, selectedTags) {
   const body = `${chunk.content} ${chunk.keywords.join(" ")} ${chunk.tags.join(" ")}`.toLowerCase();
-  let score = chunk.semanticScore || 0;
+  let score = (chunk.semanticScore || 0) + ((chunk.vectorSimilarity || 0) * 3);
 
   for (const term of queryTerms) {
     if (body.includes(term)) score += 1.8;

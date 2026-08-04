@@ -19,10 +19,17 @@ import {
   DEFAULT_CHUNK_WORDS,
   DEFAULT_OVERLAP_WORDS
 } from "../modules/ai-tools/pipeline/chunking.js";
+import {
+  embedQuery,
+  embedTexts,
+  isEmbeddingProviderConfigured,
+  toVectorLiteral
+} from "../modules/ai-tools/pipeline/embeddings.js";
 
 let folderHierarchySupported;
 let documentFoldersSupported;
 let documentChunksSupported;
+let documentChunkEmbeddingsSupported;
 let topicTagColorSupported;
 let workspaceColorSupported;
 let subjectColorSupported;
@@ -101,6 +108,20 @@ async function supportsDocumentChunks(client) {
 
   documentChunksSupported = !error;
   return documentChunksSupported;
+}
+
+async function supportsDocumentChunkEmbeddings(client) {
+  if (typeof documentChunkEmbeddingsSupported === "boolean") {
+    return documentChunkEmbeddingsSupported;
+  }
+
+  const { error } = await client
+    .from("document_chunks")
+    .select("embedding")
+    .limit(1);
+
+  documentChunkEmbeddingsSupported = !error;
+  return documentChunkEmbeddingsSupported;
 }
 
 async function supportsTopicTagColor(client) {
@@ -551,6 +572,7 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
   const client = createSupabaseAdminClient();
   const hasDocumentFolders = await supportsDocumentFolders(client);
   const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
   const meta = normalizeDocumentMeta(options);
   const folderIds = normalizeFolderIds(meta.folderIds || []);
   if (folderIds.length > 1 && !hasDocumentFolders) {
@@ -613,6 +635,16 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
     });
 
     if (chunkRows.length) {
+      if (hasDocumentChunkEmbeddings && isEmbeddingProviderConfigured()) {
+        const embeddings = await embedTexts(chunkRows.map((row) => row.content));
+        for (let index = 0; index < chunkRows.length; index += 1) {
+          const embedding = embeddings[index];
+          if (embedding) {
+            chunkRows[index].embedding = toVectorLiteral(embedding);
+          }
+        }
+      }
+
       const { error: chunkInsertError } = await client
         .from("document_chunks")
         .insert(chunkRows);
@@ -754,5 +786,49 @@ export async function listDocumentChunks(documentIds, options = {}) {
     semanticScore: row.semantic_score,
     keywords: Array.isArray(row.keywords) ? row.keywords : [],
     content: row.content || ""
+  }));
+}
+
+export async function matchDocumentChunksByEmbedding(documentIds, queryText, options = {}) {
+  const ids = Array.isArray(documentIds) ? documentIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+  const normalizedQuery = String(queryText || "").trim();
+  if (!ids.length || !normalizedQuery) return [];
+  if (!isSupabaseConfigured() || !isEmbeddingProviderConfigured()) return [];
+
+  const client = createSupabaseAdminClient();
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+  if (!hasDocumentChunks || !hasDocumentChunkEmbeddings) return [];
+
+  const embedding = await embedQuery(normalizedQuery);
+  if (!embedding) return [];
+
+  const chunkWords = Number(options.chunkWords || DEFAULT_CHUNK_WORDS);
+  const overlapWords = Number(options.overlapWords || DEFAULT_OVERLAP_WORDS);
+  const matchCount = Math.max(1, Number(options.matchCount || 12));
+
+  const { data, error } = await client.rpc("match_document_chunks", {
+    query_embedding: toVectorLiteral(embedding),
+    match_count: matchCount,
+    filter_document_ids: ids,
+    filter_chunk_words: chunkWords,
+    filter_overlap_words: overlapWords
+  });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    documentId: row.document_id,
+    subjectId: row.subject_id,
+    chunkIndex: row.chunk_index,
+    chunkWords: row.chunk_words,
+    overlapWords: row.overlap_words,
+    startWord: row.start_word,
+    endWord: row.end_word,
+    wordCount: row.word_count,
+    semanticScore: row.semantic_score,
+    keywords: Array.isArray(row.keywords) ? row.keywords : [],
+    content: row.content || "",
+    vectorSimilarity: Number(row.similarity || 0)
   }));
 }

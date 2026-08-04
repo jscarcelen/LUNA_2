@@ -31,6 +31,7 @@ Apply SQL migration:
 - `supabase/migrations/202608040004_add_topic_tag_color.sql`
 - `supabase/migrations/202608040005_add_workspace_subject_color.sql`
 - `supabase/migrations/202608040006_add_document_chunks.sql`
+- `supabase/migrations/202608040007_add_document_chunk_embeddings.sql`
 
 This creates:
 
@@ -43,6 +44,12 @@ This creates:
 - `document_tags`
 - `document_folders` (document-to-many-folders assignment)
 - `document_chunks` (persisted overlapping text chunks for AI retrieval)
+- `document_chunks.embedding` via pgvector for vector similarity retrieval
+
+## 3.1) Optional embedding env vars
+
+- `OPENAI_API_KEY` for upload-time chunk embeddings and query embeddings
+- `LUNA_EMBEDDING_MODEL` optional override, defaults to `text-embedding-3-small`
 
 ## 4) Test connectivity
 

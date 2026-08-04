@@ -4,18 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
 import { pageTitles } from "./data";
-import {
-  AnalyticsView,
-  BuilderView,
-  ChatView,
-  DashboardView,
-  MarketplaceView,
-  QuizView,
-  RevenueView,
-  WorkspacesManagerView
-} from "./views";
+import { WorkspacePage } from "../modules/workspace";
+import { DashboardPage } from "../modules/dashboard";
+import { AgentMarketplacePage } from "../modules/agent-marketplace";
+import { AIToolsHubPage, AIToolRuntimePage, findAiToolById } from "../modules/ai-tools";
+import { BuilderView, RevenueView } from "./views";
 
-const defaultPage = { student: "dashboard", teacher: "builder" };
+const defaultPage = { student: "workspaces", teacher: "workspaces" };
 const WORKSPACES_API = "/api/workspaces-supabase";
 
 export function AppShell() {
@@ -27,7 +22,9 @@ export function AppShell() {
   const [statusMessage, setStatusMessage] = useState("Loading workspaces...");
   const [isWorking, setIsWorking] = useState(false);
 
-  const title = pageTitles[page] || "LUNA";
+  const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "") : "";
+  const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
+  const title = currentAiTool ? currentAiTool.name : (pageTitles[page] || "LUNA");
 
   useEffect(() => {
     loadWorkspaces();
@@ -100,10 +97,10 @@ export function AppShell() {
   }
 
   const content = useMemo(() => {
-    if (page === "dashboard") return <DashboardView />;
+    if (page === "dashboard") return <DashboardPage />;
     if (page === "workspaces") {
       return (
-        <WorkspacesManagerView
+        <WorkspacePage
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -113,9 +110,11 @@ export function AppShell() {
           onSelectSubject={handleSelectSubject}
           onCreateWorkspace={handleCreateWorkspace}
           onRenameWorkspace={handleRenameWorkspace}
+          onSetWorkspaceColor={handleSetWorkspaceColor}
           onRemoveWorkspace={handleRemoveWorkspace}
           onCreateSubject={handleCreateSubject}
           onRenameSubject={handleRenameSubject}
+          onSetSubjectColor={handleSetSubjectColor}
           onRemoveSubject={handleRemoveSubject}
           onCreateFolder={handleCreateFolder}
           onAddTopicTag={handleAddTopicTag}
@@ -123,20 +122,36 @@ export function AppShell() {
           onRemoveFolder={handleRemoveFolder}
           onRenameTopicTag={handleRenameTopicTag}
           onRemoveTopicTag={handleRemoveTopicTag}
+          onSetTopicTagColor={handleSetTopicTagColor}
           onUploadTxt={handleUploadTxt}
           onRenameDocument={handleRenameDocument}
           onRemoveDocument={handleRemoveDocument}
+          onUpdateDocumentMeta={handleUpdateDocumentMeta}
         />
       );
     }
-    if (page === "quiz") return <QuizView />;
-    if (page === "chat") return <ChatView />;
-    if (page === "analytics") return <AnalyticsView />;
-    if (page === "marketplace") return <MarketplaceView onGoBuilder={() => setPage("builder")} />;
+    if (page === "ai-tools") {
+      return <AIToolsHubPage onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)} />;
+    }
+    if (currentAiTool) {
+      const ToolComponent = currentAiTool.component;
+      return (
+        <AIToolRuntimePage title={currentAiTool.name} description={currentAiTool.description} onBack={() => setPage("ai-tools")}>
+          <ToolComponent
+            toolContext={{
+              workspaces,
+              selectedWorkspaceId,
+              selectedSubjectId
+            }}
+          />
+        </AIToolRuntimePage>
+      );
+    }
+    if (page === "marketplace") return <AgentMarketplacePage onGoBuilder={() => setPage("builder")} />;
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
-    return <DashboardView />;
-  }, [page, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
+    return <DashboardPage />;
+  }, [page, currentAiTool, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);
@@ -159,6 +174,11 @@ export function AppShell() {
   async function handleRenameWorkspace(workspaceId, nextName) {
     if (!workspaceId) return;
     await runWorkspaceAction("renameWorkspace", { workspaceId, nextName });
+  }
+
+  async function handleSetWorkspaceColor(workspaceId, color) {
+    if (!workspaceId) return;
+    await runWorkspaceAction("setWorkspaceColor", { workspaceId, color });
   }
 
   async function handleRemoveWorkspace(workspaceId) {
@@ -199,6 +219,15 @@ export function AppShell() {
       workspaceId: selectedWorkspaceId,
       subjectId,
       nextName
+    });
+  }
+
+  async function handleSetSubjectColor(subjectId, color) {
+    if (!selectedWorkspaceId || !subjectId) return;
+    await runWorkspaceAction("setSubjectColor", {
+      workspaceId: selectedWorkspaceId,
+      subjectId,
+      color
     });
   }
 
@@ -290,6 +319,16 @@ export function AppShell() {
     });
   }
 
+  async function handleSetTopicTagColor(tag, color) {
+    if (!selectedWorkspaceId || !selectedSubjectId || !tag) return;
+    await runWorkspaceAction("setTopicTagColor", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: selectedSubjectId,
+      tag,
+      color
+    });
+  }
+
   async function handleUploadTxt(files, options) {
     if (!selectedWorkspaceId || !selectedSubjectId) return;
 
@@ -307,7 +346,7 @@ export function AppShell() {
     await runWorkspaceAction("uploadDocuments", {
       workspaceId: selectedWorkspaceId,
       subjectId: selectedSubjectId,
-      folderId: options?.folderId || "",
+      folderIds: Array.isArray(options?.folderIds) ? options.folderIds : [],
       tags: options?.tags || [],
       files: documents
     });
@@ -329,6 +368,17 @@ export function AppShell() {
       workspaceId: selectedWorkspaceId,
       subjectId: selectedSubjectId,
       documentId
+    });
+  }
+
+  async function handleUpdateDocumentMeta(documentId, options = {}) {
+    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return;
+    await runWorkspaceAction("updateDocumentMeta", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: selectedSubjectId,
+      documentId,
+      folderIds: Array.isArray(options.folderIds) ? options.folderIds : [],
+      tags: Array.isArray(options.tags) ? options.tags : []
     });
   }
 

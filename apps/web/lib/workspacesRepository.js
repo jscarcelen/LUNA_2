@@ -1,13 +1,35 @@
-import { createSupabaseAdminClient, getDemoOwnerUserId } from "./supabaseClient.js";
+import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } from "./supabaseClient.js";
+import {
+  DEFAULT_SUBJECT_COLOR,
+  DEFAULT_WORKSPACE_COLOR,
+  normalizeSubjectColor,
+  normalizeSubjectName,
+  normalizeWorkspaceColor,
+  normalizeWorkspaceName,
+  DEFAULT_TOPIC_TAG_COLOR,
+  dedupeTagNames,
+  normalizeTagName,
+  normalizeTopicTagColor,
+  normalizeDocumentMeta,
+  normalizeDocumentName,
+  normalizeFolderIds
+} from "../modules/core/contracts.js";
+import {
+  chunkDocument,
+  DEFAULT_CHUNK_WORDS,
+  DEFAULT_OVERLAP_WORDS
+} from "../modules/ai-tools/pipeline/chunking.js";
 
 let folderHierarchySupported;
-
-function dedupeTags(tags) {
-  return Array.from(new Set((tags || []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean)));
-}
+let documentFoldersSupported;
+let documentChunksSupported;
+let topicTagColorSupported;
+let workspaceColorSupported;
+let subjectColorSupported;
 
 async function ensureTopicTags(client, subjectId, tags) {
-  const normalized = dedupeTags(tags);
+  const hasTopicTagColor = await supportsTopicTagColor(client);
+  const normalized = dedupeTagNames(tags);
   if (!normalized.length) return [];
 
   const { data: existing, error: existingError } = await client
@@ -24,14 +46,14 @@ async function ensureTopicTags(client, subjectId, tags) {
   if (missing.length) {
     const { error: insertError } = await client
       .from("topic_tags")
-      .insert(missing.map((tag) => ({ subject_id: subjectId, tag })));
+        .insert(missing.map((tag) => ({ subject_id: subjectId, tag })));
 
     if (insertError) throw insertError;
   }
 
   const { data: allTags, error: allTagsError } = await client
     .from("topic_tags")
-    .select("id, tag")
+    .select(hasTopicTagColor ? "id, tag, color" : "id, tag")
     .eq("subject_id", subjectId)
     .in("tag", normalized);
 
@@ -44,30 +66,96 @@ async function supportsFolderHierarchy(client) {
     return folderHierarchySupported;
   }
 
-  const { data, error } = await client
-    .from("information_schema.columns")
-    .select("column_name")
-    .eq("table_schema", "public")
-    .eq("table_name", "folders")
-    .eq("column_name", "parent_folder_id")
+  const { error } = await client
+    .from("folders")
+    .select("parent_folder_id")
     .limit(1);
 
-  if (error) {
-    folderHierarchySupported = false;
-    return folderHierarchySupported;
+  folderHierarchySupported = !error;
+  return folderHierarchySupported;
+}
+
+async function supportsDocumentFolders(client) {
+  if (typeof documentFoldersSupported === "boolean") {
+    return documentFoldersSupported;
   }
 
-  folderHierarchySupported = Boolean(data && data.length);
-  return folderHierarchySupported;
+  const { error } = await client
+    .from("document_folders")
+    .select("document_id")
+    .limit(1);
+
+  documentFoldersSupported = !error;
+  return documentFoldersSupported;
+}
+
+async function supportsDocumentChunks(client) {
+  if (typeof documentChunksSupported === "boolean") {
+    return documentChunksSupported;
+  }
+
+  const { error } = await client
+    .from("document_chunks")
+    .select("document_id")
+    .limit(1);
+
+  documentChunksSupported = !error;
+  return documentChunksSupported;
+}
+
+async function supportsTopicTagColor(client) {
+  if (typeof topicTagColorSupported === "boolean") {
+    return topicTagColorSupported;
+  }
+
+  const { error } = await client
+    .from("topic_tags")
+    .select("color")
+    .limit(1);
+
+  topicTagColorSupported = !error;
+  return topicTagColorSupported;
+}
+
+async function supportsWorkspaceColor(client) {
+  if (typeof workspaceColorSupported === "boolean") {
+    return workspaceColorSupported;
+  }
+
+  const { error } = await client
+    .from("workspaces")
+    .select("color")
+    .limit(1);
+
+  workspaceColorSupported = !error;
+  return workspaceColorSupported;
+}
+
+async function supportsSubjectColor(client) {
+  if (typeof subjectColorSupported === "boolean") {
+    return subjectColorSupported;
+  }
+
+  const { error } = await client
+    .from("subjects")
+    .select("color")
+    .limit(1);
+
+  subjectColorSupported = !error;
+  return subjectColorSupported;
 }
 
 export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const client = createSupabaseAdminClient();
   const hasFolderHierarchy = await supportsFolderHierarchy(client);
+  const hasDocumentFolders = await supportsDocumentFolders(client);
+  const hasTopicTagColor = await supportsTopicTagColor(client);
+  const hasWorkspaceColor = await supportsWorkspaceColor(client);
+  const hasSubjectColor = await supportsSubjectColor(client);
 
   const { data: workspaces, error: wsError } = await client
     .from("workspaces")
-    .select("id, name, owner_user_id")
+    .select(hasWorkspaceColor ? "id, name, color, owner_user_id" : "id, name, owner_user_id")
     .eq("owner_user_id", ownerUserId)
     .order("created_at", { ascending: true });
 
@@ -78,7 +166,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
 
   const { data: subjects, error: subError } = await client
     .from("subjects")
-    .select("id, workspace_id, name")
+    .select(hasSubjectColor ? "id, workspace_id, name, color" : "id, workspace_id, name")
     .in("workspace_id", workspaceIds)
     .order("created_at", { ascending: true });
   if (subError) throw subError;
@@ -94,7 +182,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
         .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     subjectIds.length
-      ? client.from("topic_tags").select("id, subject_id, tag").in("subject_id", subjectIds).order("created_at", { ascending: true })
+      ? client.from("topic_tags").select(hasTopicTagColor ? "id, subject_id, tag, color" : "id, subject_id, tag").in("subject_id", subjectIds).order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     subjectIds.length
       ? client.from("documents").select("id, subject_id, folder_id, name, content, preview, size_bytes").in("subject_id", subjectIds).order("created_at", { ascending: false })
@@ -115,7 +203,15 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       .in("document_id", docIds)
     : { data: [], error: null };
 
+  const docFoldersRes = docIds.length && hasDocumentFolders
+    ? await client
+      .from("document_folders")
+      .select("document_id, folder_id")
+      .in("document_id", docIds)
+    : { data: [], error: null };
+
   if (docTagsRes.error) throw docTagsRes.error;
+  if (docFoldersRes.error) throw docFoldersRes.error;
 
   const foldersBySubject = new Map();
   for (const folder of foldersRes.data || []) {
@@ -127,7 +223,10 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const topicTagsBySubject = new Map();
   for (const tag of tagsRes.data || []) {
     const list = topicTagsBySubject.get(tag.subject_id) || [];
-    list.push(tag.tag);
+    list.push({
+      name: tag.tag,
+      color: tag.color || DEFAULT_TOPIC_TAG_COLOR
+    });
     topicTagsBySubject.set(tag.subject_id, list);
   }
 
@@ -139,15 +238,25 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     tagsByDocId.set(row.document_id, list);
   }
 
+  const folderIdsByDocId = new Map();
+  for (const row of docFoldersRes.data || []) {
+    const list = folderIdsByDocId.get(row.document_id) || [];
+    if (row.folder_id) list.push(row.folder_id);
+    folderIdsByDocId.set(row.document_id, list);
+  }
+
   const docsBySubject = new Map();
   for (const doc of docs) {
     const list = docsBySubject.get(doc.subject_id) || [];
+    const mappedFolderIds = hasDocumentFolders ? normalizeFolderIds(folderIdsByDocId.get(doc.id) || []) : [];
+    const folderIds = mappedFolderIds.length ? mappedFolderIds : normalizeFolderIds([doc.folder_id || ""]);
     list.push({
       id: doc.id,
       name: doc.name,
       content: doc.content,
       preview: doc.preview,
-      folderId: doc.folder_id || "",
+      folderId: folderIds[0] || "",
+      folderIds,
       sizeLabel: `${(Number(doc.size_bytes || 0) / 1024).toFixed(1)} KB`,
       tags: tagsByDocId.get(doc.id) || []
     });
@@ -160,6 +269,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     list.push({
       id: subject.id,
       name: subject.name,
+      color: subject.color || DEFAULT_SUBJECT_COLOR,
       folders: foldersBySubject.get(subject.id) || [],
       topicTags: topicTagsBySubject.get(subject.id) || [],
       documents: docsBySubject.get(subject.id) || []
@@ -170,16 +280,21 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   return workspaces.map((workspace) => ({
     id: workspace.id,
     name: workspace.name,
+    color: workspace.color || DEFAULT_WORKSPACE_COLOR,
     subjects: subjectsByWorkspace.get(workspace.id) || []
   }));
 }
 
 export async function createWorkspace(name, ownerUserId = getDemoOwnerUserId()) {
   const client = createSupabaseAdminClient();
+  const hasWorkspaceColor = await supportsWorkspaceColor(client);
+  const normalizedName = normalizeWorkspaceName(name);
   const { data, error } = await client
     .from("workspaces")
-    .insert({ name: String(name).trim(), owner_user_id: ownerUserId })
-    .select("id, name")
+    .insert(hasWorkspaceColor
+      ? { name: normalizedName, owner_user_id: ownerUserId, color: DEFAULT_WORKSPACE_COLOR }
+      : { name: normalizedName, owner_user_id: ownerUserId })
+    .select(hasWorkspaceColor ? "id, name, color" : "id, name")
     .single();
   if (error) throw error;
   return data;
@@ -189,7 +304,7 @@ export async function renameWorkspace(workspaceId, nextName) {
   const client = createSupabaseAdminClient();
   const { error } = await client
     .from("workspaces")
-    .update({ name: String(nextName).trim(), updated_at: new Date().toISOString() })
+    .update({ name: normalizeWorkspaceName(nextName), updated_at: new Date().toISOString() })
     .eq("id", workspaceId);
   if (error) throw error;
 }
@@ -234,20 +349,54 @@ export async function removeWorkspace(workspaceId, force = false) {
 
 export async function createSubject(workspaceId, name) {
   const client = createSupabaseAdminClient();
+  const hasSubjectColor = await supportsSubjectColor(client);
+  const normalizedName = normalizeSubjectName(name);
   const { data, error } = await client
     .from("subjects")
-    .insert({ workspace_id: workspaceId, name: String(name).trim() })
-    .select("id, name")
+    .insert(hasSubjectColor
+      ? { workspace_id: workspaceId, name: normalizedName, color: DEFAULT_SUBJECT_COLOR }
+      : { workspace_id: workspaceId, name: normalizedName })
+    .select(hasSubjectColor ? "id, name, color" : "id, name")
     .single();
   if (error) throw error;
   return data;
+}
+
+export async function setWorkspaceColor(workspaceId, color) {
+  const client = createSupabaseAdminClient();
+  const hasWorkspaceColor = await supportsWorkspaceColor(client);
+  if (!hasWorkspaceColor) {
+    throw new Error("Workspace colors require migration 202608040005_add_workspace_subject_color.sql to be applied.");
+  }
+
+  const nextColor = normalizeWorkspaceColor(color);
+  const { error } = await client
+    .from("workspaces")
+    .update({ color: nextColor, updated_at: new Date().toISOString() })
+    .eq("id", workspaceId);
+  if (error) throw error;
+}
+
+export async function setSubjectColor(subjectId, color) {
+  const client = createSupabaseAdminClient();
+  const hasSubjectColor = await supportsSubjectColor(client);
+  if (!hasSubjectColor) {
+    throw new Error("Subject colors require migration 202608040005_add_workspace_subject_color.sql to be applied.");
+  }
+
+  const nextColor = normalizeSubjectColor(color);
+  const { error } = await client
+    .from("subjects")
+    .update({ color: nextColor, updated_at: new Date().toISOString() })
+    .eq("id", subjectId);
+  if (error) throw error;
 }
 
 export async function renameSubject(subjectId, nextName) {
   const client = createSupabaseAdminClient();
   const { error } = await client
     .from("subjects")
-    .update({ name: String(nextName).trim(), updated_at: new Date().toISOString() })
+    .update({ name: normalizeSubjectName(nextName), updated_at: new Date().toISOString() })
     .eq("id", subjectId);
   if (error) throw error;
 }
@@ -295,12 +444,12 @@ export async function createFolder(subjectId, name, parentFolderId = "") {
       hasFolderHierarchy
         ? {
           subject_id: subjectId,
-          name: String(name).trim(),
+          name: normalizeSubjectName(name),
           parent_folder_id: parentFolderId ? String(parentFolderId) : null
         }
         : {
           subject_id: subjectId,
-          name: String(name).trim()
+          name: normalizeSubjectName(name)
         }
     )
     .select(hasFolderHierarchy ? "id, name, parent_folder_id" : "id, name")
@@ -317,7 +466,7 @@ export async function renameFolder(folderId, nextName) {
   const client = createSupabaseAdminClient();
   const { error } = await client
     .from("folders")
-    .update({ name: String(nextName).trim(), updated_at: new Date().toISOString() })
+    .update({ name: normalizeSubjectName(nextName), updated_at: new Date().toISOString() })
     .eq("id", folderId);
   if (error) throw error;
 }
@@ -331,7 +480,7 @@ export async function removeFolder(folderId) {
 
 export async function addTopicTag(subjectId, tag) {
   const client = createSupabaseAdminClient();
-  const normalized = String(tag).trim().toLowerCase();
+  const normalized = normalizeTagName(tag);
   const { error } = await client
     .from("topic_tags")
     .insert({ subject_id: subjectId, tag: normalized });
@@ -341,8 +490,8 @@ export async function addTopicTag(subjectId, tag) {
 
 export async function renameTopicTag(subjectId, prevTag, nextTag) {
   const client = createSupabaseAdminClient();
-  const previous = String(prevTag).trim().toLowerCase();
-  const next = String(nextTag).trim().toLowerCase();
+  const previous = normalizeTagName(prevTag);
+  const next = normalizeTagName(nextTag);
 
   const { data: prevRow, error: findError } = await client
     .from("topic_tags")
@@ -362,7 +511,7 @@ export async function renameTopicTag(subjectId, prevTag, nextTag) {
 
 export async function removeTopicTag(subjectId, tag) {
   const client = createSupabaseAdminClient();
-  const normalized = String(tag).trim().toLowerCase();
+  const normalized = normalizeTagName(tag);
   const { data: row, error: findError } = await client
     .from("topic_tags")
     .select("id")
@@ -379,20 +528,47 @@ export async function removeTopicTag(subjectId, tag) {
   if (error) throw error;
 }
 
+export async function setTopicTagColor(subjectId, tag, color) {
+  const client = createSupabaseAdminClient();
+  const hasTopicTagColor = await supportsTopicTagColor(client);
+  if (!hasTopicTagColor) {
+    throw new Error("Tag colors require migration 202608040004_add_topic_tag_color.sql to be applied.");
+  }
+
+  const normalizedTag = normalizeTagName(tag);
+  const nextColor = normalizeTopicTagColor(color);
+
+  const { error } = await client
+    .from("topic_tags")
+    .update({ color: nextColor, updated_at: new Date().toISOString() })
+    .eq("subject_id", subjectId)
+    .eq("tag", normalizedTag);
+
+  if (error) throw error;
+}
+
 export async function uploadTxtDocuments(subjectId, files, options = {}) {
   const client = createSupabaseAdminClient();
-  const folderId = options.folderId || null;
+  const hasDocumentFolders = await supportsDocumentFolders(client);
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  const meta = normalizeDocumentMeta(options);
+  const folderIds = normalizeFolderIds(meta.folderIds || []);
+  if (folderIds.length > 1 && !hasDocumentFolders) {
+    throw new Error("Multi-folder assignment requires migration 202608040003_add_document_folder_map.sql to be applied.");
+  }
+  const primaryFolderId = folderIds[0] || null;
   const nowIso = new Date().toISOString();
 
   const toInsert = files.map((file) => {
-    const name = String(file.name || "untitled.txt");
+    const normalizedName = normalizeDocumentName(file.name || "");
+    const name = normalizedName || "untitled.txt";
     const content = String(file.content || "");
     const preview = content.trim().slice(0, 180) || "(empty file)";
     const sizeBytes = Number(file.sizeBytes || Buffer.byteLength(content, "utf8") || 0);
 
     return {
       subject_id: subjectId,
-      folder_id: folderId,
+      folder_id: primaryFolderId,
       name,
       content,
       preview,
@@ -404,10 +580,64 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
   const { data: docs, error: docsError } = await client
     .from("documents")
     .insert(toInsert)
-    .select("id");
+    .select("id, subject_id, name, content");
   if (docsError) throw docsError;
 
-  const tags = dedupeTags(options.tags || []);
+  if (hasDocumentChunks && docs?.length) {
+    const chunkRows = docs.flatMap((doc) => {
+      const baseDocument = {
+        id: doc.id,
+        subjectId: doc.subject_id || subjectId,
+        name: doc.name,
+        content: doc.content,
+        folderIds,
+        tags: dedupeTagNames(meta.tags || [])
+      };
+
+      return chunkDocument(baseDocument, {
+        chunkWords: DEFAULT_CHUNK_WORDS,
+        overlapWords: DEFAULT_OVERLAP_WORDS
+      }).map((chunk) => ({
+        document_id: doc.id,
+        subject_id: doc.subject_id || subjectId,
+        chunk_index: chunk.chunkIndex,
+        chunk_words: DEFAULT_CHUNK_WORDS,
+        overlap_words: DEFAULT_OVERLAP_WORDS,
+        start_word: chunk.startWord,
+        end_word: chunk.endWord,
+        word_count: chunk.wordCount,
+        semantic_score: chunk.semanticScore,
+        keywords: chunk.keywords,
+        content: chunk.content
+      }));
+    });
+
+    if (chunkRows.length) {
+      const { error: chunkInsertError } = await client
+        .from("document_chunks")
+        .insert(chunkRows);
+      if (chunkInsertError) throw chunkInsertError;
+    }
+  }
+
+  if (hasDocumentFolders && folderIds.length && docs?.length) {
+    const docFolderRows = [];
+    for (const doc of docs) {
+      for (const folderId of folderIds) {
+        docFolderRows.push({
+          document_id: doc.id,
+          folder_id: folderId
+        });
+      }
+    }
+
+    const { error: docFoldersError } = await client
+      .from("document_folders")
+      .insert(docFolderRows);
+    if (docFoldersError) throw docFoldersError;
+  }
+
+  const tags = dedupeTagNames(meta.tags || []);
   if (!tags.length || !docs?.length) return;
 
   const topicRows = await ensureTopicTags(client, subjectId, tags);
@@ -428,7 +658,7 @@ export async function renameDocument(documentId, nextName) {
   const client = createSupabaseAdminClient();
   const { error } = await client
     .from("documents")
-    .update({ name: String(nextName).trim(), updated_at: new Date().toISOString() })
+    .update({ name: normalizeDocumentName(nextName), updated_at: new Date().toISOString() })
     .eq("id", documentId);
   if (error) throw error;
 }
@@ -437,4 +667,92 @@ export async function removeDocument(documentId) {
   const client = createSupabaseAdminClient();
   const { error } = await client.from("documents").delete().eq("id", documentId);
   if (error) throw error;
+}
+
+export async function updateDocumentMeta(subjectId, documentId, options = {}) {
+  const client = createSupabaseAdminClient();
+  const hasDocumentFolders = await supportsDocumentFolders(client);
+  const meta = normalizeDocumentMeta(options);
+  const folderIds = normalizeFolderIds(meta.folderIds || []);
+  const tags = dedupeTagNames(meta.tags || []);
+
+  if (folderIds.length > 1 && !hasDocumentFolders) {
+    throw new Error("Multi-folder assignment requires migration 202608040003_add_document_folder_map.sql to be applied.");
+  }
+
+  const primaryFolderId = folderIds[0] || null;
+  const { error: docUpdateError } = await client
+    .from("documents")
+    .update({ folder_id: primaryFolderId, updated_at: new Date().toISOString() })
+    .eq("id", documentId)
+    .eq("subject_id", subjectId);
+  if (docUpdateError) throw docUpdateError;
+
+  if (hasDocumentFolders) {
+    const { error: clearFolderLinksError } = await client
+      .from("document_folders")
+      .delete()
+      .eq("document_id", documentId);
+    if (clearFolderLinksError) throw clearFolderLinksError;
+
+    if (folderIds.length) {
+      const { error: insertFolderLinksError } = await client
+        .from("document_folders")
+        .insert(folderIds.map((folderId) => ({ document_id: documentId, folder_id: folderId })));
+      if (insertFolderLinksError) throw insertFolderLinksError;
+    }
+  }
+
+  const { error: clearTagsError } = await client
+    .from("document_tags")
+    .delete()
+    .eq("document_id", documentId);
+  if (clearTagsError) throw clearTagsError;
+
+  if (!tags.length) return;
+  const topicRows = await ensureTopicTags(client, subjectId, tags);
+  const bridgeRows = topicRows.map((row) => ({ document_id: documentId, topic_tag_id: row.id }));
+
+  const { error: insertTagsError } = await client
+    .from("document_tags")
+    .insert(bridgeRows);
+  if (insertTagsError) throw insertTagsError;
+}
+
+export async function listDocumentChunks(documentIds, options = {}) {
+  const ids = Array.isArray(documentIds) ? documentIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
+  if (!ids.length) return [];
+  if (!isSupabaseConfigured()) return [];
+
+  const client = createSupabaseAdminClient();
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  if (!hasDocumentChunks) return [];
+
+  const chunkWords = Number(options.chunkWords || DEFAULT_CHUNK_WORDS);
+  const overlapWords = Number(options.overlapWords || DEFAULT_OVERLAP_WORDS);
+
+  const { data, error } = await client
+    .from("document_chunks")
+    .select("document_id, subject_id, chunk_index, chunk_words, overlap_words, start_word, end_word, word_count, semantic_score, keywords, content")
+    .in("document_id", ids)
+    .eq("chunk_words", chunkWords)
+    .eq("overlap_words", overlapWords)
+    .order("document_id", { ascending: true })
+    .order("chunk_index", { ascending: true });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    documentId: row.document_id,
+    subjectId: row.subject_id,
+    chunkIndex: row.chunk_index,
+    chunkWords: row.chunk_words,
+    overlapWords: row.overlap_words,
+    startWord: row.start_word,
+    endWord: row.end_word,
+    wordCount: row.word_count,
+    semanticScore: row.semantic_score,
+    keywords: Array.isArray(row.keywords) ? row.keywords : [],
+    content: row.content || ""
+  }));
 }

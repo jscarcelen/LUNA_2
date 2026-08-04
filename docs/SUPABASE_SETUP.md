@@ -27,6 +27,10 @@ Apply SQL migration:
 
 - `supabase/migrations/202608040001_init_luna.sql`
 - `supabase/migrations/202608040002_add_folder_hierarchy.sql`
+- `supabase/migrations/202608040003_add_document_folder_map.sql`
+- `supabase/migrations/202608040004_add_topic_tag_color.sql`
+- `supabase/migrations/202608040005_add_workspace_subject_color.sql`
+- `supabase/migrations/202608040006_add_document_chunks.sql`
 
 This creates:
 
@@ -37,6 +41,8 @@ This creates:
 - `topic_tags`
 - `documents`
 - `document_tags`
+- `document_folders` (document-to-many-folders assignment)
+- `document_chunks` (persisted overlapping text chunks for AI retrieval)
 
 ## 4) Test connectivity
 
@@ -62,9 +68,10 @@ Supported actions currently mirror the mock route:
 - create/rename/remove folder and subfolder
 - add/rename/remove topic tag
 - upload/rename/remove document
+- assign uploaded documents to one or many folders
 
 ## Notes
 
-- This route uses `@luna/database` repository functions.
+- This route uses app-local repository functions in `apps/web/lib/workspacesRepository.js`.
 - Delete safety checks return `409` + `requiresForce` for workspace/subject when related data exists.
-- Existing frontend still points to `/api/workspaces` (mock). You can switch UI to `/api/workspaces-supabase` once your Supabase env + migration are ready.
+- Workspace UI is connected to `/api/workspaces-supabase`.

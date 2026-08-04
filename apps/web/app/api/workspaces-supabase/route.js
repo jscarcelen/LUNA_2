@@ -14,6 +14,10 @@ import {
   renameSubject,
   renameTopicTag,
   renameWorkspace,
+  setSubjectColor,
+  setTopicTagColor,
+  setWorkspaceColor,
+  updateDocumentMeta,
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
@@ -64,6 +68,11 @@ export async function POST(request) {
       return await ok(ownerUserId);
     }
 
+    if (action === "setWorkspaceColor") {
+      await setWorkspaceColor(payload.workspaceId, payload.color);
+      return await ok(ownerUserId);
+    }
+
     if (action === "removeWorkspace") {
       const removed = await removeWorkspace(payload.workspaceId, Boolean(payload.force));
       if (removed.requiresForce) {
@@ -83,6 +92,11 @@ export async function POST(request) {
 
     if (action === "renameSubject") {
       await renameSubject(payload.subjectId, payload.nextName);
+      return await ok(ownerUserId);
+    }
+
+    if (action === "setSubjectColor") {
+      await setSubjectColor(payload.subjectId, payload.color);
       return await ok(ownerUserId);
     }
 
@@ -128,10 +142,15 @@ export async function POST(request) {
       return await ok(ownerUserId);
     }
 
+    if (action === "setTopicTagColor") {
+      await setTopicTagColor(payload.subjectId, payload.tag, payload.color);
+      return await ok(ownerUserId);
+    }
+
     if (action === "uploadDocuments") {
       const files = Array.isArray(payload.files) ? payload.files : [];
       await uploadTxtDocuments(payload.subjectId, files, {
-        folderId: payload.folderId,
+        folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
         tags: payload.tags || []
       });
       return await ok(ownerUserId);
@@ -144,6 +163,14 @@ export async function POST(request) {
 
     if (action === "removeDocument") {
       await removeDocument(payload.documentId);
+      return await ok(ownerUserId);
+    }
+
+    if (action === "updateDocumentMeta") {
+      await updateDocumentMeta(payload.subjectId, payload.documentId, {
+        folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
+        tags: payload.tags || []
+      });
       return await ok(ownerUserId);
     }
 

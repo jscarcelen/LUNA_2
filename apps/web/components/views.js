@@ -1,5 +1,20 @@
 import { useState } from "react";
 import { kpiCards } from "./data";
+import {
+  buildFolderChildrenMap,
+  buildFolderPathMap,
+  DEFAULT_SUBJECT_COLOR,
+  DEFAULT_TOPIC_TAG_COLOR,
+  DEFAULT_WORKSPACE_COLOR,
+  filterDocuments,
+  flattenFolders,
+  getDocumentFolderIds,
+  normalizeSubjectColor,
+  normalizeTagName,
+  normalizeTopicTagColor,
+  splitDocumentsByFolder,
+  normalizeWorkspaceColor
+} from "../modules/core";
 
 function ScopeBar({ label = "Scope" }) {
   return (
@@ -69,6 +84,90 @@ export function DashboardView() {
           </div>
         </article>
       </div>
+
+      <div className="panel-grid three">
+        <article className="panel">
+          <h4>Mastery</h4>
+          <h3>78%</h3>
+          <p className="hint">Up 12% this month</p>
+        </article>
+        <article className="panel">
+          <h4>Strong</h4>
+          <ul className="line-list">
+            <li>Derivatives: 91%</li>
+            <li>Limits: 86%</li>
+          </ul>
+        </article>
+        <article className="panel">
+          <h4>Needs Work</h4>
+          <ul className="line-list">
+            <li>Integration: 63%</li>
+            <li>Integration by Parts: 41%</li>
+          </ul>
+        </article>
+      </div>
+      <article className="panel accent">
+        AI Insight placeholder: 3 short sessions on Integration by Parts can improve projected score.
+      </article>
+    </section>
+  );
+}
+
+export function AIToolsHubView({ onOpenTool }) {
+  const tools = [
+    {
+      key: "ai-tool-quiz",
+      name: "Quiz Generator",
+      description: "Build chapter quizzes and exams from selected workspace documents.",
+      action: "Open Quiz Generator"
+    },
+    {
+      key: "ai-tool-tutor",
+      name: "AI Tutor",
+      description: "Step-by-step tutoring and practice hints constrained by your study scope.",
+      action: "Open AI Tutor"
+    },
+    {
+      key: "ai-tool-chatbot",
+      name: "Chatbot",
+      description: "General purpose learning assistant for quick questions and summaries.",
+      action: "Open Chatbot"
+    }
+  ];
+
+  return (
+    <section className="view-stack">
+      <article className="panel accent">
+        <h4 style={{ marginTop: 0 }}>AI Tools Library</h4>
+        <p className="hint">This catalog will keep growing. Click any tool to open its full page.</p>
+      </article>
+
+      <div className="panel-grid three">
+        {tools.map((tool) => (
+          <article key={tool.key} className="panel ai-tool-card">
+            <h4>{tool.name}</h4>
+            <p>{tool.description}</p>
+            <button className="primary-btn" type="button" onClick={() => onOpenTool(tool.key)}>{tool.action}</button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function AIToolPageView({ title, description, onBack, children }) {
+  return (
+    <section className="view-stack">
+      <article className="panel">
+        <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+          <div>
+            <h4 style={{ margin: 0 }}>{title}</h4>
+            <p className="hint" style={{ margin: "6px 0 0" }}>{description}</p>
+          </div>
+          <button className="table-btn" type="button" onClick={onBack}>Back To AI Tools</button>
+        </div>
+      </article>
+      {children}
     </section>
   );
 }
@@ -87,9 +186,11 @@ export function WorkspacesManagerView({
   onSelectSubject,
   onCreateWorkspace,
   onRenameWorkspace,
+  onSetWorkspaceColor,
   onRemoveWorkspace,
   onCreateSubject,
   onRenameSubject,
+  onSetSubjectColor,
   onRemoveSubject,
   onCreateFolder,
   onAddTopicTag,
@@ -97,133 +198,116 @@ export function WorkspacesManagerView({
   onRemoveFolder,
   onRenameTopicTag,
   onRemoveTopicTag,
+  onSetTopicTagColor,
   onUploadTxt,
   onRenameDocument,
-  onRemoveDocument
+  onRemoveDocument,
+  onUpdateDocumentMeta
 }) {
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [subjectName, setSubjectName] = useState("");
   const [folderName, setFolderName] = useState("");
   const [parentFolderId, setParentFolderId] = useState("");
   const [topicTagName, setTopicTagName] = useState("");
-  const [uploadFolderId, setUploadFolderId] = useState("");
-  const [uploadTags, setUploadTags] = useState("");
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadFolderIds, setUploadFolderIds] = useState([]);
+  const [uploadSelectedTags, setUploadSelectedTags] = useState([]);
+  const [uploadTagDraft, setUploadTagDraft] = useState("");
+  const [pendingFiles, setPendingFiles] = useState([]);
+  const [activeFolderId, setActiveFolderId] = useState("");
+  const [docViewMode, setDocViewMode] = useState("cards");
+  const [filterFolderId, setFilterFolderId] = useState("");
+  const [filterTag, setFilterTag] = useState("");
+  const [filterText, setFilterText] = useState("");
   const [renameDocId, setRenameDocId] = useState("");
   const [renameDocName, setRenameDocName] = useState("");
-  const [renameWorkspaceId, setRenameWorkspaceId] = useState("");
-  const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
   const [renameSubjectId, setRenameSubjectId] = useState("");
   const [renameSubjectName, setRenameSubjectName] = useState("");
+  const [renameWorkspaceId, setRenameWorkspaceId] = useState("");
+  const [renameWorkspaceName, setRenameWorkspaceName] = useState("");
+  const [workspaceColorDraftById, setWorkspaceColorDraftById] = useState({});
+  const [subjectColorDraftById, setSubjectColorDraftById] = useState({});
   const [renameFolderId, setRenameFolderId] = useState("");
   const [renameFolderName, setRenameFolderName] = useState("");
   const [renameTopicTagFrom, setRenameTopicTagFrom] = useState("");
   const [renameTopicTagTo, setRenameTopicTagTo] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState({});
+  const [collapsedFolderDocs, setCollapsedFolderDocs] = useState({});
+  const [unfiledCollapsed, setUnfiledCollapsed] = useState(false);
+  const [editDocMeta, setEditDocMeta] = useState(null);
+  const [editDocFolderIds, setEditDocFolderIds] = useState([]);
+  const [editDocSelectedTags, setEditDocSelectedTags] = useState([]);
+  const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [previewDoc, setPreviewDoc] = useState(null);
+
+  const [tagColorDraftByName, setTagColorDraftByName] = useState({});
 
   const selectedWorkspace = workspaces.find((item) => item.id === selectedWorkspaceId) || null;
   const subjects = selectedWorkspace ? selectedWorkspace.subjects : [];
   const selectedSubject = subjects.find((item) => item.id === selectedSubjectId) || null;
   const folders = selectedSubject?.folders || [];
   const topicTags = selectedSubject?.topicTags || [];
+  const documents = selectedSubject?.documents || [];
+  const topicTagNames = topicTags.map((item) => item.name);
+  const tagColorByName = Object.fromEntries(topicTags.map((item) => [item.name, item.color || DEFAULT_TOPIC_TAG_COLOR]));
 
-  function flattenFolders(folderList) {
-    const childrenByParent = new Map();
-    for (const folder of folderList) {
-      const key = folder.parentFolderId || "";
-      const list = childrenByParent.get(key) || [];
-      list.push(folder);
-      childrenByParent.set(key, list);
-    }
+  function getWorkspaceColor(workspace) {
+    return normalizeWorkspaceColor(workspaceColorDraftById[workspace.id] || workspace.color || DEFAULT_WORKSPACE_COLOR);
+  }
 
-    const out = [];
-    const visit = (parentId, depth) => {
-      const children = childrenByParent.get(parentId) || [];
-      for (const child of children) {
-        out.push({ ...child, depth });
-        visit(child.id, depth + 1);
-      }
+  function getSubjectColor(subject) {
+    return normalizeSubjectColor(subjectColorDraftById[subject.id] || subject.color || DEFAULT_SUBJECT_COLOR);
+  }
+
+  function cardStyle(colorHex) {
+    const safe = normalizeWorkspaceColor(colorHex);
+    return {
+      background: `linear-gradient(160deg, ${safe}4D, rgba(11, 30, 56, 0.94))`
     };
+  }
 
-    visit("", 0);
-    return out;
+  function getTagColor(tagName) {
+    return normalizeTopicTagColor(tagColorDraftByName[tagName] || tagColorByName[tagName] || DEFAULT_TOPIC_TAG_COLOR);
   }
 
   const flattenedFolders = flattenFolders(folders);
+  const folderLabels = buildFolderPathMap(folders);
+  const effectiveFolderFilter = filterFolderId || activeFolderId;
+  const selectedFolderLabel = folderLabels.get(activeFolderId) || "All folders";
 
-  function folderPathMap(folderList) {
-    const byId = new Map(folderList.map((folder) => [folder.id, folder]));
-    const cache = new Map();
+  const filteredDocuments = filterDocuments(documents, {
+    folderId: effectiveFolderFilter,
+    tag: filterTag,
+    text: filterText
+  });
 
-    const labelFor = (id) => {
-      if (!id) return "-";
-      if (cache.has(id)) return cache.get(id);
-      const folder = byId.get(id);
-      if (!folder) return "-";
+  const folderChildrenMap = buildFolderChildrenMap(flattenedFolders);
+  const { documentsByFolder, unfiledDocuments } = splitDocumentsByFolder(documents);
 
-      const parentLabel = folder.parentFolderId ? labelFor(folder.parentFolderId) : "";
-      const label = parentLabel && parentLabel !== "-" ? `${parentLabel} / ${folder.name}` : folder.name;
-      cache.set(id, label);
-      return label;
-    };
-
-    const labels = new Map();
-    for (const folder of folderList) {
-      labels.set(folder.id, labelFor(folder.id));
-    }
-    return labels;
+  function clearFilters() {
+    setFilterFolderId("");
+    setFilterTag("");
+    setFilterText("");
+    setActiveFolderId("");
   }
 
-  const folderLabels = folderPathMap(folders);
-
-  function parseTagList(rawValue) {
-    return rawValue
-      .split(",")
-      .map((value) => value.trim().toLowerCase())
-      .filter(Boolean);
+  function toggleUploadFolder(folderId) {
+    setUploadFolderIds((prev) => (prev.includes(folderId) ? prev.filter((id) => id !== folderId) : [...prev, folderId]));
   }
 
-  function handleCreateWorkspace(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const field = form.elements.namedItem("workspaceName");
-    const name = field && "value" in field ? field.value.trim() : "";
+  function handleCreateWorkspace() {
+    const name = workspaceName.trim();
     if (!name) return;
     onCreateWorkspace(name);
-    form.reset();
+    setWorkspaceName("");
   }
 
-  function handleCreateSubject(event) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const field = form.elements.namedItem("subjectName");
-    const name = field && "value" in field ? field.value.trim() : "";
+  function handleCreateSubject() {
+    const name = subjectName.trim();
     if (!name) return;
     onCreateSubject(name);
-    form.reset();
-  }
-
-  function handleStartRenameWorkspace(workspace) {
-    setRenameWorkspaceId(workspace.id);
-    setRenameWorkspaceName(workspace.name);
-  }
-
-  function handleSaveRenameWorkspace(workspaceId) {
-    const nextName = renameWorkspaceName.trim();
-    if (!nextName) return;
-    onRenameWorkspace(workspaceId, nextName);
-    setRenameWorkspaceId("");
-    setRenameWorkspaceName("");
-  }
-
-  function handleCancelRenameWorkspace() {
-    setRenameWorkspaceId("");
-    setRenameWorkspaceName("");
-  }
-
-  function handleRemoveWorkspace(workspaceId) {
-    onRemoveWorkspace(workspaceId);
-    if (selectedWorkspaceId === workspaceId) {
-      setRenameSubjectId("");
-      setRenameSubjectName("");
-    }
+    setSubjectName("");
   }
 
   function handleStartRenameSubject(subject) {
@@ -239,39 +323,13 @@ export function WorkspacesManagerView({
     setRenameSubjectName("");
   }
 
-  function handleCancelRenameSubject() {
-    setRenameSubjectId("");
-    setRenameSubjectName("");
-  }
-
-  function handleRemoveSubject(subjectId) {
-    onRemoveSubject(subjectId);
-    if (selectedSubjectId === subjectId) {
-      setRenameFolderId("");
-      setRenameFolderName("");
-      setRenameTopicTagFrom("");
-      setRenameTopicTagTo("");
-    }
-  }
-
-  function handleUpload(event) {
-    const files = Array.from(event.target.files || []);
-    if (!files.length) return;
-    const tags = parseTagList(uploadTags);
-    onUploadTxt(files, {
-      folderId: uploadFolderId || folders[0]?.id || "",
-      tags
-    });
-    event.target.value = "";
-  }
-
-  function handleCreateFolder(event) {
-    event.preventDefault();
+  function handleAddFolder() {
     const name = folderName.trim();
     if (!name) return;
     onCreateFolder(name, parentFolderId);
     setFolderName("");
     setParentFolderId("");
+    setShowFolderModal(false);
   }
 
   function handleAddTopicTag(event) {
@@ -282,9 +340,30 @@ export function WorkspacesManagerView({
     setTopicTagName("");
   }
 
-  function handleStartRename(document) {
-    setRenameDocId(document.id);
-    setRenameDocName(document.name);
+  function handleUploadSubmit() {
+    if (!pendingFiles.length) return;
+    onUploadTxt(pendingFiles, {
+      folderIds: uploadFolderIds,
+      tags: uploadSelectedTags
+    });
+    setPendingFiles([]);
+    setUploadFolderIds([]);
+    setUploadSelectedTags([]);
+    setUploadTagDraft("");
+    setShowUploadModal(false);
+  }
+
+  function handleStartRenameWorkspace(workspace) {
+    setRenameWorkspaceId(workspace.id);
+    setRenameWorkspaceName(workspace.name);
+  }
+
+  function handleSaveRenameWorkspace(workspaceId) {
+    const nextName = renameWorkspaceName.trim();
+    if (!nextName) return;
+    onRenameWorkspace(workspaceId, nextName);
+    setRenameWorkspaceId("");
+    setRenameWorkspaceName("");
   }
 
   function handleStartRenameFolder(folder) {
@@ -300,22 +379,17 @@ export function WorkspacesManagerView({
     setRenameFolderName("");
   }
 
-  function handleCancelRenameFolder() {
-    setRenameFolderId("");
-    setRenameFolderName("");
-  }
-
   function handleRemoveFolder(folderId) {
-    if (!window.confirm("Remove this folder? Documents will remain but lose folder assignment.")) return;
+    if (!window.confirm("Remove this folder? Documents remain and only lose folder assignments.")) return;
     onRemoveFolder(folderId);
-    if (uploadFolderId === folderId) {
-      setUploadFolderId("");
-    }
+    setUploadFolderIds((prev) => prev.filter((id) => id !== folderId));
+    if (activeFolderId === folderId) setActiveFolderId("");
+    if (filterFolderId === folderId) setFilterFolderId("");
   }
 
   function handleStartRenameTopicTag(tag) {
-    setRenameTopicTagFrom(tag);
-    setRenameTopicTagTo(tag);
+    setRenameTopicTagFrom(tag.name);
+    setRenameTopicTagTo(tag.name);
   }
 
   function handleSaveRenameTopicTag() {
@@ -326,17 +400,17 @@ export function WorkspacesManagerView({
     setRenameTopicTagTo("");
   }
 
-  function handleCancelRenameTopicTag() {
-    setRenameTopicTagFrom("");
-    setRenameTopicTagTo("");
-  }
-
   function handleRemoveTopicTag(tag) {
-    if (!window.confirm("Remove this topic tag? It will be removed from related documents too.")) return;
-    onRemoveTopicTag(tag);
+    if (!window.confirm("Remove this topic tag from this subject and linked docs?")) return;
+    onRemoveTopicTag(tag.name);
   }
 
-  function handleSaveRename(documentId) {
+  function handleStartRenameDoc(doc) {
+    setRenameDocId(doc.id);
+    setRenameDocName(doc.name);
+  }
+
+  function handleSaveRenameDoc(documentId) {
     const nextName = renameDocName.trim();
     if (!nextName) return;
     onRenameDocument(documentId, nextName);
@@ -344,372 +418,720 @@ export function WorkspacesManagerView({
     setRenameDocName("");
   }
 
-  function handleRemove(documentId) {
+  function handleRemoveDoc(documentId) {
     if (!window.confirm("Remove this document?")) return;
     onRemoveDocument(documentId);
-    if (previewDoc?.id === documentId) {
-      setPreviewDoc(null);
-    }
+    if (previewDoc?.id === documentId) setPreviewDoc(null);
+  }
+
+  function toggleFolderCollapsed(folderId) {
+    setCollapsedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  }
+
+  function toggleFolderDocsCollapsed(folderId) {
+    setCollapsedFolderDocs((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  }
+
+  function handleStartEditDocMeta(doc) {
+    const folderIds = getDocumentFolderIds(doc);
+    setEditDocMeta(doc);
+    setEditDocFolderIds(folderIds);
+    setEditDocSelectedTags(doc.tags || []);
+    setEditDocTagDraft("");
+  }
+
+  function toggleEditDocFolder(folderId) {
+    setEditDocFolderIds((prev) => (prev.includes(folderId) ? prev.filter((id) => id !== folderId) : [...prev, folderId]));
+  }
+
+  function handleSaveDocMeta() {
+    if (!editDocMeta) return;
+    onUpdateDocumentMeta(editDocMeta.id, {
+      folderIds: editDocFolderIds,
+      tags: editDocSelectedTags
+    });
+    setEditDocMeta(null);
+    setEditDocFolderIds([]);
+    setEditDocSelectedTags([]);
+    setEditDocTagDraft("");
+  }
+
+  function addTagToSelection(rawValue, setter) {
+    const nextTag = normalizeTagName(rawValue);
+    if (!nextTag) return;
+    setter((prev) => (prev.includes(nextTag) ? prev : [...prev, nextTag]));
+  }
+
+  function removeTagFromSelection(tagName, setter) {
+    setter((prev) => prev.filter((item) => item !== tagName));
+  }
+
+  function renderFolderNode(folder, depth) {
+    const childFolders = folderChildrenMap.get(folder.id) || [];
+    const folderDocs = documentsByFolder.get(folder.id) || [];
+    const isCollapsed = Boolean(collapsedFolders[folder.id]);
+    const areDocsCollapsed = Boolean(collapsedFolderDocs[folder.id]);
+    const hasTreeToggle = childFolders.length > 0 || folderDocs.length > 0;
+
+    return (
+      <div key={folder.id} className="folder-indent-wrap" style={{ marginLeft: `${depth * 18}px` }}>
+        <div className={activeFolderId === folder.id ? "folder-node on" : "folder-node"}>
+          {renameFolderId === folder.id ? (
+            <div className="inline-actions">
+              <input
+                className="input"
+                value={renameFolderName}
+                onChange={(event) => setRenameFolderName(event.target.value)}
+                disabled={isWorking}
+              />
+              <button className="table-btn" type="button" onClick={() => handleSaveRenameFolder(folder.id)} disabled={isWorking}>Save</button>
+              <button className="table-btn" type="button" onClick={() => setRenameFolderId("")} disabled={isWorking}>Cancel</button>
+            </div>
+          ) : (
+            <>
+              <div className="folder-node-head">
+                <div className="folder-node-title">
+                  {hasTreeToggle ? (
+                    <button className="tree-toggle" type="button" onClick={() => toggleFolderCollapsed(folder.id)} disabled={isWorking}>
+                      {isCollapsed ? "+" : "-"}
+                    </button>
+                  ) : <span className="tree-toggle-empty" />}
+                  <button className="folder-node-main" type="button" onClick={() => setActiveFolderId(folder.id)} disabled={isWorking}>
+                    {folder.name}
+                  </button>
+                </div>
+                <div className="inline-actions">
+                  <button className="table-btn" type="button" onClick={() => handleStartRenameFolder(folder)} disabled={isWorking}>Rename</button>
+                  <button className="table-btn danger" type="button" onClick={() => handleRemoveFolder(folder.id)} disabled={isWorking}>Delete</button>
+                </div>
+              </div>
+
+              {!isCollapsed ? (
+                <div className="folder-children-wrap">
+                  {folderDocs.length ? (
+                    <div className="folder-docs-block">
+                      <button className="tree-toggle-docs" type="button" onClick={() => toggleFolderDocsCollapsed(folder.id)}>
+                        {areDocsCollapsed ? "+" : "-"} Documents ({folderDocs.length})
+                      </button>
+                      {!areDocsCollapsed ? (
+                        <div className="folder-docs-list">
+                          {folderDocs.map((doc) => (
+                            <div className="doc-inline-row" key={`${folder.id}-${doc.id}`}>
+                              <span>{doc.name}</span>
+                              <div className="chip-wrap doc-inline-tags">
+                                {(doc.tags || []).map((tag) => (
+                                  <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="inline-actions">
+                                <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
+                                <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                                <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                                <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {childFolders.map((child) => renderFolderNode(child, depth + 1))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
     <section className="view-stack">
-      <div className="scope-bar">
-        <b>Workspace Builder</b>
-        <span>Create workspace</span>
-        <span>Add subjects</span>
-        <span>Create folders, subfolders, and topic tags</span>
-        <span>Upload TXT documents</span>
-        <span>Persisted via Supabase API routes</span>
-      </div>
-
       {statusMessage ? <p className="hint">{statusMessage}</p> : null}
       {isWorking ? <p className="hint">Syncing changes...</p> : null}
 
-      <div className="panel-grid two-wide">
-        <article className="panel">
-          <h4>Create Workspace</h4>
-          <form className="form-stack" onSubmit={handleCreateWorkspace}>
-            <label className="field-label" htmlFor="workspaceName">Workspace name</label>
-            <input
-              id="workspaceName"
-              name="workspaceName"
-              className="input"
-              placeholder="e.g. High School 2026"
-              disabled={isWorking}
-            />
-            <button className="primary-btn" type="submit" disabled={isWorking}>Add Workspace</button>
-          </form>
+      <article className="workspace-shell">
+        <div className="workspace-shell-head">
+          <h3>Workspaces</h3>
+          <p className="hint">Click a workspace to open its folder and document explorer.</p>
+        </div>
 
-          <h4 style={{ marginTop: "18px" }}>Workspaces</h4>
-          <div className="button-list">
-            {workspaces.map((workspace) => (
-              <div className="entity-row" key={workspace.id}>
-                {renameWorkspaceId === workspace.id ? (
-                  <div className="inline-actions entity-main">
+        <div className="workspace-grid">
+          {workspaces.map((workspace) => (
+            <article
+              key={workspace.id}
+              className={workspace.id === selectedWorkspaceId ? "ws-card on" : "ws-card"}
+              style={cardStyle(getWorkspaceColor(workspace))}
+              onClick={() => onSelectWorkspace(workspace.id)}
+            >
+              {renameWorkspaceId === workspace.id ? (
+                <div className="form-stack" onClick={(event) => event.stopPropagation()}>
+                  <input
+                    className="input"
+                    value={renameWorkspaceName}
+                    onChange={(event) => setRenameWorkspaceName(event.target.value)}
+                    disabled={isWorking}
+                  />
+                  <div className="inline-actions">
+                    <button className="table-btn" type="button" onClick={() => handleSaveRenameWorkspace(workspace.id)} disabled={isWorking}>Save</button>
+                    <button className="table-btn" type="button" onClick={() => setRenameWorkspaceId("")} disabled={isWorking}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h4>{workspace.name}</h4>
+                  <p className="hint">{workspace.subjects.length} subjects</p>
+                  <div className="inline-actions" onClick={(event) => event.stopPropagation()}>
                     <input
-                      className="input"
-                      value={renameWorkspaceName}
-                      onChange={(event) => setRenameWorkspaceName(event.target.value)}
+                      className="input color-input"
+                      type="color"
+                      value={getWorkspaceColor(workspace)}
+                      onChange={(event) => {
+                        const nextColor = normalizeWorkspaceColor(event.target.value);
+                        setWorkspaceColorDraftById((prev) => ({ ...prev, [workspace.id]: nextColor }));
+                        onSetWorkspaceColor(workspace.id, nextColor);
+                      }}
                       disabled={isWorking}
                     />
-                    <button className="table-btn" type="button" onClick={() => handleSaveRenameWorkspace(workspace.id)} disabled={isWorking}>Save</button>
-                    <button className="table-btn" type="button" onClick={handleCancelRenameWorkspace} disabled={isWorking}>Cancel</button>
+                    <button className="table-btn" type="button" onClick={() => handleStartRenameWorkspace(workspace)} disabled={isWorking}>Rename</button>
+                    <button className="table-btn danger" type="button" onClick={() => onRemoveWorkspace(workspace.id)} disabled={isWorking}>Delete</button>
                   </div>
-                ) : (
-                  <button
-                    className={workspace.id === selectedWorkspaceId ? "list-btn on entity-main" : "list-btn entity-main"}
-                    onClick={() => onSelectWorkspace(workspace.id)}
-                    disabled={isWorking}
-                    type="button"
-                  >
-                    <span>{workspace.name}</span>
-                    <small>{workspace.subjects.length} subjects</small>
-                  </button>
-                )}
+                </>
+              )}
+            </article>
+          ))}
 
-                {renameWorkspaceId !== workspace.id ? (
-                  <div className="inline-actions">
-                    <button className="table-btn" type="button" onClick={() => handleStartRenameWorkspace(workspace)} disabled={isWorking}>Edit</button>
-                    <button className="table-btn danger" type="button" onClick={() => handleRemoveWorkspace(workspace.id)} disabled={isWorking}>Delete</button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="panel">
-          <h4>Create Subject</h4>
-          <form className="form-stack" onSubmit={handleCreateSubject}>
-            <label className="field-label" htmlFor="subjectName">Subject in selected workspace</label>
+          <article className="ws-card add-end">
+            <p className="field-label">Add workspace</p>
             <input
-              id="subjectName"
-              name="subjectName"
               className="input"
-              placeholder="e.g. Mathematics"
-              disabled={!selectedWorkspace || isWorking}
+              placeholder="e.g. SAT Prep"
+              value={workspaceName}
+              onChange={(event) => setWorkspaceName(event.target.value)}
+              disabled={isWorking}
             />
-            <button className="primary-btn" type="submit" disabled={!selectedWorkspace || isWorking}>
-              Add Subject
-            </button>
-          </form>
+            <button className="primary-btn" type="button" onClick={handleCreateWorkspace} disabled={isWorking}>Create Workspace</button>
+          </article>
+        </div>
+      </article>
 
-          <h4 style={{ marginTop: "18px" }}>Subjects</h4>
-          {!selectedWorkspace && <p className="hint">Select a workspace first.</p>}
-          {selectedWorkspace && subjects.length === 0 && <p className="hint">No subjects yet in this workspace.</p>}
-          {selectedWorkspace && subjects.length > 0 && (
-            <div className="button-list">
+      {selectedWorkspace ? (
+        <article className="workspace-shell">
+          <div className="workspace-shell-head">
+            <h3>{selectedWorkspace.name}</h3>
+            <p className="hint">Choose a subject, then folders. Documents open below for the selected folder.</p>
+          </div>
+
+          <div className="subject-strip">
+            <div className="subject-grid">
               {subjects.map((subject) => (
-                <div className="entity-row" key={subject.id}>
+                <article
+                  key={subject.id}
+                  className={subject.id === selectedSubjectId ? "subject-card on" : "subject-card"}
+                  style={cardStyle(getSubjectColor(subject))}
+                  onClick={() => onSelectSubject(subject.id)}
+                >
                   {renameSubjectId === subject.id ? (
-                    <div className="inline-actions entity-main">
+                    <div className="form-stack" onClick={(event) => event.stopPropagation()}>
                       <input
                         className="input"
                         value={renameSubjectName}
                         onChange={(event) => setRenameSubjectName(event.target.value)}
                         disabled={isWorking}
                       />
-                      <button className="table-btn" type="button" onClick={() => handleSaveRenameSubject(subject.id)} disabled={isWorking}>Save</button>
-                      <button className="table-btn" type="button" onClick={handleCancelRenameSubject} disabled={isWorking}>Cancel</button>
+                      <div className="inline-actions">
+                        <button className="table-btn" type="button" onClick={() => handleSaveRenameSubject(subject.id)} disabled={isWorking}>Save</button>
+                        <button className="table-btn" type="button" onClick={() => setRenameSubjectId("")} disabled={isWorking}>Cancel</button>
+                      </div>
                     </div>
                   ) : (
-                    <button
-                      className={subject.id === selectedSubjectId ? "list-btn on entity-main" : "list-btn entity-main"}
-                      onClick={() => onSelectSubject(subject.id)}
-                      disabled={isWorking}
-                      type="button"
-                    >
-                      <span>{subject.name}</span>
-                      <small>{subject.documents.length} docs</small>
-                    </button>
+                    <>
+                      <h4>{subject.name}</h4>
+                      <p className="hint">{subject.documents.length} docs</p>
+                      <div className="inline-actions" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          className="input color-input"
+                          type="color"
+                          value={getSubjectColor(subject)}
+                          onChange={(event) => {
+                            const nextColor = normalizeSubjectColor(event.target.value);
+                            setSubjectColorDraftById((prev) => ({ ...prev, [subject.id]: nextColor }));
+                            onSetSubjectColor(subject.id, nextColor);
+                          }}
+                          disabled={isWorking}
+                        />
+                        <button className="table-btn" type="button" onClick={() => handleStartRenameSubject(subject)} disabled={isWorking}>Rename</button>
+                        <button className="table-btn danger" type="button" onClick={() => onRemoveSubject(subject.id)} disabled={isWorking}>Delete</button>
+                      </div>
+                    </>
                   )}
+                </article>
+              ))}
+            </div>
 
-                  {renameSubjectId !== subject.id ? (
-                    <div className="inline-actions">
-                      <button className="table-btn" type="button" onClick={() => handleStartRenameSubject(subject)} disabled={isWorking}>Edit</button>
-                      <button className="table-btn danger" type="button" onClick={() => handleRemoveSubject(subject.id)} disabled={isWorking}>Delete</button>
+            <div className="subject-create">
+              <input
+                className="input"
+                placeholder="Add subject"
+                value={subjectName}
+                onChange={(event) => setSubjectName(event.target.value)}
+                disabled={isWorking}
+              />
+              <button className="ghost-btn" type="button" onClick={handleCreateSubject} disabled={isWorking}>Add Subject</button>
+            </div>
+          </div>
+
+          {selectedSubject ? (
+            <>
+              <div className="folder-box">
+                <div className="box-head">
+                  <h4>Folders</h4>
+                  <p className="hint">Selected: {selectedFolderLabel}</p>
+                </div>
+
+                <div className="folder-tree-visual">
+                  {(folderChildrenMap.get("") || []).map((folder) => renderFolderNode(folder, 0))}
+
+                  {unfiledDocuments.length ? (
+                    <div className="folder-indent-wrap">
+                      <div className="folder-node">
+                        <div className="folder-node-head">
+                          <div className="folder-node-title">
+                            <button className="tree-toggle" type="button" onClick={() => setUnfiledCollapsed((prev) => !prev)}>
+                              {unfiledCollapsed ? "+" : "-"}
+                            </button>
+                            <span className="folder-node-main">Unfiled Documents</span>
+                          </div>
+                        </div>
+                        {!unfiledCollapsed ? (
+                          <div className="folder-docs-list">
+                            {unfiledDocuments.map((doc) => (
+                              <div className="doc-inline-row" key={`unfiled-${doc.id}`}>
+                                <span>{doc.name}</span>
+                                <div className="chip-wrap doc-inline-tags">
+                                  {(doc.tags || []).map((tag) => (
+                                    <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                                <div className="inline-actions">
+                                  <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
+                                  <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                                  <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                                  <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                   ) : null}
+                  {!flattenedFolders.length ? <p className="hint">No folders yet for this subject.</p> : null}
                 </div>
-              ))}
-            </div>
+
+                <div className="box-foot">
+                  <button className="primary-btn" type="button" onClick={() => setShowFolderModal(true)} disabled={isWorking}>Add Folder</button>
+                </div>
+              </div>
+
+              <div className="tags-box">
+                <div className="box-head">
+                  <h4>Topic Tags</h4>
+                </div>
+
+                <form className="form-stack" onSubmit={handleAddTopicTag}>
+                  <input
+                    className="input"
+                    placeholder="Add a topic tag"
+                    value={topicTagName}
+                    onChange={(event) => setTopicTagName(event.target.value)}
+                    disabled={isWorking}
+                  />
+                  <button className="ghost-btn" type="submit" disabled={isWorking}>Add Tag</button>
+                </form>
+
+                <div className="chip-stack" style={{ marginTop: "10px" }}>
+                  {topicTags.map((tag) => (
+                    <div className="scope-chip-row tag-row" key={tag.name}>
+                      {renameTopicTagFrom === tag.name ? (
+                        <>
+                          <input
+                            className="input chip-input"
+                            value={renameTopicTagTo}
+                            onChange={(event) => setRenameTopicTagTo(event.target.value)}
+                            disabled={isWorking}
+                          />
+                          <button className="table-btn" type="button" onClick={handleSaveRenameTopicTag} disabled={isWorking}>Save</button>
+                          <button className="table-btn" type="button" onClick={() => setRenameTopicTagFrom("")} disabled={isWorking}>Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="scope-chip" style={{ backgroundColor: `${getTagColor(tag.name)}2a`, borderColor: getTagColor(tag.name) }}>#{tag.name}</span>
+                          <input
+                            className="input color-input"
+                            type="color"
+                            value={getTagColor(tag.name)}
+                            onChange={(event) => {
+                              const nextColor = normalizeTopicTagColor(event.target.value);
+                              setTagColorDraftByName((prev) => ({ ...prev, [tag.name]: nextColor }));
+                              onSetTopicTagColor(tag.name, nextColor);
+                            }}
+                            disabled={isWorking}
+                          />
+                          <button className="table-btn" type="button" onClick={() => handleStartRenameTopicTag(tag)} disabled={isWorking}>Rename</button>
+                          <button className="table-btn danger" type="button" onClick={() => handleRemoveTopicTag(tag)} disabled={isWorking}>Delete</button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="documents-box">
+                <div className="box-head">
+                  <h4>Documents</h4>
+                  <div className="inline-actions">
+                    <button className={docViewMode === "cards" ? "table-btn view-on" : "table-btn"} type="button" onClick={() => setDocViewMode("cards")}>Cards</button>
+                    <button className={docViewMode === "list" ? "table-btn view-on" : "table-btn"} type="button" onClick={() => setDocViewMode("list")}>List View</button>
+                    <button className="primary-btn" type="button" onClick={() => setShowUploadModal(true)} disabled={isWorking}>Add Document</button>
+                  </div>
+                </div>
+
+                <div className="panel-grid three filter-grid">
+                  <label className="form-stack">
+                    <span className="field-label">Filter by folder</span>
+                    <select className="input" value={filterFolderId} onChange={(event) => setFilterFolderId(event.target.value)}>
+                      <option value="">All folders</option>
+                      {flattenedFolders.map((folder) => (
+                        <option key={folder.id} value={folder.id}>{folderLabels.get(folder.id)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="form-stack">
+                    <span className="field-label">Filter by tag</span>
+                    <select className="input" value={filterTag} onChange={(event) => setFilterTag(event.target.value)}>
+                      <option value="">All tags</option>
+                      {topicTags.map((tag) => (
+                        <option key={tag.name} value={tag.name}>{tag.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="form-stack">
+                    <span className="field-label">Search by name/content</span>
+                    <input className="input" value={filterText} onChange={(event) => setFilterText(event.target.value)} placeholder="search..." />
+                  </label>
+                </div>
+
+                <div className="box-foot">
+                  <button className="table-btn" type="button" onClick={clearFilters}>Reset Filters</button>
+                  <span className="hint">Showing {filteredDocuments.length} of {documents.length}</span>
+                </div>
+
+                {docViewMode === "cards" ? (
+                  <div className="doc-card-grid">
+                    {filteredDocuments.map((doc) => {
+                      const isRenaming = renameDocId === doc.id;
+                      const docFolderIds = getDocumentFolderIds(doc);
+                      const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
+
+                      return (
+                        <article className="doc-visual-card" key={doc.id}>
+                          {isRenaming ? (
+                            <div className="form-stack">
+                              <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
+                              <div className="inline-actions">
+                                <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
+                                <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <h5>{doc.name}</h5>
+                              <p className="hint">{doc.sizeLabel}</p>
+                            </>
+                          )}
+
+                          <p className="hint">{folderNames.length ? folderNames.join(" · ") : "No folder"}</p>
+                          <div className="chip-wrap">
+                            {(doc.tags || []).map((tag) => (
+                              <span className="scope-chip" key={tag} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                          <div className="inline-actions" style={{ marginTop: "10px" }}>
+                            {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
+                            <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                            <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                            <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+                          </div>
+                        </article>
+                      );
+                    })}
+                    {!filteredDocuments.length ? <p className="hint">No documents found in this view.</p> : null}
+                  </div>
+                ) : (
+                  <div className="doc-table-wrap">
+                    <table className="doc-table">
+                      <thead>
+                        <tr>
+                          <th>Workspace</th>
+                          <th>Folder Path</th>
+                          <th>Document</th>
+                          <th>Tags</th>
+                          <th>Size</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDocuments.map((doc) => {
+                          const docFolderIds = getDocumentFolderIds(doc);
+                          const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
+                          const isRenaming = renameDocId === doc.id;
+                          return (
+                            <tr key={doc.id}>
+                              <td>{selectedWorkspace.name}</td>
+                              <td>{folderNames.length ? folderNames.join(" | ") : "-"}</td>
+                              <td>
+                                {isRenaming ? (
+                                  <div className="inline-actions">
+                                    <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
+                                    <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
+                                    <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
+                                  </div>
+                                ) : doc.name}
+                              </td>
+                              <td>{doc.tags?.length ? doc.tags.join(", ") : "-"}</td>
+                              <td>{doc.sizeLabel}</td>
+                              <td>
+                                <div className="inline-actions">
+                                  {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
+                                  <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                                  <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                                  <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="hint">Choose a subject to view folders and documents.</p>
           )}
         </article>
-      </div>
+      ) : null}
 
-      <article className="panel">
-        <h4>Subject Organization</h4>
-        <p className="hint">Add folders and topic tags under the selected subject.</p>
-
-        <div className="panel-grid two">
-          <form className="form-stack" onSubmit={handleCreateFolder}>
-            <label className="field-label" htmlFor="folderName">Create folder</label>
-            <input
-              id="folderName"
-              className="input"
-              value={folderName}
-              onChange={(event) => setFolderName(event.target.value)}
-              placeholder="e.g. Chapter 4"
-              disabled={!selectedSubject || isWorking}
-            />
-            <label className="field-label" htmlFor="parentFolderId">Parent folder (optional)</label>
-            <select
-              id="parentFolderId"
-              className="input"
-              value={parentFolderId}
-              onChange={(event) => setParentFolderId(event.target.value)}
-              disabled={!selectedSubject || isWorking}
-            >
-              <option value="">Top level</option>
-              {flattenedFolders.map((folder) => (
-                <option key={folder.id} value={folder.id}>
-                  {`${"  ".repeat(folder.depth)}${folder.name}`}
-                </option>
-              ))}
-            </select>
-            <button className="ghost-btn" type="submit" disabled={!selectedSubject || isWorking}>Add Folder</button>
-          </form>
-
-          <form className="form-stack" onSubmit={handleAddTopicTag}>
-            <label className="field-label" htmlFor="topicTagName">Add topic tag</label>
-            <input
-              id="topicTagName"
-              className="input"
-              value={topicTagName}
-              onChange={(event) => setTopicTagName(event.target.value)}
-              placeholder="e.g. derivatives"
-              disabled={!selectedSubject || isWorking}
-            />
-            <button className="ghost-btn" type="submit" disabled={!selectedSubject || isWorking}>Add Tag</button>
-          </form>
-        </div>
-
-        <div className="panel-grid two" style={{ marginTop: "12px" }}>
-          <div>
-            <p className="field-label">Folders</p>
-            {folders.length ? (
-              <div className="chip-stack">
+      {showFolderModal ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <h4>Add Folder / Subfolder</h4>
+              <button className="table-btn" type="button" onClick={() => setShowFolderModal(false)}>Close</button>
+            </div>
+            <div className="form-stack" style={{ marginTop: "10px" }}>
+              <input
+                className="input"
+                placeholder="Folder name"
+                value={folderName}
+                onChange={(event) => setFolderName(event.target.value)}
+              />
+              <select className="input" value={parentFolderId} onChange={(event) => setParentFolderId(event.target.value)}>
+                <option value="">Top level folder</option>
                 {flattenedFolders.map((folder) => (
-                  <div className="scope-chip-row" key={folder.id}>
-                    {renameFolderId === folder.id ? (
-                      <>
-                        <input
-                          className="input chip-input"
-                          value={renameFolderName}
-                          onChange={(event) => setRenameFolderName(event.target.value)}
-                          disabled={isWorking}
-                        />
-                        <button className="table-btn" type="button" onClick={() => handleSaveRenameFolder(folder.id)} disabled={isWorking}>Save</button>
-                        <button className="table-btn" type="button" onClick={handleCancelRenameFolder} disabled={isWorking}>Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="scope-chip">{`${"  ".repeat(folder.depth)}${folder.name}`}</span>
-                        <button className="table-btn" type="button" onClick={() => handleStartRenameFolder(folder)} disabled={isWorking}>Edit</button>
-                        <button className="table-btn danger" type="button" onClick={() => handleRemoveFolder(folder.id)} disabled={isWorking}>Delete</button>
-                      </>
-                    )}
-                  </div>
+                  <option key={folder.id} value={folder.id}>{folderLabels.get(folder.id)}</option>
                 ))}
-              </div>
-            ) : (
-              <p className="hint">No folders yet.</p>
-            )}
-          </div>
-          <div>
-            <p className="field-label">Topic tags</p>
-            {topicTags.length ? (
-              <div className="chip-stack">
-                {topicTags.map((tag) => (
-                  <div className="scope-chip-row" key={tag}>
-                    {renameTopicTagFrom === tag ? (
-                      <>
-                        <input
-                          className="input chip-input"
-                          value={renameTopicTagTo}
-                          onChange={(event) => setRenameTopicTagTo(event.target.value)}
-                          disabled={isWorking}
-                        />
-                        <button className="table-btn" type="button" onClick={handleSaveRenameTopicTag} disabled={isWorking}>Save</button>
-                        <button className="table-btn" type="button" onClick={handleCancelRenameTopicTag} disabled={isWorking}>Cancel</button>
-                      </>
-                    ) : (
-                      <>
-                        <span className="scope-chip">#{tag}</span>
-                        <button className="table-btn" type="button" onClick={() => handleStartRenameTopicTag(tag)} disabled={isWorking}>Edit</button>
-                        <button className="table-btn danger" type="button" onClick={() => handleRemoveTopicTag(tag)} disabled={isWorking}>Delete</button>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="hint">No topic tags yet.</p>
-            )}
-          </div>
-        </div>
-      </article>
-
-      <article className="panel">
-        <h4>Upload Documents (TXT only for now)</h4>
-        <p className="hint">
-          Current scope: {selectedWorkspace ? selectedWorkspace.name : "No workspace"}
-          {" / "}
-          {selectedSubject ? selectedSubject.name : "No subject"}
-        </p>
-
-        <div className="panel-grid two" style={{ marginBottom: "12px" }}>
-          <label className="form-stack">
-            <span className="field-label">Folder for upload</span>
-            <select
-              className="input"
-              value={uploadFolderId}
-              onChange={(event) => setUploadFolderId(event.target.value)}
-              disabled={!selectedSubject || isWorking}
-            >
-              <option value="">No folder</option>
-              {flattenedFolders.map((folder) => (
-                <option key={folder.id} value={folder.id}>{`${"  ".repeat(folder.depth)}${folder.name}`}</option>
-              ))}
-            </select>
-          </label>
-          <label className="form-stack">
-            <span className="field-label">Tags for uploaded docs</span>
-            <input
-              className="input"
-              value={uploadTags}
-              onChange={(event) => setUploadTags(event.target.value)}
-              placeholder="comma,separated,tags"
-              disabled={!selectedSubject || isWorking}
-            />
-          </label>
-        </div>
-
-        <label className="upload-box">
-          <span>Choose one or more .txt files</span>
-          <input
-            type="file"
-            accept=".txt,text/plain"
-            multiple
-            disabled={!selectedWorkspace || !selectedSubject || isWorking}
-            onChange={handleUpload}
-          />
-        </label>
-
-        {!selectedWorkspace || !selectedSubject ? (
-          <p className="hint" style={{ marginTop: "10px" }}>
-            Create/select a workspace and subject before uploading documents.
-          </p>
-        ) : null}
-
-        {selectedSubject && selectedSubject.documents.length > 0 ? (
-          <div className="doc-table-wrap">
-            <table className="doc-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Folder</th>
-                  <th>Tags</th>
-                  <th>Size</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedSubject.documents.map((doc) => {
-                  const isRenaming = renameDocId === doc.id;
-                  return (
-                    <tr key={doc.id}>
-                      <td>
-                        {isRenaming ? (
-                          <div className="inline-actions">
-                            <input
-                              className="input"
-                              value={renameDocName}
-                              onChange={(event) => setRenameDocName(event.target.value)}
-                            />
-                            <button className="table-btn" onClick={() => handleSaveRename(doc.id)} type="button">Save</button>
-                            <button className="table-btn" onClick={() => setRenameDocId("")} type="button">Cancel</button>
-                          </div>
-                        ) : (
-                          <span>{doc.name}</span>
-                        )}
-                      </td>
-                      <td>{folderLabels.get(doc.folderId) || "-"}</td>
-                      <td>{doc.tags?.length ? doc.tags.join(", ") : "-"}</td>
-                      <td>{doc.sizeLabel}</td>
-                      <td>
-                        <div className="inline-actions">
-                          {!isRenaming ? <button className="table-btn" onClick={() => handleStartRename(doc)} type="button">Rename</button> : null}
-                          <button className="table-btn" onClick={() => setPreviewDoc(doc)} type="button">Preview</button>
-                          <button className="table-btn danger" onClick={() => handleRemove(doc.id)} type="button">Remove</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="hint" style={{ marginTop: "10px" }}>
-            No TXT files uploaded yet.
-          </p>
-        )}
-
-        {previewDoc ? (
-          <div className="modal-backdrop" role="dialog" aria-modal="true">
-            <div className="modal-card">
-              <div className="modal-head">
-                <h4>{previewDoc.name}</h4>
-                <button className="table-btn" onClick={() => setPreviewDoc(null)} type="button">Close</button>
-              </div>
-              <p className="hint">{previewDoc.sizeLabel} · TXT</p>
-              <pre className="doc-preview">{previewDoc.content || "(empty file)"}</pre>
+              </select>
+              <button className="primary-btn" type="button" onClick={handleAddFolder}>Add</button>
             </div>
           </div>
-        ) : null}
-      </article>
+        </div>
+      ) : null}
+
+      {showUploadModal ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <h4>Add Documents</h4>
+              <button className="table-btn" type="button" onClick={() => setShowUploadModal(false)}>Close</button>
+            </div>
+            <div className="form-stack" style={{ marginTop: "10px" }}>
+              <label className="upload-box">
+                <span>Select TXT files</span>
+                <input
+                  type="file"
+                  accept=".txt,text/plain"
+                  multiple
+                  onChange={(event) => setPendingFiles(Array.from(event.target.files || []))}
+                />
+              </label>
+
+              <div>
+                <p className="field-label">Assign to folders</p>
+                <div className="chip-stack finder-upload-folders">
+                  {flattenedFolders.map((folder) => (
+                    <label className="scope-chip-row" key={folder.id}>
+                      <input
+                        type="checkbox"
+                        checked={uploadFolderIds.includes(folder.id)}
+                        onChange={() => toggleUploadFolder(folder.id)}
+                      />
+                      <span className="scope-chip">{folderLabels.get(folder.id)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <input
+                className="input"
+                placeholder="Type a new tag"
+                value={uploadTagDraft}
+                onChange={(event) => setUploadTagDraft(event.target.value)}
+              />
+
+              <div className="inline-actions">
+                <button
+                  className="table-btn"
+                  type="button"
+                  onClick={() => {
+                    addTagToSelection(uploadTagDraft, setUploadSelectedTags);
+                    setUploadTagDraft("");
+                  }}
+                >
+                  Add Tag
+                </button>
+              </div>
+
+              <div className="chip-wrap">
+                {topicTagNames.map((tagName) => (
+                  <button
+                    key={`upload-existing-${tagName}`}
+                    className="table-btn"
+                    type="button"
+                    onClick={() => addTagToSelection(tagName, setUploadSelectedTags)}
+                  >
+                    + {tagName}
+                  </button>
+                ))}
+              </div>
+
+              <div className="chip-wrap">
+                {uploadSelectedTags.map((tagName) => (
+                    <span className="scope-chip tag-picked" key={`upload-picked-${tagName}`} style={{ backgroundColor: `${getTagColor(tagName)}2a`, borderColor: getTagColor(tagName) }}>
+                    {tagName}
+                    <button type="button" className="tag-remove-btn" onClick={() => removeTagFromSelection(tagName, setUploadSelectedTags)}>x</button>
+                  </span>
+                ))}
+              </div>
+
+              <button className="primary-btn" type="button" onClick={handleUploadSubmit} disabled={!pendingFiles.length}>Add Documents</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewDoc ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <h4>{previewDoc.name}</h4>
+              <button className="table-btn" onClick={() => setPreviewDoc(null)} type="button">Close</button>
+            </div>
+            <p className="hint">{previewDoc.sizeLabel} · TXT</p>
+            <pre className="doc-preview">{previewDoc.content || "(empty file)"}</pre>
+          </div>
+        </div>
+      ) : null}
+
+      {editDocMeta ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card">
+            <div className="modal-head">
+              <h4>Edit Document Metadata</h4>
+              <button className="table-btn" onClick={() => setEditDocMeta(null)} type="button">Close</button>
+            </div>
+
+            <p className="hint" style={{ marginTop: "8px" }}>{editDocMeta.name}</p>
+
+            <div className="doc-meta-grid">
+              <div className="form-stack">
+                <span className="field-label">Folders</span>
+                <div className="chip-stack finder-upload-folders">
+                  {flattenedFolders.map((folder) => (
+                    <label className="scope-chip-row" key={`edit-${folder.id}`}>
+                      <input
+                        type="checkbox"
+                        checked={editDocFolderIds.includes(folder.id)}
+                        onChange={() => toggleEditDocFolder(folder.id)}
+                      />
+                      <span className="scope-chip">{folderLabels.get(folder.id)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <label className="form-stack">
+                <span className="field-label">Tags</span>
+                <input
+                  className="input"
+                  value={editDocTagDraft}
+                  onChange={(event) => setEditDocTagDraft(event.target.value)}
+                  placeholder="Type a new tag"
+                />
+
+                <div className="inline-actions">
+                  <button
+                    className="table-btn"
+                    type="button"
+                    onClick={() => {
+                      addTagToSelection(editDocTagDraft, setEditDocSelectedTags);
+                      setEditDocTagDraft("");
+                    }}
+                  >
+                    Add Tag
+                  </button>
+                </div>
+
+                <div className="chip-wrap">
+                  {topicTagNames.map((tagName) => (
+                    <button
+                      key={`edit-existing-${tagName}`}
+                      className="table-btn"
+                      type="button"
+                      onClick={() => addTagToSelection(tagName, setEditDocSelectedTags)}
+                    >
+                      + {tagName}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="chip-wrap">
+                  {editDocSelectedTags.map((tagName) => (
+                    <span className="scope-chip tag-picked" key={`edit-picked-${tagName}`} style={{ backgroundColor: `${getTagColor(tagName)}2a`, borderColor: getTagColor(tagName) }}>
+                      {tagName}
+                      <button type="button" className="tag-remove-btn" onClick={() => removeTagFromSelection(tagName, setEditDocSelectedTags)}>x</button>
+                    </span>
+                  ))}
+                </div>
+              </label>
+            </div>
+
+            <div className="inline-actions" style={{ marginTop: "10px" }}>
+              <button className="primary-btn" type="button" onClick={handleSaveDocMeta}>Save Changes</button>
+              <button className="table-btn" type="button" onClick={() => setEditDocMeta(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

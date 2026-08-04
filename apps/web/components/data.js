@@ -2,31 +2,26 @@ export const appName = "LUNA";
 
 export const navByRole = {
   student: [
-    { key: "dashboard", label: "Dashboard" },
     { key: "workspaces", label: "Workspaces" },
-    { key: "quiz", label: "Quizzes and Exams" },
-    { key: "chat", label: "Tutor Chat" },
-    { key: "analytics", label: "Analytics" },
-    { key: "marketplace", label: "Marketplace" }
+    { key: "dashboard", label: "Dashboard" },
+    { key: "ai-tools", label: "AI Tools" },
+    { key: "marketplace", label: "Agent Marketplace" }
   ],
   teacher: [
-    { key: "dashboard", label: "Dashboard" },
     { key: "workspaces", label: "Workspaces" },
-    { key: "quiz", label: "Quizzes and Exams" },
-    { key: "chat", label: "Tutor Chat" },
-    { key: "analytics", label: "Analytics" },
-    { key: "marketplace", label: "Marketplace" },
-    { key: "builder", label: "Agent Builder" },
-    { key: "revenue", label: "Revenue" }
+    { key: "dashboard", label: "Dashboard" },
+    { key: "ai-tools", label: "AI Tools" },
+    { key: "marketplace", label: "Agent Marketplace" }
   ]
 };
 
 export const pageTitles = {
   dashboard: "Dashboard",
   workspaces: "Workspaces",
-  quiz: "Quiz Engine",
-  chat: "Tutor Chat",
-  analytics: "Learning Analytics",
+  "ai-tools": "AI Tools",
+  "ai-tool-quiz": "Quiz Generator",
+  "ai-tool-tutor": "AI Tutor",
+  "ai-tool-chatbot": "Chatbot",
   marketplace: "Agent Marketplace",
   builder: "Agent Builder",
   revenue: "Creator Revenue"

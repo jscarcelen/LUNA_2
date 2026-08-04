@@ -290,3 +290,22 @@
   - read and visualize from returned tree
 - Subfolder action returns explicit migration-required error until SQL 0002 is applied in Supabase.
 - Production endpoint check currently reports missing Supabase env vars in Vercel runtime.
+
+## 2026-08-04 (update 12)
+
+### Step 19: Workspace UX + data model upgrade for document organization
+
+- Added multi-folder assignment support for uploaded TXT documents.
+- Added migration `supabase/migrations/202608040003_add_document_folder_map.sql`:
+  - new `document_folders` bridge table
+  - backfill from existing `documents.folder_id`
+- Updated Supabase repository (`apps/web/lib/workspacesRepository.js`):
+  - document list now includes `folderIds`
+  - upload supports assigning to multiple folders
+  - compatibility guard provides actionable error if migration 0003 is missing
+- Updated workspace API route payload handling (`apps/web/app/api/workspaces-supabase/route.js`) for `folderIds`.
+- Updated workspace manager UI (`apps/web/components/views.js`):
+  - checkbox-based folder assignment on upload
+  - folder/tag/text filters for document table
+  - friendly filter reset and results count
+  - multi-folder display per document

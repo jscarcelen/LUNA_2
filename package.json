@@ -1,0 +1,25 @@
+{
+  "name": "luna-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "LUNA modular AI study platform scaffold",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @luna/web",
+    "dev:admin": "npm run dev --workspace @luna/admin",
+    "build": "npm run build --workspace @luna/web && npm run build --workspace @luna/admin",
+    "lint": "npm run lint --workspace @luna/web && npm run lint --workspace @luna/admin",
+    "db:migration:apply": "echo 'Apply SQL in supabase/migrations using Supabase SQL editor or CLI.'"
+  },
+  "engines": {
+    "node": ">=20.9.0 <25"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "eslint": "^9.32.0",
+    "globals": "^16.3.0"
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ws-1",
+    "name": "High School 2024",
+    "subjects": [
+      {
+        "id": "sub-1",
+        "name": "Mathematics",
+        "topicTags": ["integrals", "exam-1"],
+        "folders": [
+          {
+            "id": "fld-1",
+            "name": "Calculus",
+            "tags": ["semester-2"]
+          }
+        ],
+        "documents": [
+          {
+            "id": "doc-1",
+            "name": "limits_notes.txt",
+            "sizeLabel": "2.4 KB",
+            "preview": "Limits describe behavior of a function near a value, not only at that value.",
+            "content": "Limits describe behavior of a function near a value, not only at that value.",
+            "folderId": "fld-1",
+            "tags": ["limits", "review"]
+          }
+        ]
+      },
+      {
+        "id": "sub-2",
+        "name": "Biology",
+        "topicTags": [],
+        "folders": [],
+        "documents": []
+      }
+    ]
+  }
+]

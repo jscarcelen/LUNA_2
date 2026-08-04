@@ -1,5 +1,6 @@
 import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } from "./supabaseClient.js";
 import {
+  DEFAULT_DOCUMENT_SOURCE_TYPE,
   DEFAULT_SUBJECT_COLOR,
   DEFAULT_WORKSPACE_COLOR,
   normalizeSubjectColor,
@@ -12,6 +13,7 @@ import {
   normalizeTopicTagColor,
   normalizeDocumentMeta,
   normalizeDocumentName,
+  normalizeDocumentSourceType,
   normalizeFolderIds
 } from "../modules/core/contracts.js";
 import {
@@ -30,9 +32,12 @@ let folderHierarchySupported;
 let documentFoldersSupported;
 let documentChunksSupported;
 let documentChunkEmbeddingsSupported;
+let documentSourceTypeSupported;
 let topicTagColorSupported;
 let workspaceColorSupported;
 let subjectColorSupported;
+
+const GENERATED_QUIZ_NAME_PREFIX = "Generated Quiz - ";
 
 async function ensureTopicTags(client, subjectId, tags) {
   const hasTopicTagColor = await supportsTopicTagColor(client);
@@ -124,6 +129,28 @@ async function supportsDocumentChunkEmbeddings(client) {
   return documentChunkEmbeddingsSupported;
 }
 
+async function supportsDocumentSourceType(client) {
+  if (typeof documentSourceTypeSupported === "boolean") {
+    return documentSourceTypeSupported;
+  }
+
+  const { error } = await client
+    .from("documents")
+    .select("source_type")
+    .limit(1);
+
+  documentSourceTypeSupported = !error;
+  return documentSourceTypeSupported;
+}
+
+function inferDocumentSourceType(row) {
+  const explicit = normalizeDocumentSourceType(row?.source_type || row?.sourceType || DEFAULT_DOCUMENT_SOURCE_TYPE);
+  if (row?.source_type || row?.sourceType) return explicit;
+
+  const name = String(row?.name || "").trim();
+  return name.startsWith(GENERATED_QUIZ_NAME_PREFIX) ? "generated" : DEFAULT_DOCUMENT_SOURCE_TYPE;
+}
+
 async function supportsTopicTagColor(client) {
   if (typeof topicTagColorSupported === "boolean") {
     return topicTagColorSupported;
@@ -170,6 +197,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const client = createSupabaseAdminClient();
   const hasFolderHierarchy = await supportsFolderHierarchy(client);
   const hasDocumentFolders = await supportsDocumentFolders(client);
+  const hasDocumentSourceType = await supportsDocumentSourceType(client);
   const hasTopicTagColor = await supportsTopicTagColor(client);
   const hasWorkspaceColor = await supportsWorkspaceColor(client);
   const hasSubjectColor = await supportsSubjectColor(client);
@@ -206,7 +234,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       ? client.from("topic_tags").select(hasTopicTagColor ? "id, subject_id, tag, color" : "id, subject_id, tag").in("subject_id", subjectIds).order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     subjectIds.length
-      ? client.from("documents").select("id, subject_id, folder_id, name, content, preview, size_bytes").in("subject_id", subjectIds).order("created_at", { ascending: false })
+      ? client.from("documents").select(hasDocumentSourceType ? "id, subject_id, folder_id, name, content, preview, size_bytes, source_type" : "id, subject_id, folder_id, name, content, preview, size_bytes").in("subject_id", subjectIds).order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null })
   ]);
 
@@ -279,6 +307,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       folderId: folderIds[0] || "",
       folderIds,
       sizeLabel: `${(Number(doc.size_bytes || 0) / 1024).toFixed(1)} KB`,
+      sourceType: inferDocumentSourceType(doc),
       tags: tagsByDocId.get(doc.id) || []
     });
     docsBySubject.set(doc.subject_id, list);
@@ -568,12 +597,15 @@ export async function setTopicTagColor(subjectId, tag, color) {
   if (error) throw error;
 }
 
-export async function uploadTxtDocuments(subjectId, files, options = {}) {
+async function persistTextDocuments(subjectId, files, options = {}) {
   const client = createSupabaseAdminClient();
   const hasDocumentFolders = await supportsDocumentFolders(client);
   const hasDocumentChunks = await supportsDocumentChunks(client);
   const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+  const hasDocumentSourceType = await supportsDocumentSourceType(client);
   const meta = normalizeDocumentMeta(options);
+  const sourceType = normalizeDocumentSourceType(options.sourceType || DEFAULT_DOCUMENT_SOURCE_TYPE);
+  const persistChunks = options.persistChunks !== false && sourceType === DEFAULT_DOCUMENT_SOURCE_TYPE;
   const folderIds = normalizeFolderIds(meta.folderIds || []);
   if (folderIds.length > 1 && !hasDocumentFolders) {
     throw new Error("Multi-folder assignment requires migration 202608040003_add_document_folder_map.sql to be applied.");
@@ -583,12 +615,16 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
 
   const toInsert = files.map((file) => {
     const normalizedName = normalizeDocumentName(file.name || "");
-    const name = normalizedName || "untitled.txt";
+    const fallbackName = sourceType === "generated" ? `${GENERATED_QUIZ_NAME_PREFIX}untitled.txt` : "untitled.txt";
+    const baseName = normalizedName || fallbackName;
+    const name = sourceType === "generated" && !hasDocumentSourceType && !baseName.startsWith(GENERATED_QUIZ_NAME_PREFIX)
+      ? `${GENERATED_QUIZ_NAME_PREFIX}${baseName}`
+      : baseName;
     const content = String(file.content || "");
     const preview = content.trim().slice(0, 180) || "(empty file)";
     const sizeBytes = Number(file.sizeBytes || Buffer.byteLength(content, "utf8") || 0);
 
-    return {
+    const row = {
       subject_id: subjectId,
       folder_id: primaryFolderId,
       name,
@@ -597,15 +633,21 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
       size_bytes: sizeBytes,
       updated_at: nowIso
     };
+
+    if (hasDocumentSourceType) {
+      row.source_type = sourceType;
+    }
+
+    return row;
   });
 
   const { data: docs, error: docsError } = await client
     .from("documents")
     .insert(toInsert)
-    .select("id, subject_id, name, content");
+    .select(hasDocumentSourceType ? "id, subject_id, name, content, source_type" : "id, subject_id, name, content");
   if (docsError) throw docsError;
 
-  if (hasDocumentChunks && docs?.length) {
+  if (persistChunks && hasDocumentChunks && docs?.length) {
     const chunkRows = docs.flatMap((doc) => {
       const baseDocument = {
         id: doc.id,
@@ -670,7 +712,14 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
   }
 
   const tags = dedupeTagNames(meta.tags || []);
-  if (!tags.length || !docs?.length) return;
+  if (!tags.length || !docs?.length) {
+    return (docs || []).map((doc) => ({
+      id: doc.id,
+      subjectId: doc.subject_id || subjectId,
+      name: doc.name,
+      sourceType: inferDocumentSourceType(doc)
+    }));
+  }
 
   const topicRows = await ensureTopicTags(client, subjectId, tags);
   const tagIds = topicRows.map((row) => row.id);
@@ -684,6 +733,31 @@ export async function uploadTxtDocuments(subjectId, files, options = {}) {
 
   const { error: tagsError } = await client.from("document_tags").insert(bridgeRows);
   if (tagsError) throw tagsError;
+
+  return (docs || []).map((doc) => ({
+    id: doc.id,
+    subjectId: doc.subject_id || subjectId,
+    name: doc.name,
+    sourceType: inferDocumentSourceType(doc)
+  }));
+}
+
+export async function uploadTxtDocuments(subjectId, files, options = {}) {
+  return persistTextDocuments(subjectId, files, {
+    ...options,
+    sourceType: "uploaded",
+    persistChunks: true
+  });
+}
+
+export async function saveGeneratedQuizDocument(subjectId, file, options = {}) {
+  const saved = await persistTextDocuments(subjectId, [file], {
+    ...options,
+    sourceType: "generated",
+    persistChunks: false
+  });
+
+  return saved[0] || null;
 }
 
 export async function renameDocument(documentId, nextName) {

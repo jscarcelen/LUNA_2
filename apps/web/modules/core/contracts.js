@@ -77,6 +77,9 @@ export function normalizeTopicTagColor(color) {
 }
 
 export const DOCUMENTS_DOMAIN_VERSION = "1";
+export const DEFAULT_DOCUMENT_SOURCE_TYPE = "uploaded";
+
+const DOCUMENT_SOURCE_TYPES = new Set(["uploaded", "generated"]);
 
 function normalizeId(value) {
   return String(value || "").trim();
@@ -88,6 +91,11 @@ function normalizeTag(value) {
 
 export function normalizeDocumentName(name) {
   return String(name || "").trim();
+}
+
+export function normalizeDocumentSourceType(sourceType) {
+  const normalized = String(sourceType || "").trim().toLowerCase();
+  return DOCUMENT_SOURCE_TYPES.has(normalized) ? normalized : DEFAULT_DOCUMENT_SOURCE_TYPE;
 }
 
 export function normalizeFolderIds(folderIds) {

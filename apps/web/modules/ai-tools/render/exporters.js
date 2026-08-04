@@ -21,6 +21,38 @@ function wrapText(text, maxChars = 88) {
   return lines;
 }
 
+export function renderQuizTextDocument(quizJson) {
+  const quiz = quizJson.quiz;
+  const lines = [
+    quiz.title,
+    `Difficulty: ${quiz.difficulty}`,
+    `Questions: ${quiz.questions.length}`,
+    "",
+    quiz.instructions,
+    ""
+  ];
+
+  quiz.questions.forEach((question, index) => {
+    lines.push(`${index + 1}. ${question.prompt}`);
+    for (const option of question.options || []) {
+      lines.push(`   - ${option}`);
+    }
+    lines.push(`   Answer: ${question.answer}`);
+    lines.push(`   Explanation: ${question.explanation}`);
+
+    if (question.sourceRefs?.length) {
+      lines.push("   Source refs:");
+      for (const ref of question.sourceRefs) {
+        lines.push(`   * ${ref.documentName} · chunk ${ref.chunkIndex}`);
+      }
+    }
+
+    lines.push("");
+  });
+
+  return lines.join("\n").trim();
+}
+
 export async function renderQuizDocxBuffer(quizJson) {
   const quiz = quizJson.quiz;
   const children = [
@@ -103,12 +135,14 @@ export async function renderQuizPdfBuffer(quizJson) {
 export async function renderQuizExports(quizJson) {
   const html = renderQuizHtmlDocument(quizJson);
   const jsonText = JSON.stringify(quizJson, null, 2);
+  const text = renderQuizTextDocument(quizJson);
   const docxBuffer = await renderQuizDocxBuffer(quizJson);
   const pdfBuffer = await renderQuizPdfBuffer(quizJson);
 
   return {
     html,
     files: {
+      txt: Buffer.from(text, "utf8").toString("base64"),
       json: Buffer.from(jsonText, "utf8").toString("base64"),
       html: Buffer.from(html, "utf8").toString("base64"),
       docx: Buffer.from(docxBuffer).toString("base64"),

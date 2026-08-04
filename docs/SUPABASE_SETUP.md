@@ -32,6 +32,7 @@ Apply SQL migration:
 - `supabase/migrations/202608040005_add_workspace_subject_color.sql`
 - `supabase/migrations/202608040006_add_document_chunks.sql`
 - `supabase/migrations/202608040007_add_document_chunk_embeddings.sql`
+- `supabase/migrations/202608040008_add_document_source_type.sql`
 
 This creates:
 
@@ -45,6 +46,7 @@ This creates:
 - `document_folders` (document-to-many-folders assignment)
 - `document_chunks` (persisted overlapping text chunks for AI retrieval)
 - `document_chunks.embedding` via pgvector for vector similarity retrieval
+- `documents.source_type` to distinguish uploaded vs generated workspace documents
 
 ## 3.1) Optional embedding env vars
 

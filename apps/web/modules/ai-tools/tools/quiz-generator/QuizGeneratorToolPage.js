@@ -41,6 +41,8 @@ export function QuizGeneratorToolPage({ toolContext }) {
   const [chunkWords, setChunkWords] = useState(500);
   const [overlapWords, setOverlapWords] = useState(150);
   const [questionTypes, setQuestionTypes] = useState(["multiple-choice"]);
+  const [autoSaveToWorkspace, setAutoSaveToWorkspace] = useState(false);
+  const [saveFolderIds, setSaveFolderIds] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState(null);
@@ -53,7 +55,10 @@ export function QuizGeneratorToolPage({ toolContext }) {
   const subjects = selectedWorkspace?.subjects || [];
   const selectedSubject = subjects.find((subject) => subject.id === subjectId) || null;
   const folders = selectedSubject?.folders || [];
-  const documents = selectedSubject?.documents || [];
+  const documents = useMemo(
+    () => (selectedSubject?.documents || []).filter((document) => document.sourceType !== "generated"),
+    [selectedSubject]
+  );
   const topicTags = selectedSubject?.topicTags || [];
   const folderLabels = useMemo(() => buildFolderPathMap(folders), [folders]);
 
@@ -77,6 +82,8 @@ export function QuizGeneratorToolPage({ toolContext }) {
     setSelectedFolderIds([]);
     setSelectedDocumentIds([]);
     setSelectedTagNames([]);
+    setSaveFolderIds([]);
+    setResult(null);
   }, [workspaceId, subjectId]);
 
   function toggleSelection(value, setter) {
@@ -111,6 +118,11 @@ export function QuizGeneratorToolPage({ toolContext }) {
               subjectId,
               folderIds: selectedFolderIds,
               documentIds: selectedDocumentIds,
+              tagNames: selectedTagNames
+            },
+            saveOutput: {
+              enabled: autoSaveToWorkspace,
+              folderIds: saveFolderIds,
               tagNames: selectedTagNames
             }
           }
@@ -246,7 +258,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
         </div>
 
         <div className="selection-box" style={{ marginTop: "14px" }}>
-          <h5>Documents</h5>
+          <h5>Uploaded Documents</h5>
           <div className="chip-stack">
             {documents.map((document) => (
               <label className="scope-chip-row" key={document.id}>
@@ -260,6 +272,36 @@ export function QuizGeneratorToolPage({ toolContext }) {
             ))}
             {!documents.length ? <p className="hint">No uploaded documents in this subject.</p> : null}
           </div>
+        </div>
+
+        <div className="selection-box" style={{ marginTop: "14px" }}>
+          <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <h5 style={{ margin: 0 }}>Save Generated Quiz Back To Workspace</h5>
+            <label className="scope-chip-row">
+              <input
+                type="checkbox"
+                checked={autoSaveToWorkspace}
+                onChange={(event) => setAutoSaveToWorkspace(event.target.checked)}
+              />
+              <span className="scope-chip">Auto-save</span>
+            </label>
+          </div>
+          <p className="hint">Saved into {selectedWorkspace?.name || "selected workspace"} / {selectedSubject?.name || "selected subject"}. Choose folders below or leave empty to save as unfiled.</p>
+          {autoSaveToWorkspace ? (
+            <div className="chip-stack">
+              {folders.map((folder) => (
+                <label className="scope-chip-row" key={`save-${folder.id}`}>
+                  <input
+                    type="checkbox"
+                    checked={saveFolderIds.includes(folder.id)}
+                    onChange={() => toggleSelection(folder.id, setSaveFolderIds)}
+                  />
+                  <span className="scope-chip">{folderLabels.get(folder.id) || folder.name}</span>
+                </label>
+              ))}
+              {!folders.length ? <p className="hint">No folders in this subject. The generated quiz will be saved as unfiled.</p> : null}
+            </div>
+          ) : null}
         </div>
 
         <div className="inline-actions" style={{ marginTop: "16px" }}>
@@ -278,7 +320,9 @@ export function QuizGeneratorToolPage({ toolContext }) {
             <h4 style={{ marginTop: 0 }}>Pipeline Summary</h4>
             <p className="hint">Documents used: {result.retrieval.selectedDocumentCount} · Chunks ranked: {result.retrieval.selectedChunkCount}</p>
             <p className="hint">Top source documents: {result.retrieval.chunkDocuments.join(", ")}</p>
+            {result.savedDocument ? <p className="hint">Saved to workspace as {result.savedDocument.name}</p> : null}
             <div className="inline-actions quiz-export-bar">
+              <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.txt, "quiz.txt", "text/plain")}>Download TXT</button>
               <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.json, "quiz.json", "application/json")}>Download JSON</button>
               <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.html, "quiz.html", "text/html")}>Download HTML</button>
               <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.docx, "quiz.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>Download Word</button>

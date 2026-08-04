@@ -20,6 +20,7 @@ function collectWorkspaceDocs(workspaces, scope) {
     for (const subject of workspace.subjects || []) {
       if (subjectFilter && subject.id !== subjectFilter) continue;
       for (const document of subject.documents || []) {
+        if (document.sourceType === "generated") continue;
         const folderMatch = !folderIds.size || document.folderIds?.some((folderId) => folderIds.has(folderId));
         const docMatch = !documentIds.size || documentIds.has(document.id);
         const tagMatch = !tagNames.size || document.tags?.some((tag) => tagNames.has(tag));

@@ -16,6 +16,14 @@ import {
   normalizeWorkspaceColor
 } from "../modules/core";
 
+function getUploadedDocuments(documents = []) {
+  return documents.filter((doc) => doc.sourceType !== "generated");
+}
+
+function getGeneratedDocuments(documents = []) {
+  return documents.filter((doc) => doc.sourceType === "generated");
+}
+
 function ScopeBar({ label = "Scope" }) {
   return (
     <div className="scope-bar">
@@ -249,6 +257,8 @@ export function WorkspacesManagerView({
   const folders = selectedSubject?.folders || [];
   const topicTags = selectedSubject?.topicTags || [];
   const documents = selectedSubject?.documents || [];
+  const uploadedDocuments = getUploadedDocuments(documents);
+  const generatedDocuments = getGeneratedDocuments(documents);
   const topicTagNames = topicTags.map((item) => item.name);
   const tagColorByName = Object.fromEntries(topicTags.map((item) => [item.name, item.color || DEFAULT_TOPIC_TAG_COLOR]));
 
@@ -276,14 +286,21 @@ export function WorkspacesManagerView({
   const effectiveFolderFilter = filterFolderId || activeFolderId;
   const selectedFolderLabel = folderLabels.get(activeFolderId) || "All folders";
 
-  const filteredDocuments = filterDocuments(documents, {
+  const filteredUploadedDocuments = filterDocuments(uploadedDocuments, {
+    folderId: effectiveFolderFilter,
+    tag: filterTag,
+    text: filterText
+  });
+
+  const filteredGeneratedDocuments = filterDocuments(generatedDocuments, {
     folderId: effectiveFolderFilter,
     tag: filterTag,
     text: filterText
   });
 
   const folderChildrenMap = buildFolderChildrenMap(flattenedFolders);
-  const { documentsByFolder, unfiledDocuments } = splitDocumentsByFolder(documents);
+  const { documentsByFolder: uploadedDocumentsByFolder, unfiledDocuments: unfiledUploadedDocuments } = splitDocumentsByFolder(uploadedDocuments);
+  const { documentsByFolder: generatedDocumentsByFolder, unfiledDocuments: unfiledGeneratedDocuments } = splitDocumentsByFolder(generatedDocuments);
 
   function clearFilters() {
     setFilterFolderId("");
@@ -432,6 +449,162 @@ export function WorkspacesManagerView({
     setCollapsedFolderDocs((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
   }
 
+  function renderInlineDocumentRow(doc, rowKey) {
+    return (
+      <div className="doc-inline-row" key={rowKey}>
+        <span>{doc.name}</span>
+        <div className="chip-wrap doc-inline-tags">
+          {(doc.tags || []).map((tag) => (
+            <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
+              {tag}
+            </span>
+          ))}
+        </div>
+        <div className="inline-actions">
+          <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
+          <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+          <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+          <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+        </div>
+      </div>
+    );
+  }
+
+  function renderFolderDocumentGroup(folderId, label, docs, collapseKey) {
+    if (!docs.length) return null;
+    const isCollapsed = Boolean(collapsedFolderDocs[collapseKey]);
+    return (
+      <div className="folder-docs-block">
+        <button className="tree-toggle-docs" type="button" onClick={() => toggleFolderDocsCollapsed(collapseKey)}>
+          {isCollapsed ? "+" : "-"} {label} ({docs.length})
+        </button>
+        {!isCollapsed ? (
+          <div className="folder-docs-list">
+            {docs.map((doc) => renderInlineDocumentRow(doc, `${folderId}-${doc.id}-${collapseKey}`))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderDocumentCards(documentList, emptyMessage) {
+    return (
+      <div className="doc-card-grid">
+        {documentList.map((doc) => {
+          const isRenaming = renameDocId === doc.id;
+          const docFolderIds = getDocumentFolderIds(doc);
+          const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
+
+          return (
+            <article className="doc-visual-card" key={doc.id}>
+              {isRenaming ? (
+                <div className="form-stack">
+                  <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
+                  <div className="inline-actions">
+                    <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
+                    <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h5>{doc.name}</h5>
+                  <p className="hint">{doc.sizeLabel}</p>
+                </>
+              )}
+
+              <p className="hint">{folderNames.length ? folderNames.join(" · ") : "No folder"}</p>
+              <div className="chip-wrap">
+                {(doc.tags || []).map((tag) => (
+                  <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+              <div className="inline-actions" style={{ marginTop: "10px" }}>
+                {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
+                <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+              </div>
+            </article>
+          );
+        })}
+        {!documentList.length ? <p className="hint">{emptyMessage}</p> : null}
+      </div>
+    );
+  }
+
+  function renderDocumentTable(documentList) {
+    return (
+      <div className="doc-table-wrap">
+        <table className="doc-table">
+          <thead>
+            <tr>
+              <th>Workspace</th>
+              <th>Folder Path</th>
+              <th>Document</th>
+              <th>Tags</th>
+              <th>Size</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {documentList.map((doc) => {
+              const docFolderIds = getDocumentFolderIds(doc);
+              const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
+              const isRenaming = renameDocId === doc.id;
+              return (
+                <tr key={doc.id}>
+                  <td>{selectedWorkspace.name}</td>
+                  <td>{folderNames.length ? folderNames.join(" | ") : "-"}</td>
+                  <td>
+                    {isRenaming ? (
+                      <div className="inline-actions">
+                        <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
+                        <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
+                        <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
+                      </div>
+                    ) : doc.name}
+                  </td>
+                  <td>{doc.tags?.length ? doc.tags.join(", ") : "-"}</td>
+                  <td>{doc.sizeLabel}</td>
+                  <td>
+                    <div className="inline-actions">
+                      {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
+                      <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                      <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
+                      <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  function renderDocumentsSection({ title, documentList, totalCount, emptyMessage, actionButton }) {
+    return (
+      <div className="documents-box">
+        <div className="box-head">
+          <h4>{title}</h4>
+          <div className="inline-actions">
+            {actionButton}
+          </div>
+        </div>
+
+        <div className="box-foot">
+          <span className="hint">Showing {documentList.length} of {totalCount}</span>
+        </div>
+
+        {docViewMode === "cards" ? renderDocumentCards(documentList, emptyMessage) : renderDocumentTable(documentList)}
+        {!documentList.length && docViewMode === "list" ? <p className="hint">{emptyMessage}</p> : null}
+      </div>
+    );
+  }
+
   function handleStartEditDocMeta(doc) {
     const folderIds = getDocumentFolderIds(doc);
     setEditDocMeta(doc);
@@ -468,10 +641,10 @@ export function WorkspacesManagerView({
 
   function renderFolderNode(folder, depth) {
     const childFolders = folderChildrenMap.get(folder.id) || [];
-    const folderDocs = documentsByFolder.get(folder.id) || [];
+    const uploadedFolderDocs = uploadedDocumentsByFolder.get(folder.id) || [];
+    const generatedFolderDocs = generatedDocumentsByFolder.get(folder.id) || [];
     const isCollapsed = Boolean(collapsedFolders[folder.id]);
-    const areDocsCollapsed = Boolean(collapsedFolderDocs[folder.id]);
-    const hasTreeToggle = childFolders.length > 0 || folderDocs.length > 0;
+    const hasTreeToggle = childFolders.length > 0 || uploadedFolderDocs.length > 0 || generatedFolderDocs.length > 0;
 
     return (
       <div key={folder.id} className="folder-indent-wrap" style={{ marginLeft: `${depth * 18}px` }}>
@@ -508,35 +681,8 @@ export function WorkspacesManagerView({
 
               {!isCollapsed ? (
                 <div className="folder-children-wrap">
-                  {folderDocs.length ? (
-                    <div className="folder-docs-block">
-                      <button className="tree-toggle-docs" type="button" onClick={() => toggleFolderDocsCollapsed(folder.id)}>
-                        {areDocsCollapsed ? "+" : "-"} Documents ({folderDocs.length})
-                      </button>
-                      {!areDocsCollapsed ? (
-                        <div className="folder-docs-list">
-                          {folderDocs.map((doc) => (
-                            <div className="doc-inline-row" key={`${folder.id}-${doc.id}`}>
-                              <span>{doc.name}</span>
-                              <div className="chip-wrap doc-inline-tags">
-                                {(doc.tags || []).map((tag) => (
-                                  <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
-                                    {tag}
-                                  </span>
-                                ))}
-                              </div>
-                              <div className="inline-actions">
-                                <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
-                                <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
-                                <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
-                                <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  ) : null}
+                  {renderFolderDocumentGroup(folder.id, "Uploaded Documents", uploadedFolderDocs, `${folder.id}:uploaded`)}
+                  {renderFolderDocumentGroup(folder.id, "Generated Documents", generatedFolderDocs, `${folder.id}:generated`)}
 
                   {childFolders.map((child) => renderFolderNode(child, depth + 1))}
                 </div>
@@ -650,7 +796,7 @@ export function WorkspacesManagerView({
                   ) : (
                     <>
                       <h4>{subject.name}</h4>
-                      <p className="hint">{subject.documents.length} docs</p>
+                      <p className="hint">{getUploadedDocuments(subject.documents || []).length} uploaded · {getGeneratedDocuments(subject.documents || []).length} generated</p>
                       <div className="inline-actions" onClick={(event) => event.stopPropagation()}>
                         <input
                           className="input color-input"
@@ -695,7 +841,7 @@ export function WorkspacesManagerView({
                 <div className="folder-tree-visual">
                   {(folderChildrenMap.get("") || []).map((folder) => renderFolderNode(folder, 0))}
 
-                  {unfiledDocuments.length ? (
+                  {unfiledUploadedDocuments.length ? (
                     <div className="folder-indent-wrap">
                       <div className="folder-node">
                         <div className="folder-node-head">
@@ -703,29 +849,31 @@ export function WorkspacesManagerView({
                             <button className="tree-toggle" type="button" onClick={() => setUnfiledCollapsed((prev) => !prev)}>
                               {unfiledCollapsed ? "+" : "-"}
                             </button>
-                            <span className="folder-node-main">Unfiled Documents</span>
+                            <span className="folder-node-main">Unfiled Uploaded Documents</span>
                           </div>
                         </div>
                         {!unfiledCollapsed ? (
                           <div className="folder-docs-list">
-                            {unfiledDocuments.map((doc) => (
-                              <div className="doc-inline-row" key={`unfiled-${doc.id}`}>
-                                <span>{doc.name}</span>
-                                <div className="chip-wrap doc-inline-tags">
-                                  {(doc.tags || []).map((tag) => (
-                                    <span className="scope-chip" key={`${doc.id}-${tag}`} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
-                                      {tag}
-                                    </span>
-                                  ))}
-                                </div>
-                                <div className="inline-actions">
-                                  <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
-                                  <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
-                                  <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
-                                  <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
-                                </div>
-                              </div>
-                            ))}
+                            {unfiledUploadedDocuments.map((doc) => renderInlineDocumentRow(doc, `unfiled-uploaded-${doc.id}`))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                  {unfiledGeneratedDocuments.length ? (
+                    <div className="folder-indent-wrap">
+                      <div className="folder-node">
+                        <div className="folder-node-head">
+                          <div className="folder-node-title">
+                            <button className="tree-toggle" type="button" onClick={() => toggleFolderDocsCollapsed("unfiled-generated")}>
+                              {collapsedFolderDocs["unfiled-generated"] ? "+" : "-"}
+                            </button>
+                            <span className="folder-node-main">Unfiled Generated Documents</span>
+                          </div>
+                        </div>
+                        {!collapsedFolderDocs["unfiled-generated"] ? (
+                          <div className="folder-docs-list">
+                            {unfiledGeneratedDocuments.map((doc) => renderInlineDocumentRow(doc, `unfiled-generated-${doc.id}`))}
                           </div>
                         ) : null}
                       </div>
@@ -794,11 +942,10 @@ export function WorkspacesManagerView({
 
               <div className="documents-box">
                 <div className="box-head">
-                  <h4>Documents</h4>
+                  <h4>Document Filters</h4>
                   <div className="inline-actions">
                     <button className={docViewMode === "cards" ? "table-btn view-on" : "table-btn"} type="button" onClick={() => setDocViewMode("cards")}>Cards</button>
                     <button className={docViewMode === "list" ? "table-btn view-on" : "table-btn"} type="button" onClick={() => setDocViewMode("list")}>List View</button>
-                    <button className="primary-btn" type="button" onClick={() => setShowUploadModal(true)} disabled={isWorking}>Add Document</button>
                   </div>
                 </div>
 
@@ -829,101 +976,25 @@ export function WorkspacesManagerView({
 
                 <div className="box-foot">
                   <button className="table-btn" type="button" onClick={clearFilters}>Reset Filters</button>
-                  <span className="hint">Showing {filteredDocuments.length} of {documents.length}</span>
+                  <span className="hint">Showing {filteredUploadedDocuments.length} of {uploadedDocuments.length} uploaded · {filteredGeneratedDocuments.length} of {generatedDocuments.length} generated</span>
                 </div>
-
-                {docViewMode === "cards" ? (
-                  <div className="doc-card-grid">
-                    {filteredDocuments.map((doc) => {
-                      const isRenaming = renameDocId === doc.id;
-                      const docFolderIds = getDocumentFolderIds(doc);
-                      const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
-
-                      return (
-                        <article className="doc-visual-card" key={doc.id}>
-                          {isRenaming ? (
-                            <div className="form-stack">
-                              <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
-                              <div className="inline-actions">
-                                <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
-                                <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <>
-                              <h5>{doc.name}</h5>
-                              <p className="hint">{doc.sizeLabel}</p>
-                            </>
-                          )}
-
-                          <p className="hint">{folderNames.length ? folderNames.join(" · ") : "No folder"}</p>
-                          <div className="chip-wrap">
-                            {(doc.tags || []).map((tag) => (
-                              <span className="scope-chip" key={tag} style={{ backgroundColor: `${getTagColor(tag)}2a`, borderColor: getTagColor(tag) }}>
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                          <div className="inline-actions" style={{ marginTop: "10px" }}>
-                            {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
-                            <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
-                            <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
-                            <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
-                          </div>
-                        </article>
-                      );
-                    })}
-                    {!filteredDocuments.length ? <p className="hint">No documents found in this view.</p> : null}
-                  </div>
-                ) : (
-                  <div className="doc-table-wrap">
-                    <table className="doc-table">
-                      <thead>
-                        <tr>
-                          <th>Workspace</th>
-                          <th>Folder Path</th>
-                          <th>Document</th>
-                          <th>Tags</th>
-                          <th>Size</th>
-                          <th>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredDocuments.map((doc) => {
-                          const docFolderIds = getDocumentFolderIds(doc);
-                          const folderNames = docFolderIds.map((id) => folderLabels.get(id)).filter(Boolean);
-                          const isRenaming = renameDocId === doc.id;
-                          return (
-                            <tr key={doc.id}>
-                              <td>{selectedWorkspace.name}</td>
-                              <td>{folderNames.length ? folderNames.join(" | ") : "-"}</td>
-                              <td>
-                                {isRenaming ? (
-                                  <div className="inline-actions">
-                                    <input className="input" value={renameDocName} onChange={(event) => setRenameDocName(event.target.value)} />
-                                    <button className="table-btn" type="button" onClick={() => handleSaveRenameDoc(doc.id)}>Save</button>
-                                    <button className="table-btn" type="button" onClick={() => setRenameDocId("")}>Cancel</button>
-                                  </div>
-                                ) : doc.name}
-                              </td>
-                              <td>{doc.tags?.length ? doc.tags.join(", ") : "-"}</td>
-                              <td>{doc.sizeLabel}</td>
-                              <td>
-                                <div className="inline-actions">
-                                  {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
-                                  <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
-                                  <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
-                                  <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
+
+              {renderDocumentsSection({
+                title: "Uploaded Documents",
+                documentList: filteredUploadedDocuments,
+                totalCount: uploadedDocuments.length,
+                emptyMessage: "No uploaded documents found in this view.",
+                actionButton: <button className="primary-btn" type="button" onClick={() => setShowUploadModal(true)} disabled={isWorking}>Add Uploaded Document</button>
+              })}
+
+              {renderDocumentsSection({
+                title: "Generated Documents",
+                documentList: filteredGeneratedDocuments,
+                totalCount: generatedDocuments.length,
+                emptyMessage: "No generated documents found in this view.",
+                actionButton: null
+              })}
             </>
           ) : (
             <p className="hint">Choose a subject to view folders and documents.</p>
@@ -961,7 +1032,7 @@ export function WorkspacesManagerView({
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal-card">
             <div className="modal-head">
-              <h4>Add Documents</h4>
+              <h4>Add Uploaded Documents</h4>
               <button className="table-btn" type="button" onClick={() => setShowUploadModal(false)}>Close</button>
             </div>
             <div className="form-stack" style={{ marginTop: "10px" }}>
@@ -1033,7 +1104,7 @@ export function WorkspacesManagerView({
                 ))}
               </div>
 
-              <button className="primary-btn" type="button" onClick={handleUploadSubmit} disabled={!pendingFiles.length}>Add Documents</button>
+              <button className="primary-btn" type="button" onClick={handleUploadSubmit} disabled={!pendingFiles.length}>Add Uploaded Documents</button>
             </div>
           </div>
         </div>

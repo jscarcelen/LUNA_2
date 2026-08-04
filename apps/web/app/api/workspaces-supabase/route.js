@@ -3,6 +3,7 @@ import {
   createFolder,
   createSubject,
   createWorkspace,
+  getGeneratedDocumentDownload,
   listWorkspaceTree,
   removeDocument,
   removeFolder,
@@ -14,6 +15,7 @@ import {
   renameSubject,
   renameTopicTag,
   renameWorkspace,
+  saveGeneratedQuizBundle,
   setSubjectColor,
   setTopicTagColor,
   setWorkspaceColor,
@@ -154,6 +156,19 @@ export async function POST(request) {
         tags: payload.tags || []
       });
       return await ok(ownerUserId);
+    }
+
+    if (action === "saveGeneratedQuizDocument") {
+      const savedDocument = await saveGeneratedQuizBundle(payload.subjectId, payload.file || {}, payload.downloads || {}, {
+        folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
+        tags: payload.tags || []
+      });
+      return await ok(ownerUserId, { savedDocument });
+    }
+
+    if (action === "downloadGeneratedDocument") {
+      const download = await getGeneratedDocumentDownload(payload.documentId, payload.format);
+      return NextResponse.json({ download });
     }
 
     if (action === "renameDocument") {

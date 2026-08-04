@@ -33,6 +33,7 @@ let documentFoldersSupported;
 let documentChunksSupported;
 let documentChunkEmbeddingsSupported;
 let documentSourceTypeSupported;
+let generatedDocumentExportsSupported;
 let topicTagColorSupported;
 let workspaceColorSupported;
 let subjectColorSupported;
@@ -143,6 +144,42 @@ async function supportsDocumentSourceType(client) {
   return documentSourceTypeSupported;
 }
 
+async function supportsGeneratedDocumentExports(client) {
+  if (typeof generatedDocumentExportsSupported === "boolean") {
+    return generatedDocumentExportsSupported;
+  }
+
+  const { error } = await client
+    .from("generated_document_exports")
+    .select("document_id")
+    .limit(1);
+
+  generatedDocumentExportsSupported = !error;
+  return generatedDocumentExportsSupported;
+}
+
+function getGeneratedExportSpec(format) {
+  const normalized = String(format || "").trim().toLowerCase();
+  if (normalized === "html") {
+    return { format: "html", extension: "html", mimeType: "text/html" };
+  }
+  if (normalized === "json") {
+    return { format: "json", extension: "json", mimeType: "application/json" };
+  }
+  if (normalized === "docx") {
+    return { format: "docx", extension: "docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+  }
+  if (normalized === "pdf") {
+    return { format: "pdf", extension: "pdf", mimeType: "application/pdf" };
+  }
+  return { format: "txt", extension: "txt", mimeType: "text/plain" };
+}
+
+function withFileExtension(name, extension) {
+  const baseName = String(name || "Generated Quiz").trim().replace(/\.[^.]+$/, "") || "Generated Quiz";
+  return `${baseName}.${extension}`;
+}
+
 function inferDocumentSourceType(row) {
   const explicit = normalizeDocumentSourceType(row?.source_type || row?.sourceType || DEFAULT_DOCUMENT_SOURCE_TYPE);
   if (row?.source_type || row?.sourceType) return explicit;
@@ -198,6 +235,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const hasFolderHierarchy = await supportsFolderHierarchy(client);
   const hasDocumentFolders = await supportsDocumentFolders(client);
   const hasDocumentSourceType = await supportsDocumentSourceType(client);
+  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
   const hasTopicTagColor = await supportsTopicTagColor(client);
   const hasWorkspaceColor = await supportsWorkspaceColor(client);
   const hasSubjectColor = await supportsSubjectColor(client);
@@ -262,6 +300,15 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   if (docTagsRes.error) throw docTagsRes.error;
   if (docFoldersRes.error) throw docFoldersRes.error;
 
+  const generatedExportRes = docIds.length && hasGeneratedDocumentExports
+    ? await client
+      .from("generated_document_exports")
+      .select("document_id, format")
+      .in("document_id", docIds)
+    : { data: [], error: null };
+
+  if (generatedExportRes.error) throw generatedExportRes.error;
+
   const foldersBySubject = new Map();
   for (const folder of foldersRes.data || []) {
     const list = foldersBySubject.get(folder.subject_id) || [];
@@ -294,6 +341,13 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     folderIdsByDocId.set(row.document_id, list);
   }
 
+  const exportFormatsByDocId = new Map();
+  for (const row of generatedExportRes.data || []) {
+    const list = exportFormatsByDocId.get(row.document_id) || [];
+    list.push(String(row.format || "").trim().toLowerCase());
+    exportFormatsByDocId.set(row.document_id, list);
+  }
+
   const docsBySubject = new Map();
   for (const doc of docs) {
     const list = docsBySubject.get(doc.subject_id) || [];
@@ -308,6 +362,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       folderIds,
       sizeLabel: `${(Number(doc.size_bytes || 0) / 1024).toFixed(1)} KB`,
       sourceType: inferDocumentSourceType(doc),
+      availableFormats: Array.from(new Set(exportFormatsByDocId.get(doc.id) || ["txt"])),
       tags: tagsByDocId.get(doc.id) || []
     });
     docsBySubject.set(doc.subject_id, list);
@@ -758,6 +813,86 @@ export async function saveGeneratedQuizDocument(subjectId, file, options = {}) {
   });
 
   return saved[0] || null;
+}
+
+export async function saveGeneratedQuizBundle(subjectId, file, downloads, options = {}) {
+  const client = createSupabaseAdminClient();
+  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
+  const saved = await saveGeneratedQuizDocument(subjectId, file, options);
+
+  if (!saved) return null;
+  if (!hasGeneratedDocumentExports) return saved;
+
+  const rows = Object.entries(downloads || {}).map(([format, contentBase64]) => {
+    const spec = getGeneratedExportSpec(format);
+    return {
+      document_id: saved.id,
+      format: spec.format,
+      mime_type: spec.mimeType,
+      file_name: withFileExtension(file.name, spec.extension),
+      content_base64: String(contentBase64 || "")
+    };
+  }).filter((row) => row.content_base64);
+
+  if (rows.length) {
+    const { error } = await client
+      .from("generated_document_exports")
+      .insert(rows);
+    if (error) throw error;
+  }
+
+  return {
+    ...saved,
+    availableFormats: Array.from(new Set(rows.map((row) => row.format).concat("txt")))
+  };
+}
+
+export async function getGeneratedDocumentDownload(documentId, format) {
+  const client = createSupabaseAdminClient();
+  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
+  const requested = getGeneratedExportSpec(format);
+
+  const { data: document, error: documentError } = await client
+    .from("documents")
+    .select("id, name, content")
+    .eq("id", documentId)
+    .maybeSingle();
+  if (documentError) throw documentError;
+  if (!document) {
+    throw new Error("Document not found.");
+  }
+
+  if (requested.format === "txt") {
+    const content = String(document.content || "");
+    return {
+      format: requested.format,
+      fileName: withFileExtension(document.name, requested.extension),
+      mimeType: requested.mimeType,
+      contentBase64: Buffer.from(content, "utf8").toString("base64")
+    };
+  }
+
+  if (!hasGeneratedDocumentExports) {
+    throw new Error("Saved generated downloads require migration 202608040009_add_generated_document_exports.sql to be applied.");
+  }
+
+  const { data: exportRow, error: exportError } = await client
+    .from("generated_document_exports")
+    .select("format, mime_type, file_name, content_base64")
+    .eq("document_id", documentId)
+    .eq("format", requested.format)
+    .maybeSingle();
+  if (exportError) throw exportError;
+  if (!exportRow?.content_base64) {
+    throw new Error(`No saved ${requested.format.toUpperCase()} download is available for this document.`);
+  }
+
+  return {
+    format: exportRow.format,
+    fileName: exportRow.file_name || withFileExtension(document.name, requested.extension),
+    mimeType: exportRow.mime_type || requested.mimeType,
+    contentBase64: exportRow.content_base64
+  };
 }
 
 export async function renameDocument(documentId, nextName) {

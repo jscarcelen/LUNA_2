@@ -28,6 +28,7 @@ function downloadBase64File(base64, filename, mimeType) {
 export function QuizGeneratorToolPage({ toolContext }) {
   const workspaces = toolContext?.workspaces || [];
   const defaultWorkspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
+  const onSaveGeneratedQuizDocument = toolContext?.onSaveGeneratedQuizDocument;
 
   const [workspaceId, setWorkspaceId] = useState(defaultWorkspaceId);
   const [subjectId, setSubjectId] = useState(toolContext?.selectedSubjectId || "");
@@ -41,9 +42,9 @@ export function QuizGeneratorToolPage({ toolContext }) {
   const [chunkWords, setChunkWords] = useState(500);
   const [overlapWords, setOverlapWords] = useState(150);
   const [questionTypes, setQuestionTypes] = useState(["multiple-choice"]);
-  const [autoSaveToWorkspace, setAutoSaveToWorkspace] = useState(false);
   const [saveFolderIds, setSaveFolderIds] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState(null);
 
@@ -119,11 +120,6 @@ export function QuizGeneratorToolPage({ toolContext }) {
               folderIds: selectedFolderIds,
               documentIds: selectedDocumentIds,
               tagNames: selectedTagNames
-            },
-            saveOutput: {
-              enabled: autoSaveToWorkspace,
-              folderIds: saveFolderIds,
-              tagNames: selectedTagNames
             }
           }
         })
@@ -139,6 +135,51 @@ export function QuizGeneratorToolPage({ toolContext }) {
       setErrorMessage(String(error.message || error));
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  function buildGeneratedQuizFilename(quizJson) {
+    const title = String(quizJson?.quiz?.title || "Generated Quiz").trim() || "Generated Quiz";
+    const safeTitle = title.replace(/[\\/:*?"<>|]+/g, " ").replace(/\s+/g, " ").trim();
+    return `${safeTitle}.txt`;
+  }
+
+  function decodeBase64Utf8(base64) {
+    const raw = atob(base64);
+    const bytes = Uint8Array.from(raw, (char) => char.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function handleSaveGeneratedQuiz() {
+    if (!result || !onSaveGeneratedQuizDocument || !subjectId) return;
+    setIsSaving(true);
+    setErrorMessage("");
+
+    try {
+      const textContent = decodeBase64Utf8(result.downloads.txt);
+      const savedDocument = await onSaveGeneratedQuizDocument({
+        folderIds: saveFolderIds,
+        tags: selectedTagNames,
+        file: {
+          name: buildGeneratedQuizFilename(result.quizJson),
+          content: textContent,
+          sizeBytes: textContent.length
+        },
+        downloads: result.downloads
+      });
+
+      if (!savedDocument) {
+        throw new Error("Generated quiz could not be saved to the workspace.");
+      }
+
+      setResult((previous) => ({
+        ...previous,
+        savedDocument
+      }));
+    } catch (error) {
+      setErrorMessage(String(error.message || error));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -274,36 +315,6 @@ export function QuizGeneratorToolPage({ toolContext }) {
           </div>
         </div>
 
-        <div className="selection-box" style={{ marginTop: "14px" }}>
-          <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <h5 style={{ margin: 0 }}>Save Generated Quiz Back To Workspace</h5>
-            <label className="scope-chip-row">
-              <input
-                type="checkbox"
-                checked={autoSaveToWorkspace}
-                onChange={(event) => setAutoSaveToWorkspace(event.target.checked)}
-              />
-              <span className="scope-chip">Auto-save</span>
-            </label>
-          </div>
-          <p className="hint">Saved into {selectedWorkspace?.name || "selected workspace"} / {selectedSubject?.name || "selected subject"}. Choose folders below or leave empty to save as unfiled.</p>
-          {autoSaveToWorkspace ? (
-            <div className="chip-stack">
-              {folders.map((folder) => (
-                <label className="scope-chip-row" key={`save-${folder.id}`}>
-                  <input
-                    type="checkbox"
-                    checked={saveFolderIds.includes(folder.id)}
-                    onChange={() => toggleSelection(folder.id, setSaveFolderIds)}
-                  />
-                  <span className="scope-chip">{folderLabels.get(folder.id) || folder.name}</span>
-                </label>
-              ))}
-              {!folders.length ? <p className="hint">No folders in this subject. The generated quiz will be saved as unfiled.</p> : null}
-            </div>
-          ) : null}
-        </div>
-
         <div className="inline-actions" style={{ marginTop: "16px" }}>
           <button className="primary-btn" type="button" onClick={handleGenerateQuiz} disabled={isGenerating || !subjectId || !questionTypes.length}>
             {isGenerating ? "Generating Quiz..." : "Generate Quiz"}
@@ -321,6 +332,28 @@ export function QuizGeneratorToolPage({ toolContext }) {
             <p className="hint">Documents used: {result.retrieval.selectedDocumentCount} · Chunks ranked: {result.retrieval.selectedChunkCount}</p>
             <p className="hint">Top source documents: {result.retrieval.chunkDocuments.join(", ")}</p>
             {result.savedDocument ? <p className="hint">Saved to workspace as {result.savedDocument.name}</p> : null}
+            <div className="selection-box" style={{ marginTop: "14px" }}>
+              <h5 style={{ marginTop: 0 }}>Save Generated Quiz Back To Workspace</h5>
+              <p className="hint">Saved into {selectedWorkspace?.name || "selected workspace"} / {selectedSubject?.name || "selected subject"}. Choose folders below or leave empty to save as unfiled.</p>
+              <div className="chip-stack">
+                {folders.map((folder) => (
+                  <label className="scope-chip-row" key={`save-${folder.id}`}>
+                    <input
+                      type="checkbox"
+                      checked={saveFolderIds.includes(folder.id)}
+                      onChange={() => toggleSelection(folder.id, setSaveFolderIds)}
+                    />
+                    <span className="scope-chip">{folderLabels.get(folder.id) || folder.name}</span>
+                  </label>
+                ))}
+                {!folders.length ? <p className="hint">No folders in this subject. The generated quiz will be saved as unfiled.</p> : null}
+              </div>
+              <div className="inline-actions" style={{ marginTop: "12px" }}>
+                <button className="primary-btn" type="button" onClick={handleSaveGeneratedQuiz} disabled={isSaving || Boolean(result.savedDocument)}>
+                  {result.savedDocument ? "Saved To Workspace" : (isSaving ? "Saving..." : "Save To Workspace")}
+                </button>
+              </div>
+            </div>
             <div className="inline-actions quiz-export-bar">
               <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.txt, "quiz.txt", "text/plain")}>Download TXT</button>
               <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.json, "quiz.json", "application/json")}>Download JSON</button>

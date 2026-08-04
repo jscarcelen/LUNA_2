@@ -141,7 +141,8 @@ export function AppShell() {
             toolContext={{
               workspaces,
               selectedWorkspaceId,
-              selectedSubjectId
+              selectedSubjectId,
+              onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument
             }}
           />
         </AIToolRuntimePage>
@@ -380,6 +381,20 @@ export function AppShell() {
       folderIds: Array.isArray(options.folderIds) ? options.folderIds : [],
       tags: Array.isArray(options.tags) ? options.tags : []
     });
+  }
+
+  async function handleSaveGeneratedQuizDocument(payload) {
+    if (!selectedWorkspaceId || !selectedSubjectId) return null;
+    const result = await runWorkspaceAction("saveGeneratedQuizDocument", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: selectedSubjectId,
+      folderIds: Array.isArray(payload?.folderIds) ? payload.folderIds : [],
+      tags: Array.isArray(payload?.tags) ? payload.tags : [],
+      file: payload?.file || {},
+      downloads: payload?.downloads || {}
+    });
+
+    return result?.savedDocument || null;
   }
 
   function handleRoleChange(nextRole) {

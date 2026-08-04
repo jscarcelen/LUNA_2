@@ -33,6 +33,7 @@ Apply SQL migration:
 - `supabase/migrations/202608040006_add_document_chunks.sql`
 - `supabase/migrations/202608040007_add_document_chunk_embeddings.sql`
 - `supabase/migrations/202608040008_add_document_source_type.sql`
+- `supabase/migrations/202608040009_add_generated_document_exports.sql`
 
 This creates:
 
@@ -47,6 +48,7 @@ This creates:
 - `document_chunks` (persisted overlapping text chunks for AI retrieval)
 - `document_chunks.embedding` via pgvector for vector similarity retrieval
 - `documents.source_type` to distinguish uploaded vs generated workspace documents
+- `generated_document_exports` to store saved HTML/JSON/DOCX/PDF downloads for generated documents
 
 ## 3.1) Optional embedding env vars
 

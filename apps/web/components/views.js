@@ -24,6 +24,24 @@ function getGeneratedDocuments(documents = []) {
   return documents.filter((doc) => doc.sourceType === "generated");
 }
 
+const WORKSPACES_API = "/api/workspaces-supabase";
+
+function downloadBase64File(base64, filename, mimeType) {
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    bytes[index] = raw.charCodeAt(index);
+  }
+
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function ScopeBar({ label = "Scope" }) {
   return (
     <div className="scope-bar">
@@ -248,6 +266,7 @@ export function WorkspacesManagerView({
   const [editDocSelectedTags, setEditDocSelectedTags] = useState([]);
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [downloadFormatByDocId, setDownloadFormatByDocId] = useState({});
 
   const [tagColorDraftByName, setTagColorDraftByName] = useState({});
 
@@ -449,6 +468,57 @@ export function WorkspacesManagerView({
     setCollapsedFolderDocs((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
   }
 
+  function getSelectedDownloadFormat(doc) {
+    const options = Array.isArray(doc.availableFormats) && doc.availableFormats.length ? doc.availableFormats : ["txt"];
+    const selected = downloadFormatByDocId[doc.id];
+    return options.includes(selected) ? selected : options[0];
+  }
+
+  async function handleDownloadGeneratedDocument(doc) {
+    try {
+      const response = await fetch(WORKSPACES_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "downloadGeneratedDocument",
+          payload: {
+            documentId: doc.id,
+            format: getSelectedDownloadFormat(doc)
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Download failed");
+      }
+
+      downloadBase64File(data.download.contentBase64, data.download.fileName, data.download.mimeType);
+    } catch (error) {
+      window.alert(String(error.message || error));
+    }
+  }
+
+  function renderGeneratedDownloadControls(doc) {
+    if (doc.sourceType !== "generated") return null;
+    const formats = Array.isArray(doc.availableFormats) && doc.availableFormats.length ? doc.availableFormats : ["txt"];
+    return (
+      <>
+        <select
+          className="input"
+          value={getSelectedDownloadFormat(doc)}
+          onChange={(event) => setDownloadFormatByDocId((prev) => ({ ...prev, [doc.id]: event.target.value }))}
+          disabled={isWorking}
+        >
+          {formats.map((format) => (
+            <option key={`${doc.id}-${format}`} value={format}>{format.toUpperCase()}</option>
+          ))}
+        </select>
+        <button className="table-btn" type="button" onClick={() => handleDownloadGeneratedDocument(doc)} disabled={isWorking}>Download</button>
+      </>
+    );
+  }
+
   function renderInlineDocumentRow(doc, rowKey) {
     return (
       <div className="doc-inline-row" key={rowKey}>
@@ -461,6 +531,7 @@ export function WorkspacesManagerView({
           ))}
         </div>
         <div className="inline-actions">
+          {renderGeneratedDownloadControls(doc)}
           <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
           <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
           <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
@@ -521,6 +592,7 @@ export function WorkspacesManagerView({
                 ))}
               </div>
               <div className="inline-actions" style={{ marginTop: "10px" }}>
+                {renderGeneratedDownloadControls(doc)}
                 {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
                 <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
                 <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>
@@ -570,6 +642,7 @@ export function WorkspacesManagerView({
                   <td>{doc.sizeLabel}</td>
                   <td>
                     <div className="inline-actions">
+                      {renderGeneratedDownloadControls(doc)}
                       {!isRenaming ? <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button> : null}
                       <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
                       <button className="table-btn" type="button" onClick={() => setPreviewDoc(doc)}>Preview</button>

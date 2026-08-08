@@ -85,11 +85,16 @@ async function loadChunksForScope(selectedDocuments, chunking) {
       folderIds: Array.isArray(document?.folderIds) ? document.folderIds : [],
       tags: Array.isArray(document?.tags) ? document.tags : [],
       chunkIndex: chunk.chunkIndex,
+      tokenCount: chunk.tokenCount || 0,
       wordCount: chunk.wordCount,
       startWord: chunk.startWord,
       endWord: chunk.endWord,
+      section: chunk.section || "",
+      headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
+      page: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
       content: chunk.content,
       keywords: chunk.keywords,
+      equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : [],
       semanticScore: chunk.semanticScore
     };
   });
@@ -130,11 +135,16 @@ async function loadVectorMatchesForScope(selectedDocuments, config, chunking) {
       folderIds: Array.isArray(document?.folderIds) ? document.folderIds : [],
       tags: Array.isArray(document?.tags) ? document.tags : [],
       chunkIndex: chunk.chunkIndex,
+      tokenCount: chunk.tokenCount || 0,
       wordCount: chunk.wordCount,
       startWord: chunk.startWord,
       endWord: chunk.endWord,
+      section: chunk.section || "",
+      headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
+      page: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
       content: chunk.content,
       keywords: chunk.keywords,
+      equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : [],
       semanticScore: chunk.semanticScore,
       vectorSimilarity: chunk.vectorSimilarity || 0
     };
@@ -143,7 +153,14 @@ async function loadVectorMatchesForScope(selectedDocuments, config, chunking) {
 
 export async function runQuizGeneration(config) {
   const workspaces = await loadWorkspaceTreeForAi();
-  const selectedDocuments = collectWorkspaceDocs(workspaces, config.scope || {});
+  const scopedDocuments = collectWorkspaceDocs(workspaces, config.scope || {});
+  const blockedDocuments = scopedDocuments.filter((doc) => String(doc.reviewStatus || "approved") !== "approved");
+  const selectedDocuments = scopedDocuments.filter((doc) => String(doc.reviewStatus || "approved") === "approved");
+
+  if (blockedDocuments.length) {
+    const sampleNames = blockedDocuments.slice(0, 5).map((doc) => doc.name).join(", ");
+    throw new Error(`Review required before quiz generation. Approve document extraction first: ${sampleNames}`);
+  }
 
   if (!selectedDocuments.length) {
     throw new Error("No documents match the selected quiz scope.");

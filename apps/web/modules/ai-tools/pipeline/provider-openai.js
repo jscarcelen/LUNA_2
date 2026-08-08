@@ -37,7 +37,10 @@ function normalizeQuestion(question, index, fallbackDifficulty) {
         .map((ref) => ({
           documentName: String(ref?.documentName || "").trim(),
           chunkIndex: Number(ref?.chunkIndex || 0),
-          excerpt: String(ref?.excerpt || "").trim()
+          excerpt: String(ref?.excerpt || "").trim(),
+          equationIds: Array.isArray(ref?.equationIds)
+            ? ref.equationIds.map((id) => String(id || "").trim()).filter(Boolean)
+            : []
         }))
         .filter((ref) => ref.documentName && ref.chunkIndex > 0 && ref.excerpt)
       : []
@@ -67,6 +70,7 @@ function buildChunksContext(chunks, maxChunks = 12) {
     chunkIndex: (chunk.chunkIndex || 0) + 1,
     tags: chunk.tags || [],
     keywords: chunk.keywords || [],
+    equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : [],
     content: String(chunk.content || "").slice(0, 1800)
   }));
 }
@@ -118,9 +122,13 @@ async function callOpenAiQuiz(config, chunks, scopeSummary) {
                         properties: {
                           documentName: { type: "string" },
                           chunkIndex: { type: "integer" },
-                          excerpt: { type: "string" }
+                          excerpt: { type: "string" },
+                          equationIds: {
+                            type: "array",
+                            items: { type: "string" }
+                          }
                         },
-                        required: ["documentName", "chunkIndex", "excerpt"]
+                        required: ["documentName", "chunkIndex", "excerpt", "equationIds"]
                       }
                     }
                   },

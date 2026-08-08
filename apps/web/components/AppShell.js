@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
-import { pageTitles } from "./data";
+import { navByRole, pageTitles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
@@ -25,6 +25,7 @@ export function AppShell() {
   const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "") : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
   const title = currentAiTool ? currentAiTool.name : (pageTitles[page] || "LUNA");
+  const navItems = navByRole[role] || [];
 
   useEffect(() => {
     loadWorkspaces();
@@ -101,6 +102,7 @@ export function AppShell() {
     if (page === "workspaces") {
       return (
         <WorkspacePage
+          role={role}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -127,6 +129,8 @@ export function AppShell() {
           onRenameDocument={handleRenameDocument}
           onRemoveDocument={handleRemoveDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onReviewDocumentExtraction={handleReviewDocumentExtraction}
+          onReprocessDocument={handleReprocessDocument}
         />
       );
     }
@@ -142,6 +146,8 @@ export function AppShell() {
               workspaces,
               selectedWorkspaceId,
               selectedSubjectId,
+              onUploadTxt: handleUploadTxt,
+              onReviewDocumentExtraction: handleReviewDocumentExtraction,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument
             }}
           />
@@ -152,7 +158,7 @@ export function AppShell() {
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return <DashboardPage />;
-  }, [page, currentAiTool, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
+  }, [page, role, currentAiTool, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);
@@ -265,12 +271,13 @@ export function AppShell() {
 
   async function handleCreateFolder(name, parentFolderId) {
     if (!selectedWorkspaceId || !selectedSubjectId) return;
-    await runWorkspaceAction("createFolder", {
+    const result = await runWorkspaceAction("createFolder", {
       workspaceId: selectedWorkspaceId,
       subjectId: selectedSubjectId,
       name,
       parentFolderId: parentFolderId || ""
     });
+    return result?.created || null;
   }
 
   async function handleAddTopicTag(tag) {
@@ -334,23 +341,44 @@ export function AppShell() {
     if (!selectedWorkspaceId || !selectedSubjectId) return;
 
     const readFiles = files.map(async (file) => {
-      const contentText = await file.text();
-      const sizeKb = file.size / 1024;
+      const contentBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = String(reader.result || "");
+          const commaIndex = dataUrl.indexOf(",");
+          resolve(commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : "");
+        };
+        reader.onerror = () => reject(reader.error || new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+
       return {
         name: file.name,
-        sizeLabel: `${sizeKb.toFixed(1)} KB`,
-        content: contentText
+        sizeBytes: Number(file.size || 0),
+        mimeType: file.type || "application/octet-stream",
+        contentBase64,
+        relativePath: file.webkitRelativePath || ""
       };
     });
 
     const documents = await Promise.all(readFiles);
-    await runWorkspaceAction("uploadDocuments", {
+    const uploadResult = await postWorkspaceAction("uploadDocuments", {
       workspaceId: selectedWorkspaceId,
       subjectId: selectedSubjectId,
       folderIds: Array.isArray(options?.folderIds) ? options.folderIds : [],
       tags: options?.tags || [],
+      quality: options?.quality || {},
       files: documents
     });
+
+    if (!uploadResult.ok) {
+      const error = new Error(uploadResult.data?.error || "Upload failed");
+      error.qualityReport = uploadResult.data?.qualityReport || null;
+      error.status = uploadResult.status;
+      throw error;
+    }
+
+    return uploadResult.data;
   }
 
   async function handleRenameDocument(documentId, nextName) {
@@ -383,6 +411,35 @@ export function AppShell() {
     });
   }
 
+  async function handleReviewDocumentExtraction(documentId, options = {}) {
+    const targetSubjectId = options?.subjectId || selectedSubjectId;
+    if (!selectedWorkspaceId || !targetSubjectId || !documentId) return null;
+    const result = await runWorkspaceAction("reviewDocumentExtraction", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: targetSubjectId,
+      documentId,
+      decision: options?.decision || "approved",
+      correctedContent: typeof options?.correctedContent === "string" ? options.correctedContent : "",
+      correctedHtml: typeof options?.correctedHtml === "string" ? options.correctedHtml : "",
+      addressedRiskIds: Array.isArray(options?.addressedRiskIds) ? options.addressedRiskIds : null,
+      autoApproveWhenAllAddressed: Boolean(options?.autoApproveWhenAllAddressed)
+    });
+
+    return result?.reviewed || null;
+  }
+
+  async function handleReprocessDocument(documentId, options = {}) {
+    const targetSubjectId = options?.subjectId || selectedSubjectId;
+    if (!selectedWorkspaceId || !targetSubjectId || !documentId) return null;
+    const result = await runWorkspaceAction("reprocessDocument", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: targetSubjectId,
+      documentId,
+      minConfidence: options?.minConfidence
+    });
+    return result?.reprocessed || null;
+  }
+
   async function handleSaveGeneratedQuizDocument(payload) {
     if (!selectedWorkspaceId || !selectedSubjectId) return null;
     const result = await runWorkspaceAction("saveGeneratedQuizDocument", {
@@ -404,9 +461,20 @@ export function AppShell() {
 
   return (
     <div className="app-shell">
-      <SideNav role={role} page={page} onPageChange={setPage} onRoleChange={handleRoleChange} />
+      <SideNav
+        role={role}
+        onRoleChange={handleRoleChange}
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedWorkspaceId}
+        onSelectWorkspace={handleSelectWorkspace}
+        onCreateWorkspace={handleCreateWorkspace}
+        onRenameWorkspace={handleRenameWorkspace}
+        onSetWorkspaceColor={handleSetWorkspaceColor}
+        onRemoveWorkspace={handleRemoveWorkspace}
+        isWorking={isWorking}
+      />
       <main className="main-pane">
-        <TopBar title={title} />
+        <TopBar title={title} navItems={navItems} page={page} onPageChange={setPage} />
         <div className="page-content">{content}</div>
       </main>
     </div>

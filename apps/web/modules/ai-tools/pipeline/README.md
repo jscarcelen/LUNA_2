@@ -11,10 +11,11 @@ The important design rule is: the pipeline stages stay stable, while each tool c
 - The backend resolves that scope into a concrete list of documents.
 
 2. Chunking
-- Documents are chunked with overlapping windows.
-- Current default persisted index: 500 words per chunk with 150-word overlap.
+- Documents are first normalized to Markdown as the canonical internal representation.
+- Semantic chunking preserves heading hierarchy, lists, tables, fenced code blocks, and equation blocks.
+- Current default persisted index: ~700 token target chunks with ~80 token overlap.
 - Implemented in `chunking.js`.
-- When a TXT document is uploaded and the `document_chunks` table exists, those default chunks are persisted immediately.
+- Uploaded study documents are chunked and persisted using this Markdown-first semantic profile.
 
 3. Semantic grading / ranking
 - Each chunk receives an intrinsic semantic quality score based on lexical density and keyword richness.

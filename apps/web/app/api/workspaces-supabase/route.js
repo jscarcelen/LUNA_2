@@ -11,11 +11,13 @@ import {
   removeSubject,
   removeTopicTag,
   removeWorkspace,
+  reprocessStoredDocument,
   renameDocument,
   renameFolder,
   renameSubject,
   renameTopicTag,
   renameWorkspace,
+  reviewDocumentExtraction,
   saveGeneratedQuizBundle,
   setSubjectColor,
   setTopicTagColor,
@@ -152,11 +154,17 @@ export async function POST(request) {
 
     if (action === "uploadDocuments") {
       const files = Array.isArray(payload.files) ? payload.files : [];
-      await uploadTxtDocuments(payload.subjectId, files, {
+      const uploadResult = await uploadTxtDocuments(payload.subjectId, files, {
         folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
-        tags: payload.tags || []
+        tags: payload.tags || [],
+        quality: payload.quality || {}
       });
-      return await ok(ownerUserId);
+      return await ok(ownerUserId, {
+        uploadReport: uploadResult?.extractionReport || [],
+        uploadedCount: Array.isArray(uploadResult?.uploaded) ? uploadResult.uploaded.length : 0,
+        uploadedDocuments: Array.isArray(uploadResult?.uploaded) ? uploadResult.uploaded : [],
+        reviewWorkflowAvailable: uploadResult?.reviewWorkflowAvailable !== false
+      });
     }
 
     if (action === "saveGeneratedQuizDocument") {
@@ -195,8 +203,41 @@ export async function POST(request) {
       return await ok(ownerUserId);
     }
 
+    if (action === "reviewDocumentExtraction") {
+      const reviewed = await reviewDocumentExtraction(payload.subjectId, payload.documentId, {
+        decision: payload.decision,
+        correctedContent: payload.correctedContent,
+        correctedHtml: payload.correctedHtml,
+        addressedRiskIds: Array.isArray(payload.addressedRiskIds) ? payload.addressedRiskIds : null,
+        autoApproveWhenAllAddressed: Boolean(payload.autoApproveWhenAllAddressed)
+      });
+      return await ok(ownerUserId, { reviewed });
+    }
+
+    if (action === "reprocessDocument") {
+      const reprocessed = await reprocessStoredDocument(payload.subjectId, payload.documentId, {
+        minConfidence: payload.minConfidence
+      });
+      return await ok(ownerUserId, { reprocessed });
+    }
+
     return NextResponse.json({ error: "Unsupported action" }, { status: 400 });
   } catch (error) {
+    const errorMessage = String(error.message || error);
+    if (errorMessage.startsWith("QUALITY_GATE_BLOCKED:")) {
+      const payload = errorMessage.replace("QUALITY_GATE_BLOCKED:", "");
+      let qualityReport = null;
+      try {
+        qualityReport = JSON.parse(payload);
+      } catch {
+        qualityReport = { summary: "Low-confidence extraction detected.", files: [] };
+      }
+
+      return NextResponse.json({
+        error: qualityReport?.summary || "Low-confidence extraction requires manual review.",
+        qualityReport
+      }, { status: 422 });
+    }
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
 }

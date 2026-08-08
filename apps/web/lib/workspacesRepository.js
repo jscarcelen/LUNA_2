@@ -27,12 +27,17 @@ import {
   isEmbeddingProviderConfigured,
   toVectorLiteral
 } from "../modules/ai-tools/pipeline/embeddings.js";
+import { processUploadedDocument } from "../modules/document-processing/index.js";
 
 let folderHierarchySupported;
 let documentFoldersSupported;
 let documentChunksSupported;
 let documentChunkEmbeddingsSupported;
+let documentChunkMarkdownFieldsSupported;
 let documentSourceTypeSupported;
+let documentReviewFieldsSupported;
+let documentReviewEnhancementFieldsSupported;
+let documentSourceVisualFieldsSupported;
 let generatedDocumentExportsSupported;
 let topicTagColorSupported;
 let workspaceColorSupported;
@@ -40,6 +45,61 @@ let subjectColorSupported;
 
 const GENERATED_QUIZ_NAME_PREFIX = "Generated Quiz - ";
 const GENERATED_DOCUMENT_BUNDLE_VERSION = "generated-document-bundle-v1";
+const EQUATION_KEYWORD_PREFIX = "eqid:";
+
+function normalizeEquationIds(ids = []) {
+  return Array.from(new Set((Array.isArray(ids) ? ids : [])
+    .map((id) => String(id || "").trim())
+    .filter(Boolean)));
+}
+
+function appendEquationKeywordTags(keywords = [], equationIds = []) {
+  const baseKeywords = Array.isArray(keywords)
+    ? keywords.map((word) => String(word || "").trim()).filter(Boolean)
+    : [];
+  const tags = normalizeEquationIds(equationIds).map((id) => `${EQUATION_KEYWORD_PREFIX}${id}`);
+  return Array.from(new Set([...baseKeywords, ...tags]));
+}
+
+function splitEquationKeywordTags(keywords = []) {
+  const list = Array.isArray(keywords)
+    ? keywords.map((word) => String(word || "").trim()).filter(Boolean)
+    : [];
+  const equationIds = [];
+  const contentKeywords = [];
+  for (const keyword of list) {
+    if (keyword.startsWith(EQUATION_KEYWORD_PREFIX)) {
+      const id = keyword.slice(EQUATION_KEYWORD_PREFIX.length).trim();
+      if (id) equationIds.push(id);
+      continue;
+    }
+    contentKeywords.push(keyword);
+  }
+  return {
+    equationIds: normalizeEquationIds(equationIds),
+    keywords: contentKeywords
+  };
+}
+
+function sanitizeEditableHtml(html = "") {
+  return String(html || "")
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
+    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "");
+}
+
+function htmlToPlainText(html = "") {
+  return String(html || "")
+    .replace(/<br\s*\/?\s*>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/h[1-6]>/gi, "\n\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+}
 
 async function ensureTopicTags(client, subjectId, tags) {
   const hasTopicTagColor = await supportsTopicTagColor(client);
@@ -131,6 +191,20 @@ async function supportsDocumentChunkEmbeddings(client) {
   return documentChunkEmbeddingsSupported;
 }
 
+async function supportsDocumentChunkMarkdownFields(client) {
+  if (typeof documentChunkMarkdownFieldsSupported === "boolean") {
+    return documentChunkMarkdownFieldsSupported;
+  }
+
+  const { error } = await client
+    .from("document_chunks")
+    .select("token_count, section, heading_path, page_number, content_markdown")
+    .limit(1);
+
+  documentChunkMarkdownFieldsSupported = !error;
+  return documentChunkMarkdownFieldsSupported;
+}
+
 async function supportsDocumentSourceType(client) {
   if (typeof documentSourceTypeSupported === "boolean") {
     return documentSourceTypeSupported;
@@ -143,6 +217,48 @@ async function supportsDocumentSourceType(client) {
 
   documentSourceTypeSupported = !error;
   return documentSourceTypeSupported;
+}
+
+async function supportsDocumentReviewFields(client) {
+  if (typeof documentReviewFieldsSupported === "boolean") {
+    return documentReviewFieldsSupported;
+  }
+
+  const { error } = await client
+    .from("documents")
+    .select("review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at")
+    .limit(1);
+
+  documentReviewFieldsSupported = !error;
+  return documentReviewFieldsSupported;
+}
+
+async function supportsDocumentReviewEnhancementFields(client) {
+  if (typeof documentReviewEnhancementFieldsSupported === "boolean") {
+    return documentReviewEnhancementFieldsSupported;
+  }
+
+  const { error } = await client
+    .from("documents")
+    .select("source_preview, extraction_risk_markers")
+    .limit(1);
+
+  documentReviewEnhancementFieldsSupported = !error;
+  return documentReviewEnhancementFieldsSupported;
+}
+
+async function supportsDocumentSourceVisualFields(client) {
+  if (typeof documentSourceVisualFieldsSupported === "boolean") {
+    return documentSourceVisualFieldsSupported;
+  }
+
+  const { error } = await client
+    .from("documents")
+    .select("source_mime_type, source_content_base64, source_render_html")
+    .limit(1);
+
+  documentSourceVisualFieldsSupported = !error;
+  return documentSourceVisualFieldsSupported;
 }
 
 async function supportsGeneratedDocumentExports(client) {
@@ -284,6 +400,9 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const hasFolderHierarchy = await supportsFolderHierarchy(client);
   const hasDocumentFolders = await supportsDocumentFolders(client);
   const hasDocumentSourceType = await supportsDocumentSourceType(client);
+  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
+  const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
+  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
   const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
   const hasTopicTagColor = await supportsTopicTagColor(client);
   const hasWorkspaceColor = await supportsWorkspaceColor(client);
@@ -321,7 +440,27 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       ? client.from("topic_tags").select(hasTopicTagColor ? "id, subject_id, tag, color" : "id, subject_id, tag").in("subject_id", subjectIds).order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
     subjectIds.length
-      ? client.from("documents").select(hasDocumentSourceType ? "id, subject_id, folder_id, name, content, preview, size_bytes, source_type" : "id, subject_id, folder_id, name, content, preview, size_bytes").in("subject_id", subjectIds).order("created_at", { ascending: false })
+      ? client.from("documents").select(
+        hasDocumentReviewFields
+          ? (hasDocumentReviewEnhancementFields
+            ? (hasDocumentSourceType
+              ? (hasDocumentSourceVisualFields
+                ? "id, subject_id, folder_id, name, content, preview, size_bytes, source_type, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at, source_preview, extraction_risk_markers, source_mime_type, source_content_base64, source_render_html"
+                : "id, subject_id, folder_id, name, content, preview, size_bytes, source_type, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at, source_preview, extraction_risk_markers")
+              : (hasDocumentSourceVisualFields
+                ? "id, subject_id, folder_id, name, content, preview, size_bytes, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at, source_preview, extraction_risk_markers, source_mime_type, source_content_base64, source_render_html"
+                : "id, subject_id, folder_id, name, content, preview, size_bytes, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at, source_preview, extraction_risk_markers"))
+            : (hasDocumentSourceType
+              ? "id, subject_id, folder_id, name, content, preview, size_bytes, source_type, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at"
+              : "id, subject_id, folder_id, name, content, preview, size_bytes, created_at, review_status, extraction_confidence, extraction_method, extraction_issues, extraction_requires_review, reviewed_at"))
+          : (hasDocumentSourceType
+            ? (hasDocumentSourceVisualFields
+              ? "id, subject_id, folder_id, name, content, preview, size_bytes, source_type, created_at, source_mime_type, source_content_base64, source_render_html"
+              : "id, subject_id, folder_id, name, content, preview, size_bytes, source_type, created_at")
+            : (hasDocumentSourceVisualFields
+              ? "id, subject_id, folder_id, name, content, preview, size_bytes, created_at, source_mime_type, source_content_base64, source_render_html"
+              : "id, subject_id, folder_id, name, content, preview, size_bytes, created_at"))
+      ).in("subject_id", subjectIds).order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null })
   ]);
 
@@ -404,6 +543,18 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     const folderIds = mappedFolderIds.length ? mappedFolderIds : normalizeFolderIds([doc.folder_id || ""]);
     const sourceType = inferDocumentSourceType(doc);
     const bundle = sourceType === "generated" ? parseGeneratedDocumentBundle(doc.content) : null;
+    const reviewStatus = String(doc.review_status || (doc.extraction_requires_review ? "needs_review" : "approved"));
+    const extractionConfidence = typeof doc.extraction_confidence === "number"
+      ? doc.extraction_confidence
+      : (reviewStatus === "approved" ? 1 : 0);
+    const extractionMethod = String(doc.extraction_method || "").trim();
+    const extractionIssues = Array.isArray(doc.extraction_issues) ? doc.extraction_issues : [];
+    const extractionRiskMarkers = Array.isArray(doc.extraction_risk_markers) ? doc.extraction_risk_markers : [];
+    const sourcePreview = String(doc.source_preview || "");
+    const sourceMimeType = String(doc.source_mime_type || "").trim().toLowerCase();
+    const sourceContentBase64 = String(doc.source_content_base64 || "");
+    const sourceRenderHtml = String(doc.source_render_html || "");
+    const requiresReview = Boolean(doc.extraction_requires_review || reviewStatus !== "approved");
     const availableFormats = sourceType === "generated"
       ? Array.from(new Set([...(bundle ? Object.keys(bundle.downloads || {}) : []), ...(exportFormatsByDocId.get(doc.id) || []), "txt"]))
       : [getExtensionFromName(doc.name, "txt")];
@@ -416,7 +567,19 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       folderId: folderIds[0] || "",
       folderIds,
       sizeLabel: `${(Number(doc.size_bytes || 0) / 1024).toFixed(1)} KB`,
+      uploadedAt: doc.created_at || "",
       sourceType,
+      reviewStatus,
+      extractionConfidence,
+      extractionMethod,
+      extractionIssues,
+      extractionRiskMarkers,
+      sourcePreview,
+      sourceMimeType,
+      sourceContentBase64,
+      sourceRenderHtml,
+      requiresReview,
+      reviewedAt: doc.reviewed_at || "",
       availableFormats,
       tags: tagsByDocId.get(doc.id) || []
     });
@@ -712,7 +875,11 @@ async function persistTextDocuments(subjectId, files, options = {}) {
   const hasDocumentFolders = await supportsDocumentFolders(client);
   const hasDocumentChunks = await supportsDocumentChunks(client);
   const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+  const hasDocumentChunkMarkdownFields = hasDocumentChunks ? await supportsDocumentChunkMarkdownFields(client) : false;
   const hasDocumentSourceType = await supportsDocumentSourceType(client);
+  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
+  const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
+  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
   const meta = normalizeDocumentMeta(options);
   const sourceType = normalizeDocumentSourceType(options.sourceType || DEFAULT_DOCUMENT_SOURCE_TYPE);
   const persistChunks = options.persistChunks !== false && sourceType === DEFAULT_DOCUMENT_SOURCE_TYPE;
@@ -748,6 +915,33 @@ async function persistTextDocuments(subjectId, files, options = {}) {
       row.source_type = sourceType;
     }
 
+    if (hasDocumentSourceVisualFields) {
+      row.source_mime_type = String(file?.extraction?.sourceMimeType || "").trim().toLowerCase() || null;
+      row.source_content_base64 = String(file?.extraction?.sourceContentBase64 || "") || null;
+      row.source_render_html = String(file?.extraction?.sourceRenderHtml || "") || null;
+    }
+
+    if (hasDocumentReviewFields) {
+      const extractionConfidence = Number(file?.extraction?.confidence);
+      const extractionMethod = String(file?.extraction?.method || "").trim();
+      const extractionIssues = Array.isArray(file?.extraction?.issues) ? file.extraction.issues : [];
+      const requiresReview = Boolean(file?.extraction?.requiresReview);
+
+      row.review_status = requiresReview ? "needs_review" : "approved";
+      row.extraction_confidence = Number.isFinite(extractionConfidence) ? extractionConfidence : 1;
+      row.extraction_method = extractionMethod || null;
+      row.extraction_issues = extractionIssues;
+      row.extraction_requires_review = requiresReview;
+      row.reviewed_at = requiresReview ? null : nowIso;
+
+      if (hasDocumentReviewEnhancementFields) {
+        const sourcePreview = String(file?.extraction?.sourcePreview || "").trim();
+        const extractionRiskMarkers = Array.isArray(file?.extraction?.riskMarkers) ? file.extraction.riskMarkers : [];
+        row.source_preview = sourcePreview || null;
+        row.extraction_risk_markers = extractionRiskMarkers;
+      }
+    }
+
     return row;
   });
 
@@ -758,12 +952,14 @@ async function persistTextDocuments(subjectId, files, options = {}) {
   if (docsError) throw docsError;
 
   if (persistChunks && hasDocumentChunks && docs?.length) {
-    const chunkRows = docs.flatMap((doc) => {
+    const chunkRows = docs.flatMap((doc, index) => {
+      const file = files[index] || null;
       const baseDocument = {
         id: doc.id,
         subjectId: doc.subject_id || subjectId,
         name: doc.name,
         content: doc.content,
+        canonicalDocument: file?.extraction?.canonicalDocument || null,
         folderIds,
         tags: dedupeTagNames(meta.tags || [])
       };
@@ -781,8 +977,17 @@ async function persistTextDocuments(subjectId, files, options = {}) {
         end_word: chunk.endWord,
         word_count: chunk.wordCount,
         semantic_score: chunk.semanticScore,
-        keywords: chunk.keywords,
-        content: chunk.content
+        keywords: appendEquationKeywordTags(chunk.keywords, chunk.equationIds),
+        content: chunk.contentMarkdown || chunk.content,
+        ...(hasDocumentChunkMarkdownFields
+          ? {
+            token_count: Number(chunk.tokenCount || 0),
+            section: String(chunk.section || ""),
+            heading_path: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
+            page_number: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
+            content_markdown: chunk.contentMarkdown || chunk.content || ""
+          }
+          : {})
       }));
     });
 
@@ -853,11 +1058,509 @@ async function persistTextDocuments(subjectId, files, options = {}) {
 }
 
 export async function uploadTxtDocuments(subjectId, files, options = {}) {
-  return persistTextDocuments(subjectId, files, {
+  const client = createSupabaseAdminClient();
+  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
+  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
+  const strictQualityGate = Boolean(options?.quality?.strict);
+  const minConfidence = Number(options?.quality?.minConfidence || 0.72);
+
+  const { parsedFiles, extractionReport } = await prepareUploadedDocumentsForPersistence(files, { minConfidence });
+
+  const flagged = extractionReport.filter((item) => item.requiresReview);
+  if (strictQualityGate && flagged.length) {
+    const payload = {
+      summary: `${flagged.length} file(s) require manual review before indexing`,
+      files: flagged
+    };
+    throw new Error(`QUALITY_GATE_BLOCKED:${JSON.stringify(payload)}`);
+  }
+
+  const uploaded = await persistTextDocuments(subjectId, parsedFiles, {
     ...options,
     sourceType: "uploaded",
     persistChunks: true
   });
+
+  for (let index = 0; index < extractionReport.length; index += 1) {
+    const uploadedDoc = uploaded[index];
+    if (!uploadedDoc) continue;
+    extractionReport[index].documentId = uploadedDoc.id;
+    extractionReport[index].subjectId = uploadedDoc.subjectId || subjectId;
+  }
+
+  if (hasGeneratedDocumentExports) {
+    const pdfRows = extractionReport
+      .map((item) => {
+        const contentBase64 = String(item.generatedPdfContentBase64 || "").trim();
+        const documentId = String(item.documentId || "").trim();
+        if (!contentBase64 || !documentId) return null;
+        return {
+          document_id: documentId,
+          format: "pdf",
+          mime_type: "application/pdf",
+          file_name: withFileExtension(item.name || "uploaded-document", "pdf"),
+          content_base64: contentBase64
+        };
+      })
+      .filter(Boolean);
+
+    if (pdfRows.length) {
+      const { error: pdfArtifactError } = await client
+        .from("generated_document_exports")
+        .upsert(pdfRows, { onConflict: "document_id,format" });
+      if (pdfArtifactError) throw pdfArtifactError;
+    }
+  }
+
+  return {
+    uploaded,
+    extractionReport,
+    reviewWorkflowAvailable: hasDocumentReviewFields
+  };
+}
+
+export async function prepareUploadedDocumentsForPersistence(files, options = {}) {
+  const minConfidence = Number(options?.minConfidence || 0.72);
+
+  const extractionReport = [];
+  const parsedFiles = await Promise.all((files || []).map(async (file) => {
+    if (typeof file?.content === "string") {
+      const markdown = String(file?.content || "");
+      extractionReport.push({
+        name: file?.name || "uploaded-file.txt",
+        method: "plain-text",
+        processingRunId: crypto.randomUUID(),
+        processingPipelineVersion: "plain-text-direct",
+        processingSummary: {
+          schemaVersion: "",
+          cdmVersion: "",
+          blockCount: 0,
+          equationCount: 0,
+          headingCount: 0
+        },
+        confidence: 1,
+        issues: [],
+        riskMarkers: [],
+        canonicalVerification: null,
+        canonicalDocument: null,
+        markdown,
+        sourcePreview: String(file?.content || ""),
+        sourceMimeType: String(file?.mimeType || "text/plain").trim().toLowerCase(),
+        sourceContentBase64: String(file?.contentBase64 || ""),
+        sourceRenderHtml: "",
+        generatedPdfContentBase64: "",
+        extractedText: String(file?.content || ""),
+        requiresReview: false
+      });
+      return {
+        ...file,
+        extraction: {
+          method: "plain-text",
+          confidence: 1,
+          issues: [],
+          riskMarkers: [],
+          markdown,
+          sourcePreview: String(file?.content || ""),
+          sourceMimeType: String(file?.mimeType || "text/plain").trim().toLowerCase(),
+          sourceContentBase64: String(file?.contentBase64 || ""),
+          sourceRenderHtml: "",
+          generatedPdfContentBase64: "",
+          canonicalDocument: null,
+          requiresReview: false
+        }
+      };
+    }
+
+    const extracted = await processUploadedDocument(file, { minConfidence });
+    extractionReport.push({
+      name: file?.name || "uploaded-file",
+      method: extracted.method,
+        processingRunId: extracted.processingRunId,
+        processingPipelineVersion: extracted.processingPipelineVersion,
+        processingSummary: extracted.processingSummary || null,
+      confidence: extracted.confidence,
+      issues: extracted.issues,
+      riskMarkers: extracted.riskMarkers,
+      canonicalVerification: extracted.canonicalVerification || null,
+      canonicalDocument: extracted.canonicalDocument || null,
+      sourcePreview: extracted.sourcePreview,
+      markdown: extracted.markdown,
+      sourceMimeType: extracted.sourceMimeType,
+      sourceContentBase64: extracted.sourceContentBase64,
+      sourceRenderHtml: extracted.sourceRenderHtml,
+      generatedPdfContentBase64: extracted.generatedPdfContentBase64,
+      extractedText: extracted.text,
+      requiresReview: extracted.requiresReview
+    });
+
+    const fallbackText = extracted.text || `No extractable text found in ${file?.name || "uploaded file"}.`;
+    const canonicalMarkdown = String(extracted.markdown || "").trim() || fallbackText;
+
+    return {
+      name: file?.name || "uploaded-file.txt",
+      content: canonicalMarkdown,
+      preview: extracted.sourcePreview || fallbackText,
+      sizeBytes: Number(file?.sizeBytes || 0),
+      extraction: {
+        method: extracted.method,
+        confidence: extracted.confidence,
+        issues: extracted.issues,
+        riskMarkers: extracted.riskMarkers,
+        processingRunId: extracted.processingRunId,
+        processingPipelineVersion: extracted.processingPipelineVersion,
+        processingSummary: extracted.processingSummary || null,
+        markdown: canonicalMarkdown,
+        sourcePreview: extracted.sourcePreview,
+        sourceMimeType: extracted.sourceMimeType,
+        sourceContentBase64: extracted.sourceContentBase64,
+        sourceRenderHtml: extracted.sourceRenderHtml,
+        generatedPdfContentBase64: extracted.generatedPdfContentBase64,
+        canonicalDocument: extracted.canonicalDocument || null,
+        requiresReview: extracted.requiresReview
+      }
+    };
+  }));
+
+  return {
+    parsedFiles,
+    extractionReport,
+    reviewWorkflowAvailable: true
+  };
+}
+
+export async function reviewDocumentExtraction(subjectId, documentId, options = {}) {
+  const client = createSupabaseAdminClient();
+  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
+  const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
+  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
+
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+
+  const decisionRaw = String(options?.decision || "approved").trim().toLowerCase();
+  let decision = decisionRaw === "rejected" ? "rejected" : (decisionRaw === "needs_review" ? "needs_review" : "approved");
+  const correctedContent = typeof options?.correctedContent === "string" ? options.correctedContent.trim() : "";
+  const correctedHtml = typeof options?.correctedHtml === "string" ? sanitizeEditableHtml(options.correctedHtml).trim() : "";
+  const correctedHtmlText = correctedHtml ? htmlToPlainText(correctedHtml) : "";
+  const effectiveCorrectedContent = correctedContent || correctedHtmlText;
+  const addressedRiskIds = Array.isArray(options?.addressedRiskIds)
+    ? options.addressedRiskIds.map((item) => String(item || "").trim()).filter(Boolean)
+    : null;
+  const autoApproveWhenAllAddressed = Boolean(options?.autoApproveWhenAllAddressed);
+
+  const { data: document, error: findError } = await client
+    .from("documents")
+    .select(hasDocumentReviewEnhancementFields
+      ? "id, subject_id, name, content, source_type, extraction_issues, extraction_risk_markers"
+      : "id, subject_id, name, content, source_type, extraction_issues")
+    .eq("id", documentId)
+    .eq("subject_id", subjectId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!document) {
+    throw new Error("Document not found for review update.");
+  }
+
+  if (inferDocumentSourceType(document) === "generated") {
+    throw new Error("Generated documents do not require extraction review.");
+  }
+
+  const nextContent = effectiveCorrectedContent || String(document.content || "");
+  if (decision === "approved" && !nextContent.trim()) {
+    throw new Error("Cannot approve a document with empty extracted content. Provide corrected content first.");
+  }
+
+  const nowIso = new Date().toISOString();
+  const nextIssues = Array.isArray(document.extraction_issues) ? [...document.extraction_issues] : [];
+  const existingRiskMarkers = Array.isArray(document.extraction_risk_markers) ? [...document.extraction_risk_markers] : [];
+  const nextRiskMarkers = addressedRiskIds
+    ? existingRiskMarkers.map((marker, index) => {
+      const fallbackId = `R${index + 1}`;
+      const markerId = String(marker?.id || fallbackId);
+      return {
+        ...marker,
+        id: markerId,
+        addressed: addressedRiskIds.includes(markerId)
+      };
+    })
+    : existingRiskMarkers;
+
+  if (autoApproveWhenAllAddressed && nextRiskMarkers.length) {
+    const allAddressed = nextRiskMarkers.every((marker) => Boolean(marker?.addressed));
+    if (allAddressed) {
+      decision = "approved";
+    } else if (decision === "approved") {
+      decision = "needs_review";
+    }
+  }
+  if (effectiveCorrectedContent || correctedHtml) {
+    nextIssues.push("manually-corrected-content");
+  }
+
+  const updatePayload = hasDocumentReviewFields
+    ? {
+      review_status: decision,
+      extraction_requires_review: decision !== "approved",
+      extraction_issues: Array.from(new Set(nextIssues)),
+      reviewed_at: decision === "approved" ? nowIso : null,
+      updated_at: nowIso
+    }
+    : {
+      updated_at: nowIso
+    };
+
+  if (effectiveCorrectedContent) {
+    updatePayload.content = nextContent;
+    updatePayload.preview = nextContent.slice(0, 180) || "(empty file)";
+    updatePayload.size_bytes = Buffer.byteLength(nextContent, "utf8");
+    updatePayload.extraction_confidence = 1;
+  }
+
+  if (hasDocumentSourceVisualFields && correctedHtml) {
+    updatePayload.source_render_html = correctedHtml;
+  }
+
+  if (hasDocumentReviewEnhancementFields && hasDocumentReviewFields) {
+    updatePayload.extraction_risk_markers = nextRiskMarkers;
+  }
+
+  const { error: updateError } = await client
+    .from("documents")
+    .update(updatePayload)
+    .eq("id", documentId)
+    .eq("subject_id", subjectId);
+
+  if (updateError) throw updateError;
+
+  if (decision === "approved" && hasDocumentChunks) {
+    const { error: deleteChunksError } = await client
+      .from("document_chunks")
+      .delete()
+      .eq("document_id", documentId);
+    if (deleteChunksError) throw deleteChunksError;
+
+    const chunks = chunkDocument({
+      id: documentId,
+      subjectId,
+      name: document.name,
+      content: nextContent,
+      folderIds: [],
+      tags: []
+    }, {
+      chunkWords: DEFAULT_CHUNK_WORDS,
+      overlapWords: DEFAULT_OVERLAP_WORDS
+    });
+
+    if (chunks.length) {
+      const chunkRows = chunks.map((chunk) => ({
+        document_id: documentId,
+        subject_id: subjectId,
+        chunk_index: chunk.chunkIndex,
+        chunk_words: DEFAULT_CHUNK_WORDS,
+        overlap_words: DEFAULT_OVERLAP_WORDS,
+        start_word: chunk.startWord,
+        end_word: chunk.endWord,
+        word_count: chunk.wordCount,
+        semantic_score: chunk.semanticScore,
+        keywords: appendEquationKeywordTags(chunk.keywords, chunk.equationIds),
+        content: chunk.content
+      }));
+
+      if (hasDocumentChunkEmbeddings && isEmbeddingProviderConfigured()) {
+        const embeddings = await embedTexts(chunkRows.map((row) => row.content));
+        for (let index = 0; index < chunkRows.length; index += 1) {
+          const embedding = embeddings[index];
+          if (embedding) {
+            chunkRows[index].embedding = toVectorLiteral(embedding);
+          }
+        }
+      }
+
+      const { error: insertChunksError } = await client
+        .from("document_chunks")
+        .insert(chunkRows);
+      if (insertChunksError) throw insertChunksError;
+    }
+  }
+
+  return {
+    documentId,
+    reviewStatus: hasDocumentReviewFields ? decision : "approved",
+    corrected: Boolean(effectiveCorrectedContent || correctedHtml),
+    extractionRiskMarkers: nextRiskMarkers
+  };
+}
+
+export async function reprocessStoredDocument(subjectId, documentId, options = {}) {
+  const client = createSupabaseAdminClient();
+  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
+  const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
+  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+  const hasDocumentChunkMarkdownFields = hasDocumentChunks ? await supportsDocumentChunkMarkdownFields(client) : false;
+  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
+  const minConfidence = Number(options?.minConfidence || 0.72);
+
+  const { data: document, error: findError } = await client
+    .from("documents")
+    .select("id, subject_id, name, content, source_type, source_mime_type, source_content_base64")
+    .eq("id", documentId)
+    .eq("subject_id", subjectId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!document) throw new Error("Document not found for reprocessing.");
+  if (inferDocumentSourceType(document) === "generated") {
+    throw new Error("Generated documents do not support source reprocessing.");
+  }
+
+  const contentBase64 = String(document.source_content_base64 || "").trim();
+  if (!contentBase64) {
+    throw new Error("Stored source bytes are unavailable for this document.");
+  }
+
+  const file = {
+    name: String(document.name || "uploaded-file"),
+    mimeType: String(document.source_mime_type || "application/octet-stream").trim().toLowerCase(),
+    contentBase64
+  };
+
+  const extracted = await processUploadedDocument(file, { minConfidence });
+  const nextContent = String(extracted.markdown || extracted.text || document.content || "").trim();
+  const nowIso = new Date().toISOString();
+
+  const updatePayload = {
+    content: nextContent,
+    preview: nextContent.slice(0, 180) || "(empty file)",
+    size_bytes: Buffer.byteLength(nextContent, "utf8"),
+    updated_at: nowIso
+  };
+
+  if (hasDocumentSourceVisualFields) {
+    updatePayload.source_mime_type = String(extracted.sourceMimeType || file.mimeType || "").trim().toLowerCase() || null;
+    updatePayload.source_content_base64 = contentBase64;
+    updatePayload.source_render_html = String(extracted.sourceRenderHtml || "") || null;
+  }
+
+  if (hasDocumentReviewFields) {
+    updatePayload.review_status = extracted.requiresReview ? "needs_review" : "approved";
+    updatePayload.extraction_confidence = Number.isFinite(Number(extracted.confidence)) ? Number(extracted.confidence) : 1;
+    updatePayload.extraction_method = [String(extracted.method || "").trim(), String(extracted.processingPipelineVersion || "").trim()].filter(Boolean).join("@");
+    updatePayload.extraction_issues = Array.isArray(extracted.issues) ? extracted.issues : [];
+    updatePayload.extraction_requires_review = Boolean(extracted.requiresReview);
+    updatePayload.reviewed_at = extracted.requiresReview ? null : nowIso;
+    if (hasDocumentReviewEnhancementFields) {
+      updatePayload.source_preview = String(extracted.sourcePreview || "") || null;
+      updatePayload.extraction_risk_markers = Array.isArray(extracted.riskMarkers) ? extracted.riskMarkers : [];
+    }
+  }
+
+  const { error: updateError } = await client
+    .from("documents")
+    .update(updatePayload)
+    .eq("id", documentId)
+    .eq("subject_id", subjectId);
+  if (updateError) throw updateError;
+
+  if (hasDocumentChunks) {
+    const { error: deleteChunksError } = await client
+      .from("document_chunks")
+      .delete()
+      .eq("document_id", documentId);
+    if (deleteChunksError) throw deleteChunksError;
+
+    const chunks = chunkDocument({
+      id: documentId,
+      subjectId,
+      name: document.name,
+      content: nextContent,
+      canonicalDocument: extracted.canonicalDocument || null,
+      folderIds: [],
+      tags: []
+    }, {
+      chunkWords: DEFAULT_CHUNK_WORDS,
+      overlapWords: DEFAULT_OVERLAP_WORDS
+    });
+
+    if (chunks.length) {
+      const chunkRows = chunks.map((chunk) => ({
+        document_id: documentId,
+        subject_id: subjectId,
+        chunk_index: chunk.chunkIndex,
+        chunk_words: DEFAULT_CHUNK_WORDS,
+        overlap_words: DEFAULT_OVERLAP_WORDS,
+        start_word: chunk.startWord,
+        end_word: chunk.endWord,
+        word_count: chunk.wordCount,
+        semantic_score: chunk.semanticScore,
+        keywords: appendEquationKeywordTags(chunk.keywords, chunk.equationIds),
+        content: chunk.contentMarkdown || chunk.content,
+        ...(hasDocumentChunkMarkdownFields
+          ? {
+            token_count: Number(chunk.tokenCount || 0),
+            section: String(chunk.section || ""),
+            heading_path: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
+            page_number: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
+            content_markdown: chunk.contentMarkdown || chunk.content || ""
+          }
+          : {})
+      }));
+
+      if (hasDocumentChunkEmbeddings && isEmbeddingProviderConfigured()) {
+        const embeddings = await embedTexts(chunkRows.map((row) => row.content));
+        for (let index = 0; index < chunkRows.length; index += 1) {
+          const embedding = embeddings[index];
+          if (embedding) {
+            chunkRows[index].embedding = toVectorLiteral(embedding);
+          }
+        }
+      }
+
+      const { error: insertChunksError } = await client
+        .from("document_chunks")
+        .insert(chunkRows);
+      if (insertChunksError) throw insertChunksError;
+    }
+  }
+
+  if (hasGeneratedDocumentExports) {
+    const pdfContentBase64 = String(extracted.generatedPdfContentBase64 || "").trim();
+    if (pdfContentBase64) {
+      const { error: pdfArtifactError } = await client
+        .from("generated_document_exports")
+        .upsert([{
+          document_id: documentId,
+          format: "pdf",
+          mime_type: "application/pdf",
+          file_name: withFileExtension(document.name || "uploaded-document", "pdf"),
+          content_base64: pdfContentBase64
+        }], { onConflict: "document_id,format" });
+      if (pdfArtifactError) throw pdfArtifactError;
+    }
+  }
+
+  return {
+    documentId,
+    processingRunId: extracted.processingRunId,
+    processingPipelineVersion: extracted.processingPipelineVersion,
+    document: {
+      id: documentId,
+      name: document.name,
+      content: nextContent,
+      sourceRenderHtml: String(extracted.sourceRenderHtml || ""),
+      sourcePreview: String(extracted.sourcePreview || ""),
+      sourceMimeType: String(extracted.sourceMimeType || file.mimeType || ""),
+      sourceContentBase64: contentBase64,
+      extractionMethod: updatePayload.extraction_method || String(extracted.method || ""),
+      extractionConfidence: Number(extracted.confidence || 0),
+      extractionIssues: Array.isArray(extracted.issues) ? extracted.issues : [],
+      extractionRiskMarkers: Array.isArray(extracted.riskMarkers) ? extracted.riskMarkers : [],
+      reviewStatus: updatePayload.review_status || "approved",
+      requiresReview: Boolean(extracted.requiresReview)
+    }
+  };
 }
 
 export async function saveGeneratedQuizDocument(subjectId, file, options = {}) {
@@ -1083,6 +1786,7 @@ export async function listDocumentChunks(documentIds, options = {}) {
 
   const client = createSupabaseAdminClient();
   const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkMarkdownFields = hasDocumentChunks ? await supportsDocumentChunkMarkdownFields(client) : false;
   if (!hasDocumentChunks) return [];
 
   const chunkWords = Number(options.chunkWords || DEFAULT_CHUNK_WORDS);
@@ -1090,7 +1794,9 @@ export async function listDocumentChunks(documentIds, options = {}) {
 
   const { data, error } = await client
     .from("document_chunks")
-    .select("document_id, subject_id, chunk_index, chunk_words, overlap_words, start_word, end_word, word_count, semantic_score, keywords, content")
+    .select(hasDocumentChunkMarkdownFields
+      ? "document_id, subject_id, chunk_index, chunk_words, overlap_words, start_word, end_word, word_count, token_count, semantic_score, keywords, section, heading_path, page_number, content, content_markdown"
+      : "document_id, subject_id, chunk_index, chunk_words, overlap_words, start_word, end_word, word_count, semantic_score, keywords, content")
     .in("document_id", ids)
     .eq("chunk_words", chunkWords)
     .eq("overlap_words", overlapWords)
@@ -1099,19 +1805,27 @@ export async function listDocumentChunks(documentIds, options = {}) {
 
   if (error) throw error;
 
-  return (data || []).map((row) => ({
-    documentId: row.document_id,
-    subjectId: row.subject_id,
-    chunkIndex: row.chunk_index,
-    chunkWords: row.chunk_words,
-    overlapWords: row.overlap_words,
-    startWord: row.start_word,
-    endWord: row.end_word,
-    wordCount: row.word_count,
-    semanticScore: row.semantic_score,
-    keywords: Array.isArray(row.keywords) ? row.keywords : [],
-    content: row.content || ""
-  }));
+  return (data || []).map((row) => {
+    const keywordParts = splitEquationKeywordTags(row.keywords || []);
+    return {
+      documentId: row.document_id,
+      subjectId: row.subject_id,
+      chunkIndex: row.chunk_index,
+      chunkWords: row.chunk_words,
+      overlapWords: row.overlap_words,
+      startWord: row.start_word,
+      endWord: row.end_word,
+      tokenCount: Number(row.token_count || row.word_count || 0),
+      wordCount: row.word_count,
+      semanticScore: row.semantic_score,
+      keywords: keywordParts.keywords,
+      equationIds: keywordParts.equationIds,
+      section: String(row.section || ""),
+      headingPath: Array.isArray(row.heading_path) ? row.heading_path : [],
+      page: Number.isFinite(Number(row.page_number)) ? Number(row.page_number) : null,
+      content: row.content_markdown || row.content || ""
+    };
+  });
 }
 
 export async function matchDocumentChunksByEmbedding(documentIds, queryText, options = {}) {
@@ -1123,6 +1837,7 @@ export async function matchDocumentChunksByEmbedding(documentIds, queryText, opt
   const client = createSupabaseAdminClient();
   const hasDocumentChunks = await supportsDocumentChunks(client);
   const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+  const hasDocumentChunkMarkdownFields = hasDocumentChunks ? await supportsDocumentChunkMarkdownFields(client) : false;
   if (!hasDocumentChunks || !hasDocumentChunkEmbeddings) return [];
 
   const embedding = await embedQuery(normalizedQuery);
@@ -1142,18 +1857,26 @@ export async function matchDocumentChunksByEmbedding(documentIds, queryText, opt
 
   if (error) throw error;
 
-  return (data || []).map((row) => ({
-    documentId: row.document_id,
-    subjectId: row.subject_id,
-    chunkIndex: row.chunk_index,
-    chunkWords: row.chunk_words,
-    overlapWords: row.overlap_words,
-    startWord: row.start_word,
-    endWord: row.end_word,
-    wordCount: row.word_count,
-    semanticScore: row.semantic_score,
-    keywords: Array.isArray(row.keywords) ? row.keywords : [],
-    content: row.content || "",
-    vectorSimilarity: Number(row.similarity || 0)
-  }));
+  return (data || []).map((row) => {
+    const keywordParts = splitEquationKeywordTags(row.keywords || []);
+    return {
+      documentId: row.document_id,
+      subjectId: row.subject_id,
+      chunkIndex: row.chunk_index,
+      chunkWords: row.chunk_words,
+      overlapWords: row.overlap_words,
+      startWord: row.start_word,
+      endWord: row.end_word,
+      tokenCount: Number(row.token_count || row.word_count || 0),
+      wordCount: row.word_count,
+      semanticScore: row.semantic_score,
+      keywords: keywordParts.keywords,
+      equationIds: keywordParts.equationIds,
+      section: hasDocumentChunkMarkdownFields ? String(row.section || "") : "",
+      headingPath: hasDocumentChunkMarkdownFields && Array.isArray(row.heading_path) ? row.heading_path : [],
+      page: hasDocumentChunkMarkdownFields && Number.isFinite(Number(row.page_number)) ? Number(row.page_number) : null,
+      content: row.content_markdown || row.content || "",
+      vectorSimilarity: Number(row.similarity || 0)
+    };
+  });
 }

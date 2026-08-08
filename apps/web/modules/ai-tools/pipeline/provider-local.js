@@ -64,7 +64,8 @@ function buildMultipleChoiceQuestion(index, chunk, sentence, pool, difficulty) {
       {
         documentName: chunk.documentName,
         chunkIndex: chunk.chunkIndex + 1,
-        excerpt: sentence
+        excerpt: sentence,
+        equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : []
       }
     ]
   };
@@ -89,7 +90,8 @@ function buildTrueFalseQuestion(index, chunk, sentence, pool, difficulty) {
       {
         documentName: chunk.documentName,
         chunkIndex: chunk.chunkIndex + 1,
-        excerpt: sentence
+        excerpt: sentence,
+        equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : []
       }
     ]
   };
@@ -109,7 +111,8 @@ function buildShortAnswerQuestion(index, chunk, sentence, pool, difficulty) {
       {
         documentName: chunk.documentName,
         chunkIndex: chunk.chunkIndex + 1,
-        excerpt: sentence
+        excerpt: sentence,
+        equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : []
       }
     ]
   };

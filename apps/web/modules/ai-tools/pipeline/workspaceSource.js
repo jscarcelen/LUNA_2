@@ -21,7 +21,12 @@ function normalizeDocuments(documents = []) {
       ? doc.folderIds.filter(Boolean)
       : (doc.folderId ? [doc.folderId] : []),
     tags: (doc.tags || []).map((tag) => String(tag).trim().toLowerCase()).filter(Boolean),
-    content: String(doc.content || "")
+    content: String(doc.content || ""),
+    reviewStatus: String(doc.reviewStatus || "approved").trim().toLowerCase() || "approved",
+    extractionConfidence: Number(doc.extractionConfidence || 0),
+    extractionMethod: String(doc.extractionMethod || ""),
+    extractionIssues: Array.isArray(doc.extractionIssues) ? doc.extractionIssues : [],
+    requiresReview: Boolean(doc.requiresReview)
   }));
 }
 

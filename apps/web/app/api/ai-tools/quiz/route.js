@@ -10,7 +10,7 @@ function normalizeConfig(input = {}) {
     title: String(input.title || "").trim(),
     topicPrompt: String(input.topicPrompt || "").trim(),
     difficulty: String(input.difficulty || "medium").trim(),
-    questionCount: Math.max(1, Math.min(20, Number(input.questionCount || 6))),
+    questionCount: Math.max(1, Number(input.questionCount || 6)),
     questionTypes: Array.isArray(input.questionTypes) ? input.questionTypes : ["multiple-choice"],
     chunking: {
       chunkWords: Math.max(150, Math.min(900, Number(input.chunking?.chunkWords || 500))),
@@ -45,6 +45,10 @@ export async function POST(request) {
       }
     });
   } catch (error) {
-    return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
+    const message = String(error.message || error);
+    if (message.startsWith("Review required before quiz generation")) {
+      return NextResponse.json({ error: message }, { status: 422 });
+    }
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

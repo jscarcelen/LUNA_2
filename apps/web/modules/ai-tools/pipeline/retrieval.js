@@ -9,7 +9,7 @@ function normalizeTerms(value) {
 }
 
 function scoreChunkAgainstQuery(chunk, queryTerms, selectedTags) {
-  const body = `${chunk.content} ${chunk.keywords.join(" ")} ${chunk.tags.join(" ")}`.toLowerCase();
+  const body = `${chunk.content} ${chunk.section || ""} ${(chunk.headingPath || []).join(" ")} ${chunk.keywords.join(" ")} ${chunk.tags.join(" ")}`.toLowerCase();
   let score = (chunk.semanticScore || 0) + ((chunk.vectorSimilarity || 0) * 3);
 
   for (const term of queryTerms) {

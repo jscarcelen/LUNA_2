@@ -1,0 +1,2977 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > adversarial-fidelity-scores 1`] = `
+[
+  {
+    "equationCoverage": 0.667,
+    "fidelityScore": 0.658,
+    "fixture": "equations-complex",
+    "headingCoverage": 1,
+    "inlinePreservation": 0.5,
+    "tableCoverage": 1,
+    "textSimilarity": 0.231,
+  },
+  {
+    "equationCoverage": 1,
+    "fidelityScore": 0.904,
+    "fixture": "formatting-edge",
+    "headingCoverage": 1,
+    "inlinePreservation": 1,
+    "tableCoverage": 1,
+    "textSimilarity": 0.615,
+  },
+  {
+    "equationCoverage": 1,
+    "fidelityScore": 0.683,
+    "fixture": "table-advanced",
+    "headingCoverage": 1,
+    "inlinePreservation": 0.5,
+    "tableCoverage": 0.5,
+    "textSimilarity": 0.333,
+  },
+  {
+    "equationCoverage": 1,
+    "fidelityScore": 0.82,
+    "fixture": "document-structures",
+    "headingCoverage": 1,
+    "inlinePreservation": 1,
+    "tableCoverage": 1,
+    "textSimilarity": 0.28,
+  },
+  {
+    "equationCoverage": 0.769,
+    "fidelityScore": 0.569,
+    "fixture": "combined-adversarial",
+    "headingCoverage": 1,
+    "inlinePreservation": 0.6,
+    "tableCoverage": 0.5,
+    "textSimilarity": 0.115,
+  },
+]
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > combined-adversarial:cdm 1`] = `
+{
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 21,
+    "footerCount": 2,
+    "headerCount": 2,
+  },
+  "document_id": "adversarial-combined.docx",
+  "equations": [
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{x 2}{y+1}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:num><m:den><m:rad><m:e><m:r><m:t>y+1</m:t></m:r></m:e></m:rad></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "x 2",
+            },
+            {
+              "type": "den",
+              "value": "y+1",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{x 2}{y+1}",
+          "linear": "(x 2)/(y+1)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      "id": "EQ-1",
+      "latex": "\\frac{x 2}{y+1}",
+      "mathml": "",
+      "nodePath": "body/p[2]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Alpha",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "x",
+        "y",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{a+b}{c}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:r><m:t>a+b</m:t></m:r></m:num><m:den><m:r><m:t>c</m:t></m:r></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "a+b",
+            },
+            {
+              "type": "den",
+              "value": "c",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{a+b}{c}",
+          "linear": "(a+b)/(c)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      "id": "EQ-2",
+      "latex": "\\frac{a+b}{c}",
+      "mathml": "",
+      "nodePath": "body/p[4]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "b",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-3",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "body/p[5]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+        "originalOmml": "<m:oMathPara><m:oMath><m:m><m:mr><m:e><m:r><m:t>1</m:t></m:r></m:e><m:e><m:r><m:t>0</m:t></m:r></m:e></m:mr><m:mr><m:e><m:r><m:t>0</m:t></m:r></m:e><m:e><m:r><m:t>1</m:t></m:r></m:e></m:mr></m:m></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "cells": [
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "1",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "1",
+                      "linear": "1",
+                    },
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "0",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "0",
+                      "linear": "0",
+                    },
+                  ],
+                  "type": "row",
+                },
+                {
+                  "cells": [
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "0",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "0",
+                      "linear": "0",
+                    },
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "1",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "1",
+                      "linear": "1",
+                    },
+                  ],
+                  "type": "row",
+                },
+              ],
+              "kind": "matrix",
+              "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+              "linear": "matrix([1 & 0 ; 0 & 1])",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+          "linear": "matrix([1 & 0; 0 & 1])",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix} $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix} $$</div>",
+      "id": "EQ-4",
+      "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+      "mathml": "",
+      "nodePath": "body/p[6]/oMathPara",
+      "operators": [],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\b",
+        "e",
+        "g",
+        "i",
+        "n",
+        "b",
+        "m",
+        "a",
+        "t",
+        "r",
+        "x",
+        "\\e",
+        "d",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\int _{0}^{1} f(x)dx",
+        "originalOmml": "<m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∫"/></m:naryPr><m:sub><m:r><m:t>0</m:t></m:r></m:sub><m:sup><m:r><m:t>1</m:t></m:r></m:sup><m:e><m:r><m:t>f(x)dx</m:t></m:r></m:e></m:nary></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "type": "body",
+                  "value": "f(x)dx",
+                },
+                {
+                  "type": "sub",
+                  "value": "0",
+                },
+                {
+                  "type": "sup",
+                  "value": "1",
+                },
+              ],
+              "kind": "integral",
+              "latex": "\\int_{0}^{1} f(x)dx",
+              "linear": "integral(f(x)dx)",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\int_{0}^{1} f(x)dx",
+          "linear": "integral(f(x)dx)",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\int _{0}^{1} f(x)dx $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\int _{0}^{1} f(x)dx $$</div>",
+      "id": "EQ-5",
+      "latex": "\\int _{0}^{1} f(x)dx",
+      "mathml": "",
+      "nodePath": "body/p[7]/oMathPara",
+      "operators": [
+        "integral",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\i",
+        "n",
+        "t",
+        "f",
+        "x",
+        "d",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\sum _{i=1}^{n} α_i+β",
+        "originalOmml": "<m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:r><m:t>α_i+β</m:t></m:r></m:e></m:nary></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "type": "body",
+                  "value": "α_i+β",
+                },
+                {
+                  "type": "sub",
+                  "value": "i=1",
+                },
+                {
+                  "type": "sup",
+                  "value": "n",
+                },
+              ],
+              "kind": "sum",
+              "latex": "\\sum_{i=1}^{n} α_i+β",
+              "linear": "sum(α_i+β)",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\sum_{i=1}^{n} α_i+β",
+          "linear": "sum(α_i+β)",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\sum _{i=1}^{n} α_i+β $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\sum _{i=1}^{n} α_i+β $$</div>",
+      "id": "EQ-6",
+      "latex": "\\sum _{i=1}^{n} α_i+β",
+      "mathml": "",
+      "nodePath": "body/p[8]/oMathPara",
+      "operators": [
+        "sum",
+        "equals",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\s",
+        "u",
+        "m",
+        "i",
+        "n",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{x 2}{y+1}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:num><m:den><m:rad><m:e><m:r><m:t>y+1</m:t></m:r></m:e></m:rad></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "x 2",
+            },
+            {
+              "type": "den",
+              "value": "y+1",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{x 2}{y+1}",
+          "linear": "(x 2)/(y+1)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      "id": "EQ-7",
+      "latex": "\\frac{x 2}{y+1}",
+      "mathml": "",
+      "nodePath": "body/p[9]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "x",
+        "y",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-8",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{a+b}{c}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:r><m:t>a+b</m:t></m:r></m:num><m:den><m:r><m:t>c</m:t></m:r></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "a+b",
+            },
+            {
+              "type": "den",
+              "value": "c",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{a+b}{c}",
+          "linear": "(a+b)/(c)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      "id": "EQ-9",
+      "latex": "\\frac{a+b}{c}",
+      "mathml": "",
+      "nodePath": "body/p[11]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "b",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-10",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "header[1]/p[2]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": "Section Two",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+  ],
+  "metadata": {
+    "extraction_method": "docx-ooxml-cdm",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "source_type": "docx",
+    "title": "adversarial-combined.docx",
+  },
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "sections": [
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[1]",
+          "source": "OOXML",
+          "text": "Section Alpha",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": true,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Bold near math ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-1",
+              "latex": "\\frac{x 2}{y+1}",
+              "nodePath": "body/p[2]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": "00AAFF",
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " color ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": "green",
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " highlight ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": "Cambria",
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " font change ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "relationship_id": "rId1",
+              "source": "OOXML",
+              "text": "MixedLink",
+              "type": "hyperlink",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-1",
+          ],
+          "nodePath": "body/p[2]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-2",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[3]",
+          "source": "OOXML",
+          "text": "Section Equations",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Fraction ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-2",
+              "latex": "\\frac{a+b}{c}",
+              "nodePath": "body/p[4]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inside text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-2",
+          ],
+          "nodePath": "body/p[4]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "SubSup ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-3",
+              "latex": "x_{i}^{2}",
+              "nodePath": "body/p[5]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inline",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-3",
+          ],
+          "nodePath": "body/p[5]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-4",
+          "equation_ids": [
+            "EQ-4",
+          ],
+          "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+          "nodePath": "body/p[6]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-5",
+          "equation_ids": [
+            "EQ-5",
+          ],
+          "latex": "\\int _{0}^{1} f(x)dx",
+          "nodePath": "body/p[7]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-6",
+          "equation_ids": [
+            "EQ-6",
+          ],
+          "latex": "\\sum _{i=1}^{n} α_i+β",
+          "nodePath": "body/p[8]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Nested ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-7",
+              "latex": "\\frac{x 2}{y+1}",
+              "nodePath": "body/p[9]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inline nested",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-7",
+          ],
+          "nodePath": "body/p[9]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "confidence": 1,
+          "nodePath": "body/tbl[1]",
+          "rows": [
+            [
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Merged heading cell",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[1]/tc[1]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 2,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[1]/tc[1]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+            ],
+            [
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Cell with equation ",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "equation_id": "EQ-8",
+                        "latex": "x_{i}^{2}",
+                        "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]/oMath",
+                        "source": "OOXML",
+                        "type": "inline_math",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [
+                      "EQ-8",
+                    ],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[1]",
+                "row_merge": "restart",
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": true,
+                          "color": "FF0000",
+                          "font": "Courier New",
+                          "highlight": "yellow",
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Formatted",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": " and link ",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "relationship_id": "rId1",
+                        "source": "OOXML",
+                        "text": "CellLink",
+                        "type": "hyperlink",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[2]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Nested cell A",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[2]/p[2]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[2]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Nested cell B",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[3]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[3]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+            ],
+          ],
+          "source": "OOXML",
+          "type": "table",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Merged down",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[10]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "equation_id": "EQ-9",
+              "latex": "\\frac{a+b}{c}",
+              "nodePath": "body/p[11]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-9",
+          ],
+          "nodePath": "body/p[11]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-3",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[12]",
+          "source": "OOXML",
+          "text": "Section One",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Intro paragraph",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[13]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Step one",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Step one",
+          ],
+          "level": 0,
+          "list_type": "numbered",
+          "nodePath": "body/p[14]",
+          "number_id": "1",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Step two",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Step two",
+          ],
+          "level": 0,
+          "list_type": "numbered",
+          "nodePath": "body/p[15]",
+          "number_id": "1",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Point A",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Point A",
+          ],
+          "level": 0,
+          "list_type": "bullet",
+          "nodePath": "body/p[16]",
+          "number_id": "2",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Point B",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Point B",
+          ],
+          "level": 0,
+          "list_type": "bullet",
+          "nodePath": "body/p[17]",
+          "number_id": "2",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "
+After page break",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[18]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "confidence": 1,
+          "source": "OOXML",
+          "type": "page_break",
+        },
+      ],
+      "heading": "",
+      "id": "section-4",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[19]",
+          "source": "OOXML",
+          "text": "Section Two",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Continuation paragraph",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[20]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-5",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 2,
+          "source": "OOXML",
+          "text": "Headers",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Header zone text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "header[1]/p[1]",
+          "region": "header",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Header equation ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-10",
+              "latex": "x_{i}^{2}",
+              "nodePath": "header[1]/p[2]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-10",
+          ],
+          "nodePath": "header[1]/p[2]",
+          "region": "header",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-6",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 2,
+          "source": "OOXML",
+          "text": "Footers",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Footer zone text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "footer[1]/p[1]",
+          "region": "footer",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Footer link ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "relationship_id": "rId1",
+              "source": "OOXML",
+              "text": "FooterRef",
+              "type": "hyperlink",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "footer[1]/p[2]",
+          "region": "footer",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-7",
+    },
+  ],
+  "stats": {
+    "block_count": 28,
+    "equation_count": 10,
+    "section_count": 6,
+    "table_count": 1,
+  },
+}
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > combined-adversarial:html 1`] = `
+"<article class="cdm-document" data-schema-version="2.0"><section class="cdm-section"><h1>Section Alpha</h1><p><strong>Bold near math </strong><span class="cdm-inline-math" data-latex="\\frac{x 2}{y+1}">$\\frac{x 2}{y+1}$</span> color  highlight  font change <a href="#" data-relationship-id="rId1">MixedLink</a></p></section><section class="cdm-section"><h1>Section Equations</h1><p>Fraction <span class="cdm-inline-math" data-latex="\\frac{a+b}{c}">$\\frac{a+b}{c}$</span> inside text</p><p>SubSup <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span> inline</p><div class="cdm-display-math" data-latex="\\begin{bmatrix}1 &amp; 0 \\\\ 0 &amp; 1\\end{bmatrix}">$$ \\begin{bmatrix}1 &amp; 0 \\\\ 0 &amp; 1\\end{bmatrix} $$</div><div class="cdm-display-math" data-latex="\\int _{0}^{1} f(x)dx">$$ \\int _{0}^{1} f(x)dx $$</div><div class="cdm-display-math" data-latex="\\sum _{i=1}^{n} α_i+β">$$ \\sum _{i=1}^{n} α_i+β $$</div><p>Nested <span class="cdm-inline-math" data-latex="\\frac{x 2}{y+1}">$\\frac{x 2}{y+1}$</span> inline nested</p><table class="cdm-table"><tbody><tr><td><p>Merged heading cell</p></td></tr><tr><td><p>Cell with equation <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span></p></td><td><p><strong>Formatted</strong> and link <a href="#" data-relationship-id="rId1">CellLink</a></p><p>Nested cell A</p></td><td><p>Nested cell B</p></td></tr></tbody></table><p>Merged down</p><p><span class="cdm-inline-math" data-latex="\\frac{a+b}{c}">$\\frac{a+b}{c}$</span></p></section><section class="cdm-section"><h1>Section One</h1><p>Intro paragraph</p><ul><li>Step one</li></ul><ul><li>Step two</li></ul><ul><li>Point A</li></ul><ul><li>Point B</li></ul><p>
+After page break</p></section><section class="cdm-section"><h1>Section Two</h1><p>Continuation paragraph</p></section><section class="cdm-section"><h2>Headers</h2><p>Header zone text</p><p>Header equation <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span></p></section><section class="cdm-section"><h2>Footers</h2><p>Footer zone text</p><p>Footer link <a href="#" data-relationship-id="rId1">FooterRef</a></p></section></article>"
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > document-structures:cdm 1`] = `
+{
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 9,
+    "footerCount": 2,
+    "headerCount": 2,
+  },
+  "document_id": "adversarial-structures.docx",
+  "equations": [
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-1",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "header[1]/p[2]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": "Section Two",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+  ],
+  "metadata": {
+    "extraction_method": "docx-ooxml-cdm",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "source_type": "docx",
+    "title": "adversarial-structures.docx",
+  },
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "sections": [
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[1]",
+          "source": "OOXML",
+          "text": "Section One",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Intro paragraph",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[2]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Step one",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Step one",
+          ],
+          "level": 0,
+          "list_type": "numbered",
+          "nodePath": "body/p[3]",
+          "number_id": "1",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Step two",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Step two",
+          ],
+          "level": 0,
+          "list_type": "numbered",
+          "nodePath": "body/p[4]",
+          "number_id": "1",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Point A",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Point A",
+          ],
+          "level": 0,
+          "list_type": "bullet",
+          "nodePath": "body/p[5]",
+          "number_id": "2",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Point B",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "items": [
+            "Point B",
+          ],
+          "level": 0,
+          "list_type": "bullet",
+          "nodePath": "body/p[6]",
+          "number_id": "2",
+          "source": "OOXML",
+          "type": "list",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "
+After page break",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[7]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "confidence": 1,
+          "source": "OOXML",
+          "type": "page_break",
+        },
+      ],
+      "heading": "",
+      "id": "section-2",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[8]",
+          "source": "OOXML",
+          "text": "Section Two",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Continuation paragraph",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[9]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-3",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 2,
+          "source": "OOXML",
+          "text": "Headers",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Header zone text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "header[1]/p[1]",
+          "region": "header",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Header equation ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-1",
+              "latex": "x_{i}^{2}",
+              "nodePath": "header[1]/p[2]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-1",
+          ],
+          "nodePath": "header[1]/p[2]",
+          "region": "header",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-4",
+    },
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 2,
+          "source": "OOXML",
+          "text": "Footers",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Footer zone text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "footer[1]/p[1]",
+          "region": "footer",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Footer link ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "relationship_id": "rId1",
+              "source": "OOXML",
+              "text": "FooterRef",
+              "type": "hyperlink",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "footer[1]/p[2]",
+          "region": "footer",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-5",
+    },
+  ],
+  "stats": {
+    "block_count": 16,
+    "equation_count": 1,
+    "section_count": 4,
+    "table_count": 0,
+  },
+}
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > document-structures:html 1`] = `
+"<article class="cdm-document" data-schema-version="2.0"><section class="cdm-section"><h1>Section One</h1><p>Intro paragraph</p><ul><li>Step one</li></ul><ul><li>Step two</li></ul><ul><li>Point A</li></ul><ul><li>Point B</li></ul><p>
+After page break</p></section><section class="cdm-section"><h1>Section Two</h1><p>Continuation paragraph</p></section><section class="cdm-section"><h2>Headers</h2><p>Header zone text</p><p>Header equation <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span></p></section><section class="cdm-section"><h2>Footers</h2><p>Footer zone text</p><p>Footer link <a href="#" data-relationship-id="rId1">FooterRef</a></p></section></article>"
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > equations-complex:cdm 1`] = `
+{
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 7,
+    "footerCount": 0,
+    "headerCount": 0,
+  },
+  "document_id": "adversarial-equations.docx",
+  "equations": [
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{a+b}{c}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:r><m:t>a+b</m:t></m:r></m:num><m:den><m:r><m:t>c</m:t></m:r></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "a+b",
+            },
+            {
+              "type": "den",
+              "value": "c",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{a+b}{c}",
+          "linear": "(a+b)/(c)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      "id": "EQ-1",
+      "latex": "\\frac{a+b}{c}",
+      "mathml": "",
+      "nodePath": "body/p[2]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "b",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-2",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "body/p[3]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+        "originalOmml": "<m:oMathPara><m:oMath><m:m><m:mr><m:e><m:r><m:t>1</m:t></m:r></m:e><m:e><m:r><m:t>0</m:t></m:r></m:e></m:mr><m:mr><m:e><m:r><m:t>0</m:t></m:r></m:e><m:e><m:r><m:t>1</m:t></m:r></m:e></m:mr></m:m></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "cells": [
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "1",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "1",
+                      "linear": "1",
+                    },
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "0",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "0",
+                      "linear": "0",
+                    },
+                  ],
+                  "type": "row",
+                },
+                {
+                  "cells": [
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "0",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "0",
+                      "linear": "0",
+                    },
+                    {
+                      "children": [
+                        {
+                          "type": "token",
+                          "value": "1",
+                        },
+                      ],
+                      "kind": "token",
+                      "latex": "1",
+                      "linear": "1",
+                    },
+                  ],
+                  "type": "row",
+                },
+              ],
+              "kind": "matrix",
+              "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+              "linear": "matrix([1 & 0 ; 0 & 1])",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+          "linear": "matrix([1 & 0; 0 & 1])",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix} $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix} $$</div>",
+      "id": "EQ-3",
+      "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+      "mathml": "",
+      "nodePath": "body/p[4]/oMathPara",
+      "operators": [],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\b",
+        "e",
+        "g",
+        "i",
+        "n",
+        "b",
+        "m",
+        "a",
+        "t",
+        "r",
+        "x",
+        "\\e",
+        "d",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\int _{0}^{1} f(x)dx",
+        "originalOmml": "<m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∫"/></m:naryPr><m:sub><m:r><m:t>0</m:t></m:r></m:sub><m:sup><m:r><m:t>1</m:t></m:r></m:sup><m:e><m:r><m:t>f(x)dx</m:t></m:r></m:e></m:nary></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "type": "body",
+                  "value": "f(x)dx",
+                },
+                {
+                  "type": "sub",
+                  "value": "0",
+                },
+                {
+                  "type": "sup",
+                  "value": "1",
+                },
+              ],
+              "kind": "integral",
+              "latex": "\\int_{0}^{1} f(x)dx",
+              "linear": "integral(f(x)dx)",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\int_{0}^{1} f(x)dx",
+          "linear": "integral(f(x)dx)",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\int _{0}^{1} f(x)dx $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\int _{0}^{1} f(x)dx $$</div>",
+      "id": "EQ-4",
+      "latex": "\\int _{0}^{1} f(x)dx",
+      "mathml": "",
+      "nodePath": "body/p[5]/oMathPara",
+      "operators": [
+        "integral",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\i",
+        "n",
+        "t",
+        "f",
+        "x",
+        "d",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\sum _{i=1}^{n} α_i+β",
+        "originalOmml": "<m:oMathPara><m:oMath><m:nary><m:naryPr><m:chr m:val="∑"/></m:naryPr><m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:r><m:t>α_i+β</m:t></m:r></m:e></m:nary></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "children": [
+                {
+                  "type": "body",
+                  "value": "α_i+β",
+                },
+                {
+                  "type": "sub",
+                  "value": "i=1",
+                },
+                {
+                  "type": "sup",
+                  "value": "n",
+                },
+              ],
+              "kind": "sum",
+              "latex": "\\sum_{i=1}^{n} α_i+β",
+              "linear": "sum(α_i+β)",
+            },
+          ],
+          "kind": "sequence",
+          "latex": "\\sum_{i=1}^{n} α_i+β",
+          "linear": "sum(α_i+β)",
+        },
+        "renderedHtml": "<div class="cdm-display-math">$$ \\sum _{i=1}^{n} α_i+β $$</div>",
+      },
+      "html": "<div class="cdm-display-math">$$ \\sum _{i=1}^{n} α_i+β $$</div>",
+      "id": "EQ-5",
+      "latex": "\\sum _{i=1}^{n} α_i+β",
+      "mathml": "",
+      "nodePath": "body/p[6]/oMathPara",
+      "operators": [
+        "sum",
+        "equals",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "display_equation",
+      "variables": [
+        "\\s",
+        "u",
+        "m",
+        "i",
+        "n",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{x 2}{y+1}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:num><m:den><m:rad><m:e><m:r><m:t>y+1</m:t></m:r></m:e></m:rad></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "x 2",
+            },
+            {
+              "type": "den",
+              "value": "y+1",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{x 2}{y+1}",
+          "linear": "(x 2)/(y+1)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      "id": "EQ-6",
+      "latex": "\\frac{x 2}{y+1}",
+      "mathml": "",
+      "nodePath": "body/p[7]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": "Section Equations",
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "x",
+        "y",
+      ],
+    },
+  ],
+  "metadata": {
+    "extraction_method": "docx-ooxml-cdm",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "source_type": "docx",
+    "title": "adversarial-equations.docx",
+  },
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "sections": [
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "level": 1,
+          "nodePath": "body/p[1]",
+          "source": "OOXML",
+          "text": "Section Equations",
+          "type": "heading",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Fraction ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-1",
+              "latex": "\\frac{a+b}{c}",
+              "nodePath": "body/p[2]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inside text",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-1",
+          ],
+          "nodePath": "body/p[2]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "SubSup ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-2",
+              "latex": "x_{i}^{2}",
+              "nodePath": "body/p[3]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inline",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-2",
+          ],
+          "nodePath": "body/p[3]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-3",
+          "equation_ids": [
+            "EQ-3",
+          ],
+          "latex": "\\begin{bmatrix}1 & 0 \\\\ 0 & 1\\end{bmatrix}",
+          "nodePath": "body/p[4]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-4",
+          "equation_ids": [
+            "EQ-4",
+          ],
+          "latex": "\\int _{0}^{1} f(x)dx",
+          "nodePath": "body/p[5]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "confidence": 1,
+          "equation_id": "EQ-5",
+          "equation_ids": [
+            "EQ-5",
+          ],
+          "latex": "\\sum _{i=1}^{n} α_i+β",
+          "nodePath": "body/p[6]/oMathPara",
+          "source": "OOXML",
+          "type": "display_math",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Nested ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-6",
+              "latex": "\\frac{x 2}{y+1}",
+              "nodePath": "body/p[7]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " inline nested",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-6",
+          ],
+          "nodePath": "body/p[7]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "",
+      "id": "section-2",
+    },
+  ],
+  "stats": {
+    "block_count": 7,
+    "equation_count": 6,
+    "section_count": 1,
+    "table_count": 0,
+  },
+}
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > equations-complex:html 1`] = `"<article class="cdm-document" data-schema-version="2.0"><section class="cdm-section"><h1>Section Equations</h1><p>Fraction <span class="cdm-inline-math" data-latex="\\frac{a+b}{c}">$\\frac{a+b}{c}$</span> inside text</p><p>SubSup <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span> inline</p><div class="cdm-display-math" data-latex="\\begin{bmatrix}1 &amp; 0 \\\\ 0 &amp; 1\\end{bmatrix}">$$ \\begin{bmatrix}1 &amp; 0 \\\\ 0 &amp; 1\\end{bmatrix} $$</div><div class="cdm-display-math" data-latex="\\int _{0}^{1} f(x)dx">$$ \\int _{0}^{1} f(x)dx $$</div><div class="cdm-display-math" data-latex="\\sum _{i=1}^{n} α_i+β">$$ \\sum _{i=1}^{n} α_i+β $$</div><p>Nested <span class="cdm-inline-math" data-latex="\\frac{x 2}{y+1}">$\\frac{x 2}{y+1}$</span> inline nested</p></section></article>"`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > formatting-edge:cdm 1`] = `
+{
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 1,
+    "footerCount": 0,
+    "headerCount": 0,
+  },
+  "document_id": "adversarial-formatting.docx",
+  "equations": [
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{x 2}{y+1}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:sSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSup></m:num><m:den><m:rad><m:e><m:r><m:t>y+1</m:t></m:r></m:e></m:rad></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "x 2",
+            },
+            {
+              "type": "den",
+              "value": "y+1",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{x 2}{y+1}",
+          "linear": "(x 2)/(y+1)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{x 2}{y+1}$</span>",
+      "id": "EQ-1",
+      "latex": "\\frac{x 2}{y+1}",
+      "mathml": "",
+      "nodePath": "body/p[1]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": null,
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "x",
+        "y",
+      ],
+    },
+  ],
+  "metadata": {
+    "extraction_method": "docx-ooxml-cdm",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "source_type": "docx",
+    "title": "adversarial-formatting.docx",
+  },
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "sections": [
+    {
+      "blocks": [
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": true,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Bold near math ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "equation_id": "EQ-1",
+              "latex": "\\frac{x 2}{y+1}",
+              "nodePath": "body/p[1]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": "00AAFF",
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " color ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": "green",
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " highlight ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": "Cambria",
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": " font change ",
+              "type": "text",
+            },
+            {
+              "confidence": 1,
+              "relationship_id": "rId1",
+              "source": "OOXML",
+              "text": "MixedLink",
+              "type": "hyperlink",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-1",
+          ],
+          "nodePath": "body/p[1]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "adversarial-formatting.docx",
+      "id": "section-1",
+    },
+  ],
+  "stats": {
+    "block_count": 1,
+    "equation_count": 1,
+    "section_count": 1,
+    "table_count": 0,
+  },
+}
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > formatting-edge:html 1`] = `"<article class="cdm-document" data-schema-version="2.0"><section class="cdm-section"><p><strong>Bold near math </strong><span class="cdm-inline-math" data-latex="\\frac{x 2}{y+1}">$\\frac{x 2}{y+1}$</span> color  highlight  font change <a href="#" data-relationship-id="rId1">MixedLink</a></p></section></article>"`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > table-advanced:cdm 1`] = `
+{
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 3,
+    "footerCount": 0,
+    "headerCount": 0,
+  },
+  "document_id": "adversarial-tables.docx",
+  "equations": [
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "x_{i}^{2}",
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "base",
+              "value": "x",
+            },
+            {
+              "type": "sub",
+              "value": "i",
+            },
+            {
+              "type": "sup",
+              "value": "2",
+            },
+          ],
+          "kind": "subsup",
+          "latex": "x_{i}^{2}",
+          "linear": "x_(i)^(2)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$x_{i}^{2}$</span>",
+      "id": "EQ-1",
+      "latex": "x_{i}^{2}",
+      "mathml": "",
+      "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]/oMath",
+      "operators": [],
+      "page": 0,
+      "section": null,
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "x_{i}",
+      ],
+    },
+    {
+      "confidence": 1,
+      "diagnostics": {
+        "canonicalLatex": "\\frac{a+b}{c}",
+        "originalOmml": "<m:oMath><m:f><m:num><m:r><m:t>a+b</m:t></m:r></m:num><m:den><m:r><m:t>c</m:t></m:r></m:den></m:f></m:oMath>",
+        "parsedMathTree": {
+          "children": [
+            {
+              "type": "num",
+              "value": "a+b",
+            },
+            {
+              "type": "den",
+              "value": "c",
+            },
+          ],
+          "kind": "fraction",
+          "latex": "\\frac{a+b}{c}",
+          "linear": "(a+b)/(c)",
+        },
+        "renderedHtml": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      },
+      "html": "<span class="cdm-inline-math">$\\frac{a+b}{c}$</span>",
+      "id": "EQ-2",
+      "latex": "\\frac{a+b}{c}",
+      "mathml": "",
+      "nodePath": "body/p[2]/oMath",
+      "operators": [
+        "fraction",
+      ],
+      "page": 0,
+      "section": null,
+      "source": "OOXML",
+      "type": "inline_equation",
+      "variables": [
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "b",
+      ],
+    },
+  ],
+  "metadata": {
+    "extraction_method": "docx-ooxml-cdm",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "source_type": "docx",
+    "title": "adversarial-tables.docx",
+  },
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "sections": [
+    {
+      "blocks": [
+        {
+          "confidence": 1,
+          "nodePath": "body/tbl[1]",
+          "rows": [
+            [
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Merged heading cell",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[1]/tc[1]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 2,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[1]/tc[1]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+            ],
+            [
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Cell with equation ",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "equation_id": "EQ-1",
+                        "latex": "x_{i}^{2}",
+                        "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]/oMath",
+                        "source": "OOXML",
+                        "type": "inline_math",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [
+                      "EQ-1",
+                    ],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[1]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[1]",
+                "row_merge": "restart",
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": true,
+                          "color": "FF0000",
+                          "font": "Courier New",
+                          "highlight": "yellow",
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Formatted",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": " and link ",
+                        "type": "text",
+                      },
+                      {
+                        "confidence": 1,
+                        "relationship_id": "rId1",
+                        "source": "OOXML",
+                        "text": "CellLink",
+                        "type": "hyperlink",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[2]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Nested cell A",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[2]/p[2]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[2]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+              {
+                "blocks": [
+                  {
+                    "children": [
+                      {
+                        "confidence": 1,
+                        "formatting": {
+                          "bold": false,
+                          "color": null,
+                          "font": null,
+                          "highlight": null,
+                          "italic": false,
+                          "underline": false,
+                        },
+                        "source": "OOXML",
+                        "text": "Nested cell B",
+                        "type": "text",
+                      },
+                    ],
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "nodePath": "body/tbl[1]/tr[2]/tc[3]/p[1]",
+                    "source": "OOXML",
+                    "type": "paragraph",
+                  },
+                ],
+                "col_span": 1,
+                "confidence": 1,
+                "nodePath": "body/tbl[1]/tr[2]/tc[3]",
+                "row_merge": null,
+                "source": "OOXML",
+                "type": "table_cell",
+              },
+            ],
+          ],
+          "source": "OOXML",
+          "type": "table",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "formatting": {
+                "bold": false,
+                "color": null,
+                "font": null,
+                "highlight": null,
+                "italic": false,
+                "underline": false,
+              },
+              "source": "OOXML",
+              "text": "Merged down",
+              "type": "text",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [],
+          "nodePath": "body/p[1]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+        {
+          "children": [
+            {
+              "confidence": 1,
+              "equation_id": "EQ-2",
+              "latex": "\\frac{a+b}{c}",
+              "nodePath": "body/p[2]/oMath",
+              "source": "OOXML",
+              "type": "inline_math",
+            },
+          ],
+          "confidence": 1,
+          "equation_ids": [
+            "EQ-2",
+          ],
+          "nodePath": "body/p[2]",
+          "source": "OOXML",
+          "type": "paragraph",
+        },
+      ],
+      "heading": "adversarial-tables.docx",
+      "id": "section-1",
+    },
+  ],
+  "stats": {
+    "block_count": 3,
+    "equation_count": 2,
+    "section_count": 1,
+    "table_count": 1,
+  },
+}
+`;
+
+exports[`CDM v2 DOCX fidelity > validates adversarial fixtures with provenance, deterministic math, and fidelity metrics > table-advanced:html 1`] = `"<article class="cdm-document" data-schema-version="2.0"><section class="cdm-section"><table class="cdm-table"><tbody><tr><td><p>Merged heading cell</p></td></tr><tr><td><p>Cell with equation <span class="cdm-inline-math" data-latex="x_{i}^{2}">$x_{i}^{2}$</span></p></td><td><p><strong>Formatted</strong> and link <a href="#" data-relationship-id="rId1">CellLink</a></p><p>Nested cell A</p></td><td><p>Nested cell B</p></td></tr></tbody></table><p>Merged down</p><p><span class="cdm-inline-math" data-latex="\\frac{a+b}{c}">$\\frac{a+b}{c}$</span></p></section></article>"`;

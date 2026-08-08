@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "document_id": "example-doc-001",
+  "metadata": {
+    "title": "CDM v2 Example",
+    "source_type": "docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "extraction_method": "docx-ooxml-cdm"
+  },
+  "equations": [
+    {
+      "id": "EQ-1",
+      "type": "inline_equation",
+      "latex": "S_x^2",
+      "mathml": "<math><mi>S</mi><msub><mi>x</mi><mn>2</mn></msub></math>",
+      "source": "OOXML",
+      "nodePath": "body/p[2]/r[2]/oMath",
+      "page": null,
+      "section": "Section Alpha",
+      "variables": ["S", "x"],
+      "operators": ["equals"],
+      "confidence": 1
+    },
+    {
+      "id": "EQ-2",
+      "type": "display_equation",
+      "latex": "\\frac{1}{n} \\sum_i x_i",
+      "mathml": "<math><mfrac><mn>1</mn><mi>n</mi></mfrac></math>",
+      "source": "OOXML",
+      "nodePath": "body/tbl[1]/tr[1]/tc[2]/p[2]/oMathPara",
+      "page": null,
+      "section": "Section Alpha",
+      "variables": ["n", "x_i"],
+      "operators": ["fraction", "sum"],
+      "confidence": 1
+    }
+  ],
+  "sections": [
+    {
+      "id": "section-1",
+      "heading": "Section Alpha",
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "text": "Section Alpha",
+          "source": "OOXML",
+          "confidence": 1,
+          "nodePath": "body/p[1]"
+        },
+        {
+          "type": "paragraph",
+          "nodePath": "body/p[2]",
+          "source": "OOXML",
+          "confidence": 1,
+          "equation_ids": ["EQ-1"],
+          "children": [
+            {
+              "type": "text",
+              "text": "Sample variance ",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null
+              },
+              "source": "OOXML",
+              "confidence": 1
+            },
+            {
+              "type": "inline_math",
+              "equation_id": "EQ-1",
+              "latex": "S_x^2",
+              "nodePath": "body/p[2]/r[2]/oMath",
+              "source": "OOXML",
+              "confidence": 1
+            },
+            {
+              "type": "text",
+              "text": " measures spread",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null
+              },
+              "source": "OOXML",
+              "confidence": 1
+            }
+          ]
+        },
+        {
+          "type": "table",
+          "nodePath": "body/tbl[1]",
+          "source": "OOXML",
+          "confidence": 1,
+          "rows": [
+            [
+              {
+                "type": "table_cell",
+                "nodePath": "body/tbl[1]/tr[1]/tc[1]",
+                "source": "OOXML",
+                "confidence": 1,
+                "blocks": [
+                  {
+                    "type": "paragraph",
+                    "nodePath": "body/tbl[1]/tr[1]/tc[1]/p[1]",
+                    "source": "OOXML",
+                    "confidence": 1,
+                    "equation_ids": [],
+                    "children": [
+                      {
+                        "type": "text",
+                        "text": "Variance formula"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "table_cell",
+                "nodePath": "body/tbl[1]/tr[1]/tc[2]",
+                "source": "OOXML",
+                "confidence": 1,
+                "blocks": [
+                  {
+                    "type": "display_math",
+                    "equation_id": "EQ-2",
+                    "equation_ids": ["EQ-2"],
+                    "latex": "\\frac{1}{n} \\sum_i x_i",
+                    "nodePath": "body/tbl[1]/tr[1]/tc[2]/p[2]/oMathPara",
+                    "source": "OOXML",
+                    "confidence": 1
+                  }
+                ]
+              }
+            ]
+          ]
+        }
+      ]
+    }
+  ]
+}

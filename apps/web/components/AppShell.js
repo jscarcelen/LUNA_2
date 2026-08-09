@@ -129,6 +129,7 @@ export function AppShell() {
           onRenameDocument={handleRenameDocument}
           onRemoveDocument={handleRemoveDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onUpdateDocumentContent={handleUpdateDocumentContent}
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
         />
@@ -409,6 +410,19 @@ export function AppShell() {
       folderIds: Array.isArray(options.folderIds) ? options.folderIds : [],
       tags: Array.isArray(options.tags) ? options.tags : []
     });
+  }
+
+  async function handleUpdateDocumentContent(documentId, options = {}) {
+    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return null;
+    const result = await runWorkspaceAction("updateDocumentContent", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: selectedSubjectId,
+      documentId,
+      correctedHtml: typeof options.correctedHtml === "string" ? options.correctedHtml : "",
+      correctedContent: typeof options.correctedContent === "string" ? options.correctedContent : ""
+    });
+
+    return result?.updated || null;
   }
 
   async function handleReviewDocumentExtraction(documentId, options = {}) {

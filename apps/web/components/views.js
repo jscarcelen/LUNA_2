@@ -577,6 +577,7 @@ export function WorkspacesManagerView({
   onRenameTopicTag,
   onRemoveTopicTag,
   onSetTopicTagColor,
+  onUpdateDocumentContent,
   onUploadTxt,
   onRenameDocument,
   onRemoveDocument,
@@ -653,6 +654,10 @@ export function WorkspacesManagerView({
   const [editDocFolderIds, setEditDocFolderIds] = useState([]);
   const [editDocSelectedTags, setEditDocSelectedTags] = useState([]);
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
+  const [editContentDoc, setEditContentDoc] = useState(null);
+  const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
+  const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
+  const [isSavingEditContent, setIsSavingEditContent] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewMode, setPreviewMode] = useState("txt");
   const [previewDownloads, setPreviewDownloads] = useState({});
@@ -1344,6 +1349,7 @@ export function WorkspacesManagerView({
                   {doc.sourceType === "generated" ? renderGeneratedDownloadControls(doc) : renderUploadedDownloadControl(doc)}
                   <button className="table-btn" type="button" onClick={() => handleStartRenameDoc(doc)}>Rename</button>
                   <button className="table-btn" type="button" onClick={() => handleStartEditDocMeta(doc)}>Edit</button>
+                  {doc.sourceType !== "generated" ? <button className="table-btn" type="button" onClick={() => handleStartEditContent(doc)}>Edit Content</button> : null}
                   <button className="table-btn danger" type="button" onClick={() => handleRemoveDoc(doc.id)}>Delete</button>
                 </div>
               ) : null}
@@ -1534,6 +1540,46 @@ export function WorkspacesManagerView({
     setEditDocFolderIds([]);
     setEditDocSelectedTags([]);
     setEditDocTagDraft("");
+  }
+
+  function handleStartEditContent(doc) {
+    if (!doc || doc.sourceType === "generated") return;
+    const seededHtml = String(doc.sourceRenderHtml || "").trim() || markdownToBasicHtml(String(doc.content || ""));
+    setEditContentDoc(doc);
+    setEditContentHtmlDraft(seededHtml);
+    setEditContentStatusMessage("");
+  }
+
+  async function handleSaveEditedContent() {
+    if (!editContentDoc?.id || !onUpdateDocumentContent) return;
+    const correctedHtml = String(editContentHtmlDraft || "").trim();
+    const correctedContent = htmlToPlainText(correctedHtml);
+    if (!correctedHtml || !correctedContent) {
+      setEditContentStatusMessage("Edited HTML cannot be empty.");
+      return;
+    }
+
+    setIsSavingEditContent(true);
+    setEditContentStatusMessage("");
+    try {
+      await onUpdateDocumentContent(editContentDoc.id, {
+        correctedHtml,
+        correctedContent
+      });
+      if (previewDoc?.id === editContentDoc.id) {
+        setPreviewDoc((previous) => previous ? {
+          ...previous,
+          content: correctedContent,
+          sourceRenderHtml: correctedHtml
+        } : previous);
+      }
+      setEditContentDoc(null);
+      setEditContentHtmlDraft("");
+    } catch (error) {
+      setEditContentStatusMessage(String(error.message || error));
+    } finally {
+      setIsSavingEditContent(false);
+    }
   }
 
   function addTagToSelection(rawValue, setter) {
@@ -3370,6 +3416,56 @@ export function WorkspacesManagerView({
               <button className="primary-btn" type="button" onClick={handleSaveDocMeta}>Save Changes</button>
               <button className="table-btn" type="button" onClick={() => setEditDocMeta(null)}>Cancel</button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editContentDoc ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal-card" style={{ maxWidth: "1100px" }}>
+            <div className="modal-head">
+              <h4>Edit Document Content (HTML)</h4>
+              <button
+                className="table-btn"
+                onClick={() => {
+                  setEditContentDoc(null);
+                  setEditContentHtmlDraft("");
+                  setEditContentStatusMessage("");
+                }}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <p className="hint" style={{ marginTop: "8px" }}>
+              Edit text, formulas, and image tags directly in HTML. Saving updates the document everywhere (workspace view, review center, and downloads).
+            </p>
+
+            <label className="form-stack" style={{ marginTop: "10px" }}>
+              <span className="field-label">HTML Source</span>
+              <textarea
+                className="doc-preview"
+                style={{ minHeight: "320px", width: "100%", whiteSpace: "pre", fontFamily: "SF Mono, Menlo, Consolas, monospace" }}
+                value={editContentHtmlDraft}
+                onChange={(event) => setEditContentHtmlDraft(event.target.value)}
+              />
+            </label>
+
+            <p className="hint" style={{ marginTop: "6px" }}>
+              Live preview
+            </p>
+            <div
+              className="doc-preview rich-html-render"
+              dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentHtmlDraft) }}
+            />
+
+            <div className="inline-actions" style={{ marginTop: "12px" }}>
+              <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>
+                {isSavingEditContent ? "Saving..." : "Save Content"}
+              </button>
+            </div>
+            {editContentStatusMessage ? <p className="hint" style={{ marginTop: "10px" }}>{editContentStatusMessage}</p> : null}
           </div>
         </div>
       ) : null}

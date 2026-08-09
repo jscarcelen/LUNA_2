@@ -2044,6 +2044,113 @@ export async function updateDocumentMeta(subjectId, documentId, options = {}) {
   if (insertTagsError) throw insertTagsError;
 }
 
+export async function updateDocumentContent(subjectId, documentId, options = {}) {
+  const client = createSupabaseAdminClient();
+  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
+  const hasDocumentChunks = await supportsDocumentChunks(client);
+  const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
+
+  const correctedHtml = typeof options?.correctedHtml === "string"
+    ? sanitizeEditableHtml(options.correctedHtml).trim()
+    : "";
+  const correctedContentOption = typeof options?.correctedContent === "string" ? options.correctedContent.trim() : "";
+  const correctedContent = correctedContentOption || (correctedHtml ? htmlToPlainText(correctedHtml) : "");
+
+  if (!correctedContent && !correctedHtml) {
+    throw new Error("No content update provided.");
+  }
+
+  const { data: document, error: findError } = await client
+    .from("documents")
+    .select("id, subject_id, name")
+    .eq("id", documentId)
+    .eq("subject_id", subjectId)
+    .maybeSingle();
+
+  if (findError) throw findError;
+  if (!document) {
+    throw new Error("Document not found.");
+  }
+
+  const nowIso = new Date().toISOString();
+  const updatePayload = {
+    content: correctedContent,
+    preview: correctedContent.slice(0, 180) || "(empty file)",
+    size_bytes: Buffer.byteLength(correctedContent, "utf8"),
+    updated_at: nowIso
+  };
+
+  if (hasDocumentSourceVisualFields && correctedHtml) {
+    updatePayload.source_render_html = correctedHtml;
+  }
+
+  const { error: updateError } = await client
+    .from("documents")
+    .update(updatePayload)
+    .eq("id", documentId)
+    .eq("subject_id", subjectId);
+
+  if (updateError) throw updateError;
+
+  if (hasDocumentChunks) {
+    const { error: deleteChunksError } = await client
+      .from("document_chunks")
+      .delete()
+      .eq("document_id", documentId);
+    if (deleteChunksError) throw deleteChunksError;
+
+    const chunks = chunkDocument({
+      id: documentId,
+      subjectId,
+      name: document.name,
+      content: correctedContent,
+      folderIds: [],
+      tags: []
+    }, {
+      chunkWords: DEFAULT_CHUNK_WORDS,
+      overlapWords: DEFAULT_OVERLAP_WORDS
+    });
+
+    if (chunks.length) {
+      const chunkRows = chunks.map((chunk) => ({
+        document_id: documentId,
+        subject_id: subjectId,
+        chunk_index: chunk.chunkIndex,
+        chunk_words: DEFAULT_CHUNK_WORDS,
+        overlap_words: DEFAULT_OVERLAP_WORDS,
+        start_word: chunk.startWord,
+        end_word: chunk.endWord,
+        word_count: chunk.wordCount,
+        semantic_score: chunk.semanticScore,
+        keywords: appendEquationKeywordTags(chunk.keywords, chunk.equationIds),
+        content: chunk.content
+      }));
+
+      if (hasDocumentChunkEmbeddings && isEmbeddingProviderConfigured()) {
+        const embeddings = await embedTexts(chunkRows.map((row) => row.content));
+        for (let index = 0; index < chunkRows.length; index += 1) {
+          const embedding = embeddings[index];
+          if (embedding) {
+            chunkRows[index].embedding = toVectorLiteral(embedding);
+          }
+        }
+      }
+
+      const { error: insertChunksError } = await client
+        .from("document_chunks")
+        .insert(chunkRows);
+      if (insertChunksError) throw insertChunksError;
+    }
+  }
+
+  return {
+    documentId,
+    corrected: true,
+    content: correctedContent,
+    sourceRenderHtml: correctedHtml
+  };
+}
+
 export async function listDocumentChunks(documentIds, options = {}) {
   const ids = Array.isArray(documentIds) ? documentIds.map((id) => String(id || "").trim()).filter(Boolean) : [];
   if (!ids.length) return [];

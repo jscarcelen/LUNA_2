@@ -23,6 +23,7 @@ import {
   setTopicTagColor,
   setWorkspaceColor,
   updateDocumentMeta,
+  updateDocumentContent,
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
@@ -201,6 +202,14 @@ export async function POST(request) {
         tags: payload.tags || []
       });
       return await ok(ownerUserId);
+    }
+
+    if (action === "updateDocumentContent") {
+      const updated = await updateDocumentContent(payload.subjectId, payload.documentId, {
+        correctedHtml: typeof payload.correctedHtml === "string" ? payload.correctedHtml : "",
+        correctedContent: typeof payload.correctedContent === "string" ? payload.correctedContent : ""
+      });
+      return await ok(ownerUserId, { updated });
     }
 
     if (action === "reviewDocumentExtraction") {

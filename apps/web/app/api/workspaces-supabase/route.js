@@ -181,7 +181,7 @@ export async function POST(request) {
     }
 
     if (action === "downloadUploadedDocument") {
-      const download = await getUploadedDocumentDownload(payload.documentId);
+      const download = await getUploadedDocumentDownload(payload.documentId, payload.format);
       return NextResponse.json({ download });
     }
 

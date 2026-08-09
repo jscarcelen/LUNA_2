@@ -313,6 +313,68 @@ function getMimeTypeForExtension(extension) {
   return "text/plain";
 }
 
+function escapeHtml(value = "") {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function markdownToBasicHtml(markdown = "") {
+  const source = String(markdown || "").replace(/\r\n/g, "\n");
+  const lines = source.split("\n");
+  const html = [];
+  let inList = false;
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || "");
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      const level = headingMatch[1].length;
+      html.push(`<h${level}>${escapeHtml(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${escapeHtml(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    }
+
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+
+    html.push(`<p>${escapeHtml(trimmed)}</p>`);
+  }
+
+  if (inList) {
+    html.push("</ul>");
+  }
+
+  return html.join("\n").trim();
+}
+
 function buildGeneratedDocumentBundle({ plainText, downloads }) {
   return JSON.stringify({
     version: GENERATED_DOCUMENT_BUNDLE_VERSION,
@@ -1689,11 +1751,11 @@ export async function getGeneratedDocumentDownload(documentId, format) {
   };
 }
 
-export async function getUploadedDocumentDownload(documentId) {
+export async function getUploadedDocumentDownload(documentId, format = "") {
   const client = createSupabaseAdminClient();
   const { data: document, error } = await client
     .from("documents")
-    .select("id, name, content")
+    .select("id, name, content, source_mime_type, source_content_base64, source_render_html")
     .eq("id", documentId)
     .maybeSingle();
 
@@ -1702,9 +1764,43 @@ export async function getUploadedDocumentDownload(documentId) {
     throw new Error("Document not found.");
   }
 
-  const extension = getExtensionFromName(document.name, "txt");
+  const requestedFormat = String(format || "").trim().toLowerCase();
+  const sourceMimeType = String(document.source_mime_type || "").trim().toLowerCase();
+  const sourceContentBase64 = String(document.source_content_base64 || "").trim();
+  const sourceRenderHtml = String(document.source_render_html || "").trim();
   const bundle = parseGeneratedDocumentBundle(document.content);
   const content = bundle?.plainText || String(document.content || "");
+
+  if (requestedFormat === "html") {
+    const html = sourceRenderHtml || markdownToBasicHtml(content);
+    return {
+      format: "html",
+      fileName: withFileExtension(document.name || "document", "html"),
+      mimeType: "text/html",
+      contentBase64: Buffer.from(html, "utf8").toString("base64")
+    };
+  }
+
+  if (requestedFormat === "markdown" || requestedFormat === "md") {
+    return {
+      format: "md",
+      fileName: withFileExtension(document.name || "document", "md"),
+      mimeType: "text/markdown",
+      contentBase64: Buffer.from(content, "utf8").toString("base64")
+    };
+  }
+
+  if ((requestedFormat === "original" || !requestedFormat) && sourceContentBase64) {
+    const extension = getExtensionFromName(document.name, "bin");
+    return {
+      format: extension,
+      fileName: document.name || `document.${extension}`,
+      mimeType: sourceMimeType || getMimeTypeForExtension(extension),
+      contentBase64: sourceContentBase64
+    };
+  }
+
+  const extension = getExtensionFromName(document.name, "txt");
 
   return {
     format: extension,

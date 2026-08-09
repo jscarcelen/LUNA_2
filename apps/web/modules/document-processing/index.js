@@ -7,6 +7,7 @@ import { renderCanonicalDocumentToHtml } from "./renderers/htmlRenderer.js";
 import { renderCanonicalDocumentToMarkdown } from "./renderers/markdownRenderer.js";
 import { renderCanonicalDocumentToText } from "./renderers/textRenderer.js";
 import { buildCanonicalVerification, buildCanonicalVerificationMarkers } from "./verification/verification.js";
+import { runAuxiliaryDocxPipeline } from "./parsers/auxiliaryDocxPipeline.js";
 
 export const DOCUMENT_PROCESSING_PIPELINE_VERSION = "CDM_V2_REAL_PIPELINE_TEST_001";
 
@@ -183,6 +184,33 @@ export async function processUploadedDocument(file, options = {}) {
   };
   const minConfidence = Number(options?.minConfidence || 0.72);
   const confidenceReviewThreshold = Number(options?.confidenceReviewThreshold || 0.85);
+
+  const detectedType = detectDocumentType(file);
+  if (detectedType === "docx") {
+    const extracted = await runAuxiliaryDocxPipeline(file);
+    return {
+      ...extracted,
+      processingRunId,
+      processingPipelineVersion: "auxiliary-docx-json-extractor-v1",
+      pipelineDiagnostic: PIPELINE_DIAGNOSTIC,
+      pipelineStageTrace: [
+        "[STAGE 1] DOCX UPLOAD",
+        "[STAGE 2] AUXILIARY OOXML PARSER",
+        "[STAGE 3] AUXILIARY HTML/MARKDOWN RENDER"
+      ],
+      processingSummary: {
+        schemaVersion: String(extracted?.canonicalDocument?.schemaVersion || ""),
+        cdmVersion: "auxiliary-docx-tree",
+        blockCount: Array.isArray(extracted?.canonicalDocument?.body?.children)
+          ? extracted.canonicalDocument.body.children.length
+          : 0,
+        equationCount: Number(extracted?.canonicalVerification?.sourceCounts?.equations || 0),
+        headingCount: 0
+      },
+      confidenceSignals: []
+    };
+  }
+
   const context = await engine.run({
     file,
     minConfidence,

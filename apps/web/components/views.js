@@ -249,6 +249,59 @@ function plainTextToHtml(text = "") {
   return paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`).join("");
 }
 
+function markdownToBasicHtml(markdown = "") {
+  const source = String(markdown || "").replace(/\r\n/g, "\n");
+  const lines = source.split("\n");
+  const html = [];
+  let inList = false;
+
+  for (const rawLine of lines) {
+    const line = String(rawLine || "");
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      continue;
+    }
+
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      if (inList) {
+        html.push("</ul>");
+        inList = false;
+      }
+      const level = headingMatch[1].length;
+      html.push(`<h${level}>${escapeHtml(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^[-*]\s+/.test(trimmed)) {
+      if (!inList) {
+        html.push("<ul>");
+        inList = true;
+      }
+      html.push(`<li>${escapeHtml(trimmed.replace(/^[-*]\s+/, ""))}</li>`);
+      continue;
+    }
+
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+
+    html.push(`<p>${escapeHtml(trimmed)}</p>`);
+  }
+
+  if (inList) {
+    html.push("</ul>");
+  }
+
+  return html.join("\n").trim() || "<p>(empty)</p>";
+}
+
 function stripRiskMarkupFromHtml(html = "") {
   return String(html || "")
     .replace(/<mark\b[^>]*data-source-risk-id="[^"]+"[^>]*>([\s\S]*?)<\/mark>/gi, "$1")
@@ -580,6 +633,7 @@ export function WorkspacesManagerView({
   const [collapsedFolderDocs, setCollapsedFolderDocs] = useState({});
   const [unfiledCollapsed, setUnfiledCollapsed] = useState(true);
   const [downloadPickerDoc, setDownloadPickerDoc] = useState(null);
+  const [reviewContentMode, setReviewContentMode] = useState("html");
   const [editDocMeta, setEditDocMeta] = useState(null);
   const [editDocFolderIds, setEditDocFolderIds] = useState([]);
   const [editDocSelectedTags, setEditDocSelectedTags] = useState([]);
@@ -1110,7 +1164,7 @@ export function WorkspacesManagerView({
     }
   }
 
-  async function handleDownloadUploadedDocument(doc) {
+  async function handleDownloadUploadedDocument(doc, format = "original") {
     try {
       const response = await fetch(WORKSPACES_API, {
         method: "POST",
@@ -1118,7 +1172,8 @@ export function WorkspacesManagerView({
         body: JSON.stringify({
           action: "downloadUploadedDocument",
           payload: {
-            documentId: doc.id
+            documentId: doc.id,
+            format
           }
         })
       });
@@ -1143,10 +1198,14 @@ export function WorkspacesManagerView({
     );
   }
 
+  function getUploadedDownloadFormats() {
+    return ["original", "html", "markdown"];
+  }
+
   function renderUploadedDownloadControl(doc, options = {}) {
     if (doc.sourceType === "generated") return null;
     return (
-      <button className={options.compact ? "table-btn icon-btn" : "table-btn"} type="button" onClick={() => handleDownloadUploadedDocument(doc)} disabled={isWorking}>
+      <button className={options.compact ? "table-btn icon-btn" : "table-btn"} type="button" onClick={() => setDownloadPickerDoc(doc)} disabled={isWorking}>
         Download
       </button>
     );
@@ -1715,9 +1774,12 @@ export function WorkspacesManagerView({
 
   async function saveReviewHtmlDraft(item) {
     if (!item?.id || !item?.subjectId || !onReviewDocumentExtraction) return;
-    const { stripped, removedRiskIds } = captureCurrentEditorState(item);
+    const markdownDraft = String(reviewDraftByDocId[item.id] || item.content || "");
+    const { stripped, removedRiskIds } = reviewContentMode === "markdown"
+      ? { stripped: markdownToBasicHtml(markdownDraft), removedRiskIds: [] }
+      : captureCurrentEditorState(item);
     const correctedHtml = stripped;
-    const correctedContent = htmlToPlainText(correctedHtml);
+    const correctedContent = reviewContentMode === "markdown" ? markdownDraft : htmlToPlainText(correctedHtml);
     const addressedIds = getAddressedRiskIds(item);
 
     if (removedRiskIds.length) {
@@ -1791,9 +1853,12 @@ export function WorkspacesManagerView({
       [item.id]: addressedMap
     }));
 
-    const { stripped, removedRiskIds } = captureCurrentEditorState(item);
+    const markdownDraft = String(reviewDraftByDocId[item.id] || item.content || "");
+    const { stripped, removedRiskIds } = reviewContentMode === "markdown"
+      ? { stripped: markdownToBasicHtml(markdownDraft), removedRiskIds: [] }
+      : captureCurrentEditorState(item);
     const correctedHtml = stripped;
-    const correctedContent = htmlToPlainText(correctedHtml);
+    const correctedContent = reviewContentMode === "markdown" ? markdownDraft : htmlToPlainText(correctedHtml);
 
     if (removedRiskIds.length) {
       setSuppressedRiskByDocId((previous) => {
@@ -1884,6 +1949,7 @@ export function WorkspacesManagerView({
       [item.id]: previous[item.id]
         ?? (String(item?.sourceRenderHtml || "").trim() || plainTextToHtml(String(item.content || "")))
     }));
+    setReviewContentMode(String(item?.sourceRenderHtml || "").trim() ? "html" : "markdown");
 
     const sourceMime = String(item?.sourceMimeType || "").toLowerCase();
     const isWordLike = sourceMime.includes("wordprocessingml") || sourceMime === "application/msword";
@@ -2440,46 +2506,68 @@ export function WorkspacesManagerView({
       return <iframe title={`source-${item?.id || "document"}`} src={sourceDataUrl} style={{ width: "100%", minHeight: "520px", border: "1px solid #d8d3f0", borderRadius: "10px" }} />;
     }
 
-    if (sourceRenderHtml) {
+    if (sourceRenderHtml || String(reviewDraftByDocId[item?.id] || item?.content || "").trim()) {
       const editableHtml = getConsolidatedReviewHtml(item);
+      const markdownDraft = String(reviewDraftByDocId[item?.id] || item?.content || "");
       return (
         <div>
           <div className="inline-actions" style={{ marginBottom: "8px", flexWrap: "wrap" }}>
-            <span className="hint">Direct edit mode. Use toolbar for formatting and optional LaTeX insertion.</span>
-            <button className="table-btn" type="button" onClick={() => setRenderLatexPreview((previous) => !previous)}>
-              {renderLatexPreview ? "Show Raw LaTeX" : "Render LaTeX Preview"}
+            <span className="hint">Edit mode: switch between HTML and Markdown, then save or approve.</span>
+            <button className="table-btn" type="button" onClick={() => setReviewContentMode((previous) => previous === "html" ? "markdown" : "html")}>
+              {reviewContentMode === "html" ? "Switch To Markdown" : "Switch To HTML"}
             </button>
+            {reviewContentMode === "html" ? (
+              <button className="table-btn" type="button" onClick={() => setRenderLatexPreview((previous) => !previous)}>
+                {renderLatexPreview ? "Show Raw LaTeX" : "Render LaTeX Preview"}
+              </button>
+            ) : null}
           </div>
-          <div className="inline-actions rich-editor-toolbar" style={{ marginBottom: "8px", flexWrap: "wrap" }}>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("bold")}><b>B</b></button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("italic")}><i>I</i></button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("underline")}><u>U</u></button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("formatBlock", "<h2>")}>H2</button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("formatBlock", "<h3>")}>H3</button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("insertUnorderedList")}>Bullets</button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("insertOrderedList")}>Numbered</button>
-            <button className="table-btn" type="button" onClick={() => runEditorCommand("removeFormat")}>Clear Format</button>
-            <button className="table-btn" type="button" onClick={() => insertLatexAtSelection(false)}>Insert Inline LaTeX</button>
-            <button className="table-btn" type="button" onClick={() => insertLatexAtSelection(true)}>Insert Display LaTeX</button>
-          </div>
-          <div
-            ref={sourceEditorRef}
-            className="doc-preview rich-html-editor"
-            style={{ maxHeight: "520px", overflow: "auto", background: "#fff" }}
-            contentEditable
-            suppressContentEditableWarning
-            onInput={() => {
-              // Keep editor uncontrolled while typing to avoid re-injecting highlights mid-delete.
-            }}
-            dangerouslySetInnerHTML={{ __html: editableHtml }}
-          />
-          {renderLatexPreview ? (
-            <div
-              className="doc-preview rich-html-render"
-              style={{ maxHeight: "280px", overflow: "auto", background: "#fff", marginTop: "10px" }}
-              dangerouslySetInnerHTML={{ __html: getConsolidatedRenderedHtml(item) }}
+          {reviewContentMode === "html" ? (
+            <>
+              <div className="inline-actions rich-editor-toolbar" style={{ marginBottom: "8px", flexWrap: "wrap" }}>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("bold")}><b>B</b></button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("italic")}><i>I</i></button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("underline")}><u>U</u></button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("formatBlock", "<h2>")}>H2</button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("formatBlock", "<h3>")}>H3</button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("insertUnorderedList")}>Bullets</button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("insertOrderedList")}>Numbered</button>
+                <button className="table-btn" type="button" onClick={() => runEditorCommand("removeFormat")}>Clear Format</button>
+                <button className="table-btn" type="button" onClick={() => insertLatexAtSelection(false)}>Insert Inline LaTeX</button>
+                <button className="table-btn" type="button" onClick={() => insertLatexAtSelection(true)}>Insert Display LaTeX</button>
+              </div>
+              <div
+                ref={sourceEditorRef}
+                className="doc-preview rich-html-editor"
+                style={{ maxHeight: "520px", overflow: "auto", background: "#fff" }}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={() => {
+                  // Keep editor uncontrolled while typing to avoid re-injecting highlights mid-delete.
+                }}
+                dangerouslySetInnerHTML={{ __html: editableHtml }}
+              />
+              {renderLatexPreview ? (
+                <div
+                  className="doc-preview rich-html-render"
+                  style={{ maxHeight: "280px", overflow: "auto", background: "#fff", marginTop: "10px" }}
+                  dangerouslySetInnerHTML={{ __html: getConsolidatedRenderedHtml(item) }}
+                />
+              ) : null}
+            </>
+          ) : (
+            <textarea
+              className="input"
+              rows={20}
+              style={{ width: "100%", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}
+              value={markdownDraft}
+              onChange={(event) => {
+                const nextMarkdown = event.target.value;
+                setReviewDraftByDocId((previous) => ({ ...previous, [item.id]: nextMarkdown }));
+                setReviewHtmlDraftByDocId((previous) => ({ ...previous, [item.id]: markdownToBasicHtml(nextMarkdown) }));
+              }}
             />
-          ) : null}
+          )}
         </div>
       );
     }
@@ -2521,15 +2609,7 @@ export function WorkspacesManagerView({
                   </p>
                   <p className="hint" style={{ margin: "0 0 8px" }}>Issues: {issues}</p>
                   {renderCanonicalVerificationPanel(item, true)}
-                  <button className="table-btn" type="button" onClick={() => openReviewCompare(item)} disabled={busy || isWorking}>Compare Source vs TXT</button>
-                  <textarea
-                    className="input"
-                    rows={4}
-                    placeholder="Optional: paste corrected extraction text before approval"
-                    value={reviewDraftByDocId[item.id] || ""}
-                    onChange={(event) => setReviewDraftByDocId((previous) => ({ ...previous, [item.id]: event.target.value }))}
-                    disabled={busy || isWorking}
-                  />
+                  <button className="table-btn" type="button" onClick={() => openReviewCompare(item)} disabled={busy || isWorking}>Open HTML/Markdown Risk Manager</button>
                   <div className="inline-actions" style={{ marginTop: "8px" }}>
                     <button className="primary-btn" type="button" onClick={() => handleReviewDecision(item, "approved")} disabled={busy || isWorking || !item.id}>
                       {busy ? "Saving..." : "Approve"}
@@ -2974,7 +3054,7 @@ export function WorkspacesManagerView({
               <button className="table-btn" type="button" onClick={() => setReviewCompareDoc(null)}>Close</button>
             </div>
             <p className="hint" style={{ marginTop: "8px" }}>
-              Single editor mode: risk areas are highlighted for reference. Edit anything directly, then save or bulk-approve when ready.
+              Risk manager mode: edit the uploaded document as HTML or Markdown, then save or bulk-approve when ready.
             </p>
             <section className="selection-box" style={{ marginTop: "12px" }}>
               {(() => {
@@ -3054,17 +3134,23 @@ export function WorkspacesManagerView({
 
             <p className="hint" style={{ marginTop: "6px" }}>Choose export format</p>
             <div className="chip-wrap" style={{ marginTop: "10px" }}>
-              {(Array.isArray(downloadPickerDoc.availableFormats) && downloadPickerDoc.availableFormats.length ? downloadPickerDoc.availableFormats : ["txt"]).map((format) => (
+              {((downloadPickerDoc.sourceType === "generated")
+                ? (Array.isArray(downloadPickerDoc.availableFormats) && downloadPickerDoc.availableFormats.length ? downloadPickerDoc.availableFormats : ["txt"])
+                : getUploadedDownloadFormats()).map((format) => (
                 <button
                   key={`${downloadPickerDoc.id}-download-${format}`}
                   className="table-btn"
                   type="button"
                   onClick={async () => {
-                    await handleDownloadGeneratedDocument(downloadPickerDoc, format);
+                    if (downloadPickerDoc.sourceType === "generated") {
+                      await handleDownloadGeneratedDocument(downloadPickerDoc, format);
+                    } else {
+                      await handleDownloadUploadedDocument(downloadPickerDoc, format);
+                    }
                     setDownloadPickerDoc(null);
                   }}
                 >
-                  {format.toUpperCase()}
+                  {String(format || "").toUpperCase()}
                 </button>
               ))}
             </div>

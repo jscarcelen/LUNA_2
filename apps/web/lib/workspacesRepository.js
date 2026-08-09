@@ -28,6 +28,9 @@ import {
   toVectorLiteral
 } from "../modules/ai-tools/pipeline/embeddings.js";
 import { processUploadedDocument } from "../modules/document-processing/index.js";
+import JSZip from "jszip";
+import katex from "katex";
+import TurndownService from "turndown";
 
 let folderHierarchySupported;
 let documentFoldersSupported;
@@ -373,6 +376,164 @@ function markdownToBasicHtml(markdown = "") {
   }
 
   return html.join("\n").trim();
+}
+
+const DOCX_MEDIA_MIME_BY_EXT = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  tif: "image/tiff",
+  tiff: "image/tiff",
+  emf: "image/emf",
+  wmf: "image/wmf"
+};
+
+function getDocxMediaMimeType(path = "") {
+  const extMatch = String(path || "").toLowerCase().match(/\.([a-z0-9]+)$/);
+  const ext = extMatch?.[1] || "";
+  return DOCX_MEDIA_MIME_BY_EXT[ext] || "application/octet-stream";
+}
+
+function normalizeMediaLookupKey(value = "") {
+  return String(value || "")
+    .trim()
+    .replace(/^\.\//, "")
+    .replace(/^\//, "")
+    .replace(/[?#].*$/, "");
+}
+
+async function extractDocxMediaDataUrls(sourceContentBase64 = "") {
+  const encoded = String(sourceContentBase64 || "").trim();
+  if (!encoded) return new Map();
+
+  try {
+    const sourceBuffer = Buffer.from(encoded, "base64");
+    const zip = await JSZip.loadAsync(sourceBuffer);
+    const mediaMap = new Map();
+    const entries = Object.entries(zip.files || {});
+
+    for (const [zipPath, zipEntry] of entries) {
+      if (!zipPath.startsWith("word/media/") || zipEntry?.dir) continue;
+      const baseName = zipPath.split("/").pop() || "";
+      if (!baseName) continue;
+      const mediaBase64 = await zipEntry.async("base64");
+      const mimeType = getDocxMediaMimeType(zipPath);
+      const dataUrl = `data:${mimeType};base64,${mediaBase64}`;
+      mediaMap.set(normalizeMediaLookupKey(baseName), dataUrl);
+      mediaMap.set(normalizeMediaLookupKey(`assets/${baseName}`), dataUrl);
+      mediaMap.set(normalizeMediaLookupKey(`word/media/${baseName}`), dataUrl);
+    }
+
+    return mediaMap;
+  } catch {
+    return new Map();
+  }
+}
+
+function mapMediaSource(source = "", mediaMap = new Map()) {
+  const key = normalizeMediaLookupKey(source);
+  if (!key) return "";
+  return mediaMap.get(key) || "";
+}
+
+function embedMediaDataUrlsInHtml(html = "", mediaMap = new Map()) {
+  if (!mediaMap.size) return String(html || "");
+  return String(html || "").replace(
+    /(<img\b[^>]*\bsrc\s*=\s*["'])([^"']+)(["'][^>]*>)/gi,
+    (match, prefix, src, suffix) => {
+      const mapped = mapMediaSource(src, mediaMap);
+      return mapped ? `${prefix}${mapped}${suffix}` : match;
+    }
+  );
+}
+
+function embedMediaDataUrlsInMarkdown(markdown = "", mediaMap = new Map()) {
+  if (!mediaMap.size) return String(markdown || "");
+  return String(markdown || "").replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, src) => {
+    const mapped = mapMediaSource(src, mediaMap);
+    return mapped ? `![${alt}](${mapped})` : match;
+  });
+}
+
+function htmlToMarkdownDocument(html = "", fallbackText = "") {
+  const source = String(html || "").trim();
+  if (!source) return String(fallbackText || "");
+
+  try {
+    const turndown = new TurndownService({
+      headingStyle: "atx",
+      bulletListMarker: "-",
+      codeBlockStyle: "fenced"
+    });
+    return turndown.turndown(source).trim();
+  } catch {
+    return String(fallbackText || "");
+  }
+}
+
+function renderLatexWithKatex(html = "") {
+  let rendered = String(html || "");
+  if (!rendered.trim()) return rendered;
+
+  rendered = rendered.replace(/<pre\b[^>]*class=["'][^"']*math-display[^"']*["'][^>]*>\s*\$\$([\s\S]*?)\$\$\s*<\/pre>/gi, (_, expr) => {
+    const latex = String(expr || "").trim();
+    if (!latex) return "";
+    try {
+      return `<div class="math-display nicer-latex">${katex.renderToString(latex, { displayMode: true, throwOnError: false })}</div>`;
+    } catch {
+      return `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
+    }
+  });
+
+  rendered = rendered.replace(/<code\b[^>]*class=["'][^"']*math-inline[^"']*["'][^>]*>\s*\$([^$\n]+?)\$\s*<\/code>/gi, (_, expr) => {
+    const latex = String(expr || "").trim();
+    if (!latex) return "";
+    try {
+      return `<span class="math-inline nicer-latex">${katex.renderToString(latex, { displayMode: false, throwOnError: false })}</span>`;
+    } catch {
+      return `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
+    }
+  });
+
+  return rendered;
+}
+
+function wrapDownloadedHtmlDocument(html = "") {
+  const content = String(html || "").trim();
+  const headExtras = `
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<style>
+  body { font-family: "Iowan Old Style", "Palatino Linotype", serif; line-height: 1.62; margin: 28px auto; max-width: 900px; padding: 0 20px; color: #1e2333; }
+  article { background: linear-gradient(180deg, #ffffff, #fbfcff); border: 1px solid #e6ecff; border-radius: 14px; padding: 24px; box-shadow: 0 8px 26px rgba(36, 68, 128, 0.08); }
+  h1, h2, h3, h4 { color: #16234d; }
+  p { margin: 0 0 12px; }
+  img, .inline-image { max-width: 100%; height: auto; border-radius: 10px; border: 1px solid #dbe6ff; box-shadow: 0 6px 18px rgba(36, 68, 128, 0.12); }
+  figure { margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+  td, th { border: 1px solid #d5dff6; padding: 8px; vertical-align: top; }
+  .nicer-latex { background: linear-gradient(180deg, #f7f9ff, #f0f5ff); border: 1px solid #d0dcfb; border-radius: 10px; padding: 8px 10px; }
+  .math-display.nicer-latex { margin: 12px 0; overflow-x: auto; }
+  .math-inline.nicer-latex { display: inline-block; margin: 0 2px; }
+</style>`;
+
+  if (!content) {
+    return `<!DOCTYPE html><html lang="en"><head>${headExtras}</head><body><article><p>(empty)</p></article></body></html>`;
+  }
+
+  if (/<html[\s>]/i.test(content)) {
+    if (/<head[\s>]/i.test(content)) {
+      return content.replace(/<head[^>]*>/i, (match) => `${match}${headExtras}`);
+    }
+    return content.replace(/<html([^>]*)>/i, `<html$1><head>${headExtras}</head>`);
+  }
+
+  return `<!DOCTYPE html><html lang="en"><head>${headExtras}</head><body><article>${content}</article></body></html>`;
 }
 
 function buildGeneratedDocumentBundle({ plainText, downloads }) {
@@ -1770,9 +1931,13 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
   const sourceRenderHtml = String(document.source_render_html || "").trim();
   const bundle = parseGeneratedDocumentBundle(document.content);
   const content = bundle?.plainText || String(document.content || "");
+  const mediaMap = await extractDocxMediaDataUrls(sourceContentBase64);
 
   if (requestedFormat === "html") {
-    const html = sourceRenderHtml || markdownToBasicHtml(content);
+    const baseHtml = sourceRenderHtml || markdownToBasicHtml(content);
+    const htmlWithMedia = embedMediaDataUrlsInHtml(baseHtml, mediaMap);
+    const renderedMathHtml = renderLatexWithKatex(htmlWithMedia);
+    const html = wrapDownloadedHtmlDocument(renderedMathHtml);
     return {
       format: "html",
       fileName: withFileExtension(document.name || "document", "html"),
@@ -1782,11 +1947,15 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
   }
 
   if (requestedFormat === "markdown" || requestedFormat === "md") {
+    const markdownSource = sourceRenderHtml
+      ? htmlToMarkdownDocument(sourceRenderHtml, content)
+      : content;
+    const markdown = embedMediaDataUrlsInMarkdown(markdownSource, mediaMap);
     return {
       format: "md",
       fileName: withFileExtension(document.name || "document", "md"),
       mimeType: "text/markdown",
-      contentBase64: Buffer.from(content, "utf8").toString("base64")
+      contentBase64: Buffer.from(markdown, "utf8").toString("base64")
     };
   }
 

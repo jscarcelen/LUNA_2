@@ -719,6 +719,15 @@ body {
   background: #fbfdff;
 }
 
+.doc-preview-frame {
+  width: 100%;
+  min-height: 62vh;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-top: 10px;
+  background: #ffffff;
+}
+
 .doc-preview.rich-html-editor:focus {
   outline: 2px solid #6f8ef0;
   outline-offset: 2px;

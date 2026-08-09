@@ -66,6 +66,21 @@ function downloadTextFile(content, filename, mimeType = "text/plain") {
   URL.revokeObjectURL(url);
 }
 
+function decodeBase64Utf8(base64 = "") {
+  const source = String(base64 || "").trim();
+  if (!source) return "";
+  try {
+    const raw = atob(source);
+    const bytes = new Uint8Array(raw.length);
+    for (let index = 0; index < raw.length; index += 1) {
+      bytes[index] = raw.charCodeAt(index);
+    }
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch {
+    return "";
+  }
+}
+
 function csvEscape(value) {
   const text = String(value ?? "");
   if (/[",\n]/.test(text)) {
@@ -639,6 +654,10 @@ export function WorkspacesManagerView({
   const [editDocSelectedTags, setEditDocSelectedTags] = useState([]);
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [previewDoc, setPreviewDoc] = useState(null);
+  const [previewMode, setPreviewMode] = useState("txt");
+  const [previewDownloads, setPreviewDownloads] = useState({});
+  const [previewLoadingMode, setPreviewLoadingMode] = useState("");
+  const [previewError, setPreviewError] = useState("");
   const [tagColorDraftByName, setTagColorDraftByName] = useState({});
 
   const selectedWorkspace = workspaces.find((item) => item.id === selectedWorkspaceId) || null;
@@ -1189,6 +1208,48 @@ export function WorkspacesManagerView({
     }
   }
 
+  async function loadUploadedPreviewMode(documentId, format) {
+    const docId = String(documentId || "").trim();
+    const targetFormat = String(format || "").trim().toLowerCase();
+    if (!docId || !targetFormat || targetFormat === "txt" || targetFormat === "original") return;
+    if (previewDownloads[targetFormat]) return;
+
+    setPreviewLoadingMode(targetFormat);
+    setPreviewError("");
+    try {
+      const response = await fetch(WORKSPACES_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "downloadUploadedDocument",
+          payload: {
+            documentId: docId,
+            format: targetFormat
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Preview load failed");
+      }
+
+      const decoded = decodeBase64Utf8(data?.download?.contentBase64 || "");
+      setPreviewDownloads((previous) => ({
+        ...previous,
+        [targetFormat]: {
+          content: decoded,
+          mimeType: String(data?.download?.mimeType || ""),
+          fileName: String(data?.download?.fileName || "")
+        }
+      }));
+    } catch (error) {
+      setPreviewError(String(error.message || error));
+    } finally {
+      setPreviewLoadingMode("");
+    }
+  }
+
   function renderGeneratedDownloadControls(doc) {
     if (doc.sourceType !== "generated") return null;
     return (
@@ -1486,6 +1547,11 @@ export function WorkspacesManagerView({
   }
 
   async function handleOpenPreview(doc) {
+    setPreviewMode("txt");
+    setPreviewDownloads({});
+    setPreviewLoadingMode("");
+    setPreviewError("");
+
     if (!doc || doc.sourceType === "generated" || !doc.sourceContentBase64 || !onReprocessDocument) {
       setPreviewDoc(doc);
       return;
@@ -1497,6 +1563,19 @@ export function WorkspacesManagerView({
     } catch {
       setPreviewDoc(doc);
     }
+  }
+
+  function getPreviewModeOptions(doc) {
+    if (!doc) return ["txt"];
+    if (doc.sourceType === "generated") return ["txt"];
+    return ["txt", "markdown", "html"];
+  }
+
+  function getPreviewModeLabel(mode) {
+    const key = String(mode || "").toLowerCase();
+    if (key === "markdown") return "Markdown";
+    if (key === "html") return "HTML";
+    return "Text";
   }
 
   async function handleReviewDecision(reviewItem, decision) {
@@ -3039,8 +3118,64 @@ export function WorkspacesManagerView({
               <h4>{previewDoc.name}</h4>
               <button className="table-btn" onClick={() => setPreviewDoc(null)} type="button">Close</button>
             </div>
-            <p className="hint">{previewDoc.sizeLabel} · TXT</p>
-            <pre className="doc-preview">{previewDoc.content || "(empty file)"}</pre>
+            <p className="hint">{previewDoc.sizeLabel} · Preview</p>
+
+            <div className="chip-wrap" style={{ marginTop: "10px" }}>
+              {getPreviewModeOptions(previewDoc).map((mode) => (
+                <button
+                  key={`preview-mode-${previewDoc.id}-${mode}`}
+                  className="table-btn"
+                  type="button"
+                  onClick={async () => {
+                    setPreviewMode(mode);
+                    if (mode !== "txt") {
+                      await loadUploadedPreviewMode(previewDoc.id, mode);
+                    }
+                  }}
+                  disabled={previewLoadingMode === mode}
+                  style={previewMode === mode ? { borderColor: "#71ddff", boxShadow: "inset 0 0 0 1px #71ddff" } : undefined}
+                >
+                  {getPreviewModeLabel(mode)}
+                </button>
+              ))}
+            </div>
+
+            {previewError ? <p className="hint" style={{ color: "#b84a77" }}>{previewError}</p> : null}
+
+            {previewMode === "txt" ? (
+              <pre className="doc-preview">{previewDoc.content || "(empty file)"}</pre>
+            ) : null}
+
+            {previewMode === "markdown" ? (
+              <>
+                {previewLoadingMode === "markdown" ? <p className="hint">Loading Markdown preview…</p> : null}
+                {previewDownloads.markdown?.content ? (
+                  <>
+                    <div
+                      className="doc-preview rich-html-render"
+                      dangerouslySetInnerHTML={{ __html: renderLatexInHtml(markdownToBasicHtml(previewDownloads.markdown.content)) }}
+                    />
+                    <details style={{ marginTop: "8px" }}>
+                      <summary className="hint">Show raw Markdown</summary>
+                      <pre className="doc-preview" style={{ marginTop: "8px" }}>{previewDownloads.markdown.content}</pre>
+                    </details>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+
+            {previewMode === "html" ? (
+              <>
+                {previewLoadingMode === "html" ? <p className="hint">Loading HTML preview…</p> : null}
+                {previewDownloads.html?.content ? (
+                  <iframe
+                    title={`HTML preview for ${previewDoc.name}`}
+                    className="doc-preview-frame"
+                    srcDoc={previewDownloads.html.content}
+                  />
+                ) : null}
+              </>
+            ) : null}
           </div>
         </div>
       ) : null}

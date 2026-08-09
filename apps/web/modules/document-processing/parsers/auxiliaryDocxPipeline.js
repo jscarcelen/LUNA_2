@@ -1,5 +1,5 @@
 import JSZip from "jszip";
-import { parseDocument } from "../../../../../auxiliary/docx-json-extractor/src/parseDocument.js";
+import { parseDocument } from "./auxiliary-docx/parseDocument.js";
 
 function escapeHtml(value = "") {
   return String(value || "")

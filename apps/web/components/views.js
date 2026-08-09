@@ -81,6 +81,21 @@ function decodeBase64Utf8(base64 = "") {
   }
 }
 
+function extractEditableBodyHtml(fullHtml = "") {
+  const source = String(fullHtml || "").trim();
+  if (!source) return "";
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(source, "text/html");
+    const article = doc.querySelector("article");
+    if (article?.innerHTML) return String(article.innerHTML || "");
+    if (doc.body?.innerHTML) return String(doc.body.innerHTML || "");
+  } catch {
+    // Fallback to the raw source if parsing fails.
+  }
+  return source;
+}
+
 function csvEscape(value) {
   const text = String(value ?? "");
   if (/[",\n]/.test(text)) {
@@ -658,6 +673,7 @@ export function WorkspacesManagerView({
   const [editContentDoc, setEditContentDoc] = useState(null);
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
+  const [isPreparingEditContent, setIsPreparingEditContent] = useState(false);
   const [isSavingEditContent, setIsSavingEditContent] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [previewMode, setPreviewMode] = useState("txt");
@@ -1543,12 +1559,136 @@ export function WorkspacesManagerView({
     setEditDocTagDraft("");
   }
 
-  function handleStartEditContent(doc) {
+  function syncEditContentDraftFromEditor() {
+    const editor = editContentEditorRef.current;
+    if (!editor) return;
+    setEditContentHtmlDraft(String(editor.innerHTML || ""));
+  }
+
+  function getEditContentSelectionCell() {
+    const editor = editContentEditorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection?.rangeCount) return null;
+    let node = selection.getRangeAt(0).startContainer;
+    if (node?.nodeType === Node.TEXT_NODE) node = node.parentElement;
+    if (!(node instanceof HTMLElement)) return null;
+    const cell = node.closest("td,th");
+    if (!cell || !editor.contains(cell)) return null;
+    const row = cell.parentElement;
+    const table = row?.closest("table");
+    if (!row || !table) return null;
+    const columnIndex = Array.from(row.children).indexOf(cell);
+    const rowIndex = Array.from(table.querySelectorAll("tr")).indexOf(row);
+    return { cell, row, table, columnIndex, rowIndex };
+  }
+
+  function addTableToEditContent() {
+    const rows = Number(window.prompt("Number of rows", "3") || 0);
+    const columns = Number(window.prompt("Number of columns", "3") || 0);
+    if (!rows || !columns || rows < 1 || columns < 1) return;
+
+    const rowHtml = "<tr>" + new Array(columns).fill("<td>Cell</td>").join("") + "</tr>";
+    const tableHtml = `<table><tbody>${new Array(rows).fill(rowHtml).join("")}</tbody></table><p></p>`;
+    runEditContentCommand("insertHTML", tableHtml);
+    syncEditContentDraftFromEditor();
+  }
+
+  function addTableRowInEditContent(after = true) {
+    const hit = getEditContentSelectionCell();
+    if (!hit) return;
+    const sourceCells = Array.from(hit.row.children);
+    const nextRow = document.createElement("tr");
+    sourceCells.forEach((sourceCell) => {
+      const tagName = sourceCell.tagName.toLowerCase() === "th" ? "th" : "td";
+      const cell = document.createElement(tagName);
+      cell.innerHTML = "&nbsp;";
+      nextRow.appendChild(cell);
+    });
+    if (after) {
+      hit.row.insertAdjacentElement("afterend", nextRow);
+    } else {
+      hit.row.insertAdjacentElement("beforebegin", nextRow);
+    }
+    syncEditContentDraftFromEditor();
+  }
+
+  function deleteTableRowInEditContent() {
+    const hit = getEditContentSelectionCell();
+    if (!hit) return;
+    const rows = hit.table.querySelectorAll("tr");
+    if (rows.length <= 1) return;
+    hit.row.remove();
+    syncEditContentDraftFromEditor();
+  }
+
+  function addTableColumnInEditContent(after = true) {
+    const hit = getEditContentSelectionCell();
+    if (!hit) return;
+    const rows = Array.from(hit.table.querySelectorAll("tr"));
+    rows.forEach((row) => {
+      const cells = Array.from(row.children);
+      const source = cells[hit.columnIndex] || cells[cells.length - 1];
+      const tagName = source?.tagName?.toLowerCase() === "th" ? "th" : "td";
+      const cell = document.createElement(tagName);
+      cell.innerHTML = "&nbsp;";
+      const target = cells[hit.columnIndex];
+      if (!target) {
+        row.appendChild(cell);
+      } else if (after) {
+        target.insertAdjacentElement("afterend", cell);
+      } else {
+        target.insertAdjacentElement("beforebegin", cell);
+      }
+    });
+    syncEditContentDraftFromEditor();
+  }
+
+  function deleteTableColumnInEditContent() {
+    const hit = getEditContentSelectionCell();
+    if (!hit) return;
+    const rows = Array.from(hit.table.querySelectorAll("tr"));
+    const maxCols = Math.max(...rows.map((row) => row.children.length));
+    if (maxCols <= 1) return;
+    rows.forEach((row) => {
+      const target = row.children[hit.columnIndex];
+      if (target) target.remove();
+    });
+    syncEditContentDraftFromEditor();
+  }
+
+  async function handleStartEditContent(doc) {
     if (!doc || doc.sourceType === "generated") return;
+    setIsPreparingEditContent(true);
+    setEditContentStatusMessage("");
     const seededHtml = String(doc.sourceRenderHtml || "").trim() || markdownToBasicHtml(String(doc.content || ""));
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
-    setEditContentStatusMessage("");
+    try {
+      const response = await fetch(WORKSPACES_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "downloadUploadedDocument",
+          payload: {
+            documentId: doc.id,
+            format: "html"
+          }
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Unable to prepare image-rich editor content.");
+      }
+      const fullHtml = decodeBase64Utf8(data?.download?.contentBase64 || "");
+      const editableHtml = extractEditableBodyHtml(fullHtml);
+      if (editableHtml.trim()) {
+        setEditContentHtmlDraft(editableHtml);
+      }
+    } catch {
+      setEditContentStatusMessage("Opened editor with fallback HTML. Some original image links may need to be reinserted.");
+    } finally {
+      setIsPreparingEditContent(false);
+    }
   }
 
   function runEditContentCommand(command, value = null) {
@@ -3486,10 +3626,19 @@ export function WorkspacesManagerView({
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbered</button>
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link</button>
               <button className="table-btn" type="button" onClick={insertEditContentImage}>Image</button>
+              <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
+              <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>+Row Above</button>
+              <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>+Row Below</button>
+              <button className="table-btn" type="button" onClick={deleteTableRowInEditContent}>-Row</button>
+              <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(false)}>+Col Left</button>
+              <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(true)}>+Col Right</button>
+              <button className="table-btn" type="button" onClick={deleteTableColumnInEditContent}>-Col</button>
               <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
               <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
             </div>
+
+            {isPreparingEditContent ? <p className="hint" style={{ marginTop: "8px" }}>Preparing editor content with embedded images...</p> : null}
 
             <div
               ref={editContentEditorRef}
@@ -3497,6 +3646,7 @@ export function WorkspacesManagerView({
               style={{ minHeight: "340px", maxHeight: "56vh", overflow: "auto", background: "#fff" }}
               contentEditable
               suppressContentEditableWarning
+              onInput={syncEditContentDraftFromEditor}
               dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
             />
 

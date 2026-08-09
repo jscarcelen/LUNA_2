@@ -38,7 +38,7 @@ function mathText(node) {
     .map((item) => decodeXmlEntities(String(item.textContent || "")))
     .join("")
     .replace(/\r/g, "")
-    .replace(/\u0000/g, "")
+    .replaceAll("\u0000", "")
     .replace(/\u2061/g, "");
 }
 

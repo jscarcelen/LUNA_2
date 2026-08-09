@@ -6,14 +6,14 @@ function escapeHtml(value = "") {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
+    .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 }
 
 function escapeMarkdown(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
-    .replace(/([*_`~\[\]<>])/g, "\\$1");
+    .replace(/([*_`~[\]<>])/g, "\\$1");
 }
 
 function imagePath(sourcePart = "") {

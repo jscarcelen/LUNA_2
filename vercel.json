@@ -3,5 +3,8 @@
   "framework": "nextjs",
   "outputDirectory": "apps/web/.next",
   "installCommand": "npm install",
-  "buildCommand": "npm run build --workspace @luna/web"
+  "buildCommand": "npm run build --workspace @luna/web",
+  "github": {
+    "silent": true
+  }
 }

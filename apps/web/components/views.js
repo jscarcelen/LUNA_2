@@ -636,6 +636,7 @@ export function WorkspacesManagerView({
   const sourceViewerRef = useRef(null);
   const sourceEditorRef = useRef(null);
   const editContentEditorRef = useRef(null);
+  const editContentWorkingHtmlRef = useRef("");
   const [activeFolderId, setActiveFolderId] = useState("");
   const [filterFolderId, setFilterFolderId] = useState("");
   const [filterTag, setFilterTag] = useState("");
@@ -672,6 +673,7 @@ export function WorkspacesManagerView({
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [editContentDoc, setEditContentDoc] = useState(null);
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
+  const [editContentPreviewHtml, setEditContentPreviewHtml] = useState("");
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
   const [isPreparingEditContent, setIsPreparingEditContent] = useState(false);
   const [isSavingEditContent, setIsSavingEditContent] = useState(false);
@@ -1562,7 +1564,7 @@ export function WorkspacesManagerView({
   function syncEditContentDraftFromEditor() {
     const editor = editContentEditorRef.current;
     if (!editor) return;
-    setEditContentHtmlDraft(String(editor.innerHTML || ""));
+    editContentWorkingHtmlRef.current = String(editor.innerHTML || "");
   }
 
   function getEditContentSelectionCell() {
@@ -1663,6 +1665,8 @@ export function WorkspacesManagerView({
     const seededHtml = String(doc.sourceRenderHtml || "").trim() || markdownToBasicHtml(String(doc.content || ""));
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
+    setEditContentPreviewHtml("");
+    editContentWorkingHtmlRef.current = seededHtml;
     try {
       const response = await fetch(WORKSPACES_API, {
         method: "POST",
@@ -1671,7 +1675,7 @@ export function WorkspacesManagerView({
           action: "downloadUploadedDocument",
           payload: {
             documentId: doc.id,
-            format: "html"
+            format: "editable-html"
           }
         })
       });
@@ -1683,6 +1687,7 @@ export function WorkspacesManagerView({
       const editableHtml = extractEditableBodyHtml(fullHtml);
       if (editableHtml.trim()) {
         setEditContentHtmlDraft(editableHtml);
+        editContentWorkingHtmlRef.current = editableHtml;
       }
     } catch {
       setEditContentStatusMessage("Opened editor with fallback HTML. Some original image links may need to be reinserted.");
@@ -1697,6 +1702,7 @@ export function WorkspacesManagerView({
     editor.focus();
     try {
       document.execCommand(command, false, value);
+      syncEditContentDraftFromEditor();
     } catch {
       // Ignore unsupported commands to keep the editor responsive.
     }
@@ -1714,11 +1720,34 @@ export function WorkspacesManagerView({
     runEditContentCommand("insertImage", nextUrl);
   }
 
+  function setEditContentTextColor() {
+    const color = window.prompt("Enter text color (name, hex, rgb)", "#1f3a8a");
+    const nextColor = String(color || "").trim();
+    if (!nextColor) return;
+    runEditContentCommand("foreColor", nextColor);
+  }
+
+  function setEditContentBackgroundColor() {
+    const color = window.prompt("Enter highlight color (name, hex, rgb)", "#fff59d");
+    const nextColor = String(color || "").trim();
+    if (!nextColor) return;
+    runEditContentCommand("hiliteColor", nextColor);
+  }
+
+  function handlePreviewEditedContent() {
+    const editor = editContentEditorRef.current;
+    const editedHtml = editor ? String(editor.innerHTML || "") : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
+    const normalized = stripRiskMarkupFromHtml(editedHtml).trim();
+    editContentWorkingHtmlRef.current = normalized;
+    setEditContentPreviewHtml(normalized);
+    setEditContentStatusMessage("Preview regenerated from current edits.");
+  }
+
   async function handleSaveEditedContent() {
     if (!editContentDoc?.id || !onUpdateDocumentContent) return;
     const editedHtml = editContentEditorRef.current
       ? String(editContentEditorRef.current.innerHTML || "")
-      : String(editContentHtmlDraft || "");
+      : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
     const correctedHtml = stripRiskMarkupFromHtml(editedHtml).trim();
     const correctedContent = htmlToPlainText(correctedHtml);
     if (!correctedHtml || !correctedContent) {
@@ -1749,6 +1778,8 @@ export function WorkspacesManagerView({
       }
       setEditContentDoc(null);
       setEditContentHtmlDraft("");
+      setEditContentPreviewHtml("");
+      editContentWorkingHtmlRef.current = "";
     } catch (error) {
       setEditContentStatusMessage(String(error.message || error));
     } finally {
@@ -3604,6 +3635,8 @@ export function WorkspacesManagerView({
                 onClick={() => {
                   setEditContentDoc(null);
                   setEditContentHtmlDraft("");
+                  setEditContentPreviewHtml("");
+                  editContentWorkingHtmlRef.current = "";
                   setEditContentStatusMessage("");
                 }}
                 type="button"
@@ -3624,8 +3657,12 @@ export function WorkspacesManagerView({
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("formatBlock", "<h3>")}>H3</button>
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbered</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("undo")}>Undo</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("redo")}>Redo</button>
               <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link</button>
               <button className="table-btn" type="button" onClick={insertEditContentImage}>Image</button>
+              <button className="table-btn" type="button" onClick={setEditContentTextColor}>Text Color</button>
+              <button className="table-btn" type="button" onClick={setEditContentBackgroundColor}>Background</button>
               <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
               <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>+Row Above</button>
               <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>+Row Below</button>
@@ -3650,20 +3687,27 @@ export function WorkspacesManagerView({
               dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
             />
 
-            <p className="hint" style={{ marginTop: "8px" }}>
-              Formula preview
-            </p>
-            <div
-              className="doc-preview rich-html-render"
-              style={{ maxHeight: "220px", overflow: "auto", background: "#fff" }}
-              dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentEditorRef.current ? String(editContentEditorRef.current.innerHTML || "") : editContentHtmlDraft) }}
-            />
-
             <div className="inline-actions" style={{ marginTop: "12px" }}>
+              <button className="table-btn" type="button" onClick={handlePreviewEditedContent} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>
+                Preview (Regenerate With Edits)
+              </button>
               <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>
-                {isSavingEditContent ? "Saving..." : "Save Content"}
+                {isSavingEditContent ? "Saving..." : "Save All Edits"}
               </button>
             </div>
+
+            {editContentPreviewHtml ? (
+              <>
+                <p className="hint" style={{ marginTop: "8px" }}>
+                  LaTeX preview (edit formulas in raw LaTeX in the editor above)
+                </p>
+                <div
+                  className="doc-preview rich-html-render"
+                  style={{ maxHeight: "240px", overflow: "auto", background: "#fff" }}
+                  dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentPreviewHtml) }}
+                />
+              </>
+            ) : null}
             {editContentStatusMessage ? <p className="hint" style={{ marginTop: "10px" }}>{editContentStatusMessage}</p> : null}
           </div>
         </div>

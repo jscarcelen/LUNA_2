@@ -1933,6 +1933,17 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
   const content = bundle?.plainText || String(document.content || "");
   const mediaMap = await extractDocxMediaDataUrls(sourceContentBase64);
 
+  if (requestedFormat === "editable-html") {
+    const baseHtml = sourceRenderHtml || markdownToBasicHtml(content);
+    const html = embedMediaDataUrlsInHtml(baseHtml, mediaMap);
+    return {
+      format: "editable-html",
+      fileName: withFileExtension(document.name || "document", "html"),
+      mimeType: "text/html",
+      contentBase64: Buffer.from(html, "utf8").toString("base64")
+    };
+  }
+
   if (requestedFormat === "html") {
     const baseHtml = sourceRenderHtml || markdownToBasicHtml(content);
     const htmlWithMedia = embedMediaDataUrlsInHtml(baseHtml, mediaMap);

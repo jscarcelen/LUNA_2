@@ -620,6 +620,7 @@ export function WorkspacesManagerView({
   const compareTextareaRef = useRef(null);
   const sourceViewerRef = useRef(null);
   const sourceEditorRef = useRef(null);
+  const editContentEditorRef = useRef(null);
   const [activeFolderId, setActiveFolderId] = useState("");
   const [filterFolderId, setFilterFolderId] = useState("");
   const [filterTag, setFilterTag] = useState("");
@@ -1550,9 +1551,35 @@ export function WorkspacesManagerView({
     setEditContentStatusMessage("");
   }
 
+  function runEditContentCommand(command, value = null) {
+    const editor = editContentEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    try {
+      document.execCommand(command, false, value);
+    } catch {
+      // Ignore unsupported commands to keep the editor responsive.
+    }
+  }
+
+  function insertEditContentLatex(displayMode = false) {
+    const wrapper = displayMode ? "$$\n\\placeholder\n$$" : "$\\placeholder$";
+    runEditContentCommand("insertText", wrapper);
+  }
+
+  function insertEditContentImage() {
+    const imageUrl = window.prompt("Paste image URL or data URL");
+    const nextUrl = String(imageUrl || "").trim();
+    if (!nextUrl) return;
+    runEditContentCommand("insertImage", nextUrl);
+  }
+
   async function handleSaveEditedContent() {
     if (!editContentDoc?.id || !onUpdateDocumentContent) return;
-    const correctedHtml = String(editContentHtmlDraft || "").trim();
+    const editedHtml = editContentEditorRef.current
+      ? String(editContentEditorRef.current.innerHTML || "")
+      : String(editContentHtmlDraft || "");
+    const correctedHtml = stripRiskMarkupFromHtml(editedHtml).trim();
     const correctedContent = htmlToPlainText(correctedHtml);
     if (!correctedHtml || !correctedContent) {
       setEditContentStatusMessage("Edited HTML cannot be empty.");
@@ -1568,6 +1595,13 @@ export function WorkspacesManagerView({
       });
       if (previewDoc?.id === editContentDoc.id) {
         setPreviewDoc((previous) => previous ? {
+          ...previous,
+          content: correctedContent,
+          sourceRenderHtml: correctedHtml
+        } : previous);
+      }
+      if (reviewCompareDoc?.id === editContentDoc.id) {
+        setReviewCompareDoc((previous) => previous ? {
           ...previous,
           content: correctedContent,
           sourceRenderHtml: correctedHtml
@@ -3424,7 +3458,7 @@ export function WorkspacesManagerView({
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal-card" style={{ maxWidth: "1100px" }}>
             <div className="modal-head">
-              <h4>Edit Document Content (HTML)</h4>
+              <h4>Visual Content Editor</h4>
               <button
                 className="table-btn"
                 onClick={() => {
@@ -3439,25 +3473,40 @@ export function WorkspacesManagerView({
             </div>
 
             <p className="hint" style={{ marginTop: "8px" }}>
-              Edit text, formulas, and image tags directly in HTML. Saving updates the document everywhere (workspace view, review center, and downloads).
+              Edit directly in the viewer like a document editor. Save applies changes to review center, downloads (HTML/Markdown), and LLM input.
             </p>
 
-            <label className="form-stack" style={{ marginTop: "10px" }}>
-              <span className="field-label">HTML Source</span>
-              <textarea
-                className="doc-preview"
-                style={{ minHeight: "320px", width: "100%", whiteSpace: "pre", fontFamily: "SF Mono, Menlo, Consolas, monospace" }}
-                value={editContentHtmlDraft}
-                onChange={(event) => setEditContentHtmlDraft(event.target.value)}
-              />
-            </label>
+            <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "10px", flexWrap: "wrap" }}>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("bold")}><b>B</b></button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("italic")}><i>I</i></button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("underline")}><u>U</u></button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("formatBlock", "<h2>")}>H2</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("formatBlock", "<h3>")}>H3</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbered</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link</button>
+              <button className="table-btn" type="button" onClick={insertEditContentImage}>Image</button>
+              <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
+              <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
+              <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
+            </div>
 
-            <p className="hint" style={{ marginTop: "6px" }}>
-              Live preview
+            <div
+              ref={editContentEditorRef}
+              className="doc-preview rich-html-editor"
+              style={{ minHeight: "340px", maxHeight: "56vh", overflow: "auto", background: "#fff" }}
+              contentEditable
+              suppressContentEditableWarning
+              dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
+            />
+
+            <p className="hint" style={{ marginTop: "8px" }}>
+              Formula preview
             </p>
             <div
               className="doc-preview rich-html-render"
-              dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentHtmlDraft) }}
+              style={{ maxHeight: "220px", overflow: "auto", background: "#fff" }}
+              dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentEditorRef.current ? String(editContentEditorRef.current.innerHTML || "") : editContentHtmlDraft) }}
             />
 
             <div className="inline-actions" style={{ marginTop: "12px" }}>

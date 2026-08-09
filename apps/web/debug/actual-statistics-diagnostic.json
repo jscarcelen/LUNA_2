@@ -1,0 +1,46 @@
+{
+  "processingRunId": "1f81ab9c-2d5c-4ac1-8772-21ea83fdb2ce",
+  "processingPipelineVersion": "CDM_V2_REAL_PIPELINE_TEST_001",
+  "pipelineDiagnostic": {
+    "version": "CDM_V2_REAL_PIPELINE_TEST_001",
+    "timestamp": "2026-08-08T14:30:40.295Z"
+  },
+  "pipelineStageTrace": [
+    "[STAGE 1] DOCX UPLOAD",
+    "[STAGE 2] OOXML PARSER",
+    "[STAGE 3] CDM V2",
+    "[STAGE 4] SEMANTIC NORMALIZER",
+    "[STAGE 5] MATH SERVICE",
+    "[STAGE 6] MARKDOWN RENDERER",
+    "[STAGE 7] FINAL OUTPUT"
+  ],
+  "processingSummary": {
+    "schemaVersion": "2.0",
+    "cdmVersion": "cdm.v2",
+    "blockCount": 10,
+    "equationCount": 6,
+    "headingCount": 1
+  },
+  "canonicalVerification": {
+    "sourceCounts": {
+      "equations": 8,
+      "tables": 0,
+      "textLength": 161
+    },
+    "extractedCounts": {
+      "equations": 6,
+      "tables": 0,
+      "textLength": 195
+    },
+    "coverage": {
+      "equations": 0.75,
+      "tables": 1,
+      "text": 1
+    },
+    "uniquenessErrors": [],
+    "gatePassed": false,
+    "unresolved": [
+      "cdm-formula-parity-failed:6/8"
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "document": {
+    "paragraphs": {
+      "sourceCount": 47,
+      "jsonCount": 33,
+      "missingParagraphs": [
+        "body/p[36]",
+        "body/p[37]",
+        "body/p[38]"
+      ]
+    },
+    "headings": {
+      "sourceCount": 6,
+      "jsonCount": 6,
+      "duplicates": []
+    },
+    "runs": {
+      "textRuns": 158
+    },
+    "tables": {
+      "jsonCount": 0
+    },
+    "images": {
+      "jsonCount": 2
+    },
+    "lists": {
+      "jsonCount": 2
+    }
+  },
+  "math": {
+    "sourceCount": 23,
+    "jsonCount": 23,
+    "sourceBreakdown": {
+      "oMathCount": 23,
+      "oMathParaCount": 6,
+      "mathRunCount": 23,
+      "mathElementsByType": {
+        "fraction": 6,
+        "subscript": 22,
+        "superscript": 7,
+        "subsuperscript": 4,
+        "radical": 2,
+        "nary": 3,
+        "matrix": 0,
+        "delimiter": 11,
+        "accent": 12,
+        "bar": 0,
+        "degree": 2,
+        "function": 5,
+        "limitLower": 0,
+        "limitUpper": 0
+      }
+    },
+    "missing": [],
+    "duplicates": [],
+    "leakedIntoText": [],
+    "unsupported": []
+  },
+  "ordering": {
+    "paragraphsChecked": 47,
+    "orderingFailures": []
+  },
+  "provenance": {
+    "missing": []
+  },
+  "overall": {
+    "passed": true,
+    "criticalFailures": []
+  }
+}

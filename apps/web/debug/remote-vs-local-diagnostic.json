@@ -1,0 +1,12 @@
+{
+  "remoteExtractionMethod": "docx",
+  "remoteReviewStatus": "needs_review",
+  "localProcessingRunId": "cd0d6798-09a1-4cc5-82a4-9035c17f4eb2",
+  "localPipelineVersion": "CDM_V2_REAL_PIPELINE_TEST_001",
+  "remoteHasMarker": false,
+  "localHasMarker": true,
+  "remoteHeadingOccurrences": 2,
+  "localHeadingOccurrences": 1,
+  "remoteMalformedMath": true,
+  "localMalformedMath": false
+}

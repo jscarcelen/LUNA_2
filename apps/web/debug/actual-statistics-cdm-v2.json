@@ -1,0 +1,539 @@
+{
+  "schemaVersion": "2.0",
+  "schema_version": "cdm.v2",
+  "document_id": "statistics-regression.docx",
+  "metadata": {
+    "title": "statistics-regression.docx",
+    "source_type": "docx",
+    "mime_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "extraction_method": "docx-ooxml-cdm",
+    "document_title": "statistics-regression.docx"
+  },
+  "equations": [
+    {
+      "id": "EQ-1",
+      "type": "inline_equation",
+      "latex": "S_x^2",
+      "mathml": "",
+      "html": "<span class=\"cdm-inline-math\">$S_{x}^{2}$</span>",
+      "source": "OOXML",
+      "nodePath": "body/p[2]/oMath",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "S_{x}"
+      ],
+      "operators": [],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMath><m:sSubSup><m:e><m:r><m:t>S</m:t></m:r></m:e><m:sub><m:r><m:t>x</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup></m:oMath>",
+        "parsedMathTree": {
+          "kind": "subsup",
+          "linear": "S_(x)^(2)",
+          "latex": "S_{x}^{2}",
+          "children": [
+            {
+              "type": "base",
+              "value": "S"
+            },
+            {
+              "type": "sub",
+              "value": "x"
+            },
+            {
+              "type": "sup",
+              "value": "2"
+            }
+          ]
+        },
+        "canonicalLatex": "S_x^2",
+        "renderedHtml": "<span class=\"cdm-inline-math\">$S_x^2$</span>"
+      }
+    },
+    {
+      "id": "EQ-2",
+      "type": "inline_equation",
+      "latex": "x_i",
+      "mathml": "",
+      "html": "<span class=\"cdm-inline-math\">$x_{i}$</span>",
+      "source": "OOXML",
+      "nodePath": "body/p[2]/oMath",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "x_{i}"
+      ],
+      "operators": [],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMath><m:sSub><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub></m:sSub></m:oMath>",
+        "parsedMathTree": {
+          "kind": "subscript",
+          "linear": "x_(i)",
+          "latex": "x_{i}",
+          "children": [
+            {
+              "type": "base",
+              "value": "x"
+            },
+            {
+              "type": "sub",
+              "value": "i"
+            }
+          ]
+        },
+        "canonicalLatex": "x_i",
+        "renderedHtml": "<span class=\"cdm-inline-math\">$x_i$</span>"
+      }
+    },
+    {
+      "id": "EQ-3",
+      "type": "inline_equation",
+      "latex": "\\\\bar{x}",
+      "mathml": "",
+      "html": "<span class=\"cdm-inline-math\">$\\bar{x}$</span>",
+      "source": "OOXML",
+      "nodePath": "body/p[3]/oMath",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "\\b",
+        "a",
+        "r",
+        "x"
+      ],
+      "operators": [],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMath><m:acc><m:accPr><m:chr m:val=\"¯\"/></m:accPr><m:e><m:r><m:t>x</m:t></m:r></m:e></m:acc></m:oMath>",
+        "parsedMathTree": {
+          "kind": "accent",
+          "linear": "\\bar{x}",
+          "latex": "\\bar{x}",
+          "children": [
+            {
+              "kind": "token",
+              "linear": "x",
+              "latex": "x",
+              "children": [
+                {
+                  "type": "token",
+                  "value": "x"
+                }
+              ]
+            }
+          ]
+        },
+        "canonicalLatex": "\\\\bar{x}",
+        "renderedHtml": "<span class=\"cdm-inline-math\">$\\\\bar{x}$</span>"
+      }
+    },
+    {
+      "id": "EQ-4",
+      "type": "inline_equation",
+      "latex": "x_i",
+      "mathml": "",
+      "html": "<span class=\"cdm-inline-math\">$x_{i}$</span>",
+      "source": "OOXML",
+      "nodePath": "body/p[4]/oMath",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "x_{i}"
+      ],
+      "operators": [],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMath><m:sSub><m:e><m:r><m:t>x</m:t></m:r></m:e><m:sub><m:r><m:t>i</m:t></m:r></m:sub></m:sSub></m:oMath>",
+        "parsedMathTree": {
+          "kind": "subscript",
+          "linear": "x_(i)",
+          "latex": "x_{i}",
+          "children": [
+            {
+              "type": "base",
+              "value": "x"
+            },
+            {
+              "type": "sub",
+              "value": "i"
+            }
+          ]
+        },
+        "canonicalLatex": "x_i",
+        "renderedHtml": "<span class=\"cdm-inline-math\">$x_i$</span>"
+      }
+    },
+    {
+      "id": "EQ-5",
+      "type": "display_equation",
+      "latex": "x",
+      "mathml": "",
+      "html": "<div class=\"cdm-display-math\">$$ x $$</div>",
+      "source": "OOXML",
+      "nodePath": "body/p[4]/oMathPara",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "x"
+      ],
+      "operators": [],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMathPara><m:oMath><m:r><m:t>x</m:t></m:r></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "kind": "sequence",
+          "linear": "x",
+          "latex": "x",
+          "children": [
+            {
+              "kind": "token",
+              "linear": "x",
+              "latex": "x",
+              "children": [
+                {
+                  "type": "token",
+                  "value": "x"
+                }
+              ]
+            }
+          ]
+        },
+        "canonicalLatex": "x",
+        "renderedHtml": "<div class=\"cdm-display-math\">$$ x $$</div>"
+      }
+    },
+    {
+      "id": "EQ-6",
+      "type": "display_equation",
+      "latex": "S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n} (x_i-\\bar{x})^2",
+      "mathml": "",
+      "html": "<div class=\"cdm-display-math\">$$ S_{x}^{2} = \\frac{1}{n-1}\\sum _{i=1}^{n} (x_(i)-bar{x})^(2) $$</div>",
+      "source": "OOXML",
+      "nodePath": "body/p[5]/oMathPara",
+      "page": 0,
+      "section": "Statistics Report",
+      "variables": [
+        "S_{x}",
+        "\\f",
+        "r",
+        "a",
+        "c",
+        "n",
+        "\\s",
+        "u",
+        "m",
+        "i",
+        "x",
+        "b"
+      ],
+      "operators": [
+        "fraction",
+        "sum",
+        "equals"
+      ],
+      "confidence": 1,
+      "diagnostics": {
+        "originalOmml": "<m:oMathPara><m:oMath><m:sSubSup><m:e><m:r><m:t>S</m:t></m:r></m:e><m:sub><m:r><m:t>x</m:t></m:r></m:sub><m:sup><m:r><m:t>2</m:t></m:r></m:sup></m:sSubSup><m:r><m:t>=</m:t></m:r><m:f><m:num><m:r><m:t>1</m:t></m:r></m:num><m:den><m:r><m:t>n-1</m:t></m:r></m:den></m:f><m:nary><m:naryPr><m:chr m:val=\"∑\"/></m:naryPr><m:sub><m:r><m:t>i=1</m:t></m:r></m:sub><m:sup><m:r><m:t>n</m:t></m:r></m:sup><m:e><m:r><m:t>(x_(i)-bar{x})^(2)</m:t></m:r></m:e></m:nary></m:oMath></m:oMathPara>",
+        "parsedMathTree": {
+          "kind": "sequence",
+          "linear": "S_(x)^(2) = (1)/(n-1) sum((x_(i)-bar{x})^(2))",
+          "latex": "S_{x}^{2} = \\frac{1}{n-1} \\sum_{i=1}^{n} (x_(i)-bar{x})^(2)",
+          "children": [
+            {
+              "kind": "sequence",
+              "linear": "S_(x)^(2) = (1)/(n-1) sum((x_(i)-bar{x})^(2))",
+              "latex": "S_{x}^{2} = \\frac{1}{n-1} \\sum_{i=1}^{n} (x_(i)-bar{x})^(2)",
+              "children": [
+                {
+                  "kind": "subsup",
+                  "linear": "S_(x)^(2)",
+                  "latex": "S_{x}^{2}",
+                  "children": [
+                    {
+                      "type": "base",
+                      "value": "S"
+                    },
+                    {
+                      "type": "sub",
+                      "value": "x"
+                    },
+                    {
+                      "type": "sup",
+                      "value": "2"
+                    }
+                  ]
+                },
+                {
+                  "kind": "token",
+                  "linear": "=",
+                  "latex": "=",
+                  "children": [
+                    {
+                      "type": "token",
+                      "value": "="
+                    }
+                  ]
+                },
+                {
+                  "kind": "fraction",
+                  "linear": "(1)/(n-1)",
+                  "latex": "\\frac{1}{n-1}",
+                  "children": [
+                    {
+                      "type": "num",
+                      "value": "1"
+                    },
+                    {
+                      "type": "den",
+                      "value": "n-1"
+                    }
+                  ]
+                },
+                {
+                  "kind": "sum",
+                  "linear": "sum((x_(i)-bar{x})^(2))",
+                  "latex": "\\sum_{i=1}^{n} (x_(i)-bar{x})^(2)",
+                  "children": [
+                    {
+                      "type": "body",
+                      "value": "(x_(i)-bar{x})^(2)"
+                    },
+                    {
+                      "type": "sub",
+                      "value": "i=1"
+                    },
+                    {
+                      "type": "sup",
+                      "value": "n"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "canonicalLatex": "S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n} (x_i-\\bar{x})^2",
+        "renderedHtml": "<div class=\"cdm-display-math\">$$ S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n} (x_i-\\bar{x})^2 $$</div>"
+      }
+    }
+  ],
+  "sections": [
+    {
+      "id": "section-2",
+      "heading": "",
+      "blocks": [
+        {
+          "type": "heading",
+          "level": 1,
+          "text": "Statistics Report",
+          "source": "OOXML",
+          "confidence": 1,
+          "nodePath": "body/p[1]"
+        },
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "Sample variance ",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null,
+                "color": null,
+                "highlight": null
+              },
+              "confidence": 1,
+              "source": "OOXML"
+            },
+            {
+              "type": "inline_math",
+              "equation_id": "EQ-1",
+              "latex": "S_x^2",
+              "nodePath": "body/p[2]/oMath",
+              "source": "OOXML",
+              "confidence": 1
+            },
+            {
+              "type": "text",
+              "text": " for score ",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null,
+                "color": null,
+                "highlight": null
+              },
+              "confidence": 1,
+              "source": "OOXML"
+            },
+            {
+              "type": "inline_math",
+              "equation_id": "EQ-2",
+              "latex": "x_i",
+              "nodePath": "body/p[2]/oMath",
+              "source": "OOXML",
+              "confidence": 1
+            },
+            {
+              "type": "text",
+              "text": ".",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null,
+                "color": null,
+                "highlight": null
+              },
+              "confidence": 1,
+              "source": "OOXML"
+            }
+          ],
+          "equation_ids": [
+            "EQ-1",
+            "EQ-2"
+          ],
+          "source": "OOXML",
+          "confidence": 1,
+          "nodePath": "body/p[2]"
+        },
+        {
+          "type": "paragraph",
+          "children": [
+            {
+              "type": "text",
+              "text": "Mean estimate ",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null,
+                "color": null,
+                "highlight": null
+              },
+              "confidence": 1,
+              "source": "OOXML"
+            },
+            {
+              "type": "inline_math",
+              "equation_id": "EQ-3",
+              "latex": "\\\\\\bar{x}",
+              "nodePath": "body/p[3]/oMath",
+              "source": "OOXML",
+              "confidence": 1
+            },
+            {
+              "type": "text",
+              "text": " is stable.",
+              "formatting": {
+                "bold": false,
+                "italic": false,
+                "underline": false,
+                "font": null,
+                "color": null,
+                "highlight": null
+              },
+              "confidence": 1,
+              "source": "OOXML"
+            }
+          ],
+          "equation_ids": [
+            "EQ-3"
+          ],
+          "source": "OOXML",
+          "confidence": 1,
+          "nodePath": "body/p[3]"
+        },
+        {
+          "type": "list",
+          "equation_ids": [
+            "EQ-4"
+          ],
+          "source": "OOXML",
+          "confidence": 1,
+          "nodePath": "body/p[4]",
+          "list_type": "bullet",
+          "level": 0,
+          "number_id": "2",
+          "list_items": [
+            {
+              "children": [
+                {
+                  "type": "text",
+                  "text": "Observation ",
+                  "formatting": {
+                    "bold": false,
+                    "italic": false,
+                    "underline": false,
+                    "font": null,
+                    "color": null,
+                    "highlight": null
+                  },
+                  "confidence": 1,
+                  "source": "OOXML"
+                },
+                {
+                  "type": "inline_math",
+                  "equation_id": "EQ-4",
+                  "latex": "x_i",
+                  "nodePath": "body/p[4]/oMath",
+                  "source": "OOXML",
+                  "confidence": 1
+                },
+                {
+                  "type": "text",
+                  "text": " has centered tendency ",
+                  "formatting": {
+                    "bold": false,
+                    "italic": false,
+                    "underline": false,
+                    "font": null,
+                    "color": null,
+                    "highlight": null
+                  },
+                  "confidence": 1,
+                  "source": "OOXML"
+                },
+                {
+                  "type": "display_math",
+                  "equation_id": "EQ-5",
+                  "latex": "x",
+                  "nodePath": "body/p[4]/oMathPara",
+                  "source": "OOXML",
+                  "confidence": 1
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "display_math",
+          "equation_id": "EQ-6",
+          "equation_ids": [
+            "EQ-6"
+          ],
+          "latex": "S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n} (x_i-\\\\bar{x})^2",
+          "nodePath": "body/p[5]/oMathPara",
+          "source": "OOXML",
+          "confidence": 1
+        }
+      ]
+    }
+  ],
+  "stats": {
+    "section_count": 3,
+    "block_count": 10,
+    "equation_count": 6,
+    "table_count": 0
+  },
+  "confidence": 1,
+  "debug": {
+    "bodyNodeCount": 5,
+    "headerCount": 1,
+    "footerCount": 1
+  }
+}

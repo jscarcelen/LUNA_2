@@ -1,0 +1,4250 @@
+{
+  "headings": [
+    {
+      "level": 1,
+      "text": "Central tendency - mean, median",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[1]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "level": 1,
+      "text": "Sample spread - variance, standard deviation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[4]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "level": 1,
+      "text": "Empirical rule",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[14]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "level": 1,
+      "text": "Variable association – Conditional statistics",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[21]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "level": 1,
+      "text": "Covariance and correlation – scatterplots & linear relation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[24]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "level": 1,
+      "text": "Natural logarithms – transforming positive, right-skewed data",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]",
+        "xmlElement": "w:p"
+      }
+    }
+  ],
+  "paragraphs": [
+    {
+      "text": "Median is less sensitive to outliers than the mean ( \\bar{x}). Median nicer to report when extreme outliers. If median and mean are very different, it is because of outliers. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "The pth quantile is the number such that p% of observations are below, (1-p)% above",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "The average of the difference from each variable observation to the mean is always 0. The size of individual differences between variable and mean tells how much spread the sample is.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Sample variance S_x^2 measures spread, is the average squared distance of the mean:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Note we square x_i-\\bar{x} to ensure the number will be positive. The larger the value, the more spread. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "If n is large, dividing by \\frac{1}{n} or \\frac{1}{n-1} does not change much. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Lowest S_x^2 is 0 (all numbers coincide with the mean). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[10]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Units are in units of x squared, solved by taking the square root of the sample variance, and get the sample standard deviation S_x:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "The standard deviation is a measure of the sample spread measured in units of x. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[13]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "The empirical rule will help us understand S_x and relate the summaries back to the histogram. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[15]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "For Mound-shape data (bell shape, tails on both sides), the empirical rule claims that",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "68% of data is within  (\\bar{x}-S_x,\\bar{x}+S_x) = \\bar{x} \\pm S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[17]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "95% of data within  (\\bar{x}-2S_x,\\bar{x}+2S_x) = \\bar{x} \\pm 2S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[18]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[19]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Comparing mutual funds – comparing mean vs standard deviation: Select those with higher mean returns and lowest standard deviation (variability). Can be seen from scatterplot. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Relation between categorical variables to unlock relations. For instance, pivot table and fraction of observations in each bucket (% of total, % of pivot row, % of pivot column). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[22]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Conditioning relates to a forecasting question where you are given a piece of information. If I condition on whether people watch the Simpsons, I am asking “if I tell you whether a person watches the Simpsons, how does that affect your view on whether that person drinks soda. If I condition on Soda, I am asking “if I tell you whether a person drinks Soda or not, how does that affect your view on whether that person watches the Simpsons.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Covariance and correlation summarize how strong a linear relationship is between two variables. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[25]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Sample covariance S_{xy} between x and y is:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Sample covariance r_{xy} units are units of x times units of y. Hence, we use sample correlation (unit-free measure), which is the sample covariance over the product of standard deviations of x and y:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Sample correlation lies between -1 and 1 (-1 \\le r_{xy} < 1), giving both linear relation strength and direction. The closer to 1, the stronger linear correlation (positive, or negative slope). Correlation does not give us the measure of the slope, just the linear relationship strength.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Samples can have perfect non-linear relationships, and give correlation of 0, since correlation only measures linear relationship. Low correlation might mean either low association between the data, or follow a non-linear relation (e.g., parabolic, logarithmic, etc.). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "If a sample follows a parabolic curve relationship, correlation between x and y would be 0, but correlation between x2 and y2 would be 1.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Building a correlation matrix (symmetric matrix) is helpful to compare many variables.  ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[33]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Focus on the sign of the covariance / correlation, it tells us which quadrant of the scatterplot we should expect to see our data respect to the mean. Positive covariance means that when one variable is above its mean, the other should be too. If negative, when one variable is above the mean, the other should be below. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[34]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Correlation has always same sign as covariance, as we are dividing by two positive numbers (standard deviation). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[35]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "It is common to transform right-skewed data to look mound-shaped/bell-shaped (where empirical rule is applicable). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "The natural logarithm is the inverse of the exponential function e: e^2 = 7.389 \\to \\ln(7.389) = 2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Properties:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[42]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Logs are only defined for positive numbers. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[45]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[46]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "We can log-transform distributions so that they passed from skewed to mount-shaped, apply the empirical rule, and we can come back to the original data by taking the exponent. Same for the empirical rule boundaries, can be taken the exponent to relate to the original data and make it more interpretable. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[47]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "text": "Pre-MBA Statistics",
+      "provenance": {
+        "part": "word/header1.xml",
+        "nodePath": "header1/p[1]",
+        "xmlElement": "w:p"
+      }
+    }
+  ],
+  "equations": [
+    {
+      "id": "EQ-0001",
+      "type": "inline_math",
+      "latex": "\\bar{x}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0002",
+      "type": "inline_math",
+      "latex": "S_x^2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0003",
+      "type": "display_math",
+      "latex": "S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[7]",
+        "xmlElement": "m:oMathPara"
+      }
+    },
+    {
+      "id": "EQ-0004",
+      "type": "inline_math",
+      "latex": "x_i-\\bar{x}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0005",
+      "type": "inline_math",
+      "latex": "n",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0006",
+      "type": "inline_math",
+      "latex": "\\frac{1}{n}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0007",
+      "type": "inline_math",
+      "latex": "\\frac{1}{n-1}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0008",
+      "type": "inline_math",
+      "latex": "S_x^2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[10]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0009",
+      "type": "inline_math",
+      "latex": "S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0010",
+      "type": "display_math",
+      "latex": "S_x = \\sqrt{S_x^2} = \\sqrt{\\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[12]",
+        "xmlElement": "m:oMathPara"
+      }
+    },
+    {
+      "id": "EQ-0011",
+      "type": "inline_math",
+      "latex": "x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[13]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0012",
+      "type": "inline_math",
+      "latex": "S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[15]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0013",
+      "type": "inline_math",
+      "latex": "(\\bar{x}-S_x,\\bar{x}+S_x) = \\bar{x} \\pm S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[17]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0014",
+      "type": "inline_math",
+      "latex": "(\\bar{x}-2S_x,\\bar{x}+2S_x) = \\bar{x} \\pm 2S_x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[18]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0015",
+      "type": "inline_math",
+      "latex": "S_{xy}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0016",
+      "type": "display_math",
+      "latex": "S_{xy} = \\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})(y_i-\\bar{y})",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[27]",
+        "xmlElement": "m:oMathPara"
+      }
+    },
+    {
+      "id": "EQ-0017",
+      "type": "inline_math",
+      "latex": "r_{xy}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0018",
+      "type": "display_math",
+      "latex": "r_{xy} = \\frac{S_{xy}}{S_x S_y}",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[29]",
+        "xmlElement": "m:oMathPara"
+      }
+    },
+    {
+      "id": "EQ-0019",
+      "type": "inline_math",
+      "latex": "-1 \\le r_{xy} < 1",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0020",
+      "type": "inline_math",
+      "latex": "e",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0021",
+      "type": "inline_math",
+      "latex": "e^2 = 7.389 \\to \\ln(7.389) = 2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]",
+        "xmlElement": "m:oMath"
+      }
+    },
+    {
+      "id": "EQ-0022",
+      "type": "display_math",
+      "latex": "e^{ab} = e^ae^b \\to \\ln(ab) = \\ln(a)+\\ln(b)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[43]",
+        "xmlElement": "m:oMathPara"
+      }
+    },
+    {
+      "id": "EQ-0023",
+      "type": "display_math",
+      "latex": "\\ln(a^b) = b \\ln(a)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[44]",
+        "xmlElement": "m:oMathPara"
+      }
+    }
+  ],
+  "tables": [],
+  "images": [
+    {
+      "id": "image-001",
+      "source": "media/image1.png",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[19]/r[1]/drawing[1]",
+        "xmlElement": "w:drawing"
+      }
+    },
+    {
+      "id": "image-002",
+      "source": "media/image2.png",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[46]/r[1]/drawing[1]",
+        "xmlElement": "w:drawing"
+      }
+    }
+  ],
+  "lists": [
+    {
+      "ordered": false,
+      "items": 3,
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]",
+        "xmlElement": "w:p"
+      }
+    },
+    {
+      "ordered": false,
+      "items": 2,
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[17]",
+        "xmlElement": "w:p"
+      }
+    }
+  ],
+  "links": [],
+  "pageBreaks": [
+    {
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[21]/r[1]/lastRenderedPageBreak[1]",
+        "xmlElement": "w:lastRenderedPageBreak"
+      }
+    },
+    {
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]/r[1]/lastRenderedPageBreak[1]",
+        "xmlElement": "w:lastRenderedPageBreak"
+      }
+    }
+  ],
+  "textRuns": [
+    {
+      "text": "Central tendency",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[1]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[1]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "- ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[1]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "mean, median",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[1]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Median",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " is less sensitiv",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "e",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " to ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "outliers",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " t",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "h",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "an the ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[8]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "mean",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[9]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[10]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "( ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[11]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ")",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]",
+        "xmlElement": "m:oMath"
+      },
+      "format": {}
+    },
+    {
+      "text": ".",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[12]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " Median nicer to report when extreme outliers. If median and mean are very different, it is because of outliers. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[2]/r[13]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "p",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "th",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": "superscript",
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " quantile",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " is the number such that p% of observations are below, ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "(",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "1-",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "p",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[8]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ")",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[9]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "%",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[10]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " above",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[3]/r[11]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Sample spread",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[4]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[4]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "- ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[4]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "variance, standard deviation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[4]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "average of the ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "difference from ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "each variable observation to the mean is always 0. The size of individual differences ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "between ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "variable and mean ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "tells how much spread the sample is.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[5]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "S",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "ample variance ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " measure",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "s",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " spread, ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "is the average squared distance of the mean:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[6]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Note we square ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " to ensure the number will be positive. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The larger the value, the more spread. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[8]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "If ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " is large, dividing by ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " or ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " does not change much. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[9]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Lowest ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[10]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " is 0 (all numbers coincide with the mean).",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[10]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[10]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Units are ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "in units of x ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "squared, ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "solved by taking the square root of the sample variance, and ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "get the sample standard deviation ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ":",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[11]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The standard deviation is a measure of the sample spread measured in units of ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[13]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[13]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Empirical rule",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[14]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The empirical rule will help us understand ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[15]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " and relate the summaries back to the histogram. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[15]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "For ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Mound-shape data",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "(bell shape, tails on both sides)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ",",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " the empirical rule claims that",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[16]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "68% of data is within  ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[17]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "95% of data within  ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[18]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Comparing mutual funds",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " – comparing mean vs standard deviation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ": ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Select those ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "with higher mean returns and lowest standard deviation (variability). Can be seen from scatterplot. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[20]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Variable association – Conditional statistics",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[21]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Relation between categorical variables to unlock relations. For instance, pivot table and fraction of observations in each bucket",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[22]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " (% of total, % of pivot row, % of pivot column)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[22]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[22]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Conditioning relates to ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "a forecasting question where you are given a piece of information. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "If I condition on ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "whether people watch the ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "S",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "impsons, I am asking “if I tell you whether a person watches the Simpsons, ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "how does that affect your view on whether that person drinks soda. If I condition on Soda, I am asking “if I tell you whether a person drinks Soda or not, how does that affect your view on whether that person watches the Simpsons.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[23]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Covariance and correlation ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[24]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "–",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[24]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " scatterplots",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[24]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " & linear relation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[24]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Covariance and correlation summarize how strong ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[25]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "a linear relationship is between two variables. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[25]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Sample covariance",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "between x and y is:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[26]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Sample ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "covariance",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " units are units of x times units of y. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Hence, we use sample ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "correlation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "(unit-free measure)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[8]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ", which is the sample covariance over the product of standard deviations of x and y",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[9]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ":",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[28]/r[10]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Sample correlation lies between -1 and 1 (",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ")",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ", giving both ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "linear ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "relation",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " strength and ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "direction",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[7]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": true,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". The closer to 1, the stronger linear correlation (positive, or negative slope)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[8]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[9]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Correlation does not give us the measure of the slope, just the linear relationship strength",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[10]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ".",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[30]/r[11]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Samples can have perfect non-linear relationships, and give correlation of 0, since correlation only measures linear relationship. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Low correlation might mean either low association between the data, or ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "follow",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " a non-linear relation (e.g., parabolic, logarithmic, etc.)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[31]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "If a sample follows a parabolic curve relationship, correlation between x and y would be 0, but correlation between x",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": "superscript",
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " and y",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "2",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": "superscript",
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " would be 1.",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[32]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Building a correlation matrix (symmetric matrix) is helpful to compare many variables. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[33]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[33]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Focus on the sign of the covariance / correlation, it tells us which quadrant of the scatterplot we shou",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[34]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "ld expect to see our data respect to the mean. Positive covariance means that when one variable is above its mean, the other should be too. If negative, when one variable is above the mean, the other should be below. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[34]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Correlation has always same sign as covariance, as we are dividing by two positive numbers (standard deviation). ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[35]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Natural logarithms",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " – transforming",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " positive,",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " right-skewed data",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[39]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "It is common to transform ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "right-skewed ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "data to look mound-shaped",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "/bell-shaped ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "(where empirical rule is applicable)",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[5]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ". ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[40]/r[6]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "The natural logarithm ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "is the inverse of the exponential function",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": " ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ": ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[41]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Properties:",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[42]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Logs are only defined for positive numbers. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[45]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "We can log-transform distributions so that they passed from skewed to mount-",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[47]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "shaped",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[47]/r[2]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": ", apply the empirical rule, and we can come back to the origina",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[47]/r[3]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "l data by taking the exponent. Same for the empirical rule boundaries, can be taken the exponent to relate to the original data and make it more interpretable. ",
+      "provenance": {
+        "part": "word/document.xml",
+        "nodePath": "body/p[47]/r[4]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": false,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": "en-GB",
+        "caps": false,
+        "smallCaps": false
+      }
+    },
+    {
+      "text": "Pre-MBA Statistics",
+      "provenance": {
+        "part": "word/header1.xml",
+        "nodePath": "header1/p[1]/r[1]",
+        "xmlElement": "w:r"
+      },
+      "format": {
+        "bold": false,
+        "italic": true,
+        "underline": null,
+        "strike": false,
+        "font": null,
+        "fontSize": null,
+        "color": null,
+        "highlight": null,
+        "verticalAlign": null,
+        "style": null,
+        "language": null,
+        "caps": false,
+        "smallCaps": false
+      }
+    }
+  ],
+  "warnings": [],
+  "unsupportedElements": [],
+  "statistics": {
+    "paragraphs": 33,
+    "headings": 6,
+    "inlineMath": 17,
+    "displayMath": 6,
+    "tables": 0,
+    "images": 2,
+    "links": 0,
+    "lists": 2,
+    "pageBreaks": 2,
+    "textRuns": 158
+  }
+}

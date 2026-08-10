@@ -749,6 +749,17 @@ body {
   margin: 0.45em 0;
 }
 
+.doc-preview.rich-html-editor img,
+.doc-preview.rich-html-render img,
+.doc-preview.rich-html-editor .inline-image,
+.doc-preview.rich-html-render .inline-image {
+  max-width: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  display: block;
+  margin: 8px 0;
+}
+
 .doc-preview.rich-html-editor table,
 .doc-preview.rich-html-render table {
   border-collapse: collapse;

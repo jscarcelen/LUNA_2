@@ -513,7 +513,16 @@ function wrapDownloadedHtmlDocument(html = "") {
   article { background: linear-gradient(180deg, #ffffff, #fbfcff); border: 1px solid #e6ecff; border-radius: 14px; padding: 24px; box-shadow: 0 8px 26px rgba(36, 68, 128, 0.08); }
   h1, h2, h3, h4 { color: #16234d; }
   p { margin: 0 0 12px; }
-  img, .inline-image { max-width: 100%; height: auto; border-radius: 10px; border: 1px solid #dbe6ff; box-shadow: 0 6px 18px rgba(36, 68, 128, 0.12); }
+  img, .inline-image {
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    display: block;
+    margin: 8px 0;
+    border-radius: 10px;
+    border: 1px solid #dbe6ff;
+    box-shadow: 0 6px 18px rgba(36, 68, 128, 0.12);
+  }
   figure { margin: 16px 0; }
   table { border-collapse: collapse; width: 100%; margin: 16px 0; }
   td, th { border: 1px solid #d5dff6; padding: 8px; vertical-align: top; }

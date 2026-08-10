@@ -767,6 +767,31 @@ body {
   min-width: 44px;
 }
 
+.rich-editor-toolbar-group-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.rich-editor-group {
+  border: 1px solid rgba(129, 173, 236, 0.28);
+  border-radius: 10px;
+  background: rgba(14, 36, 67, 0.18);
+  padding: 6px 8px;
+}
+
+.rich-editor-group summary {
+  cursor: pointer;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #2a3f70;
+  font-weight: 700;
+}
+
+.rich-editor-group[open] summary {
+  margin-bottom: 4px;
+}
+
 .luna-source-formula-appendix {
   margin-top: 14px;
   border-top: 1px dashed #b9caef;

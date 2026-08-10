@@ -636,6 +636,7 @@ export function WorkspacesManagerView({
   const sourceViewerRef = useRef(null);
   const sourceEditorRef = useRef(null);
   const editContentEditorRef = useRef(null);
+  const editContentImageInputRef = useRef(null);
   const editContentWorkingHtmlRef = useRef("");
   const [activeFolderId, setActiveFolderId] = useState("");
   const [filterFolderId, setFilterFolderId] = useState("");
@@ -675,6 +676,10 @@ export function WorkspacesManagerView({
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
   const [editContentPreviewHtml, setEditContentPreviewHtml] = useState("");
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
+  const [editContentFontFamily, setEditContentFontFamily] = useState("Avenir Next");
+  const [editContentFontSize, setEditContentFontSize] = useState("16");
+  const [editContentTextColorValue, setEditContentTextColorValue] = useState("#1f3a8a");
+  const [editContentBackgroundColorValue, setEditContentBackgroundColorValue] = useState("#fff59d");
   const [isPreparingEditContent, setIsPreparingEditContent] = useState(false);
   const [isSavingEditContent, setIsSavingEditContent] = useState(false);
   const [previewDoc, setPreviewDoc] = useState(null);
@@ -1708,6 +1713,39 @@ export function WorkspacesManagerView({
     }
   }
 
+  function applyEditContentHeading(level = 2) {
+    const normalized = Math.min(6, Math.max(1, Number(level || 2)));
+    runEditContentCommand("formatBlock", `<h${normalized}>`);
+  }
+
+  function applyEditContentFontFamily(nextFamily = "") {
+    const family = String(nextFamily || "").trim();
+    if (!family) return;
+    setEditContentFontFamily(family);
+    runEditContentCommand("fontName", family);
+  }
+
+  function applyEditContentFontSize(nextSize = "") {
+    const parsed = Number(nextSize || 16);
+    const sizePx = Number.isFinite(parsed) ? Math.max(10, Math.min(64, Math.round(parsed))) : 16;
+    setEditContentFontSize(String(sizePx));
+    const editor = editContentEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    try {
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("fontSize", false, "7");
+      const nodes = editor.querySelectorAll("font[size='7']");
+      nodes.forEach((node) => {
+        node.removeAttribute("size");
+        node.style.fontSize = `${sizePx}px`;
+      });
+      syncEditContentDraftFromEditor();
+    } catch {
+      // Ignore unsupported commands to keep the editor responsive.
+    }
+  }
+
   function insertEditContentLatex(displayMode = false) {
     const wrapper = displayMode ? "$$\n\\placeholder\n$$" : "$\\placeholder$";
     runEditContentCommand("insertText", wrapper);
@@ -1720,18 +1758,47 @@ export function WorkspacesManagerView({
     runEditContentCommand("insertImage", nextUrl);
   }
 
-  function setEditContentTextColor() {
-    const color = window.prompt("Enter text color (name, hex, rgb)", "#1f3a8a");
-    const nextColor = String(color || "").trim();
-    if (!nextColor) return;
-    runEditContentCommand("foreColor", nextColor);
+  function openEditContentImageFilePicker() {
+    editContentImageInputRef.current?.click();
   }
 
-  function setEditContentBackgroundColor() {
-    const color = window.prompt("Enter highlight color (name, hex, rgb)", "#fff59d");
-    const nextColor = String(color || "").trim();
-    if (!nextColor) return;
-    runEditContentCommand("hiliteColor", nextColor);
+  function handleEditContentImageFileChange(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    if (!String(file.type || "").toLowerCase().startsWith("image/")) {
+      setEditContentStatusMessage("Selected file is not an image.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      if (dataUrl) {
+        runEditContentCommand("insertImage", dataUrl);
+        setEditContentStatusMessage("Inserted image from file.");
+      }
+      event.target.value = "";
+    };
+    reader.onerror = () => {
+      setEditContentStatusMessage("Failed to read image file.");
+      event.target.value = "";
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function setEditContentTextColor(nextColor = "") {
+    const color = String(nextColor || "").trim();
+    if (!color) return;
+    setEditContentTextColorValue(color);
+    runEditContentCommand("foreColor", color);
+  }
+
+  function setEditContentBackgroundColor(nextColor = "") {
+    const color = String(nextColor || "").trim();
+    if (!color) return;
+    setEditContentBackgroundColorValue(color);
+    runEditContentCommand("hiliteColor", color);
   }
 
   function handlePreviewEditedContent() {
@@ -3649,31 +3716,96 @@ export function WorkspacesManagerView({
               Edit directly in the viewer like a document editor. Save applies changes to review center, downloads (HTML/Markdown), and LLM input.
             </p>
 
-            <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "10px", flexWrap: "wrap" }}>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("bold")}><b>B</b></button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("italic")}><i>I</i></button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("underline")}><u>U</u></button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("formatBlock", "<h2>")}>H2</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("formatBlock", "<h3>")}>H3</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbered</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("undo")}>Undo</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("redo")}>Redo</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link</button>
-              <button className="table-btn" type="button" onClick={insertEditContentImage}>Image</button>
-              <button className="table-btn" type="button" onClick={setEditContentTextColor}>Text Color</button>
-              <button className="table-btn" type="button" onClick={setEditContentBackgroundColor}>Background</button>
-              <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
-              <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>+Row Above</button>
-              <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>+Row Below</button>
-              <button className="table-btn" type="button" onClick={deleteTableRowInEditContent}>-Row</button>
-              <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(false)}>+Col Left</button>
-              <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(true)}>+Col Right</button>
-              <button className="table-btn" type="button" onClick={deleteTableColumnInEditContent}>-Col</button>
-              <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
-              <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
-              <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
+            <div className="rich-editor-toolbar-group-grid" style={{ marginTop: "10px" }}>
+              <details className="rich-editor-group" open>
+                <summary>Text Format</summary>
+                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("bold")}><b>B</b></button>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("italic")}><i>I</i></button>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("underline")}><u>U</u></button>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("undo")}>Undo</button>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("redo")}>Redo</button>
+                  <select className="input" style={{ maxWidth: "220px" }} value={editContentFontFamily} onChange={(event) => applyEditContentFontFamily(event.target.value)}>
+                    <option value="Avenir Next">Avenir Next</option>
+                    <option value="Georgia">Georgia</option>
+                    <option value="Times New Roman">Times New Roman</option>
+                    <option value="Arial">Arial</option>
+                    <option value="Courier New">Courier New</option>
+                  </select>
+                  <select className="input" style={{ maxWidth: "120px" }} value={editContentFontSize} onChange={(event) => applyEditContentFontSize(event.target.value)}>
+                    <option value="12">12px</option>
+                    <option value="14">14px</option>
+                    <option value="16">16px</option>
+                    <option value="18">18px</option>
+                    <option value="20">20px</option>
+                    <option value="24">24px</option>
+                    <option value="28">28px</option>
+                    <option value="32">32px</option>
+                  </select>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(1)}>H1</button>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(2)}>H2</button>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(3)}>H3</button>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(4)}>H4</button>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(5)}>H5</button>
+                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(6)}>H6</button>
+                  <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    Text
+                    <input type="color" value={editContentTextColorValue} onChange={(event) => setEditContentTextColor(event.target.value)} />
+                  </label>
+                  <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    Background
+                    <input type="color" value={editContentBackgroundColorValue} onChange={(event) => setEditContentBackgroundColor(event.target.value)} />
+                  </label>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
+                </div>
+              </details>
+
+              <details className="rich-editor-group">
+                <summary>Insert</summary>
+                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link / URL</button>
+                  <button className="table-btn" type="button" onClick={insertEditContentImage}>Image URL</button>
+                  <button className="table-btn" type="button" onClick={openEditContentImageFilePicker}>Image File</button>
+                  <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
+                </div>
+              </details>
+
+              <details className="rich-editor-group">
+                <summary>Lists</summary>
+                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
+                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbering</button>
+                </div>
+              </details>
+
+              <details className="rich-editor-group">
+                <summary>Tables</summary>
+                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>Add Row Above</button>
+                  <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>Add Row Below</button>
+                  <button className="table-btn" type="button" onClick={deleteTableRowInEditContent}>Delete Row</button>
+                  <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(false)}>Add Col Left</button>
+                  <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(true)}>Add Col Right</button>
+                  <button className="table-btn" type="button" onClick={deleteTableColumnInEditContent}>Delete Col</button>
+                </div>
+              </details>
+
+              <details className="rich-editor-group">
+                <summary>Math</summary>
+                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
+                  <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
+                </div>
+              </details>
             </div>
+
+            <input
+              ref={editContentImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handleEditContentImageFileChange}
+            />
 
             {isPreparingEditContent ? <p className="hint" style={{ marginTop: "8px" }}>Preparing editor content with embedded images...</p> : null}
 

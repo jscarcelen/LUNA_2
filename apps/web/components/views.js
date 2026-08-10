@@ -674,7 +674,6 @@ export function WorkspacesManagerView({
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [editContentDoc, setEditContentDoc] = useState(null);
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
-  const [editContentPreviewHtml, setEditContentPreviewHtml] = useState("");
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
   const [editContentFontFamily, setEditContentFontFamily] = useState("Avenir Next");
   const [editContentFontSize, setEditContentFontSize] = useState("16");
@@ -1670,7 +1669,6 @@ export function WorkspacesManagerView({
     const seededHtml = String(doc.sourceRenderHtml || "").trim() || markdownToBasicHtml(String(doc.content || ""));
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
-    setEditContentPreviewHtml("");
     editContentWorkingHtmlRef.current = seededHtml;
     try {
       const response = await fetch(WORKSPACES_API, {
@@ -1801,16 +1799,7 @@ export function WorkspacesManagerView({
     runEditContentCommand("hiliteColor", color);
   }
 
-  function handlePreviewEditedContent() {
-    const editor = editContentEditorRef.current;
-    const editedHtml = editor ? String(editor.innerHTML || "") : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
-    const normalized = stripRiskMarkupFromHtml(editedHtml).trim();
-    editContentWorkingHtmlRef.current = normalized;
-    setEditContentPreviewHtml(normalized);
-    setEditContentStatusMessage("Preview regenerated from current edits.");
-  }
-
-  async function handleSaveEditedContent() {
+  async function persistEditedContent(options = {}) {
     if (!editContentDoc?.id || !onUpdateDocumentContent) return;
     const editedHtml = editContentEditorRef.current
       ? String(editContentEditorRef.current.innerHTML || "")
@@ -1819,7 +1808,7 @@ export function WorkspacesManagerView({
     const correctedContent = htmlToPlainText(correctedHtml);
     if (!correctedHtml || !correctedContent) {
       setEditContentStatusMessage("Edited HTML cannot be empty.");
-      return;
+      return null;
     }
 
     setIsSavingEditContent(true);
@@ -1843,14 +1832,59 @@ export function WorkspacesManagerView({
           sourceRenderHtml: correctedHtml
         } : previous);
       }
-      setEditContentDoc(null);
-      setEditContentHtmlDraft("");
-      setEditContentPreviewHtml("");
-      editContentWorkingHtmlRef.current = "";
+      const closeOnSuccess = options?.closeOnSuccess !== false;
+      if (closeOnSuccess) {
+        setEditContentDoc(null);
+        setEditContentHtmlDraft("");
+        editContentWorkingHtmlRef.current = "";
+      }
+      return {
+        documentId: editContentDoc.id,
+        correctedHtml,
+        correctedContent
+      };
     } catch (error) {
       setEditContentStatusMessage(String(error.message || error));
+      return null;
     } finally {
       setIsSavingEditContent(false);
+    }
+  }
+
+  async function handleSaveEditedContent() {
+    const saved = await persistEditedContent({ closeOnSuccess: true });
+    if (saved) {
+      setEditContentStatusMessage("Saved all edits.");
+    }
+  }
+
+  async function handleDownloadEditedContentHtml() {
+    if (!editContentDoc?.id) return;
+    const saved = await persistEditedContent({ closeOnSuccess: false });
+    if (!saved) return;
+
+    try {
+      const response = await fetch(WORKSPACES_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "downloadUploadedDocument",
+          payload: {
+            documentId: editContentDoc.id,
+            format: "html"
+          }
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Download failed");
+      }
+
+      downloadBase64File(data.download.contentBase64, data.download.fileName, data.download.mimeType);
+      setEditContentStatusMessage("Downloaded HTML with latest saved edits.");
+    } catch (error) {
+      setEditContentStatusMessage(String(error.message || error));
     }
   }
 
@@ -3702,7 +3736,6 @@ export function WorkspacesManagerView({
                 onClick={() => {
                   setEditContentDoc(null);
                   setEditContentHtmlDraft("");
-                  setEditContentPreviewHtml("");
                   editContentWorkingHtmlRef.current = "";
                   setEditContentStatusMessage("");
                 }}
@@ -3820,26 +3853,13 @@ export function WorkspacesManagerView({
             />
 
             <div className="inline-actions" style={{ marginTop: "12px" }}>
-              <button className="table-btn" type="button" onClick={handlePreviewEditedContent} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>
-                Preview (Regenerate With Edits)
+              <button className="table-btn" type="button" onClick={handleDownloadEditedContentHtml} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>
+                Download HTML
               </button>
               <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>
                 {isSavingEditContent ? "Saving..." : "Save All Edits"}
               </button>
             </div>
-
-            {editContentPreviewHtml ? (
-              <>
-                <p className="hint" style={{ marginTop: "8px" }}>
-                  LaTeX preview (edit formulas in raw LaTeX in the editor above)
-                </p>
-                <div
-                  className="doc-preview rich-html-render"
-                  style={{ maxHeight: "240px", overflow: "auto", background: "#fff" }}
-                  dangerouslySetInnerHTML={{ __html: renderLatexInHtml(editContentPreviewHtml) }}
-                />
-              </>
-            ) : null}
             {editContentStatusMessage ? <p className="hint" style={{ marginTop: "10px" }}>{editContentStatusMessage}</p> : null}
           </div>
         </div>

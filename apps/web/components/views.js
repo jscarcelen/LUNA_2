@@ -40,6 +40,21 @@ function hashTagName(tagName) {
 
 const WORKSPACES_API = "/api/workspaces-supabase";
 const BLOCK_TEMPLATE_STORAGE_KEY = "luna.blockTemplates.v1";
+const TEMPLATE_FOLDER_STORAGE_KEY = "luna.templateFolders.v1";
+
+const BLOCK_BUILDING_TYPES = [
+  { value: "heading1", label: "Heading" },
+  { value: "heading2", label: "Heading 2" },
+  { value: "heading3", label: "Heading 3" },
+  { value: "paragraph", label: "Paragraph" },
+  { value: "standalone_text", label: "Standalone Text" },
+  { value: "bullet_list", label: "Bullet List" },
+  { value: "standalone_formula", label: "Standalone Formula" },
+  { value: "table", label: "Table" },
+  { value: "image", label: "Image" },
+  { value: "url", label: "URL" },
+  { value: "code", label: "Code" }
+];
 
 const DEFAULT_BLOCK_TEMPLATES = [
   {
@@ -47,24 +62,39 @@ const DEFAULT_BLOCK_TEMPLATES = [
     name: "Default Clean",
     description: "Neutral reading layout for mixed academic documents.",
     containerClass: "luna-template-default",
+    folderId: "tpl-folder-root",
     blockClasses: {
       heading1: "tpl-h1",
       heading2: "tpl-h2",
       heading3: "tpl-h3",
       paragraph: "tpl-p",
+      standalone_text: "tpl-standalone-text",
       bullet_list: "tpl-list",
-      inline_formula: "tpl-inline-math",
       standalone_formula: "tpl-display-math",
       table: "tpl-table",
       image: "tpl-image",
       url: "tpl-url",
       code: "tpl-code"
     },
+    blockFormats: {
+      heading1: [{ name: "Heading", className: "tpl-h1", htmlTemplate: "<h1>{{text}}</h1>" }],
+      heading2: [{ name: "Heading 2", className: "tpl-h2", htmlTemplate: "<h2>{{text}}</h2>" }],
+      heading3: [{ name: "Heading 3", className: "tpl-h3", htmlTemplate: "<h3>{{text}}</h3>" }],
+      paragraph: [{ name: "Paragraph", className: "tpl-p", htmlTemplate: "<p>{{text}}</p>" }],
+      standalone_text: [{ name: "Standalone", className: "tpl-standalone-text", htmlTemplate: "<div>{{text}}</div>" }],
+      bullet_list: [{ name: "Bullet List", className: "tpl-list", htmlTemplate: "<ul>{{items}}</ul>" }],
+      standalone_formula: [{ name: "Formula", className: "tpl-display-math", htmlTemplate: "<div>$$ {{latex}} $$</div>" }],
+      table: [{ name: "Table", className: "tpl-table", htmlTemplate: "{{table}}" }],
+      image: [{ name: "Image", className: "tpl-image", htmlTemplate: "<figure><img src=\"{{src}}\" alt=\"{{alt}}\" /><figcaption>{{caption}}</figcaption></figure>" }],
+      url: [{ name: "URL", className: "tpl-url", htmlTemplate: "<p><a href=\"{{href}}\">{{text}}</a></p>" }],
+      code: [{ name: "Code", className: "tpl-code", htmlTemplate: "<pre data-language=\"{{language}}\"><code>{{code}}</code></pre>" }]
+    },
     css: [
       ".luna-template-default{font-family:Georgia,serif;color:#1f2937;line-height:1.6}",
       ".luna-template-default .tpl-h1{font-size:2rem;font-weight:700;margin:.8rem 0}",
       ".luna-template-default .tpl-h2{font-size:1.55rem;font-weight:700;margin:.7rem 0}",
       ".luna-template-default .tpl-h3{font-size:1.2rem;font-weight:600;margin:.6rem 0}",
+      ".luna-template-default .tpl-standalone-text{display:block;margin:.75rem 0;font-size:1.03rem}",
       ".luna-template-default .tpl-display-math{background:#f8fafc;border:1px solid #dbe4f0;border-radius:8px;padding:.7rem;font-family:'Times New Roman',serif}",
       ".luna-template-default .tpl-code{background:#0f172a;color:#e2e8f0;padding:.8rem;border-radius:8px;overflow:auto}",
       ".luna-template-default table{border-collapse:collapse;width:100%}",
@@ -76,42 +106,49 @@ const DEFAULT_BLOCK_TEMPLATES = [
     name: "Study Cards",
     description: "Higher contrast blocks for active review sessions.",
     containerClass: "luna-template-study-cards",
+    folderId: "tpl-folder-root",
     blockClasses: {
       heading1: "tpl-h1",
       heading2: "tpl-h2",
       heading3: "tpl-h3",
       paragraph: "tpl-card",
+      standalone_text: "tpl-card",
       bullet_list: "tpl-card",
-      inline_formula: "tpl-inline-math",
       standalone_formula: "tpl-math-card",
       table: "tpl-card",
       image: "tpl-card",
       url: "tpl-card",
       code: "tpl-code"
     },
+    blockFormats: {
+      heading1: [{ name: "Heading", className: "tpl-h1", htmlTemplate: "<h1>{{text}}</h1>" }],
+      heading2: [{ name: "Heading 2", className: "tpl-h2", htmlTemplate: "<h2>{{text}}</h2>" }],
+      heading3: [{ name: "Heading 3", className: "tpl-h3", htmlTemplate: "<h3>{{text}}</h3>" }],
+      paragraph: [
+        { name: "Paragraph", className: "tpl-card", htmlTemplate: "<p>{{text}}</p>" },
+        { name: "Citation", className: "tpl-card tpl-citation", htmlTemplate: "<p class=\"tpl-citation\">{{text}}</p>" }
+      ],
+      standalone_text: [{ name: "Standalone", className: "tpl-card", htmlTemplate: "<div>{{text}}</div>" }],
+      bullet_list: [{ name: "Bullet List", className: "tpl-card", htmlTemplate: "<ul>{{items}}</ul>" }],
+      standalone_formula: [{ name: "Formula", className: "tpl-math-card", htmlTemplate: "<div>$$ {{latex}} $$</div>" }],
+      table: [{ name: "Table", className: "tpl-card", htmlTemplate: "{{table}}" }],
+      image: [{ name: "Image", className: "tpl-card", htmlTemplate: "<figure><img src=\"{{src}}\" alt=\"{{alt}}\" /><figcaption>{{caption}}</figcaption></figure>" }],
+      url: [{ name: "URL", className: "tpl-card", htmlTemplate: "<p><a href=\"{{href}}\">{{text}}</a></p>" }],
+      code: [{ name: "Code", className: "tpl-code", htmlTemplate: "<pre data-language=\"{{language}}\"><code>{{code}}</code></pre>" }]
+    },
     css: [
       ".luna-template-study-cards{font-family:'Avenir Next',system-ui,sans-serif;color:#0f172a}",
       ".luna-template-study-cards .tpl-h1{font-size:2rem;font-weight:800;margin:.9rem 0;color:#7c2d12}",
       ".luna-template-study-cards .tpl-h2{font-size:1.45rem;font-weight:700;margin:.7rem 0;color:#0f766e}",
       ".luna-template-study-cards .tpl-card{background:#fff8ef;border:1px solid #f2c48f;border-radius:12px;padding:.7rem .8rem;margin:.45rem 0}",
+      ".luna-template-study-cards .tpl-citation{font-style:italic;opacity:.9}",
       ".luna-template-study-cards .tpl-math-card{background:#ecfeff;border:1px solid #7dd3fc;border-radius:12px;padding:.7rem .8rem;font-family:'Times New Roman',serif}",
       ".luna-template-study-cards .tpl-code{background:#111827;color:#f9fafb;padding:.8rem;border-radius:10px;overflow:auto}"
     ].join("\n")
   }
 ];
 
-const BLOCK_TYPE_OPTIONS = [
-  { value: "heading1", label: "Heading 1" },
-  { value: "heading2", label: "Heading 2" },
-  { value: "heading3", label: "Heading 3" },
-  { value: "paragraph", label: "Paragraph" },
-  { value: "bullet_list", label: "Bullet List" },
-  { value: "standalone_formula", label: "Standalone Formula" },
-  { value: "table", label: "Table" },
-  { value: "image", label: "Image" },
-  { value: "url", label: "URL" },
-  { value: "code", label: "Code" }
-];
+const BLOCK_TYPE_OPTIONS = BLOCK_BUILDING_TYPES;
 
 function createBlockId() {
   return `block_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -120,10 +157,11 @@ function createBlockId() {
 function createDefaultBlock(type = "paragraph") {
   const block = {
     id: createBlockId(),
-    type
+    type,
+    formatName: ""
   };
 
-  if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") {
+  if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph" || type === "standalone_text") {
     block.text = "";
     return block;
   }
@@ -175,6 +213,90 @@ function readBlockTemplatesFromStorage() {
   } catch {
     return DEFAULT_BLOCK_TEMPLATES;
   }
+}
+
+function defaultTemplateFolders() {
+  return [{ id: "tpl-folder-root", name: "All Templates", parentFolderId: "" }];
+}
+
+function readTemplateFoldersFromStorage() {
+  if (typeof window === "undefined") return defaultTemplateFolders();
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_FOLDER_STORAGE_KEY);
+    if (!raw) return defaultTemplateFolders();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return defaultTemplateFolders();
+    return parsed;
+  } catch {
+    return defaultTemplateFolders();
+  }
+}
+
+function writeTemplateFoldersToStorage(folders = []) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TEMPLATE_FOLDER_STORAGE_KEY, JSON.stringify(folders));
+  } catch {
+    // Ignore local storage limits.
+  }
+}
+
+function getDefaultBlockFormats(blockClasses = {}) {
+  const output = {};
+  for (const typeDef of BLOCK_BUILDING_TYPES) {
+    const type = typeDef.value;
+    const className = String(blockClasses?.[type] || "");
+    output[type] = [{
+      name: typeDef.label,
+      className,
+      htmlTemplate: ""
+    }];
+  }
+  return output;
+}
+
+function normalizeTemplateModel(template = {}) {
+  const blockClasses = template?.blockClasses && typeof template.blockClasses === "object" ? template.blockClasses : {};
+  const incomingFormats = template?.blockFormats && typeof template.blockFormats === "object" ? template.blockFormats : {};
+  const defaults = getDefaultBlockFormats(blockClasses);
+  const normalizedFormats = {};
+
+  for (const typeDef of BLOCK_BUILDING_TYPES) {
+    const type = typeDef.value;
+    const list = Array.isArray(incomingFormats[type]) ? incomingFormats[type] : defaults[type];
+    const normalized = list
+      .map((entry, index) => ({
+        name: String(entry?.name || `${typeDef.label} ${index + 1}`).trim() || `${typeDef.label} ${index + 1}`,
+        className: String(entry?.className || blockClasses[type] || "").trim(),
+        htmlTemplate: String(entry?.htmlTemplate || "")
+      }))
+      .filter((entry) => entry.name);
+    normalizedFormats[type] = normalized.length ? normalized : defaults[type];
+  }
+
+  return {
+    ...template,
+    folderId: String(template?.folderId || "tpl-folder-root"),
+    blockClasses,
+    blockFormats: normalizedFormats,
+    blockHtmlTemplates: template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object"
+      ? template.blockHtmlTemplates
+      : {}
+  };
+}
+
+function resolveBlockFormatSpec(template = {}, block = {}) {
+  const type = String(block?.type || "paragraph");
+  const formatName = String(block?.formatName || "").trim();
+  const formats = Array.isArray(template?.blockFormats?.[type]) ? template.blockFormats[type] : [];
+  const fallbackClass = String(template?.blockClasses?.[type] || "").trim();
+  const fallbackHtml = String(template?.blockHtmlTemplates?.[type] || "");
+  const match = formats.find((item) => String(item?.name || "").trim() === formatName) || formats[0] || null;
+  return {
+    formatName: String(match?.name || formatName || "Default"),
+    className: String(match?.className || fallbackClass || ""),
+    htmlTemplate: String(match?.htmlTemplate || fallbackHtml || "")
+  };
 }
 
 function writeBlockTemplatesToStorage(templates = []) {
@@ -366,10 +488,12 @@ function htmlToBlocks(htmlSource = "") {
 }
 
 function blockToHtml(block = {}, blockClass = "") {
-  const classAttr = blockClass ? ` class="${escapeHtml(blockClass)}"` : "";
+  const effectiveClass = String(block.__formatClass || blockClass || "");
+  const classAttr = effectiveClass ? ` class="${escapeHtml(effectiveClass)}"` : "";
   const blockIdAttr = ` data-block-id="${escapeHtml(block.id || createBlockId())}"`;
   const type = String(block.type || "paragraph");
   const templateMap = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : null;
+  const explicitTemplate = String(block.__formatHtmlTemplate || "");
 
   function fillTemplate(template = "", vars = {}) {
     const source = String(template || "");
@@ -381,7 +505,7 @@ function blockToHtml(block = {}, blockClass = "") {
   }
 
   function renderWithTemplate(templateKey, fallbackHtml, vars = {}) {
-    const template = String(templateMap?.[templateKey] || "");
+    const template = explicitTemplate || String(templateMap?.[templateKey] || "");
     if (!template.trim()) return fallbackHtml;
     return fillTemplate(template, vars);
   }
@@ -389,6 +513,10 @@ function blockToHtml(block = {}, blockClass = "") {
   if (type === "heading1") return renderWithTemplate("heading1", `<h1${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`, { text: escapeHtml(block.text || "") });
   if (type === "heading2") return renderWithTemplate("heading2", `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`, { text: escapeHtml(block.text || "") });
   if (type === "heading3") return renderWithTemplate("heading3", `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`, { text: escapeHtml(block.text || "") });
+  if (type === "standalone_text") {
+    const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
+    return renderWithTemplate("standalone_text", `<div${classAttr}${blockIdAttr}>${text}</div>`, { text });
+  }
   if (type === "paragraph") {
     const htmlValue = String(block.html || "").trim();
     if (htmlValue) {
@@ -445,8 +573,12 @@ function blocksToHtml(blocks = [], template = null) {
 
   const htmlBlocks = safeBlocks.map((block) => {
     const className = String(blockClasses[String(block.type || "paragraph")] || "");
+    const formatSpec = resolveBlockFormatSpec(activeTemplate, block);
     return blockToHtml({
       ...block,
+      formatName: formatSpec.formatName,
+      __formatClass: formatSpec.className || className,
+      __formatHtmlTemplate: formatSpec.htmlTemplate,
       __templateHtml: template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object"
         ? template.blockHtmlTemplates
         : null
@@ -461,11 +593,17 @@ function normalizeBlocksForEditor(blocks = []) {
   const list = Array.isArray(blocks) ? blocks : [];
   return list.map((block) => {
     const type = String(block?.type || "paragraph");
-    if (type !== "inline_formula") return block;
+    if (type !== "inline_formula") {
+      return {
+        ...block,
+        formatName: String(block?.formatName || "")
+      };
+    }
     const inlineText = `${String(block?.textBefore || "")}$${String(block?.latex || "")}$${String(block?.textAfter || "")}`;
     return {
       id: String(block?.id || createBlockId()),
       type: "paragraph",
+      formatName: String(block?.formatName || ""),
       text: inlineText
     };
   });
@@ -1113,6 +1251,13 @@ export function WorkspacesManagerView({
   const [editContentMode, setEditContentMode] = useState("blocks");
   const [editContentBlocks, setEditContentBlocks] = useState([]);
   const [editContentTemplates, setEditContentTemplates] = useState(DEFAULT_BLOCK_TEMPLATES);
+  const [templateFolders, setTemplateFolders] = useState(defaultTemplateFolders());
+  const [activeTemplateFolderId, setActiveTemplateFolderId] = useState("tpl-folder-root");
+  const [activeTemplateEditId, setActiveTemplateEditId] = useState("");
+  const [templateFormatTypeDraft, setTemplateFormatTypeDraft] = useState("paragraph");
+  const [templateFormatNameDraft, setTemplateFormatNameDraft] = useState("");
+  const [templateFormatClassDraft, setTemplateFormatClassDraft] = useState("");
+  const [templateFormatHtmlDraft, setTemplateFormatHtmlDraft] = useState("");
   const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
   const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
   const [editContentTemplateRawHtmlDraft, setEditContentTemplateRawHtmlDraft] = useState("{}");
@@ -1335,13 +1480,14 @@ export function WorkspacesManagerView({
     let cancelled = false;
 
     async function loadTemplates() {
-      let templates = readBlockTemplatesFromStorage();
+      let templates = readBlockTemplatesFromStorage().map((item) => normalizeTemplateModel(item));
+      const folders = readTemplateFoldersFromStorage();
       if (typeof onListDocumentBlockTemplates === "function") {
         try {
           const sharedTemplates = await onListDocumentBlockTemplates();
           if (Array.isArray(sharedTemplates) && sharedTemplates.length) {
-            templates = sharedTemplates;
-            writeBlockTemplatesToStorage(sharedTemplates);
+            templates = sharedTemplates.map((item) => normalizeTemplateModel(item));
+            writeBlockTemplatesToStorage(templates);
           }
         } catch {
           // Keep local fallback templates when shared repository is not available.
@@ -1349,7 +1495,9 @@ export function WorkspacesManagerView({
       }
 
       if (cancelled || !Array.isArray(templates) || !templates.length) return;
+      setTemplateFolders(Array.isArray(folders) && folders.length ? folders : defaultTemplateFolders());
       setEditContentTemplates(templates);
+      setActiveTemplateEditId(String(templates[0].id || ""));
       if (!templates.some((item) => item.id === editContentTemplateId)) {
         setEditContentTemplateId(templates[0].id);
         setEditContentTemplateCssDraft(String(templates[0].css || ""));
@@ -1372,6 +1520,21 @@ export function WorkspacesManagerView({
       setEditContentTemplateRawHtmlDraft("{}");
     }
   }, [editContentTemplateId, editContentTemplates]);
+
+  useEffect(() => {
+    writeTemplateFoldersToStorage(templateFolders);
+  }, [templateFolders]);
+
+  useEffect(() => {
+    if (!Array.isArray(editContentTemplates) || !editContentTemplates.length) {
+      setActiveTemplateEditId("");
+      return;
+    }
+    const exists = editContentTemplates.some((item) => item.id === activeTemplateEditId);
+    if (!exists) {
+      setActiveTemplateEditId(String(editContentTemplates[0].id || ""));
+    }
+  }, [editContentTemplates, activeTemplateEditId]);
 
   useEffect(() => {
     if (!Array.isArray(editContentBlocks) || !editContentBlocks.length) {
@@ -2078,6 +2241,150 @@ export function WorkspacesManagerView({
     return editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0] || DEFAULT_BLOCK_TEMPLATES[0];
   }
 
+  function activeTemplateEditorItem() {
+    return editContentTemplates.find((item) => item.id === activeTemplateEditId) || null;
+  }
+
+  function templateFoldersByParent() {
+    const map = new Map();
+    for (const folder of templateFolders) {
+      const parent = String(folder.parentFolderId || "");
+      const bucket = map.get(parent) || [];
+      bucket.push(folder);
+      map.set(parent, bucket);
+    }
+    return map;
+  }
+
+  function templatesInFolder(folderId = "") {
+    const target = String(folderId || "").trim() || "tpl-folder-root";
+    return editContentTemplates.filter((item) => String(item.folderId || "tpl-folder-root") === target);
+  }
+
+  function addTemplateFolder() {
+    const name = window.prompt("Template folder name", "New Template Folder");
+    const nextName = String(name || "").trim();
+    if (!nextName) return;
+    const folder = {
+      id: `tpl-folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      name: nextName,
+      parentFolderId: String(activeTemplateFolderId || "")
+    };
+    const nextFolders = [...templateFolders, folder];
+    setTemplateFolders(nextFolders);
+    writeTemplateFoldersToStorage(nextFolders);
+  }
+
+  function renameTemplateFolder(folderId) {
+    const target = templateFolders.find((item) => item.id === folderId);
+    if (!target) return;
+    const name = window.prompt("Rename template folder", target.name || "");
+    const nextName = String(name || "").trim();
+    if (!nextName) return;
+    const nextFolders = templateFolders.map((item) => (item.id === folderId ? { ...item, name: nextName } : item));
+    setTemplateFolders(nextFolders);
+    writeTemplateFoldersToStorage(nextFolders);
+  }
+
+  function removeTemplateFolder(folderId) {
+    const id = String(folderId || "").trim();
+    if (!id || id === "tpl-folder-root") return;
+    if (!window.confirm("Delete this template folder? Templates inside move to root.")) return;
+    const descendants = new Set([id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const folder of templateFolders) {
+        if (descendants.has(folder.id)) continue;
+        if (descendants.has(String(folder.parentFolderId || ""))) {
+          descendants.add(folder.id);
+          changed = true;
+        }
+      }
+    }
+    const nextFolders = templateFolders.filter((folder) => !descendants.has(folder.id));
+    setTemplateFolders(nextFolders);
+    writeTemplateFoldersToStorage(nextFolders);
+    if (descendants.has(activeTemplateFolderId)) {
+      setActiveTemplateFolderId("tpl-folder-root");
+    }
+    setEditContentTemplates((previous) => {
+      const nextTemplates = previous.map((item) => (descendants.has(String(item.folderId || "")) ? { ...item, folderId: "tpl-folder-root" } : item));
+      writeBlockTemplatesToStorage(nextTemplates);
+      return nextTemplates;
+    });
+  }
+
+  async function persistTemplatePatch(templateId, patch = {}) {
+    let localTemplates = [];
+    setEditContentTemplates((previous) => {
+      localTemplates = previous.map((item) => (item.id === templateId ? normalizeTemplateModel({ ...item, ...patch }) : item));
+      return localTemplates;
+    });
+    if (localTemplates.length) writeBlockTemplatesToStorage(localTemplates);
+
+    const active = localTemplates.find((item) => item.id === templateId);
+    if (active && typeof onSaveDocumentBlockTemplate === "function") {
+      try {
+        const saved = await onSaveDocumentBlockTemplate(active);
+        if (Array.isArray(saved?.templates) && saved.templates.length) {
+          const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
+          setEditContentTemplates(normalized);
+          writeBlockTemplatesToStorage(normalized);
+          return;
+        }
+      } catch {
+        // Keep local changes when remote sync fails.
+      }
+    }
+  }
+
+  async function addTemplateFormat() {
+    const active = activeTemplateEditorItem();
+    if (!active) return;
+    const type = String(templateFormatTypeDraft || "paragraph");
+    const name = String(templateFormatNameDraft || "").trim();
+    if (!name) {
+      setEditContentStatusMessage("Format name is required.");
+      return;
+    }
+    const current = Array.isArray(active.blockFormats?.[type]) ? active.blockFormats[type] : [];
+    const exists = current.some((item) => String(item?.name || "").trim().toLowerCase() === name.toLowerCase());
+    if (exists) {
+      setEditContentStatusMessage("Format name already exists for this block type.");
+      return;
+    }
+    const blockFormats = {
+      ...(active.blockFormats || {}),
+      [type]: [...current, {
+        name,
+        className: String(templateFormatClassDraft || "").trim(),
+        htmlTemplate: String(templateFormatHtmlDraft || "")
+      }]
+    };
+    await persistTemplatePatch(active.id, { blockFormats });
+    setTemplateFormatNameDraft("");
+    setTemplateFormatClassDraft("");
+    setTemplateFormatHtmlDraft("");
+    setEditContentStatusMessage(`Added format \"${name}\".`);
+  }
+
+  async function removeTemplateFormat(type, name) {
+    const active = activeTemplateEditorItem();
+    if (!active) return;
+    const current = Array.isArray(active.blockFormats?.[type]) ? active.blockFormats[type] : [];
+    if (current.length <= 1) {
+      setEditContentStatusMessage("Each block type must keep at least one format.");
+      return;
+    }
+    const blockFormats = {
+      ...(active.blockFormats || {}),
+      [type]: current.filter((item) => String(item?.name || "") !== String(name || ""))
+    };
+    await persistTemplatePatch(active.id, { blockFormats });
+    setEditContentStatusMessage(`Removed format \"${name}\".`);
+  }
+
   function parseTemplateRawHtmlDraft() {
     const source = String(editContentTemplateRawHtmlDraft || "").trim();
     if (!source) return {};
@@ -2091,7 +2398,7 @@ export function WorkspacesManagerView({
 
   function blockToTextSnapshot(block = {}) {
     const type = String(block.type || "paragraph");
-    if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") {
+    if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph" || type === "standalone_text") {
       return String(block.text || "");
     }
     if (type === "bullet_list") {
@@ -2112,9 +2419,6 @@ export function WorkspacesManagerView({
     if (type === "code") {
       return String(block.code || "");
     }
-    if (type === "inline_formula") {
-      return `${String(block.textBefore || "")}$${String(block.latex || "")}$${String(block.textAfter || "")}`;
-    }
     return String(block.text || "");
   }
 
@@ -2122,9 +2426,10 @@ export function WorkspacesManagerView({
     const targetType = String(nextType || "paragraph");
     const replacement = createDefaultBlock(targetType);
     replacement.id = String(block.id || replacement.id);
+    replacement.formatName = "";
     const text = blockToTextSnapshot(block);
 
-    if (targetType === "heading1" || targetType === "heading2" || targetType === "heading3" || targetType === "paragraph") {
+    if (targetType === "heading1" || targetType === "heading2" || targetType === "heading3" || targetType === "paragraph" || targetType === "standalone_text") {
       replacement.text = text;
       if (typeof block.html === "string") {
         replacement.html = block.html;
@@ -2179,7 +2484,14 @@ export function WorkspacesManagerView({
   }
 
   function syncBlocksFromHtml(htmlSource = "") {
-    const nextBlocks = normalizeBlocksForEditor(htmlToBlocks(htmlSource));
+    const activeTemplate = activeBlockTemplate();
+    const nextBlocks = normalizeBlocksForEditor(htmlToBlocks(htmlSource)).map((block) => {
+      const formatSpec = resolveBlockFormatSpec(activeTemplate, block);
+      return {
+        ...block,
+        formatName: formatSpec.formatName
+      };
+    });
     setEditContentBlocks(nextBlocks);
     setEditContentSelectedBlockId(String(nextBlocks[0]?.id || ""));
     setEditContentMenuBlockId("");
@@ -2193,12 +2505,36 @@ export function WorkspacesManagerView({
     return html;
   }
 
+  function setBlockFormatName(blockId, formatName) {
+    const key = String(blockId || "");
+    const nextName = String(formatName || "");
+    if (!key) return;
+    setEditContentBlocks((previous) => {
+      const list = (Array.isArray(previous) ? previous : []).map((block) => (block.id === key ? { ...block, formatName: nextName } : block));
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
   function changeBlockTemplate(nextTemplateId = "") {
     const nextId = String(nextTemplateId || "").trim();
     if (!nextId) return;
     setEditContentTemplateId(nextId);
     window.requestAnimationFrame(() => {
-      syncHtmlFromBlocks();
+      const template = editContentTemplates.find((item) => item.id === nextId) || activeBlockTemplate();
+      setEditContentBlocks((previous) => {
+        const normalized = (Array.isArray(previous) ? previous : []).map((block) => {
+          const format = resolveBlockFormatSpec(template, block);
+          return {
+            ...block,
+            formatName: format.formatName
+          };
+        });
+        syncHtmlFromBlocks(normalized);
+        return normalized;
+      });
     });
   }
 
@@ -2215,11 +2551,11 @@ export function WorkspacesManagerView({
       return;
     }
 
-    const nextTemplates = editContentTemplates.map((item) => (item.id === editContentTemplateId ? {
+    const nextTemplates = editContentTemplates.map((item) => (item.id === editContentTemplateId ? normalizeTemplateModel({
       ...item,
       css: String(editContentTemplateCssDraft || ""),
       blockHtmlTemplates
-    } : item));
+    }) : item));
 
     let syncedWithServer = false;
 
@@ -2229,8 +2565,9 @@ export function WorkspacesManagerView({
         try {
           const saved = await onSaveDocumentBlockTemplate(active);
           if (Array.isArray(saved?.templates) && saved.templates.length) {
-            setEditContentTemplates(saved.templates);
-            writeBlockTemplatesToStorage(saved.templates);
+            const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
+            setEditContentTemplates(normalized);
+            writeBlockTemplatesToStorage(normalized);
             syncedWithServer = true;
           }
         } catch {
@@ -2263,19 +2600,22 @@ export function WorkspacesManagerView({
       ...source,
       id: `template_${Date.now().toString(36)}`,
       name: nextName,
+      folderId: String(activeTemplateFolderId || source?.folderId || "tpl-folder-root"),
       css: String(editContentTemplateCssDraft || source?.css || ""),
       blockHtmlTemplates
     };
-    const nextTemplates = [...editContentTemplates, nextTemplate];
+    const nextTemplates = [...editContentTemplates, normalizeTemplateModel(nextTemplate)];
 
     if (typeof onSaveDocumentBlockTemplate === "function") {
       try {
         const saved = await onSaveDocumentBlockTemplate(nextTemplate);
         if (Array.isArray(saved?.templates) && saved.templates.length) {
-          setEditContentTemplates(saved.templates);
+          const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
+          setEditContentTemplates(normalized);
           const savedId = String(saved?.template?.id || "").trim();
           setEditContentTemplateId(savedId || nextTemplate.id);
-          writeBlockTemplatesToStorage(saved.templates);
+          writeBlockTemplatesToStorage(normalized);
+          setActiveTemplateEditId(savedId || nextTemplate.id);
           setEditContentStatusMessage(`Saved template: ${nextName}`);
           return;
         }
@@ -2286,6 +2626,7 @@ export function WorkspacesManagerView({
 
     setEditContentTemplates(nextTemplates);
     setEditContentTemplateId(nextTemplate.id);
+    setActiveTemplateEditId(nextTemplate.id);
     writeBlockTemplatesToStorage(nextTemplates);
     setEditContentStatusMessage(`Saved template: ${nextName}`);
   }
@@ -2305,9 +2646,11 @@ export function WorkspacesManagerView({
       try {
         const templates = await onDeleteDocumentBlockTemplate(active.id);
         if (Array.isArray(templates) && templates.length) {
-          setEditContentTemplates(templates);
-          setEditContentTemplateId(String(templates[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
-          writeBlockTemplatesToStorage(templates);
+          const normalized = templates.map((item) => normalizeTemplateModel(item));
+          setEditContentTemplates(normalized);
+          setEditContentTemplateId(String(normalized[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
+          setActiveTemplateEditId(String(normalized[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
+          writeBlockTemplatesToStorage(normalized);
           setEditContentStatusMessage("Template deleted.");
           return;
         }
@@ -2319,12 +2662,14 @@ export function WorkspacesManagerView({
     const nextTemplates = editContentTemplates.filter((item) => item.id !== active.id);
     setEditContentTemplates(nextTemplates);
     setEditContentTemplateId(String(nextTemplates[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
+    setActiveTemplateEditId(String(nextTemplates[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
     writeBlockTemplatesToStorage(nextTemplates);
     setEditContentStatusMessage("Template deleted.");
   }
 
   function addContentBlock(type = "paragraph", afterIndex = null) {
     const nextBlock = createDefaultBlock(type);
+    nextBlock.formatName = resolveBlockFormatSpec(activeBlockTemplate(), nextBlock).formatName;
     setEditContentBlocks((previous) => {
       const list = Array.isArray(previous) ? [...previous] : [];
       const insertAt = Number.isInteger(afterIndex) ? Math.min(list.length, Math.max(0, afterIndex + 1)) : list.length;
@@ -2359,6 +2704,7 @@ export function WorkspacesManagerView({
       const index = list.findIndex((block) => block.id === key);
       if (index < 0) return previous;
       const replacement = convertBlockToTypeKeepingContent(list[index], targetType);
+      replacement.formatName = resolveBlockFormatSpec(activeBlockTemplate(), replacement).formatName;
       list[index] = replacement;
       window.requestAnimationFrame(() => {
         syncHtmlFromBlocks(list);
@@ -2577,7 +2923,15 @@ export function WorkspacesManagerView({
     setEditContentHtmlDraft(seededHtml);
     editContentWorkingHtmlRef.current = seededHtml;
     if (Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length) {
-      const normalizedBlocks = normalizeBlocksForEditor(doc.contentBlocksJson);
+      const targetTemplateId = String(doc.contentTemplateId || "").trim();
+      const template = editContentTemplates.find((item) => item.id === targetTemplateId) || activeBlockTemplate();
+      const normalizedBlocks = normalizeBlocksForEditor(doc.contentBlocksJson).map((block) => {
+        const formatSpec = resolveBlockFormatSpec(template, block);
+        return {
+          ...block,
+          formatName: formatSpec.formatName
+        };
+      });
       setEditContentBlocks(normalizedBlocks);
       setEditContentSelectedBlockId(String(normalizedBlocks[0]?.id || ""));
     } else {
@@ -4107,17 +4461,18 @@ export function WorkspacesManagerView({
             <button className={workspaceTab === "folders" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("folders")}>📁 Folders</button>
             <button className={workspaceTab === "files" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("files")}>📄 Files</button>
             <button className={workspaceTab === "generated" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("generated")}>🤖 Generated</button>
+            <button className={workspaceTab === "templates" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("templates")}>🧩 Templates</button>
             <button className={workspaceTab === "shared" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("shared")}>👥 Shared With Me</button>
             <button className={workspaceTab === "review-center" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("review-center")}>🛡️ Review Center</button>
           </div>
 
-          {selectedSubject ? (
+          {selectedSubject || workspaceTab === "templates" ? (
             <>
               <div className="folder-box">
                 <div className="box-head workspace-folder-head">
                   <div className="workspace-folder-top-row">
-                    <h4>{workspaceTab === "folders" ? "Folders" : (workspaceTab === "files" ? "Files" : (workspaceTab === "generated" ? "Generated" : (workspaceTab === "review-center" ? "Review Center" : "Shared")))}</h4>
-                    {!showReviewCenter ? <div className="inline-actions workspace-folder-actions">
+                    <h4>{workspaceTab === "folders" ? "Folders" : (workspaceTab === "files" ? "Files" : (workspaceTab === "generated" ? "Generated" : (workspaceTab === "templates" ? "Templates" : (workspaceTab === "review-center" ? "Review Center" : "Shared"))))}</h4>
+                    {!showReviewCenter && workspaceTab !== "templates" ? <div className="inline-actions workspace-folder-actions">
                     <div className="doc-inline-menu-wrap">
                       <button className="table-btn icon-btn workspace-emoji-action" type="button" onClick={() => setShowFolderActionMenu((previous) => !previous)} disabled={isWorking}>➕</button>
                       {showFolderActionMenu ? (
@@ -4161,7 +4516,7 @@ export function WorkspacesManagerView({
                     </div>
                   </div> : null}
                   </div>
-                  <p className="hint">{showReviewCenter ? `Pending review: ${effectiveReviewQueue.length}` : `Selected: ${selectedFolderLabel} · Showing ${workspaceTab === "generated" ? 0 : filteredUploadedDocuments.length} uploaded and ${workspaceTab === "files" ? 0 : filteredGeneratedDocuments.length} generated`}</p>
+                  <p className="hint">{showReviewCenter ? `Pending review: ${effectiveReviewQueue.length}` : (workspaceTab === "templates" ? `Template repository: ${editContentTemplates.length} templates` : `Selected: ${selectedFolderLabel} · Showing ${workspaceTab === "generated" ? 0 : filteredUploadedDocuments.length} uploaded and ${workspaceTab === "files" ? 0 : filteredGeneratedDocuments.length} generated`)}</p>
                 </div>
 
                 {showTagEditor ? (
@@ -4221,6 +4576,169 @@ export function WorkspacesManagerView({
 
                 {showReviewCenter ? renderReviewCenterPanel() : null}
 
+                {!showReviewCenter && workspaceTab === "templates" ? (
+                  <div className="panel" style={{ background: "#fff" }}>
+                    {(() => {
+                      const folderChildren = templateFoldersByParent();
+                      const activeTemplate = activeTemplateEditorItem();
+
+                      const renderTemplateFolderTree = (parentId = "", depth = 0) => {
+                        const children = folderChildren.get(parentId) || [];
+                        return children.map((folder) => {
+                          const selected = activeTemplateFolderId === folder.id;
+                          const templateCount = templatesInFolder(folder.id).length;
+                          return (
+                            <div key={`tpl-folder-tree-${folder.id}`} style={{ marginLeft: `${depth * 14}px`, marginBottom: "6px" }}>
+                              <div className={selected ? "folder-node on" : "folder-node"}>
+                                <div className="folder-node-head">
+                                  <button className="folder-node-main" type="button" onClick={() => setActiveTemplateFolderId(folder.id)}>
+                                    <span className="row-icon-badge">📁</span> {folder.name} <span className="hint">({templateCount})</span>
+                                  </button>
+                                  {folder.id !== "tpl-folder-root" ? (
+                                    <div className="inline-actions">
+                                      <button className="table-btn icon-btn" type="button" onClick={() => renameTemplateFolder(folder.id)}>✏️</button>
+                                      <button className="table-btn danger icon-btn" type="button" onClick={() => removeTemplateFolder(folder.id)}>🗑️</button>
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </div>
+                              {renderTemplateFolderTree(folder.id, depth + 1)}
+                            </div>
+                          );
+                        });
+                      };
+
+                      const visibleTemplates = templatesInFolder(activeTemplateFolderId);
+
+                      return (
+                        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "14px" }}>
+                          <section className="selection-box" style={{ margin: 0 }}>
+                            <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "8px" }}>
+                              <h5 style={{ margin: 0 }}>Template Folders</h5>
+                              <button className="table-btn" type="button" onClick={addTemplateFolder}>+ Folder</button>
+                            </div>
+                            {renderTemplateFolderTree("")}
+                          </section>
+
+                          <section className="selection-box" style={{ margin: 0 }}>
+                            <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "10px" }}>
+                              <h5 style={{ margin: 0 }}>Templates</h5>
+                              <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>+ New Template</button>
+                            </div>
+
+                            <div className="chip-wrap" style={{ marginBottom: "10px" }}>
+                              {visibleTemplates.map((template) => (
+                                <button
+                                  key={`tpl-pick-${template.id}`}
+                                  className="table-btn"
+                                  type="button"
+                                  style={template.id === activeTemplateEditId ? { borderColor: "#80b5ff", boxShadow: "inset 0 0 0 1px #80b5ff" } : undefined}
+                                  onClick={() => {
+                                    setActiveTemplateEditId(template.id);
+                                    setEditContentTemplateId(template.id);
+                                  }}
+                                >
+                                  {template.name}
+                                </button>
+                              ))}
+                              {!visibleTemplates.length ? <span className="hint">No templates in this folder.</span> : null}
+                            </div>
+
+                            {activeTemplate ? (
+                              <>
+                                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
+                                  <span className="scope-chip">Template: {activeTemplate.name}</span>
+                                  <button
+                                    className="table-btn"
+                                    type="button"
+                                    onClick={async () => {
+                                      const nextName = String(window.prompt("Template name", String(activeTemplate.name || "")) || "").trim();
+                                      if (!nextName) return;
+                                      await persistTemplatePatch(activeTemplate.id, { name: nextName });
+                                    }}
+                                  >
+                                    Rename
+                                  </button>
+                                  <select
+                                    className="input"
+                                    value={String(activeTemplate.folderId || "tpl-folder-root")}
+                                    onChange={(event) => persistTemplatePatch(activeTemplate.id, { folderId: event.target.value })}
+                                  >
+                                    {templateFolders.map((folder) => (
+                                      <option key={`tpl-folder-opt-${folder.id}`} value={folder.id}>{folder.name}</option>
+                                    ))}
+                                  </select>
+                                  <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
+                                </div>
+
+                                <label className="search full" style={{ marginBottom: "8px" }}>
+                                  <span>Template CSS</span>
+                                  <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
+                                </label>
+                                <div className="inline-actions">
+                                  <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Save Template Styles</button>
+                                </div>
+
+                                <article className="selection-box" style={{ marginTop: "12px" }}>
+                                  <h6 style={{ marginTop: 0 }}>Block Formats (building block -> format name -> format spec)</h6>
+                                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                                    <select className="input" value={templateFormatTypeDraft} onChange={(event) => setTemplateFormatTypeDraft(event.target.value)}>
+                                      {BLOCK_BUILDING_TYPES.map((option) => (
+                                        <option key={`fmt-type-${option.value}`} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </select>
+                                    <input className="input" placeholder="Format name" value={templateFormatNameDraft} onChange={(event) => setTemplateFormatNameDraft(event.target.value)} />
+                                    <input className="input" placeholder="Class name" value={templateFormatClassDraft} onChange={(event) => setTemplateFormatClassDraft(event.target.value)} />
+                                    <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Format</button>
+                                  </div>
+                                  <label className="search full" style={{ marginTop: "8px" }}>
+                                    <span>HTML template (optional)</span>
+                                    <textarea className="input" rows={3} value={templateFormatHtmlDraft} onChange={(event) => setTemplateFormatHtmlDraft(event.target.value)} />
+                                  </label>
+
+                                  <div className="chip-stack" style={{ marginTop: "10px" }}>
+                                    {BLOCK_BUILDING_TYPES.map((typeDef) => {
+                                      const formats = Array.isArray(activeTemplate.blockFormats?.[typeDef.value]) ? activeTemplate.blockFormats[typeDef.value] : [];
+                                      return (
+                                        <div key={`fmt-list-${typeDef.value}`} className="selection-box" style={{ margin: 0 }}>
+                                          <strong>{typeDef.label}</strong>
+                                          {formats.map((formatItem) => (
+                                            <div key={`fmt-${typeDef.value}-${formatItem.name}`} className="inline-actions" style={{ justifyContent: "space-between", marginTop: "6px" }}>
+                                              <span className="hint">{formatItem.name} · class: {formatItem.className || "(none)"}</span>
+                                              <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(typeDef.value, formatItem.name)}>Remove</button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </article>
+
+                                <article className="selection-box" style={{ marginTop: "12px" }}>
+                                  <h6 style={{ marginTop: 0 }}>HTML Preview With All Blocks</h6>
+                                  <div className="doc-preview rich-html-render" dangerouslySetInnerHTML={{
+                                    __html: blocksToHtml(
+                                      [
+                                        { id: "preview-h1", type: "heading1", formatName: resolveBlockFormatSpec(activeTemplate, { type: "heading1" }).formatName, text: "heading" },
+                                        { id: "preview-p", type: "paragraph", formatName: resolveBlockFormatSpec(activeTemplate, { type: "paragraph" }).formatName, text: "paragraph" },
+                                        { id: "preview-st", type: "standalone_text", formatName: resolveBlockFormatSpec(activeTemplate, { type: "standalone_text" }).formatName, text: "standalone text" },
+                                        { id: "preview-code", type: "code", formatName: resolveBlockFormatSpec(activeTemplate, { type: "code" }).formatName, language: "text", code: "code" },
+                                        { id: "preview-image", type: "image", formatName: resolveBlockFormatSpec(activeTemplate, { type: "image" }).formatName, src: "", alt: "image", caption: "image" },
+                                        { id: "preview-table", type: "table", formatName: resolveBlockFormatSpec(activeTemplate, { type: "table" }).formatName, rows: [["table", "cell"]] }
+                                      ],
+                                      activeTemplate
+                                    )
+                                  }} />
+                                </article>
+                              </>
+                            ) : null}
+                          </section>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ) : null}
+
                 {!showReviewCenter && workspaceTab === "shared" ? (
                   <div className="selection-box">
                     <h5 style={{ marginTop: 0 }}>Shared With Me</h5>
@@ -4228,7 +4746,7 @@ export function WorkspacesManagerView({
                   </div>
                 ) : null}
 
-                {!showReviewCenter && workspaceTab !== "shared" ? (
+                {!showReviewCenter && workspaceTab !== "shared" && workspaceTab !== "templates" ? (
                   <div className="folder-tree-visual">
                     {(folderChildrenMap.get("") || []).map((folder) => renderFolderNode(folder, 0))}
 
@@ -4866,6 +5384,7 @@ export function WorkspacesManagerView({
                           {type === "heading2" ? <h2 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h2> : null}
                           {type === "heading3" ? <h3 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h3> : null}
                           {type === "paragraph" ? <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</p> : null}
+                          {type === "standalone_text" ? <div style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</div> : null}
                           {type === "bullet_list" ? (
                             <ul style={{ margin: "0 0 0 20px" }}>
                               {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
@@ -4926,6 +5445,8 @@ export function WorkspacesManagerView({
                       }
 
                       const type = String(selectedBlock.type || "paragraph");
+                      const template = activeBlockTemplate();
+                      const formatsForType = Array.isArray(template?.blockFormats?.[type]) ? template.blockFormats[type] : [];
                       return (
                         <>
                           <h4 style={{ marginTop: 0 }}>Block</h4>
@@ -4937,6 +5458,20 @@ export function WorkspacesManagerView({
                               {BLOCK_TYPE_OPTIONS.map((option) => (
                                 <option key={`inspector-${selectedBlock.id}-${option.value}`} value={option.value}>{option.label}</option>
                               ))}
+                            </select>
+                          </label>
+
+                          <label className="search full" style={{ marginTop: "8px" }}>
+                            <span>Block Format Name</span>
+                            <select
+                              className="input"
+                              value={String(selectedBlock.formatName || resolveBlockFormatSpec(template, selectedBlock).formatName)}
+                              onChange={(event) => setBlockFormatName(selectedBlock.id, event.target.value)}
+                            >
+                              {formatsForType.map((item) => (
+                                <option key={`inspector-format-${selectedBlock.id}-${item.name}`} value={item.name}>{item.name}</option>
+                              ))}
+                              {!formatsForType.length ? <option value="Default">Default</option> : null}
                             </select>
                           </label>
 
@@ -4992,6 +5527,13 @@ export function WorkspacesManagerView({
                                 <textarea className="input" rows={4} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value, html: "" })} />
                               </label>
                             </>
+                          ) : null}
+
+                          {type === "standalone_text" ? (
+                            <label className="search full" style={{ marginTop: "8px" }}>
+                              <span>Standalone Text</span>
+                              <textarea className="input" rows={5} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value })} />
+                            </label>
                           ) : null}
 
                           {type === "bullet_list" ? (

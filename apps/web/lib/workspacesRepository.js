@@ -126,17 +126,24 @@ function splitTemplateBlockClassesMeta(raw = {}) {
   const blockHtmlTemplates = meta.blockHtmlTemplates && typeof meta.blockHtmlTemplates === "object"
     ? meta.blockHtmlTemplates
     : {};
+  const blockFormats = meta.blockFormats && typeof meta.blockFormats === "object"
+    ? meta.blockFormats
+    : {};
+  const folderId = String(meta.folderId || "").trim() || "tpl-folder-root";
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId };
 }
 
-function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}) {
+function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root") {
   const classes = blockClasses && typeof blockClasses === "object" ? { ...blockClasses } : {};
   const htmlTemplates = blockHtmlTemplates && typeof blockHtmlTemplates === "object" ? blockHtmlTemplates : {};
-  if (Object.keys(htmlTemplates).length) {
-    classes.__luna_meta = { blockHtmlTemplates: htmlTemplates };
-  }
+  const formats = blockFormats && typeof blockFormats === "object" ? blockFormats : {};
+  classes.__luna_meta = {
+    blockHtmlTemplates: htmlTemplates,
+    blockFormats: formats,
+    folderId: String(folderId || "").trim() || "tpl-folder-root"
+  };
   return classes;
 }
 
@@ -145,6 +152,19 @@ function fillTemplatePlaceholders(template = "", vars = {}) {
     const value = Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "";
     return String(value ?? "");
   });
+}
+
+function resolveBlockFormatSpec(template = {}, block = {}) {
+  const type = String(block?.type || "paragraph");
+  const formatName = String(block?.formatName || "").trim();
+  const formats = Array.isArray(template?.blockFormats?.[type]) ? template.blockFormats[type] : [];
+  const fallbackClass = String(template?.blockClasses?.[type] || "").trim();
+  const fallbackHtml = String(template?.blockHtmlTemplates?.[type] || "");
+  const match = formats.find((item) => String(item?.name || "").trim() === formatName) || formats[0] || null;
+  return {
+    className: String(match?.className || fallbackClass || ""),
+    htmlTemplate: String(match?.htmlTemplate || fallbackHtml || "")
+  };
 }
 
 function renderDocumentBlocksHtml(blocks = [], template = {}) {
@@ -158,7 +178,8 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
     const classAttr = className ? ` class="${escapeHtml(className)}"` : "";
     const blockIdAttr = ` data-block-id="${escapeHtml(block.id || `block_${Date.now().toString(36)}`)}"`;
     const type = String(block.type || "paragraph");
-    const templateHtml = String(blockHtmlTemplates[type] || "").trim();
+    const overrideTemplates = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : {};
+    const templateHtml = String(overrideTemplates[type] || blockHtmlTemplates[type] || "").trim();
 
     const applyTemplate = (fallback, vars = {}) => {
       if (!templateHtml) return fallback;
@@ -169,6 +190,11 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
       const tag = type === "heading1" ? "h1" : (type === "heading2" ? "h2" : "h3");
       const text = escapeHtml(block.text || "");
       return applyTemplate(`<${tag}${classAttr}${blockIdAttr}>${text}</${tag}>`, { text });
+    }
+
+    if (type === "standalone_text") {
+      const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
+      return applyTemplate(`<div${classAttr}${blockIdAttr}>${text}</div>`, { text });
     }
 
     if (type === "paragraph") {
@@ -228,7 +254,14 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
 
   const htmlBlocks = safeBlocks.map((block) => {
     const className = String(blockClasses[String(block.type || "paragraph")] || "");
-    return renderByType(block, className);
+    const formatSpec = resolveBlockFormatSpec(template, block);
+    const nextBlock = {
+      ...block,
+      __templateHtml: {
+        [String(block.type || "paragraph")]: formatSpec.htmlTemplate
+      }
+    };
+    return renderByType(nextBlock, formatSpec.className || className);
   }).join("\n");
 
   const styleTag = css ? `<style data-luna-template="${escapeHtml(template?.id || "template_default")}">${css}</style>` : "";
@@ -2150,14 +2183,16 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       .maybeSingle();
     if (templateError) throw templateError;
     if (templateRow) {
-      const { blockClasses, blockHtmlTemplates } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
       renderedFromBlocksHtml = renderDocumentBlocksHtml(contentBlocksJson, {
         id: templateRow.id,
         name: templateRow.name,
         description: templateRow.description || "",
         containerClass: templateRow.container_class || "",
+        folderId,
         blockClasses,
         blockHtmlTemplates,
+        blockFormats,
         css: templateRow.css || ""
       });
     }
@@ -2185,14 +2220,16 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       },
       template: selectedTemplate.data ? {
         ...(function mapTemplateForPayload() {
-          const { blockClasses, blockHtmlTemplates } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
+          const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
           return {
             id: selectedTemplate.data.id,
             name: selectedTemplate.data.name,
             description: selectedTemplate.data.description || "",
             containerClass: selectedTemplate.data.container_class || "",
+            folderId,
             blockClasses,
             blockHtmlTemplates,
+            blockFormats,
             css: selectedTemplate.data.css || ""
           };
         })()
@@ -2282,15 +2319,17 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         id: row.id,
         ownerUserId: row.owner_user_id,
         name: row.name,
         description: row.description || "",
         containerClass: row.container_class || "",
+        folderId,
         blockClasses,
         blockHtmlTemplates,
+        blockFormats,
         css: row.css || "",
         sourceDocumentId: row.source_document_id || "",
         createdAt: row.created_at || "",
@@ -2317,7 +2356,9 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
     container_class: String(payload.containerClass || "").trim(),
     block_classes: composeTemplateBlockClassesMeta(
       payload.blockClasses && typeof payload.blockClasses === "object" ? payload.blockClasses : {},
-      payload.blockHtmlTemplates && typeof payload.blockHtmlTemplates === "object" ? payload.blockHtmlTemplates : {}
+      payload.blockHtmlTemplates && typeof payload.blockHtmlTemplates === "object" ? payload.blockHtmlTemplates : {},
+      payload.blockFormats && typeof payload.blockFormats === "object" ? payload.blockFormats : {},
+      String(payload.folderId || "tpl-folder-root")
     ),
     css: String(payload.css || ""),
     source_document_id: String(payload.sourceDocumentId || "").trim() || null,
@@ -2365,14 +2406,16 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
       .eq("id", resolvedTemplateId)
       .maybeSingle();
     if (!data) return null;
-    const { blockClasses, blockHtmlTemplates } = splitTemplateBlockClassesMeta(data.block_classes);
+    const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(data.block_classes);
     return {
       id: data.id,
       name: data.name,
       description: data.description || "",
       containerClass: data.container_class || "",
+      folderId,
       blockClasses,
       blockHtmlTemplates,
+      blockFormats,
       css: data.css || ""
     };
   })());

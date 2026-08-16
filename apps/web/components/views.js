@@ -4955,7 +4955,7 @@ export function WorkspacesManagerView({
                               {showInlineLatexInfo ? (
                                 <div className="hint" style={{ border: "1px solid #d7e1ee", borderRadius: "8px", padding: "8px", background: "#f8fbff", marginTop: "6px" }}>
                                   Use inline formulas with dollar signs in text, for example: <code>Area = $\\pi r^2$</code>.<br />
-                                  Symbols examples: <code>$\\sqrt{x}$</code>, <code>$\\sum_{{i=1}}^n i$</code>, <code>$\\lim_{{x\\to 0}}$</code>, <code>$\\pm$</code>, <code>$\\approx$</code>, <code>$\\neq$</code>, <code>$x^2$</code>, <code>$x_i$</code>, <code>$\\to$</code>.
+                                  Symbols examples: <code>{"$\\sqrt{x}$"}</code>, <code>{"$\\sum_{i=1}^n i$"}</code>, <code>{"$\\lim_{x\\to 0}$"}</code>, <code>{"$\\pm$"}</code>, <code>{"$\\approx$"}</code>, <code>{"$\\neq$"}</code>, <code>{"$x^2$"}</code>, <code>{"$x_i$"}</code>, <code>{"$\\to$"}</code>.
                                 </div>
                               ) : null}
 

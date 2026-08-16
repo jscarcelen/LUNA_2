@@ -1084,6 +1084,8 @@ export function WorkspacesManagerView({
   const [editContentTemplates, setEditContentTemplates] = useState(DEFAULT_BLOCK_TEMPLATES);
   const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
   const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
+  const [editContentSelectedBlockId, setEditContentSelectedBlockId] = useState("");
+  const [editContentMenuBlockId, setEditContentMenuBlockId] = useState("");
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
   const [editContentFontFamily, setEditContentFontFamily] = useState("Avenir Next");
   const [editContentFontSize, setEditContentFontSize] = useState("16");
@@ -1330,6 +1332,19 @@ export function WorkspacesManagerView({
     if (!activeTemplate) return;
     setEditContentTemplateCssDraft(String(activeTemplate.css || ""));
   }, [editContentTemplateId, editContentTemplates]);
+
+  useEffect(() => {
+    if (!Array.isArray(editContentBlocks) || !editContentBlocks.length) {
+      setEditContentSelectedBlockId("");
+      setEditContentMenuBlockId("");
+      return;
+    }
+
+    const exists = editContentBlocks.some((block) => block.id === editContentSelectedBlockId);
+    if (!exists) {
+      setEditContentSelectedBlockId(String(editContentBlocks[0].id || ""));
+    }
+  }, [editContentBlocks, editContentSelectedBlockId]);
 
   function clearFilters() {
     setFilterFolderId("");
@@ -2026,6 +2041,8 @@ export function WorkspacesManagerView({
   function syncBlocksFromHtml(htmlSource = "") {
     const nextBlocks = htmlToBlocks(htmlSource);
     setEditContentBlocks(nextBlocks);
+    setEditContentSelectedBlockId(String(nextBlocks[0]?.id || ""));
+    setEditContentMenuBlockId("");
   }
 
   function syncHtmlFromBlocks(blocksOverride = null) {
@@ -2155,6 +2172,8 @@ export function WorkspacesManagerView({
       const list = Array.isArray(previous) ? [...previous] : [];
       const insertAt = Number.isInteger(afterIndex) ? Math.min(list.length, Math.max(0, afterIndex + 1)) : list.length;
       list.splice(insertAt, 0, nextBlock);
+      setEditContentSelectedBlockId(nextBlock.id);
+      setEditContentMenuBlockId("");
       window.requestAnimationFrame(() => {
         syncHtmlFromBlocks(list);
       });
@@ -2201,6 +2220,29 @@ export function WorkspacesManagerView({
       if (toIndex < 0 || toIndex >= list.length) return previous;
       const [moved] = list.splice(fromIndex, 1);
       list.splice(toIndex, 0, moved);
+      setEditContentSelectedBlockId(String(moved?.id || ""));
+      setEditContentMenuBlockId("");
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
+  function duplicateContentBlock(blockId) {
+    const key = String(blockId || "");
+    if (!key) return;
+    setEditContentBlocks((previous) => {
+      const list = Array.isArray(previous) ? [...previous] : [];
+      const index = list.findIndex((block) => block.id === key);
+      if (index < 0) return previous;
+      const copy = {
+        ...list[index],
+        id: createBlockId()
+      };
+      list.splice(index + 1, 0, copy);
+      setEditContentSelectedBlockId(copy.id);
+      setEditContentMenuBlockId("");
       window.requestAnimationFrame(() => {
         syncHtmlFromBlocks(list);
       });
@@ -2214,11 +2256,57 @@ export function WorkspacesManagerView({
     setEditContentBlocks((previous) => {
       const list = (Array.isArray(previous) ? previous : []).filter((block) => block.id !== key);
       const normalized = list.length ? list : [createDefaultBlock("paragraph")];
+      const nextSelection = normalized.find((block) => block.id !== key) || normalized[0];
+      setEditContentSelectedBlockId(String(nextSelection?.id || ""));
+      setEditContentMenuBlockId("");
       window.requestAnimationFrame(() => {
         syncHtmlFromBlocks(normalized);
       });
       return normalized;
     });
+  }
+
+  function getSelectedBlock() {
+    return editContentBlocks.find((block) => block.id === editContentSelectedBlockId) || null;
+  }
+
+  function getSelectedBlockIndex() {
+    return editContentBlocks.findIndex((block) => block.id === editContentSelectedBlockId);
+  }
+
+  function renderLatexSnippet(latex = "", displayMode = false) {
+    const source = String(latex || "").trim();
+    if (!source) {
+      return displayMode ? "$$\\placeholder$$" : "$\\placeholder$";
+    }
+    try {
+      return katex.renderToString(source, { displayMode, throwOnError: false });
+    } catch {
+      return escapeHtml(displayMode ? `$$${source}$$` : `$${source}$`);
+    }
+  }
+
+  function renderTextWithInlineLatex(text = "") {
+    const source = String(text || "");
+    const parts = [];
+    const pattern = /\$([^$\n]+)\$/g;
+    let cursor = 0;
+    let match;
+
+    while ((match = pattern.exec(source)) !== null) {
+      if (match.index > cursor) {
+        parts.push(<span key={`txt-${cursor}`}>{source.slice(cursor, match.index)}</span>);
+      }
+      const latex = String(match[1] || "").trim();
+      parts.push(<span key={`latex-${match.index}`} className="luna-inline-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(latex, false) }} />);
+      cursor = match.index + match[0].length;
+    }
+
+    if (cursor < source.length) {
+      parts.push(<span key={`txt-tail-${cursor}`}>{source.slice(cursor)}</span>);
+    }
+
+    return parts.length ? parts : source;
   }
 
   function exportContentBlocksJson() {
@@ -2331,6 +2419,7 @@ export function WorkspacesManagerView({
     editContentWorkingHtmlRef.current = seededHtml;
     if (Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length) {
       setEditContentBlocks(doc.contentBlocksJson);
+      setEditContentSelectedBlockId(String(doc.contentBlocksJson[0]?.id || ""));
     } else {
       syncBlocksFromHtml(seededHtml);
     }
@@ -2516,6 +2605,8 @@ export function WorkspacesManagerView({
         setEditContentDoc(null);
         setEditContentHtmlDraft("");
         setEditContentBlocks([]);
+        setEditContentSelectedBlockId("");
+        setEditContentMenuBlockId("");
         editContentWorkingHtmlRef.current = "";
       }
       return {
@@ -4408,7 +4499,7 @@ export function WorkspacesManagerView({
 
       {editContentDoc ? (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
-          <div className="modal-card" style={{ maxWidth: "1100px" }}>
+          <div className="modal-card" style={{ maxWidth: "96vw", width: "96vw", maxHeight: "94vh", overflow: "auto" }}>
             <div className="modal-head">
               <h4>Visual Content Editor</h4>
               <button
@@ -4417,6 +4508,8 @@ export function WorkspacesManagerView({
                   setEditContentDoc(null);
                   setEditContentHtmlDraft("");
                   setEditContentBlocks([]);
+                  setEditContentSelectedBlockId("");
+                  setEditContentMenuBlockId("");
                   editContentWorkingHtmlRef.current = "";
                   setEditContentStatusMessage("");
                 }}
@@ -4465,9 +4558,22 @@ export function WorkspacesManagerView({
 
             {editContentMode === "blocks" ? (
               <>
+                <style>{`
+                  .luna-canvas-grid { display:grid; grid-template-columns: 1fr 320px; gap:14px; height: calc(100vh - 310px); min-height: 520px; }
+                  .luna-canvas-scroll { overflow:auto; background:#ffffff; border:1px solid #d9e3f2; border-radius:12px; padding:16px; }
+                  .luna-canvas-block { position:relative; border:1px solid transparent; border-radius:10px; padding:8px 10px; margin-bottom:10px; cursor:pointer; }
+                  .luna-canvas-block:hover { border-color:#d3dcf0; background:#fbfcff; }
+                  .luna-canvas-block.active { border-color:#8aa6ff; box-shadow:0 0 0 2px rgba(95,120,214,.18); }
+                  .luna-block-menu-btn { position:absolute; top:8px; right:8px; opacity:0; transition:opacity .12s ease; }
+                  .luna-canvas-block:hover .luna-block-menu-btn, .luna-canvas-block.active .luna-block-menu-btn { opacity:1; }
+                  .luna-inspector { background:#fff; border:1px solid #d9e3f2; border-radius:12px; padding:12px; overflow:auto; }
+                  .luna-inline-math { display:inline-block; margin:0 4px; }
+                  .luna-display-math { background:#f6f9ff; border:1px solid #d7e4ff; border-radius:10px; padding:10px; overflow:auto; }
+                `}</style>
+
                 <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
                   <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
-                    <label className="search" style={{ minWidth: "260px" }}>
+                    <label className="search" style={{ minWidth: "220px" }}>
                       <span>Template</span>
                       <select className="input" value={editContentTemplateId} onChange={(event) => changeBlockTemplate(event.target.value)}>
                         {editContentTemplates.map((template) => (
@@ -4475,168 +4581,232 @@ export function WorkspacesManagerView({
                         ))}
                       </select>
                     </label>
+                    <label className="search" style={{ minWidth: "220px" }}>
+                      <span>Add Block</span>
+                      <select className="input" defaultValue="" onChange={(event) => {
+                        const value = String(event.target.value || "").trim();
+                        if (value) addContentBlock(value);
+                        event.target.value = "";
+                      }}>
+                        <option value="">Choose type...</option>
+                        {BLOCK_TYPE_OPTIONS.map((option) => (
+                          <option key={`add-select-${option.value}`} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
-                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
                     <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
                   </div>
-                  <label className="search full" style={{ marginTop: "8px" }}>
-                    <span>Template CSS (template repository)</span>
-                    <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
-                  </label>
-                  <div className="inline-actions" style={{ marginTop: "8px" }}>
-                    <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Apply Template CSS</button>
-                  </div>
                 </div>
 
-                <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
-                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
-                    {BLOCK_TYPE_OPTIONS.map((option) => (
-                      <button key={`add-${option.value}`} className="table-btn" type="button" onClick={() => addContentBlock(option.value)}>
-                        + {option.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <div className="luna-canvas-grid" style={{ marginTop: "10px" }}>
+                  <div className="luna-canvas-scroll">
+                    {editContentBlocks.map((block, index) => {
+                      const type = String(block.type || "paragraph");
+                      const isActive = block.id === editContentSelectedBlockId;
+                      return (
+                        <div
+                          key={block.id}
+                          className={`luna-canvas-block ${isActive ? "active" : ""}`}
+                          onClick={() => {
+                            setEditContentSelectedBlockId(block.id);
+                            setEditContentMenuBlockId("");
+                          }}
+                        >
+                          <button
+                            className="table-btn icon-btn luna-block-menu-btn"
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setEditContentSelectedBlockId(block.id);
+                              setEditContentMenuBlockId((previous) => previous === block.id ? "" : block.id);
+                            }}
+                          >
+                            ⋯
+                          </button>
 
-                <div style={{ marginTop: "10px", maxHeight: "56vh", overflow: "auto", background: "#f8fafc", border: "1px solid #dbe5f0", borderRadius: "10px", padding: "10px" }}>
-                  {editContentBlocks.map((block, index) => {
-                    const type = String(block.type || "paragraph");
-                    return (
-                      <div
-                        key={block.id}
-                        className="panel"
-                        style={{ marginBottom: "10px", background: "#fff", border: "1px solid #d7e1ee" }}
-                        draggable
-                        onDragStart={() => { editContentDragIndexRef.current = index; }}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => {
-                          const from = Number(editContentDragIndexRef.current);
-                          moveContentBlock(from, index);
-                          editContentDragIndexRef.current = -1;
-                        }}
-                      >
-                        <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                          <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
-                            <strong>Block {index + 1}</strong>
-                            <select className="input" value={type} onChange={(event) => changeContentBlockType(block.id, event.target.value)}>
+                          {editContentMenuBlockId === block.id ? (
+                            <div className="row-menu" style={{ position: "absolute", top: "40px", right: "8px", zIndex: 4 }} onClick={(event) => event.stopPropagation()}>
+                              <button className="table-btn" type="button" onClick={() => { setEditContentSelectedBlockId(block.id); setEditContentMenuBlockId(""); }}>Edit block</button>
+                              <button className="table-btn" type="button" onClick={() => { moveContentBlock(index, Math.max(0, index - 1)); }}>Move up</button>
+                              <button className="table-btn" type="button" onClick={() => { moveContentBlock(index, Math.min(editContentBlocks.length - 1, index + 1)); }}>Move down</button>
+                              <button className="table-btn" type="button" onClick={() => duplicateContentBlock(block.id)}>Duplicate</button>
+                              <button className="table-btn danger" type="button" onClick={() => removeContentBlock(block.id)}>Delete</button>
+                            </div>
+                          ) : null}
+
+                          {type === "heading1" ? <h1 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h1> : null}
+                          {type === "heading2" ? <h2 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h2> : null}
+                          {type === "heading3" ? <h3 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h3> : null}
+                          {type === "paragraph" ? <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</p> : null}
+                          {type === "bullet_list" ? (
+                            <ul style={{ margin: "0 0 0 20px" }}>
+                              {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
+                                <li key={`${block.id}-item-${itemIndex}`}>{renderTextWithInlineLatex(String(item || ""))}</li>
+                              ))}
+                            </ul>
+                          ) : null}
+                          {type === "inline_formula" ? (
+                            <p style={{ margin: 0 }}>
+                              {String(block.textBefore || "")}
+                              <span className="luna-inline-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(block.latex, false) }} />
+                              {String(block.textAfter || "")}
+                            </p>
+                          ) : null}
+                          {type === "standalone_formula" ? (
+                            <div className="luna-display-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(block.latex, true) }} />
+                          ) : null}
+                          {type === "table" ? (
+                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                              <tbody>
+                                {(Array.isArray(block.rows) ? block.rows : []).map((row, rowIndex) => (
+                                  <tr key={`${block.id}-row-${rowIndex}`}>
+                                    {(Array.isArray(row) ? row : []).map((cell, cellIndex) => (
+                                      <td key={`${block.id}-cell-${rowIndex}-${cellIndex}`} style={{ border: "1px solid #d7e1ee", padding: "6px" }}>{cell}</td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : null}
+                          {type === "image" ? (
+                            <figure style={{ margin: 0 }}>
+                              {String(block.src || "").trim() ? <img src={String(block.src || "")} alt={String(block.alt || "")} style={{ maxWidth: "100%", borderRadius: "8px" }} /> : <div className="hint">Image URL missing</div>}
+                              {String(block.caption || "").trim() ? <figcaption className="hint">{String(block.caption || "")}</figcaption> : null}
+                            </figure>
+                          ) : null}
+                          {type === "url" ? (
+                            <p style={{ margin: 0 }}><a href={String(block.href || "#")} target="_blank" rel="noreferrer">{String(block.text || block.href || "")}</a></p>
+                          ) : null}
+                          {type === "code" ? (
+                            <pre style={{ margin: 0, background: "#0f172a", color: "#e2e8f0", padding: "10px", borderRadius: "8px", overflow: "auto" }}><code>{String(block.code || "")}</code></pre>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <aside className="luna-inspector">
+                    {(() => {
+                      const selectedBlock = getSelectedBlock();
+                      const selectedIndex = getSelectedBlockIndex();
+                      if (!selectedBlock) {
+                        return <p className="hint">Select a block to edit.</p>;
+                      }
+
+                      const type = String(selectedBlock.type || "paragraph");
+                      return (
+                        <>
+                          <h4 style={{ marginTop: 0 }}>Block</h4>
+                          <p className="hint" style={{ marginTop: "-4px" }}>#{selectedIndex + 1}</p>
+
+                          <label className="search full">
+                            <span>Type</span>
+                            <select className="input" value={type} onChange={(event) => changeContentBlockType(selectedBlock.id, event.target.value)}>
                               {BLOCK_TYPE_OPTIONS.map((option) => (
-                                <option key={`${block.id}-${option.value}`} value={option.value}>{option.label}</option>
+                                <option key={`inspector-${selectedBlock.id}-${option.value}`} value={option.value}>{option.label}</option>
                               ))}
                             </select>
-                          </div>
-                          <div className="inline-actions" style={{ gap: "6px", flexWrap: "wrap" }}>
-                            <button className="table-btn" type="button" onClick={() => moveContentBlock(index, Math.max(0, index - 1))}>Up</button>
-                            <button className="table-btn" type="button" onClick={() => moveContentBlock(index, Math.min(editContentBlocks.length - 1, index + 1))}>Down</button>
-                            <button className="table-btn" type="button" onClick={() => addContentBlock("paragraph", index)}>Insert After</button>
-                            <button className="table-btn" type="button" onClick={() => removeContentBlock(block.id)}>Delete</button>
-                          </div>
-                        </div>
-
-                        {(type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") ? (
-                          <label className="search full" style={{ marginTop: "8px" }}>
-                            <span>Text</span>
-                            <textarea
-                              className="input"
-                              rows={type.startsWith("heading") ? 2 : 4}
-                              value={String(block.text || "")}
-                              onChange={(event) => updateContentBlock(block.id, { text: event.target.value })}
-                            />
                           </label>
-                        ) : null}
 
-                        {type === "bullet_list" ? (
-                          <label className="search full" style={{ marginTop: "8px" }}>
-                            <span>One bullet per line</span>
-                            <textarea
-                              className="input"
-                              rows={5}
-                              value={(Array.isArray(block.items) ? block.items : []).join("\n")}
-                              onChange={(event) => updateContentBlock(block.id, { items: String(event.target.value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean) })}
-                            />
-                          </label>
-                        ) : null}
-
-                        {type === "inline_formula" ? (
-                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
-                              <span>Text Before</span>
-                              <input className="input" value={String(block.textBefore || "")} onChange={(event) => updateContentBlock(block.id, { textBefore: event.target.value })} />
-                            </label>
-                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
-                              <span>LaTeX</span>
-                              <input className="input" value={String(block.latex || "")} onChange={(event) => updateContentBlock(block.id, { latex: event.target.value })} />
-                            </label>
-                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
-                              <span>Text After</span>
-                              <input className="input" value={String(block.textAfter || "")} onChange={(event) => updateContentBlock(block.id, { textAfter: event.target.value })} />
-                            </label>
-                          </div>
-                        ) : null}
-
-                        {type === "standalone_formula" ? (
-                          <label className="search full" style={{ marginTop: "8px" }}>
-                            <span>Display LaTeX</span>
-                            <textarea className="input" rows={3} value={String(block.latex || "")} onChange={(event) => updateContentBlock(block.id, { latex: event.target.value })} />
-                          </label>
-                        ) : null}
-
-                        {type === "table" ? (
-                          <label className="search full" style={{ marginTop: "8px" }}>
-                            <span>Table rows (use | between cells)</span>
-                            <textarea
-                              className="input"
-                              rows={5}
-                              value={blockRowsToText(block.rows || [])}
-                              onChange={(event) => updateContentBlock(block.id, { rows: tableTextToRows(event.target.value) })}
-                            />
-                          </label>
-                        ) : null}
-
-                        {type === "image" ? (
-                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                            <label className="search" style={{ minWidth: "260px", flex: 2 }}>
-                              <span>Image URL or Data URL</span>
-                              <input className="input" value={String(block.src || "")} onChange={(event) => updateContentBlock(block.id, { src: event.target.value })} />
-                            </label>
-                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
-                              <span>Alt Text</span>
-                              <input className="input" value={String(block.alt || "")} onChange={(event) => updateContentBlock(block.id, { alt: event.target.value })} />
-                            </label>
-                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
-                              <span>Caption</span>
-                              <input className="input" value={String(block.caption || "")} onChange={(event) => updateContentBlock(block.id, { caption: event.target.value })} />
-                            </label>
-                          </div>
-                        ) : null}
-
-                        {type === "url" ? (
-                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                            <label className="search" style={{ minWidth: "260px", flex: 2 }}>
-                              <span>URL</span>
-                              <input className="input" value={String(block.href || "")} onChange={(event) => updateContentBlock(block.id, { href: event.target.value })} />
-                            </label>
-                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
-                              <span>Label</span>
-                              <input className="input" value={String(block.text || "")} onChange={(event) => updateContentBlock(block.id, { text: event.target.value })} />
-                            </label>
-                          </div>
-                        ) : null}
-
-                        {type === "code" ? (
-                          <>
-                            <label className="search" style={{ marginTop: "8px", maxWidth: "220px" }}>
-                              <span>Language</span>
-                              <input className="input" value={String(block.language || "text")} onChange={(event) => updateContentBlock(block.id, { language: event.target.value })} />
-                            </label>
+                          {(type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") ? (
                             <label className="search full" style={{ marginTop: "8px" }}>
-                              <span>Code</span>
-                              <textarea className="input" rows={5} value={String(block.code || "")} onChange={(event) => updateContentBlock(block.id, { code: event.target.value })} />
+                              <span>Text</span>
+                              <textarea className="input" rows={type.startsWith("heading") ? 2 : 5} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value })} />
                             </label>
-                          </>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                          ) : null}
+
+                          {type === "bullet_list" ? (
+                            <label className="search full" style={{ marginTop: "8px" }}>
+                              <span>List (one item per line)</span>
+                              <textarea className="input" rows={6} value={(Array.isArray(selectedBlock.items) ? selectedBlock.items : []).join("\n")} onChange={(event) => updateContentBlock(selectedBlock.id, { items: String(event.target.value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean) })} />
+                            </label>
+                          ) : null}
+
+                          {type === "inline_formula" ? (
+                            <>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Text before</span>
+                                <input className="input" value={String(selectedBlock.textBefore || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { textBefore: event.target.value })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>LaTeX (inline)</span>
+                                <input className="input" value={String(selectedBlock.latex || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { latex: event.target.value.replace(/^\$|\$$/g, "") })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Text after</span>
+                                <input className="input" value={String(selectedBlock.textAfter || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { textAfter: event.target.value })} />
+                              </label>
+                            </>
+                          ) : null}
+
+                          {type === "standalone_formula" ? (
+                            <label className="search full" style={{ marginTop: "8px" }}>
+                              <span>LaTeX (display)</span>
+                              <textarea className="input" rows={4} value={String(selectedBlock.latex || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { latex: event.target.value.replace(/^\$\$|\$\$$/g, "").trim() })} />
+                            </label>
+                          ) : null}
+
+                          {type === "table" ? (
+                            <label className="search full" style={{ marginTop: "8px" }}>
+                              <span>Rows (use | for columns)</span>
+                              <textarea className="input" rows={6} value={blockRowsToText(selectedBlock.rows || [])} onChange={(event) => updateContentBlock(selectedBlock.id, { rows: tableTextToRows(event.target.value) })} />
+                            </label>
+                          ) : null}
+
+                          {type === "image" ? (
+                            <>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Image URL / Data URL</span>
+                                <input className="input" value={String(selectedBlock.src || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { src: event.target.value })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Alt</span>
+                                <input className="input" value={String(selectedBlock.alt || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { alt: event.target.value })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Caption</span>
+                                <input className="input" value={String(selectedBlock.caption || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { caption: event.target.value })} />
+                              </label>
+                            </>
+                          ) : null}
+
+                          {type === "url" ? (
+                            <>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>URL</span>
+                                <input className="input" value={String(selectedBlock.href || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { href: event.target.value })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Label</span>
+                                <input className="input" value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value })} />
+                              </label>
+                            </>
+                          ) : null}
+
+                          {type === "code" ? (
+                            <>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Language</span>
+                                <input className="input" value={String(selectedBlock.language || "text")} onChange={(event) => updateContentBlock(selectedBlock.id, { language: event.target.value })} />
+                              </label>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Code</span>
+                                <textarea className="input" rows={7} value={String(selectedBlock.code || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { code: event.target.value })} />
+                              </label>
+                            </>
+                          ) : null}
+
+                          <div className="inline-actions" style={{ marginTop: "12px", flexWrap: "wrap" }}>
+                            <button className="table-btn" type="button" onClick={() => moveContentBlock(selectedIndex, Math.max(0, selectedIndex - 1))}>Move Up</button>
+                            <button className="table-btn" type="button" onClick={() => moveContentBlock(selectedIndex, Math.min(editContentBlocks.length - 1, selectedIndex + 1))}>Move Down</button>
+                            <button className="table-btn" type="button" onClick={() => duplicateContentBlock(selectedBlock.id)}>Duplicate</button>
+                            <button className="table-btn danger" type="button" onClick={() => removeContentBlock(selectedBlock.id)}>Delete</button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </aside>
                 </div>
               </>
             ) : (
@@ -4744,13 +4914,7 @@ export function WorkspacesManagerView({
                 onInput={syncEditContentDraftFromEditor}
                 dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
               />
-            ) : (
-              <div
-                className="doc-preview rich-html-render"
-                style={{ minHeight: "220px", maxHeight: "38vh", overflow: "auto", background: "#fff", marginTop: "10px" }}
-                dangerouslySetInnerHTML={{ __html: blocksToHtml(editContentBlocks, activeBlockTemplate()) }}
-              />
-            )}
+            ) : null}
 
             <div className="inline-actions" style={{ marginTop: "12px" }}>
               <button className="table-btn" type="button" onClick={handleDownloadEditedContentHtml} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>

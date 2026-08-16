@@ -130,6 +130,9 @@ export function AppShell() {
           onRemoveDocument={handleRemoveDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onUpdateDocumentContent={handleUpdateDocumentContent}
+          onListDocumentBlockTemplates={handleListDocumentBlockTemplates}
+          onSaveDocumentBlockTemplate={handleSaveDocumentBlockTemplate}
+          onDeleteDocumentBlockTemplate={handleDeleteDocumentBlockTemplate}
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
         />
@@ -414,12 +417,26 @@ export function AppShell() {
 
   async function handleUpdateDocumentContent(documentId, options = {}) {
     if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return null;
-    const result = await runWorkspaceAction("updateDocumentContent", {
+    const payload = {
       workspaceId: selectedWorkspaceId,
       subjectId: selectedSubjectId,
       documentId,
       correctedHtml: typeof options.correctedHtml === "string" ? options.correctedHtml : "",
       correctedContent: typeof options.correctedContent === "string" ? options.correctedContent : ""
+    };
+
+    if (Object.prototype.hasOwnProperty.call(options || {}, "contentTemplateId")) {
+      payload.contentTemplateId = typeof options.contentTemplateId === "string" ? options.contentTemplateId : "";
+    }
+    if (Object.prototype.hasOwnProperty.call(options || {}, "contentBlocksJson")) {
+      payload.contentBlocksJson = options.contentBlocksJson;
+    }
+    if (Object.prototype.hasOwnProperty.call(options || {}, "contentBlocksSchemaVersion")) {
+      payload.contentBlocksSchemaVersion = typeof options.contentBlocksSchemaVersion === "string" ? options.contentBlocksSchemaVersion : "";
+    }
+
+    const result = await runWorkspaceAction("updateDocumentContent", {
+      ...payload
     });
 
     return result?.updated || null;
@@ -452,6 +469,33 @@ export function AppShell() {
       minConfidence: options?.minConfidence
     });
     return result?.reprocessed || null;
+  }
+
+  async function handleListDocumentBlockTemplates() {
+    const result = await postWorkspaceAction("listDocumentBlockTemplates", {});
+    if (!result.ok) {
+      throw new Error(result.data?.error || "Failed to load block templates");
+    }
+    return Array.isArray(result.data?.templates) ? result.data.templates : [];
+  }
+
+  async function handleSaveDocumentBlockTemplate(template = {}) {
+    const result = await postWorkspaceAction("saveDocumentBlockTemplate", { template });
+    if (!result.ok) {
+      throw new Error(result.data?.error || "Failed to save block template");
+    }
+    return {
+      template: result.data?.template || null,
+      templates: Array.isArray(result.data?.templates) ? result.data.templates : []
+    };
+  }
+
+  async function handleDeleteDocumentBlockTemplate(templateId) {
+    const result = await postWorkspaceAction("deleteDocumentBlockTemplate", { templateId });
+    if (!result.ok) {
+      throw new Error(result.data?.error || "Failed to delete block template");
+    }
+    return Array.isArray(result.data?.templates) ? result.data.templates : [];
   }
 
   async function handleSaveGeneratedQuizDocument(payload) {

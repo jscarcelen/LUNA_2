@@ -39,6 +39,331 @@ function hashTagName(tagName) {
 }
 
 const WORKSPACES_API = "/api/workspaces-supabase";
+const BLOCK_TEMPLATE_STORAGE_KEY = "luna.blockTemplates.v1";
+
+const DEFAULT_BLOCK_TEMPLATES = [
+  {
+    id: "template_default",
+    name: "Default Clean",
+    description: "Neutral reading layout for mixed academic documents.",
+    containerClass: "luna-template-default",
+    blockClasses: {
+      heading1: "tpl-h1",
+      heading2: "tpl-h2",
+      heading3: "tpl-h3",
+      paragraph: "tpl-p",
+      bullet_list: "tpl-list",
+      inline_formula: "tpl-inline-math",
+      standalone_formula: "tpl-display-math",
+      table: "tpl-table",
+      image: "tpl-image",
+      url: "tpl-url",
+      code: "tpl-code"
+    },
+    css: [
+      ".luna-template-default{font-family:Georgia,serif;color:#1f2937;line-height:1.6}",
+      ".luna-template-default .tpl-h1{font-size:2rem;font-weight:700;margin:.8rem 0}",
+      ".luna-template-default .tpl-h2{font-size:1.55rem;font-weight:700;margin:.7rem 0}",
+      ".luna-template-default .tpl-h3{font-size:1.2rem;font-weight:600;margin:.6rem 0}",
+      ".luna-template-default .tpl-display-math{background:#f8fafc;border:1px solid #dbe4f0;border-radius:8px;padding:.7rem;font-family:'Times New Roman',serif}",
+      ".luna-template-default .tpl-code{background:#0f172a;color:#e2e8f0;padding:.8rem;border-radius:8px;overflow:auto}",
+      ".luna-template-default table{border-collapse:collapse;width:100%}",
+      ".luna-template-default td,.luna-template-default th{border:1px solid #cbd5e1;padding:.45rem .5rem}"
+    ].join("\n")
+  },
+  {
+    id: "template_study_cards",
+    name: "Study Cards",
+    description: "Higher contrast blocks for active review sessions.",
+    containerClass: "luna-template-study-cards",
+    blockClasses: {
+      heading1: "tpl-h1",
+      heading2: "tpl-h2",
+      heading3: "tpl-h3",
+      paragraph: "tpl-card",
+      bullet_list: "tpl-card",
+      inline_formula: "tpl-inline-math",
+      standalone_formula: "tpl-math-card",
+      table: "tpl-card",
+      image: "tpl-card",
+      url: "tpl-card",
+      code: "tpl-code"
+    },
+    css: [
+      ".luna-template-study-cards{font-family:'Avenir Next',system-ui,sans-serif;color:#0f172a}",
+      ".luna-template-study-cards .tpl-h1{font-size:2rem;font-weight:800;margin:.9rem 0;color:#7c2d12}",
+      ".luna-template-study-cards .tpl-h2{font-size:1.45rem;font-weight:700;margin:.7rem 0;color:#0f766e}",
+      ".luna-template-study-cards .tpl-card{background:#fff8ef;border:1px solid #f2c48f;border-radius:12px;padding:.7rem .8rem;margin:.45rem 0}",
+      ".luna-template-study-cards .tpl-math-card{background:#ecfeff;border:1px solid #7dd3fc;border-radius:12px;padding:.7rem .8rem;font-family:'Times New Roman',serif}",
+      ".luna-template-study-cards .tpl-code{background:#111827;color:#f9fafb;padding:.8rem;border-radius:10px;overflow:auto}"
+    ].join("\n")
+  }
+];
+
+const BLOCK_TYPE_OPTIONS = [
+  { value: "heading1", label: "Heading 1" },
+  { value: "heading2", label: "Heading 2" },
+  { value: "heading3", label: "Heading 3" },
+  { value: "paragraph", label: "Paragraph" },
+  { value: "bullet_list", label: "Bullet List" },
+  { value: "inline_formula", label: "In-text Formula" },
+  { value: "standalone_formula", label: "Standalone Formula" },
+  { value: "table", label: "Table" },
+  { value: "image", label: "Image" },
+  { value: "url", label: "URL" },
+  { value: "code", label: "Code" }
+];
+
+function createBlockId() {
+  return `block_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createDefaultBlock(type = "paragraph") {
+  const block = {
+    id: createBlockId(),
+    type
+  };
+
+  if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") {
+    block.text = "";
+    return block;
+  }
+  if (type === "bullet_list") {
+    block.items = [""];
+    return block;
+  }
+  if (type === "inline_formula") {
+    block.textBefore = "";
+    block.latex = "";
+    block.textAfter = "";
+    return block;
+  }
+  if (type === "standalone_formula") {
+    block.latex = "";
+    return block;
+  }
+  if (type === "table") {
+    block.rows = [["Cell 1", "Cell 2"], ["Cell 3", "Cell 4"]];
+    return block;
+  }
+  if (type === "image") {
+    block.src = "";
+    block.alt = "";
+    block.caption = "";
+    return block;
+  }
+  if (type === "url") {
+    block.href = "https://";
+    block.text = "Link text";
+    return block;
+  }
+  if (type === "code") {
+    block.language = "text";
+    block.code = "";
+    return block;
+  }
+
+  block.text = "";
+  return block;
+}
+
+function sanitizeCellText(value = "") {
+  return String(value || "").replace(/\r/g, "").trim();
+}
+
+function readBlockTemplatesFromStorage() {
+  if (typeof window === "undefined") return DEFAULT_BLOCK_TEMPLATES;
+  try {
+    const raw = window.localStorage.getItem(BLOCK_TEMPLATE_STORAGE_KEY);
+    if (!raw) return DEFAULT_BLOCK_TEMPLATES;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_BLOCK_TEMPLATES;
+    return parsed;
+  } catch {
+    return DEFAULT_BLOCK_TEMPLATES;
+  }
+}
+
+function writeBlockTemplatesToStorage(templates = []) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BLOCK_TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+  } catch {
+    // Ignore localStorage quota issues and keep in-memory state.
+  }
+}
+
+function blockRowsToText(rows = []) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => (Array.isArray(row) ? row.map((cell) => String(cell || "").trim()).join(" | ") : ""))
+    .join("\n");
+}
+
+function tableTextToRows(value = "") {
+  return String(value || "")
+    .split(/\n+/)
+    .map((line) => line.split("|").map((cell) => sanitizeCellText(cell)).filter((cell) => cell.length > 0))
+    .filter((row) => row.length > 0);
+}
+
+function inlineFormulaFromText(text = "") {
+  const match = String(text || "").match(/^(.*?)\$([^$]+)\$(.*?)$/);
+  if (!match) return null;
+  return {
+    textBefore: String(match[1] || ""),
+    latex: String(match[2] || "").trim(),
+    textAfter: String(match[3] || "")
+  };
+}
+
+function htmlToBlocks(htmlSource = "") {
+  const source = String(htmlSource || "").trim();
+  if (!source) return [createDefaultBlock("paragraph")];
+
+  try {
+    const parser = new DOMParser();
+    const parsed = parser.parseFromString(`<body>${source}</body>`, "text/html");
+    const body = parsed.body;
+    const blocks = [];
+
+    for (const node of Array.from(body.children || [])) {
+      const tag = String(node.tagName || "").toLowerCase();
+      if (tag === "h1" || tag === "h2" || tag === "h3") {
+        blocks.push({ id: createBlockId(), type: `heading${tag.slice(1)}`, text: node.textContent || "" });
+        continue;
+      }
+
+      if (tag === "ul" || tag === "ol") {
+        const items = Array.from(node.querySelectorAll("li")).map((li) => String(li.textContent || "").trim()).filter(Boolean);
+        blocks.push({ id: createBlockId(), type: "bullet_list", items: items.length ? items : [""] });
+        continue;
+      }
+
+      if (tag === "table") {
+        const rows = Array.from(node.querySelectorAll("tr")).map((tr) => Array.from(tr.querySelectorAll("th,td")).map((td) => String(td.textContent || "").trim()));
+        blocks.push({ id: createBlockId(), type: "table", rows: rows.length ? rows : [["Cell"]] });
+        continue;
+      }
+
+      if (tag === "img") {
+        blocks.push({
+          id: createBlockId(),
+          type: "image",
+          src: String(node.getAttribute("src") || ""),
+          alt: String(node.getAttribute("alt") || ""),
+          caption: ""
+        });
+        continue;
+      }
+
+      if (tag === "a") {
+        blocks.push({
+          id: createBlockId(),
+          type: "url",
+          href: String(node.getAttribute("href") || ""),
+          text: String(node.textContent || "")
+        });
+        continue;
+      }
+
+      if (tag === "pre" || tag === "code") {
+        blocks.push({
+          id: createBlockId(),
+          type: "code",
+          language: "text",
+          code: String(node.textContent || "")
+        });
+        continue;
+      }
+
+      const text = String(node.textContent || "").trim();
+      if (!text) continue;
+
+      const displayMatch = text.match(/^\$\$([\s\S]+)\$\$$/);
+      if (displayMatch) {
+        blocks.push({ id: createBlockId(), type: "standalone_formula", latex: String(displayMatch[1] || "").trim() });
+        continue;
+      }
+
+      const inline = inlineFormulaFromText(text);
+      if (inline) {
+        blocks.push({ id: createBlockId(), type: "inline_formula", ...inline });
+        continue;
+      }
+
+      blocks.push({ id: createBlockId(), type: "paragraph", text });
+    }
+
+    return blocks.length ? blocks : [createDefaultBlock("paragraph")];
+  } catch {
+    return [{ id: createBlockId(), type: "paragraph", text: htmlToPlainText(source) }];
+  }
+}
+
+function blockToHtml(block = {}, blockClass = "") {
+  const classAttr = blockClass ? ` class="${escapeHtml(blockClass)}"` : "";
+  const blockIdAttr = ` data-block-id="${escapeHtml(block.id || createBlockId())}"`;
+  const type = String(block.type || "paragraph");
+
+  if (type === "heading1") return `<h1${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`;
+  if (type === "heading2") return `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`;
+  if (type === "heading3") return `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`;
+  if (type === "paragraph") return `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`;
+  if (type === "bullet_list") {
+    const items = Array.isArray(block.items) ? block.items : [];
+    const li = items.map((item) => `<li>${escapeHtml(item || "")}</li>`).join("");
+    return `<ul${classAttr}${blockIdAttr}>${li}</ul>`;
+  }
+  if (type === "inline_formula") {
+    const textBefore = escapeHtml(block.textBefore || "");
+    const latex = escapeHtml(block.latex || "");
+    const textAfter = escapeHtml(block.textAfter || "");
+    return `<p${classAttr}${blockIdAttr}>${textBefore}<span data-inline-latex="true">$${latex}$</span>${textAfter}</p>`;
+  }
+  if (type === "standalone_formula") return `<div${classAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`;
+  if (type === "table") {
+    const rows = Array.isArray(block.rows) ? block.rows : [];
+    const rowHtml = rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("");
+    return `<table${classAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
+  }
+  if (type === "image") {
+    const src = escapeHtml(block.src || "");
+    const alt = escapeHtml(block.alt || "");
+    const caption = String(block.caption || "").trim();
+    const figureCaption = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "";
+    return `<figure${classAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`;
+  }
+  if (type === "url") {
+    const href = escapeHtml(block.href || "");
+    const text = escapeHtml(block.text || block.href || "");
+    return `<p${classAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`;
+  }
+  if (type === "code") {
+    const language = escapeHtml(block.language || "text");
+    const code = escapeHtml(block.code || "");
+    return `<pre${classAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`;
+  }
+
+  return `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</p>`;
+}
+
+function blocksToHtml(blocks = [], template = null) {
+  const safeBlocks = Array.isArray(blocks) && blocks.length ? blocks : [{ id: "block_empty", type: "paragraph", text: "" }];
+  const activeTemplate = template || DEFAULT_BLOCK_TEMPLATES[0];
+  const blockClasses = activeTemplate?.blockClasses && typeof activeTemplate.blockClasses === "object"
+    ? activeTemplate.blockClasses
+    : {};
+  const css = String(activeTemplate?.css || "").trim();
+  const containerClass = String(activeTemplate?.containerClass || "luna-template-default");
+
+  const htmlBlocks = safeBlocks.map((block) => {
+    const className = String(blockClasses[String(block.type || "paragraph")] || "");
+    return blockToHtml(block, className);
+  }).join("\n");
+
+  const styleTag = css ? `<style data-luna-template="${escapeHtml(activeTemplate?.id || "template_default")}">${css}</style>` : "";
+  return `${styleTag}<div class="${escapeHtml(containerClass)}" data-template-id="${escapeHtml(activeTemplate?.id || "template_default")}">${htmlBlocks}</div>`;
+}
 
 function downloadBase64File(base64, filename, mimeType) {
   const raw = atob(base64);
@@ -597,6 +922,9 @@ export function WorkspacesManagerView({
   onRenameDocument,
   onRemoveDocument,
   onUpdateDocumentMeta,
+  onListDocumentBlockTemplates,
+  onSaveDocumentBlockTemplate,
+  onDeleteDocumentBlockTemplate,
   onReviewDocumentExtraction,
   onReprocessDocument
 }) {
@@ -674,6 +1002,11 @@ export function WorkspacesManagerView({
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [editContentDoc, setEditContentDoc] = useState(null);
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
+  const [editContentMode, setEditContentMode] = useState("blocks");
+  const [editContentBlocks, setEditContentBlocks] = useState([]);
+  const [editContentTemplates, setEditContentTemplates] = useState(DEFAULT_BLOCK_TEMPLATES);
+  const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
+  const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
   const [editContentFontFamily, setEditContentFontFamily] = useState("Avenir Next");
   const [editContentFontSize, setEditContentFontSize] = useState("16");
@@ -687,6 +1020,7 @@ export function WorkspacesManagerView({
   const [previewLoadingMode, setPreviewLoadingMode] = useState("");
   const [previewError, setPreviewError] = useState("");
   const [tagColorDraftByName, setTagColorDraftByName] = useState({});
+  const editContentDragIndexRef = useRef(-1);
 
   const selectedWorkspace = workspaces.find((item) => item.id === selectedWorkspaceId) || null;
   const subjects = selectedWorkspace ? selectedWorkspace.subjects : [];
@@ -882,6 +1216,43 @@ export function WorkspacesManagerView({
 
     return () => window.cancelAnimationFrame(frameId);
   }, [reviewCompareDoc, activeCompareRiskId, reviewDraftByDocId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTemplates() {
+      let templates = readBlockTemplatesFromStorage();
+      if (typeof onListDocumentBlockTemplates === "function") {
+        try {
+          const sharedTemplates = await onListDocumentBlockTemplates();
+          if (Array.isArray(sharedTemplates) && sharedTemplates.length) {
+            templates = sharedTemplates;
+            writeBlockTemplatesToStorage(sharedTemplates);
+          }
+        } catch {
+          // Keep local fallback templates when shared repository is not available.
+        }
+      }
+
+      if (cancelled || !Array.isArray(templates) || !templates.length) return;
+      setEditContentTemplates(templates);
+      if (!templates.some((item) => item.id === editContentTemplateId)) {
+        setEditContentTemplateId(templates[0].id);
+        setEditContentTemplateCssDraft(String(templates[0].css || ""));
+      }
+    }
+
+    loadTemplates();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const activeTemplate = editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0];
+    if (!activeTemplate) return;
+    setEditContentTemplateCssDraft(String(activeTemplate.css || ""));
+  }, [editContentTemplateId, editContentTemplates]);
 
   function clearFilters() {
     setFilterFolderId("");
@@ -1571,6 +1942,217 @@ export function WorkspacesManagerView({
     editContentWorkingHtmlRef.current = String(editor.innerHTML || "");
   }
 
+  function activeBlockTemplate() {
+    return editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0] || DEFAULT_BLOCK_TEMPLATES[0];
+  }
+
+  function syncBlocksFromHtml(htmlSource = "") {
+    const nextBlocks = htmlToBlocks(htmlSource);
+    setEditContentBlocks(nextBlocks);
+  }
+
+  function syncHtmlFromBlocks(blocksOverride = null) {
+    const blocks = Array.isArray(blocksOverride) ? blocksOverride : editContentBlocks;
+    const html = blocksToHtml(blocks, activeBlockTemplate());
+    setEditContentHtmlDraft(html);
+    editContentWorkingHtmlRef.current = html;
+    return html;
+  }
+
+  function changeBlockTemplate(nextTemplateId = "") {
+    const nextId = String(nextTemplateId || "").trim();
+    if (!nextId) return;
+    setEditContentTemplateId(nextId);
+    window.requestAnimationFrame(() => {
+      syncHtmlFromBlocks();
+    });
+  }
+
+  function updateTemplateCssDraft(nextCss = "") {
+    setEditContentTemplateCssDraft(String(nextCss || ""));
+  }
+
+  async function applyTemplateCssDraft() {
+    const nextTemplates = editContentTemplates.map((item) => (item.id === editContentTemplateId ? {
+      ...item,
+      css: String(editContentTemplateCssDraft || "")
+    } : item));
+
+    let syncedWithServer = false;
+
+    if (typeof onSaveDocumentBlockTemplate === "function") {
+      const active = nextTemplates.find((item) => item.id === editContentTemplateId);
+      if (active) {
+        try {
+          const saved = await onSaveDocumentBlockTemplate(active);
+          if (Array.isArray(saved?.templates) && saved.templates.length) {
+            setEditContentTemplates(saved.templates);
+            writeBlockTemplatesToStorage(saved.templates);
+            syncedWithServer = true;
+          }
+        } catch {
+          // Keep local update when shared save fails.
+        }
+      }
+    }
+
+    if (!syncedWithServer) {
+      setEditContentTemplates(nextTemplates);
+      writeBlockTemplatesToStorage(nextTemplates);
+    }
+    setEditContentStatusMessage("Template CSS updated.");
+    syncHtmlFromBlocks();
+  }
+
+  async function saveCurrentTemplateAsNew() {
+    const name = window.prompt("Template name", "My Template");
+    const nextName = String(name || "").trim();
+    if (!nextName) return;
+    const source = activeBlockTemplate();
+    const nextTemplate = {
+      ...source,
+      id: `template_${Date.now().toString(36)}`,
+      name: nextName,
+      css: String(editContentTemplateCssDraft || source?.css || "")
+    };
+    const nextTemplates = [...editContentTemplates, nextTemplate];
+
+    if (typeof onSaveDocumentBlockTemplate === "function") {
+      try {
+        const saved = await onSaveDocumentBlockTemplate(nextTemplate);
+        if (Array.isArray(saved?.templates) && saved.templates.length) {
+          setEditContentTemplates(saved.templates);
+          const savedId = String(saved?.template?.id || "").trim();
+          setEditContentTemplateId(savedId || nextTemplate.id);
+          writeBlockTemplatesToStorage(saved.templates);
+          setEditContentStatusMessage(`Saved template: ${nextName}`);
+          return;
+        }
+      } catch {
+        // Fallback to local repository.
+      }
+    }
+
+    setEditContentTemplates(nextTemplates);
+    setEditContentTemplateId(nextTemplate.id);
+    writeBlockTemplatesToStorage(nextTemplates);
+    setEditContentStatusMessage(`Saved template: ${nextName}`);
+  }
+
+  async function deleteCurrentTemplate() {
+    const active = activeBlockTemplate();
+    if (!active?.id) return;
+    if (editContentTemplates.length <= 1) {
+      setEditContentStatusMessage("At least one template is required.");
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete template \"${active.name || "Untitled"}\"?`);
+    if (!confirmed) return;
+
+    if (typeof onDeleteDocumentBlockTemplate === "function") {
+      try {
+        const templates = await onDeleteDocumentBlockTemplate(active.id);
+        if (Array.isArray(templates) && templates.length) {
+          setEditContentTemplates(templates);
+          setEditContentTemplateId(String(templates[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
+          writeBlockTemplatesToStorage(templates);
+          setEditContentStatusMessage("Template deleted.");
+          return;
+        }
+      } catch {
+        // Fallback to local delete.
+      }
+    }
+
+    const nextTemplates = editContentTemplates.filter((item) => item.id !== active.id);
+    setEditContentTemplates(nextTemplates);
+    setEditContentTemplateId(String(nextTemplates[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
+    writeBlockTemplatesToStorage(nextTemplates);
+    setEditContentStatusMessage("Template deleted.");
+  }
+
+  function addContentBlock(type = "paragraph", afterIndex = null) {
+    const nextBlock = createDefaultBlock(type);
+    setEditContentBlocks((previous) => {
+      const list = Array.isArray(previous) ? [...previous] : [];
+      const insertAt = Number.isInteger(afterIndex) ? Math.min(list.length, Math.max(0, afterIndex + 1)) : list.length;
+      list.splice(insertAt, 0, nextBlock);
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
+  function updateContentBlock(blockId, patch = {}) {
+    const key = String(blockId || "");
+    if (!key) return;
+    setEditContentBlocks((previous) => {
+      const list = (Array.isArray(previous) ? previous : []).map((block) => (block.id === key ? { ...block, ...patch } : block));
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
+  function changeContentBlockType(blockId, nextType) {
+    const key = String(blockId || "");
+    const targetType = String(nextType || "paragraph");
+    if (!key) return;
+    setEditContentBlocks((previous) => {
+      const list = Array.isArray(previous) ? [...previous] : [];
+      const index = list.findIndex((block) => block.id === key);
+      if (index < 0) return previous;
+      const replacement = createDefaultBlock(targetType);
+      replacement.id = key;
+      list[index] = replacement;
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
+  function moveContentBlock(fromIndex, toIndex) {
+    if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
+    if (fromIndex === toIndex) return;
+    setEditContentBlocks((previous) => {
+      const list = Array.isArray(previous) ? [...previous] : [];
+      if (fromIndex < 0 || fromIndex >= list.length) return previous;
+      if (toIndex < 0 || toIndex >= list.length) return previous;
+      const [moved] = list.splice(fromIndex, 1);
+      list.splice(toIndex, 0, moved);
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(list);
+      });
+      return list;
+    });
+  }
+
+  function removeContentBlock(blockId) {
+    const key = String(blockId || "");
+    if (!key) return;
+    setEditContentBlocks((previous) => {
+      const list = (Array.isArray(previous) ? previous : []).filter((block) => block.id !== key);
+      const normalized = list.length ? list : [createDefaultBlock("paragraph")];
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(normalized);
+      });
+      return normalized;
+    });
+  }
+
+  function exportContentBlocksJson() {
+    const payload = {
+      schemaVersion: "block-editor-v1",
+      templateId: editContentTemplateId,
+      blocks: editContentBlocks
+    };
+    downloadTextFile(JSON.stringify(payload, null, 2), `${String(editContentDoc?.name || "document")}.blocks.json`, "application/json");
+  }
+
   function getEditContentSelectionCell() {
     const editor = editContentEditorRef.current;
     const selection = window.getSelection();
@@ -1670,6 +2252,14 @@ export function WorkspacesManagerView({
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
     editContentWorkingHtmlRef.current = seededHtml;
+    if (Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length) {
+      setEditContentBlocks(doc.contentBlocksJson);
+    } else {
+      syncBlocksFromHtml(seededHtml);
+    }
+    if (String(doc.contentTemplateId || "").trim()) {
+      setEditContentTemplateId(String(doc.contentTemplateId || ""));
+    }
     try {
       const response = await fetch(WORKSPACES_API, {
         method: "POST",
@@ -1691,6 +2281,7 @@ export function WorkspacesManagerView({
       if (editableHtml.trim()) {
         setEditContentHtmlDraft(editableHtml);
         editContentWorkingHtmlRef.current = editableHtml;
+        syncBlocksFromHtml(editableHtml);
       }
     } catch {
       setEditContentStatusMessage("Opened editor with fallback HTML. Some original image links may need to be reinserted.");
@@ -1801,9 +2392,11 @@ export function WorkspacesManagerView({
 
   async function persistEditedContent(options = {}) {
     if (!editContentDoc?.id || !onUpdateDocumentContent) return;
-    const editedHtml = editContentEditorRef.current
-      ? String(editContentEditorRef.current.innerHTML || "")
-      : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
+    const editedHtml = editContentMode === "blocks"
+      ? syncHtmlFromBlocks()
+      : (editContentEditorRef.current
+        ? String(editContentEditorRef.current.innerHTML || "")
+        : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || ""));
     const correctedHtml = stripRiskMarkupFromHtml(editedHtml).trim();
     const correctedContent = htmlToPlainText(correctedHtml);
     if (!correctedHtml || !correctedContent) {
@@ -1816,26 +2409,36 @@ export function WorkspacesManagerView({
     try {
       await onUpdateDocumentContent(editContentDoc.id, {
         correctedHtml,
-        correctedContent
+        correctedContent,
+        contentTemplateId: String(editContentTemplateId || ""),
+        contentBlocksJson: editContentBlocks,
+        contentBlocksSchemaVersion: "block-editor-v1"
       });
       if (previewDoc?.id === editContentDoc.id) {
         setPreviewDoc((previous) => previous ? {
           ...previous,
           content: correctedContent,
-          sourceRenderHtml: correctedHtml
+          sourceRenderHtml: correctedHtml,
+          contentTemplateId: String(editContentTemplateId || ""),
+          contentBlocksJson: editContentBlocks,
+          contentBlocksSchemaVersion: "block-editor-v1"
         } : previous);
       }
       if (reviewCompareDoc?.id === editContentDoc.id) {
         setReviewCompareDoc((previous) => previous ? {
           ...previous,
           content: correctedContent,
-          sourceRenderHtml: correctedHtml
+          sourceRenderHtml: correctedHtml,
+          contentTemplateId: String(editContentTemplateId || ""),
+          contentBlocksJson: editContentBlocks,
+          contentBlocksSchemaVersion: "block-editor-v1"
         } : previous);
       }
       const closeOnSuccess = options?.closeOnSuccess !== false;
       if (closeOnSuccess) {
         setEditContentDoc(null);
         setEditContentHtmlDraft("");
+        setEditContentBlocks([]);
         editContentWorkingHtmlRef.current = "";
       }
       return {
@@ -3736,6 +4339,7 @@ export function WorkspacesManagerView({
                 onClick={() => {
                   setEditContentDoc(null);
                   setEditContentHtmlDraft("");
+                  setEditContentBlocks([]);
                   editContentWorkingHtmlRef.current = "";
                   setEditContentStatusMessage("");
                 }}
@@ -3749,88 +4353,299 @@ export function WorkspacesManagerView({
               Edit directly in the viewer like a document editor. Save applies changes to review center, downloads (HTML/Markdown), and LLM input.
             </p>
 
-            <div className="rich-editor-toolbar-group-grid" style={{ marginTop: "10px" }}>
-              <details className="rich-editor-group" open>
-                <summary>Text Format</summary>
-                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("bold")}><b>B</b></button>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("italic")}><i>I</i></button>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("underline")}><u>U</u></button>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("undo")}>Undo</button>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("redo")}>Redo</button>
-                  <select className="input" style={{ maxWidth: "220px" }} value={editContentFontFamily} onChange={(event) => applyEditContentFontFamily(event.target.value)}>
-                    <option value="Avenir Next">Avenir Next</option>
-                    <option value="Georgia">Georgia</option>
-                    <option value="Times New Roman">Times New Roman</option>
-                    <option value="Arial">Arial</option>
-                    <option value="Courier New">Courier New</option>
-                  </select>
-                  <select className="input" style={{ maxWidth: "120px" }} value={editContentFontSize} onChange={(event) => applyEditContentFontSize(event.target.value)}>
-                    <option value="12">12px</option>
-                    <option value="14">14px</option>
-                    <option value="16">16px</option>
-                    <option value="18">18px</option>
-                    <option value="20">20px</option>
-                    <option value="24">24px</option>
-                    <option value="28">28px</option>
-                    <option value="32">32px</option>
-                  </select>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(1)}>H1</button>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(2)}>H2</button>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(3)}>H3</button>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(4)}>H4</button>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(5)}>H5</button>
-                  <button className="table-btn" type="button" onClick={() => applyEditContentHeading(6)}>H6</button>
-                  <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    Text
-                    <input type="color" value={editContentTextColorValue} onChange={(event) => setEditContentTextColor(event.target.value)} />
-                  </label>
-                  <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    Background
-                    <input type="color" value={editContentBackgroundColorValue} onChange={(event) => setEditContentBackgroundColor(event.target.value)} />
-                  </label>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
-                </div>
-              </details>
-
-              <details className="rich-editor-group">
-                <summary>Insert</summary>
-                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link / URL</button>
-                  <button className="table-btn" type="button" onClick={insertEditContentImage}>Image URL</button>
-                  <button className="table-btn" type="button" onClick={openEditContentImageFilePicker}>Image File</button>
-                  <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
-                </div>
-              </details>
-
-              <details className="rich-editor-group">
-                <summary>Lists</summary>
-                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
-                  <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbering</button>
-                </div>
-              </details>
-
-              <details className="rich-editor-group">
-                <summary>Tables</summary>
-                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                  <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>Add Row Above</button>
-                  <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>Add Row Below</button>
-                  <button className="table-btn" type="button" onClick={deleteTableRowInEditContent}>Delete Row</button>
-                  <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(false)}>Add Col Left</button>
-                  <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(true)}>Add Col Right</button>
-                  <button className="table-btn" type="button" onClick={deleteTableColumnInEditContent}>Delete Col</button>
-                </div>
-              </details>
-
-              <details className="rich-editor-group">
-                <summary>Math</summary>
-                <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                  <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
-                  <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
-                </div>
-              </details>
+            <div className="inline-actions" style={{ marginTop: "10px", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+              <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  className={editContentMode === "blocks" ? "primary-btn" : "table-btn"}
+                  type="button"
+                  onClick={() => {
+                    const sourceHtml = editContentEditorRef.current
+                      ? String(editContentEditorRef.current.innerHTML || "")
+                      : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
+                    if (sourceHtml.trim()) {
+                      syncBlocksFromHtml(sourceHtml);
+                    }
+                    setEditContentMode("blocks");
+                  }}
+                >
+                  Block Editor
+                </button>
+                <button
+                  className={editContentMode === "rich" ? "primary-btn" : "table-btn"}
+                  type="button"
+                  onClick={() => {
+                    const nextHtml = syncHtmlFromBlocks();
+                    setEditContentHtmlDraft(nextHtml);
+                    editContentWorkingHtmlRef.current = nextHtml;
+                    setEditContentMode("rich");
+                  }}
+                >
+                  Rich HTML
+                </button>
+              </div>
+              <p className="hint" style={{ margin: 0 }}>Block mode supports add, reorder, type-switch, templates, and JSON export.</p>
             </div>
+
+            {editContentMode === "blocks" ? (
+              <>
+                <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
+                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                    <label className="search" style={{ minWidth: "260px" }}>
+                      <span>Template</span>
+                      <select className="input" value={editContentTemplateId} onChange={(event) => changeBlockTemplate(event.target.value)}>
+                        {editContentTemplates.map((template) => (
+                          <option key={template.id} value={template.id}>{template.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
+                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
+                    <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
+                  </div>
+                  <label className="search full" style={{ marginTop: "8px" }}>
+                    <span>Template CSS (template repository)</span>
+                    <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
+                  </label>
+                  <div className="inline-actions" style={{ marginTop: "8px" }}>
+                    <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Apply Template CSS</button>
+                  </div>
+                </div>
+
+                <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
+                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                    {BLOCK_TYPE_OPTIONS.map((option) => (
+                      <button key={`add-${option.value}`} className="table-btn" type="button" onClick={() => addContentBlock(option.value)}>
+                        + {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: "10px", maxHeight: "56vh", overflow: "auto", background: "#f8fafc", border: "1px solid #dbe5f0", borderRadius: "10px", padding: "10px" }}>
+                  {editContentBlocks.map((block, index) => {
+                    const type = String(block.type || "paragraph");
+                    return (
+                      <div
+                        key={block.id}
+                        className="panel"
+                        style={{ marginBottom: "10px", background: "#fff", border: "1px solid #d7e1ee" }}
+                        draggable
+                        onDragStart={() => { editContentDragIndexRef.current = index; }}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => {
+                          const from = Number(editContentDragIndexRef.current);
+                          moveContentBlock(from, index);
+                          editContentDragIndexRef.current = -1;
+                        }}
+                      >
+                        <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                          <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                            <strong>Block {index + 1}</strong>
+                            <select className="input" value={type} onChange={(event) => changeContentBlockType(block.id, event.target.value)}>
+                              {BLOCK_TYPE_OPTIONS.map((option) => (
+                                <option key={`${block.id}-${option.value}`} value={option.value}>{option.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="inline-actions" style={{ gap: "6px", flexWrap: "wrap" }}>
+                            <button className="table-btn" type="button" onClick={() => moveContentBlock(index, Math.max(0, index - 1))}>Up</button>
+                            <button className="table-btn" type="button" onClick={() => moveContentBlock(index, Math.min(editContentBlocks.length - 1, index + 1))}>Down</button>
+                            <button className="table-btn" type="button" onClick={() => addContentBlock("paragraph", index)}>Insert After</button>
+                            <button className="table-btn" type="button" onClick={() => removeContentBlock(block.id)}>Delete</button>
+                          </div>
+                        </div>
+
+                        {(type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") ? (
+                          <label className="search full" style={{ marginTop: "8px" }}>
+                            <span>Text</span>
+                            <textarea
+                              className="input"
+                              rows={type.startsWith("heading") ? 2 : 4}
+                              value={String(block.text || "")}
+                              onChange={(event) => updateContentBlock(block.id, { text: event.target.value })}
+                            />
+                          </label>
+                        ) : null}
+
+                        {type === "bullet_list" ? (
+                          <label className="search full" style={{ marginTop: "8px" }}>
+                            <span>One bullet per line</span>
+                            <textarea
+                              className="input"
+                              rows={5}
+                              value={(Array.isArray(block.items) ? block.items : []).join("\n")}
+                              onChange={(event) => updateContentBlock(block.id, { items: String(event.target.value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean) })}
+                            />
+                          </label>
+                        ) : null}
+
+                        {type === "inline_formula" ? (
+                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
+                              <span>Text Before</span>
+                              <input className="input" value={String(block.textBefore || "")} onChange={(event) => updateContentBlock(block.id, { textBefore: event.target.value })} />
+                            </label>
+                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
+                              <span>LaTeX</span>
+                              <input className="input" value={String(block.latex || "")} onChange={(event) => updateContentBlock(block.id, { latex: event.target.value })} />
+                            </label>
+                            <label className="search" style={{ minWidth: "220px", flex: 1 }}>
+                              <span>Text After</span>
+                              <input className="input" value={String(block.textAfter || "")} onChange={(event) => updateContentBlock(block.id, { textAfter: event.target.value })} />
+                            </label>
+                          </div>
+                        ) : null}
+
+                        {type === "standalone_formula" ? (
+                          <label className="search full" style={{ marginTop: "8px" }}>
+                            <span>Display LaTeX</span>
+                            <textarea className="input" rows={3} value={String(block.latex || "")} onChange={(event) => updateContentBlock(block.id, { latex: event.target.value })} />
+                          </label>
+                        ) : null}
+
+                        {type === "table" ? (
+                          <label className="search full" style={{ marginTop: "8px" }}>
+                            <span>Table rows (use | between cells)</span>
+                            <textarea
+                              className="input"
+                              rows={5}
+                              value={blockRowsToText(block.rows || [])}
+                              onChange={(event) => updateContentBlock(block.id, { rows: tableTextToRows(event.target.value) })}
+                            />
+                          </label>
+                        ) : null}
+
+                        {type === "image" ? (
+                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                            <label className="search" style={{ minWidth: "260px", flex: 2 }}>
+                              <span>Image URL or Data URL</span>
+                              <input className="input" value={String(block.src || "")} onChange={(event) => updateContentBlock(block.id, { src: event.target.value })} />
+                            </label>
+                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
+                              <span>Alt Text</span>
+                              <input className="input" value={String(block.alt || "")} onChange={(event) => updateContentBlock(block.id, { alt: event.target.value })} />
+                            </label>
+                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
+                              <span>Caption</span>
+                              <input className="input" value={String(block.caption || "")} onChange={(event) => updateContentBlock(block.id, { caption: event.target.value })} />
+                            </label>
+                          </div>
+                        ) : null}
+
+                        {type === "url" ? (
+                          <div className="inline-actions" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                            <label className="search" style={{ minWidth: "260px", flex: 2 }}>
+                              <span>URL</span>
+                              <input className="input" value={String(block.href || "")} onChange={(event) => updateContentBlock(block.id, { href: event.target.value })} />
+                            </label>
+                            <label className="search" style={{ minWidth: "180px", flex: 1 }}>
+                              <span>Label</span>
+                              <input className="input" value={String(block.text || "")} onChange={(event) => updateContentBlock(block.id, { text: event.target.value })} />
+                            </label>
+                          </div>
+                        ) : null}
+
+                        {type === "code" ? (
+                          <>
+                            <label className="search" style={{ marginTop: "8px", maxWidth: "220px" }}>
+                              <span>Language</span>
+                              <input className="input" value={String(block.language || "text")} onChange={(event) => updateContentBlock(block.id, { language: event.target.value })} />
+                            </label>
+                            <label className="search full" style={{ marginTop: "8px" }}>
+                              <span>Code</span>
+                              <textarea className="input" rows={5} value={String(block.code || "")} onChange={(event) => updateContentBlock(block.id, { code: event.target.value })} />
+                            </label>
+                          </>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div className="rich-editor-toolbar-group-grid" style={{ marginTop: "10px" }}>
+                <details className="rich-editor-group" open>
+                  <summary>Text Format</summary>
+                  <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("bold")}><b>B</b></button>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("italic")}><i>I</i></button>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("underline")}><u>U</u></button>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("undo")}>Undo</button>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("redo")}>Redo</button>
+                    <select className="input" style={{ maxWidth: "220px" }} value={editContentFontFamily} onChange={(event) => applyEditContentFontFamily(event.target.value)}>
+                      <option value="Avenir Next">Avenir Next</option>
+                      <option value="Georgia">Georgia</option>
+                      <option value="Times New Roman">Times New Roman</option>
+                      <option value="Arial">Arial</option>
+                      <option value="Courier New">Courier New</option>
+                    </select>
+                    <select className="input" style={{ maxWidth: "120px" }} value={editContentFontSize} onChange={(event) => applyEditContentFontSize(event.target.value)}>
+                      <option value="12">12px</option>
+                      <option value="14">14px</option>
+                      <option value="16">16px</option>
+                      <option value="18">18px</option>
+                      <option value="20">20px</option>
+                      <option value="24">24px</option>
+                      <option value="28">28px</option>
+                      <option value="32">32px</option>
+                    </select>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(1)}>H1</button>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(2)}>H2</button>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(3)}>H3</button>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(4)}>H4</button>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(5)}>H5</button>
+                    <button className="table-btn" type="button" onClick={() => applyEditContentHeading(6)}>H6</button>
+                    <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      Text
+                      <input type="color" value={editContentTextColorValue} onChange={(event) => setEditContentTextColor(event.target.value)} />
+                    </label>
+                    <label className="table-btn" style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                      Background
+                      <input type="color" value={editContentBackgroundColorValue} onChange={(event) => setEditContentBackgroundColor(event.target.value)} />
+                    </label>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("removeFormat")}>Clear Format</button>
+                  </div>
+                </details>
+
+                <details className="rich-editor-group">
+                  <summary>Insert</summary>
+                  <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link / URL</button>
+                    <button className="table-btn" type="button" onClick={insertEditContentImage}>Image URL</button>
+                    <button className="table-btn" type="button" onClick={openEditContentImageFilePicker}>Image File</button>
+                    <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>
+                  </div>
+                </details>
+
+                <details className="rich-editor-group">
+                  <summary>Lists</summary>
+                  <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertUnorderedList")}>Bullets</button>
+                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("insertOrderedList")}>Numbering</button>
+                  </div>
+                </details>
+
+                <details className="rich-editor-group">
+                  <summary>Tables</summary>
+                  <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                    <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(false)}>Add Row Above</button>
+                    <button className="table-btn" type="button" onClick={() => addTableRowInEditContent(true)}>Add Row Below</button>
+                    <button className="table-btn" type="button" onClick={deleteTableRowInEditContent}>Delete Row</button>
+                    <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(false)}>Add Col Left</button>
+                    <button className="table-btn" type="button" onClick={() => addTableColumnInEditContent(true)}>Add Col Right</button>
+                    <button className="table-btn" type="button" onClick={deleteTableColumnInEditContent}>Delete Col</button>
+                  </div>
+                </details>
+
+                <details className="rich-editor-group">
+                  <summary>Math</summary>
+                  <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
+                    <button className="table-btn" type="button" onClick={() => insertEditContentLatex(false)}>Inline LaTeX</button>
+                    <button className="table-btn" type="button" onClick={() => insertEditContentLatex(true)}>Display LaTeX</button>
+                  </div>
+                </details>
+              </div>
+            )}
 
             <input
               ref={editContentImageInputRef}
@@ -3842,15 +4657,23 @@ export function WorkspacesManagerView({
 
             {isPreparingEditContent ? <p className="hint" style={{ marginTop: "8px" }}>Preparing editor content with embedded images...</p> : null}
 
-            <div
-              ref={editContentEditorRef}
-              className="doc-preview rich-html-editor"
-              style={{ minHeight: "340px", maxHeight: "56vh", overflow: "auto", background: "#fff" }}
-              contentEditable
-              suppressContentEditableWarning
-              onInput={syncEditContentDraftFromEditor}
-              dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
-            />
+            {editContentMode === "rich" ? (
+              <div
+                ref={editContentEditorRef}
+                className="doc-preview rich-html-editor"
+                style={{ minHeight: "340px", maxHeight: "56vh", overflow: "auto", background: "#fff" }}
+                contentEditable
+                suppressContentEditableWarning
+                onInput={syncEditContentDraftFromEditor}
+                dangerouslySetInnerHTML={{ __html: editContentHtmlDraft }}
+              />
+            ) : (
+              <div
+                className="doc-preview rich-html-render"
+                style={{ minHeight: "220px", maxHeight: "38vh", overflow: "auto", background: "#fff", marginTop: "10px" }}
+                dangerouslySetInnerHTML={{ __html: blocksToHtml(editContentBlocks, activeBlockTemplate()) }}
+              />
+            )}
 
             <div className="inline-actions" style={{ marginTop: "12px" }}>
               <button className="table-btn" type="button" onClick={handleDownloadEditedContentHtml} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>

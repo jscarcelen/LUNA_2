@@ -5,8 +5,10 @@ import {
   createWorkspace,
   getGeneratedDocumentDownload,
   getUploadedDocumentDownload,
+  listDocumentBlockTemplates,
   listWorkspaceTree,
   removeDocument,
+  deleteDocumentBlockTemplate,
   removeFolder,
   removeSubject,
   removeTopicTag,
@@ -22,6 +24,7 @@ import {
   setSubjectColor,
   setTopicTagColor,
   setWorkspaceColor,
+  saveDocumentBlockTemplate,
   updateDocumentMeta,
   updateDocumentContent,
   uploadTxtDocuments
@@ -186,6 +189,23 @@ export async function POST(request) {
       return NextResponse.json({ download });
     }
 
+    if (action === "listDocumentBlockTemplates") {
+      const templates = await listDocumentBlockTemplates(ownerUserId);
+      return NextResponse.json({ templates });
+    }
+
+    if (action === "saveDocumentBlockTemplate") {
+      const template = await saveDocumentBlockTemplate(ownerUserId, payload.template || {});
+      const templates = await listDocumentBlockTemplates(ownerUserId);
+      return NextResponse.json({ template, templates });
+    }
+
+    if (action === "deleteDocumentBlockTemplate") {
+      await deleteDocumentBlockTemplate(ownerUserId, payload.templateId);
+      const templates = await listDocumentBlockTemplates(ownerUserId);
+      return NextResponse.json({ deleted: true, templates });
+    }
+
     if (action === "renameDocument") {
       await renameDocument(payload.documentId, payload.nextName);
       return await ok(ownerUserId);
@@ -205,10 +225,22 @@ export async function POST(request) {
     }
 
     if (action === "updateDocumentContent") {
-      const updated = await updateDocumentContent(payload.subjectId, payload.documentId, {
+      const contentOptions = {
         correctedHtml: typeof payload.correctedHtml === "string" ? payload.correctedHtml : "",
         correctedContent: typeof payload.correctedContent === "string" ? payload.correctedContent : ""
-      });
+      };
+
+      if (Object.prototype.hasOwnProperty.call(payload || {}, "contentTemplateId")) {
+        contentOptions.contentTemplateId = typeof payload.contentTemplateId === "string" ? payload.contentTemplateId : "";
+      }
+      if (Object.prototype.hasOwnProperty.call(payload || {}, "contentBlocksJson")) {
+        contentOptions.contentBlocksJson = payload.contentBlocksJson;
+      }
+      if (Object.prototype.hasOwnProperty.call(payload || {}, "contentBlocksSchemaVersion")) {
+        contentOptions.contentBlocksSchemaVersion = typeof payload.contentBlocksSchemaVersion === "string" ? payload.contentBlocksSchemaVersion : "";
+      }
+
+      const updated = await updateDocumentContent(payload.subjectId, payload.documentId, contentOptions);
       return await ok(ownerUserId, { updated });
     }
 

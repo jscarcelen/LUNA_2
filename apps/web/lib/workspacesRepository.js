@@ -41,6 +41,8 @@ let documentSourceTypeSupported;
 let documentReviewFieldsSupported;
 let documentReviewEnhancementFieldsSupported;
 let documentSourceVisualFieldsSupported;
+let documentBlockFieldsSupported;
+let documentBlockTemplateLibrarySupported;
 let generatedDocumentExportsSupported;
 let topicTagColorSupported;
 let workspaceColorSupported;
@@ -49,6 +51,20 @@ let subjectColorSupported;
 const GENERATED_QUIZ_NAME_PREFIX = "Generated Quiz - ";
 const GENERATED_DOCUMENT_BUNDLE_VERSION = "generated-document-bundle-v1";
 const EQUATION_KEYWORD_PREFIX = "eqid:";
+const DOCUMENT_BLOCK_SCHEMA_VERSION = "block-editor-v1";
+
+function normalizeDocumentBlocksJson(value) {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === "object" ? value : null;
+}
 
 function normalizeEquationIds(ids = []) {
   return Array.from(new Set((Array.isArray(ids) ? ids : [])
@@ -262,6 +278,34 @@ async function supportsDocumentSourceVisualFields(client) {
 
   documentSourceVisualFieldsSupported = !error;
   return documentSourceVisualFieldsSupported;
+}
+
+async function supportsDocumentBlockFields(client) {
+  if (typeof documentBlockFieldsSupported === "boolean") {
+    return documentBlockFieldsSupported;
+  }
+
+  const { error } = await client
+    .from("documents")
+    .select("content_template_id, content_blocks_json, content_blocks_schema_version")
+    .limit(1);
+
+  documentBlockFieldsSupported = !error;
+  return documentBlockFieldsSupported;
+}
+
+async function supportsDocumentBlockTemplateLibrary(client) {
+  if (typeof documentBlockTemplateLibrarySupported === "boolean") {
+    return documentBlockTemplateLibrarySupported;
+  }
+
+  const { error } = await client
+    .from("document_block_templates")
+    .select("id")
+    .limit(1);
+
+  documentBlockTemplateLibrarySupported = !error;
+  return documentBlockTemplateLibrarySupported;
 }
 
 async function supportsGeneratedDocumentExports(client) {
@@ -635,6 +679,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
   const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
   const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
+  const hasDocumentBlockFields = await supportsDocumentBlockFields(client);
   const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
   const hasTopicTagColor = await supportsTopicTagColor(client);
   const hasWorkspaceColor = await supportsWorkspaceColor(client);
@@ -703,6 +748,13 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const docs = docsRes.data || [];
   const docIds = docs.map((row) => row.id);
 
+  const blockMetaRes = docIds.length && hasDocumentBlockFields
+    ? await client
+      .from("documents")
+      .select("id, content_template_id, content_blocks_json, content_blocks_schema_version")
+      .in("id", docIds)
+    : { data: [], error: null };
+
   const docTagsRes = docIds.length
     ? await client
       .from("document_tags")
@@ -719,6 +771,7 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
 
   if (docTagsRes.error) throw docTagsRes.error;
   if (docFoldersRes.error) throw docFoldersRes.error;
+  if (blockMetaRes.error) throw blockMetaRes.error;
 
   const generatedExportRes = docIds.length && hasGeneratedDocumentExports
     ? await client
@@ -768,6 +821,15 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     exportFormatsByDocId.set(row.document_id, list);
   }
 
+  const blockMetaByDocId = new Map();
+  for (const row of blockMetaRes.data || []) {
+    blockMetaByDocId.set(row.id, {
+      contentTemplateId: row.content_template_id || "",
+      contentBlocksJson: normalizeDocumentBlocksJson(row.content_blocks_json),
+      contentBlocksSchemaVersion: String(row.content_blocks_schema_version || "").trim() || DOCUMENT_BLOCK_SCHEMA_VERSION
+    });
+  }
+
   const docsBySubject = new Map();
   for (const doc of docs) {
     const list = docsBySubject.get(doc.subject_id) || [];
@@ -786,10 +848,21 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
     const sourceMimeType = String(doc.source_mime_type || "").trim().toLowerCase();
     const sourceContentBase64 = String(doc.source_content_base64 || "");
     const sourceRenderHtml = String(doc.source_render_html || "");
+    const blockMeta = blockMetaByDocId.get(doc.id) || {
+      contentTemplateId: "",
+      contentBlocksJson: null,
+      contentBlocksSchemaVersion: ""
+    };
     const requiresReview = Boolean(doc.extraction_requires_review || reviewStatus !== "approved");
     const availableFormats = sourceType === "generated"
       ? Array.from(new Set([...(bundle ? Object.keys(bundle.downloads || {}) : []), ...(exportFormatsByDocId.get(doc.id) || []), "txt"]))
-      : [getExtensionFromName(doc.name, "txt")];
+      : Array.from(new Set([
+        getExtensionFromName(doc.name, "txt"),
+        "html",
+        "md",
+        "original",
+        ...(blockMeta.contentBlocksJson ? ["blocks-json"] : [])
+      ]));
     const displayContent = bundle?.plainText || doc.content;
     list.push({
       id: doc.id,
@@ -810,6 +883,9 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
       sourceMimeType,
       sourceContentBase64,
       sourceRenderHtml,
+      contentTemplateId: blockMeta.contentTemplateId,
+      contentBlocksJson: blockMeta.contentBlocksJson,
+      contentBlocksSchemaVersion: blockMeta.contentBlocksSchemaVersion,
       requiresReview,
       reviewedAt: doc.reviewed_at || "",
       availableFormats,
@@ -1923,9 +1999,14 @@ export async function getGeneratedDocumentDownload(documentId, format) {
 
 export async function getUploadedDocumentDownload(documentId, format = "") {
   const client = createSupabaseAdminClient();
+  const hasDocumentBlockFields = await supportsDocumentBlockFields(client);
+  const hasTemplateLibrary = await supportsDocumentBlockTemplateLibrary(client);
+  const documentSelect = hasDocumentBlockFields
+    ? "id, name, content, source_mime_type, source_content_base64, source_render_html, content_template_id, content_blocks_json, content_blocks_schema_version"
+    : "id, name, content, source_mime_type, source_content_base64, source_render_html";
   const { data: document, error } = await client
     .from("documents")
-    .select("id, name, content, source_mime_type, source_content_base64, source_render_html")
+    .select(documentSelect)
     .eq("id", documentId)
     .maybeSingle();
 
@@ -1938,9 +2019,50 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
   const sourceMimeType = String(document.source_mime_type || "").trim().toLowerCase();
   const sourceContentBase64 = String(document.source_content_base64 || "").trim();
   const sourceRenderHtml = String(document.source_render_html || "").trim();
+  const contentTemplateId = String(document.content_template_id || "").trim();
+  const contentBlocksJson = normalizeDocumentBlocksJson(document.content_blocks_json);
+  const contentBlocksSchemaVersion = String(document.content_blocks_schema_version || "").trim() || DOCUMENT_BLOCK_SCHEMA_VERSION;
   const bundle = parseGeneratedDocumentBundle(document.content);
   const content = bundle?.plainText || String(document.content || "");
   const mediaMap = await extractDocxMediaDataUrls(sourceContentBase64);
+
+  if (requestedFormat === "blocks-json" || requestedFormat === "block-json" || requestedFormat === "json-tree") {
+    const selectedTemplate = contentTemplateId && hasTemplateLibrary
+      ? await client
+        .from("document_block_templates")
+        .select("id, name, description, container_class, block_classes, css")
+        .eq("id", contentTemplateId)
+        .maybeSingle()
+      : { data: null, error: null };
+    if (selectedTemplate.error) throw selectedTemplate.error;
+
+    const payload = {
+      schemaVersion: contentBlocksSchemaVersion,
+      document: {
+        id: document.id,
+        name: document.name,
+        templateId: contentTemplateId || null,
+        blocks: contentBlocksJson,
+        sourceRenderHtml,
+        plainText: content
+      },
+      template: selectedTemplate.data ? {
+        id: selectedTemplate.data.id,
+        name: selectedTemplate.data.name,
+        description: selectedTemplate.data.description || "",
+        containerClass: selectedTemplate.data.container_class || "",
+        blockClasses: selectedTemplate.data.block_classes || {},
+        css: selectedTemplate.data.css || ""
+      } : null
+    };
+
+    return {
+      format: "blocks-json",
+      fileName: withFileExtension(document.name || "document", "blocks.json"),
+      mimeType: "application/json",
+      contentBase64: Buffer.from(JSON.stringify(payload, null, 2), "utf8").toString("base64")
+    };
+  }
 
   if (requestedFormat === "editable-html") {
     const baseHtml = sourceRenderHtml || markdownToBasicHtml(content);
@@ -1997,6 +2119,97 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
     mimeType: getMimeTypeForExtension(extension),
     contentBase64: Buffer.from(content, "utf8").toString("base64")
   };
+}
+
+export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserId()) {
+  const client = createSupabaseAdminClient();
+  const supported = await supportsDocumentBlockTemplateLibrary(client);
+  if (!supported) {
+    throw new Error("Document block templates require migration 202608160001_add_document_block_editor_templates.sql to be applied.");
+  }
+
+  const { data, error } = await client
+    .from("document_block_templates")
+    .select("id, owner_user_id, name, description, container_class, block_classes, css, source_document_id, created_at, updated_at")
+    .eq("owner_user_id", ownerUserId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => ({
+    id: row.id,
+    ownerUserId: row.owner_user_id,
+    name: row.name,
+    description: row.description || "",
+    containerClass: row.container_class || "",
+    blockClasses: row.block_classes && typeof row.block_classes === "object" ? row.block_classes : {},
+    css: row.css || "",
+    sourceDocumentId: row.source_document_id || "",
+    createdAt: row.created_at || "",
+    updatedAt: row.updated_at || ""
+  }));
+}
+
+export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
+  const client = createSupabaseAdminClient();
+  const supported = await supportsDocumentBlockTemplateLibrary(client);
+  if (!supported) {
+    throw new Error("Document block templates require migration 202608160001_add_document_block_editor_templates.sql to be applied.");
+  }
+
+  const templateId = String(payload.id || "").trim();
+  const nowIso = new Date().toISOString();
+  const templateName = String(payload.name || "").trim() || "Untitled Template";
+  const row = {
+    owner_user_id: ownerUserId,
+    name: templateName,
+    description: String(payload.description || "").trim(),
+    container_class: String(payload.containerClass || "").trim(),
+    block_classes: payload.blockClasses && typeof payload.blockClasses === "object" ? payload.blockClasses : {},
+    css: String(payload.css || ""),
+    source_document_id: String(payload.sourceDocumentId || "").trim() || null,
+    updated_at: nowIso
+  };
+
+  if (templateId) {
+    const { error: updateError } = await client
+      .from("document_block_templates")
+      .update(row)
+      .eq("id", templateId)
+      .eq("owner_user_id", ownerUserId);
+    if (updateError) throw updateError;
+  } else {
+    row.created_at = nowIso;
+    const { error: insertError } = await client
+      .from("document_block_templates")
+      .insert(row);
+    if (insertError) throw insertError;
+  }
+
+  const templates = await listDocumentBlockTemplates(ownerUserId);
+  return templates.find((item) => item.name === templateName) || templates[0] || null;
+}
+
+export async function deleteDocumentBlockTemplate(ownerUserId, templateId) {
+  const client = createSupabaseAdminClient();
+  const supported = await supportsDocumentBlockTemplateLibrary(client);
+  if (!supported) {
+    throw new Error("Document block templates require migration 202608160001_add_document_block_editor_templates.sql to be applied.");
+  }
+
+  const id = String(templateId || "").trim();
+  if (!id) {
+    throw new Error("Template id is required.");
+  }
+
+  const { error } = await client
+    .from("document_block_templates")
+    .delete()
+    .eq("id", id)
+    .eq("owner_user_id", ownerUserId);
+  if (error) throw error;
+
+  return { deleted: true, id };
 }
 
 export async function renameDocument(documentId, nextName) {
@@ -2067,6 +2280,8 @@ export async function updateDocumentMeta(subjectId, documentId, options = {}) {
 export async function updateDocumentContent(subjectId, documentId, options = {}) {
   const client = createSupabaseAdminClient();
   const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
+  const hasDocumentBlockFields = await supportsDocumentBlockFields(client);
+  const hasTemplateLibrary = await supportsDocumentBlockTemplateLibrary(client);
   const hasDocumentChunks = await supportsDocumentChunks(client);
   const hasDocumentChunkEmbeddings = hasDocumentChunks ? await supportsDocumentChunkEmbeddings(client) : false;
 
@@ -2075,6 +2290,11 @@ export async function updateDocumentContent(subjectId, documentId, options = {})
     : "";
   const correctedContentOption = typeof options?.correctedContent === "string" ? options.correctedContent.trim() : "";
   const correctedContent = correctedContentOption || (correctedHtml ? htmlToPlainText(correctedHtml) : "");
+  const hasTemplateInPayload = Object.prototype.hasOwnProperty.call(options || {}, "contentTemplateId");
+  const hasBlocksInPayload = Object.prototype.hasOwnProperty.call(options || {}, "contentBlocksJson");
+  const contentTemplateId = String(options?.contentTemplateId || "").trim();
+  const contentBlocksJson = normalizeDocumentBlocksJson(options?.contentBlocksJson);
+  const contentBlocksSchemaVersion = String(options?.contentBlocksSchemaVersion || DOCUMENT_BLOCK_SCHEMA_VERSION).trim() || DOCUMENT_BLOCK_SCHEMA_VERSION;
 
   if (!correctedContent && !correctedHtml) {
     throw new Error("No content update provided.");
@@ -2102,6 +2322,29 @@ export async function updateDocumentContent(subjectId, documentId, options = {})
 
   if (hasDocumentSourceVisualFields && correctedHtml) {
     updatePayload.source_render_html = correctedHtml;
+  }
+
+  if (hasDocumentBlockFields) {
+    if (hasTemplateInPayload) {
+      if (contentTemplateId && hasTemplateLibrary) {
+        const { data: template, error: templateError } = await client
+          .from("document_block_templates")
+          .select("id")
+          .eq("id", contentTemplateId)
+          .maybeSingle();
+        if (templateError) throw templateError;
+        updatePayload.content_template_id = template?.id || null;
+      } else if (contentTemplateId) {
+        throw new Error("Document block templates require migration 202608160001_add_document_block_editor_templates.sql to be applied.");
+      } else {
+        updatePayload.content_template_id = null;
+      }
+    }
+
+    if (hasBlocksInPayload) {
+      updatePayload.content_blocks_json = contentBlocksJson;
+      updatePayload.content_blocks_schema_version = contentBlocksJson ? contentBlocksSchemaVersion : null;
+    }
   }
 
   const { error: updateError } = await client
@@ -2167,7 +2410,10 @@ export async function updateDocumentContent(subjectId, documentId, options = {})
     documentId,
     corrected: true,
     content: correctedContent,
-    sourceRenderHtml: correctedHtml
+    sourceRenderHtml: correctedHtml,
+    contentTemplateId: hasDocumentBlockFields ? (updatePayload.content_template_id || null) : null,
+    contentBlocksJson: hasDocumentBlockFields ? (contentBlocksJson || null) : null,
+    contentBlocksSchemaVersion: hasDocumentBlockFields ? contentBlocksSchemaVersion : null
   };
 }
 

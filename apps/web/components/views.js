@@ -1210,6 +1210,7 @@ export function WorkspacesManagerView({
   const editContentEditorRef = useRef(null);
   const editContentParagraphHtmlEditorRef = useRef(null);
   const editContentTableHtmlEditorRef = useRef(null);
+  const templateFormatHtmlEditorRef = useRef(null);
   const editContentImageInputRef = useRef(null);
   const editContentWorkingHtmlRef = useRef("");
   const [activeFolderId, setActiveFolderId] = useState("");
@@ -1254,6 +1255,8 @@ export function WorkspacesManagerView({
   const [templateFolders, setTemplateFolders] = useState(defaultTemplateFolders());
   const [activeTemplateFolderId, setActiveTemplateFolderId] = useState("tpl-folder-root");
   const [activeTemplateEditId, setActiveTemplateEditId] = useState("");
+  const [activeTemplateFormatKey, setActiveTemplateFormatKey] = useState("");
+  const [templateSearchText, setTemplateSearchText] = useState("");
   const [templateFormatTypeDraft, setTemplateFormatTypeDraft] = useState("paragraph");
   const [templateFormatNameDraft, setTemplateFormatNameDraft] = useState("");
   const [templateFormatClassDraft, setTemplateFormatClassDraft] = useState("");
@@ -1535,6 +1538,23 @@ export function WorkspacesManagerView({
       setActiveTemplateEditId(String(editContentTemplates[0].id || ""));
     }
   }, [editContentTemplates, activeTemplateEditId]);
+
+  useEffect(() => {
+    const active = activeTemplateEditorItem();
+    if (!active) {
+      setActiveTemplateFormatKey("");
+      return;
+    }
+    const blocks = templateFormatBlocks(active);
+    if (!blocks.length) {
+      setActiveTemplateFormatKey("");
+      return;
+    }
+    const exists = blocks.some((item) => item.key === activeTemplateFormatKey);
+    if (!exists) {
+      setActiveTemplateFormatKey(String(blocks[0].key || ""));
+    }
+  }, [editContentTemplates, activeTemplateEditId, activeTemplateFormatKey]);
 
   useEffect(() => {
     if (!Array.isArray(editContentBlocks) || !editContentBlocks.length) {
@@ -2256,9 +2276,101 @@ export function WorkspacesManagerView({
     return map;
   }
 
-  function templatesInFolder(folderId = "") {
+  function templateFolderDescendants(folderId = "") {
     const target = String(folderId || "").trim() || "tpl-folder-root";
-    return editContentTemplates.filter((item) => String(item.folderId || "tpl-folder-root") === target);
+    const byParent = templateFoldersByParent();
+    const queue = [target];
+    const seen = new Set([target]);
+    while (queue.length) {
+      const current = queue.shift();
+      const children = byParent.get(current) || [];
+      for (const child of children) {
+        if (seen.has(child.id)) continue;
+        seen.add(child.id);
+        queue.push(child.id);
+      }
+    }
+    return seen;
+  }
+
+  function templatesInFolder(folderId = "") {
+    const descendants = templateFolderDescendants(folderId);
+    const search = String(templateSearchText || "").trim().toLowerCase();
+    return editContentTemplates.filter((item) => {
+      const inScope = descendants.has(String(item.folderId || "tpl-folder-root"));
+      if (!inScope) return false;
+      if (!search) return true;
+      return String(item.name || "").toLowerCase().includes(search);
+    });
+  }
+
+  function templateFormatBlocks(template = null) {
+    const active = template || activeTemplateEditorItem();
+    if (!active) return [];
+    const blocks = [];
+    for (const typeDef of BLOCK_BUILDING_TYPES) {
+      const list = Array.isArray(active.blockFormats?.[typeDef.value]) ? active.blockFormats[typeDef.value] : [];
+      list.forEach((entry, index) => {
+        const name = String(entry?.name || `${typeDef.label} ${index + 1}`);
+        blocks.push({
+          key: `${typeDef.value}::${name}`,
+          type: typeDef.value,
+          typeLabel: typeDef.label,
+          name,
+          className: String(entry?.className || ""),
+          htmlTemplate: String(entry?.htmlTemplate || "")
+        });
+      });
+    }
+    return blocks;
+  }
+
+  function parseTemplateFormatKey(key = "") {
+    const source = String(key || "");
+    const splitIndex = source.indexOf("::");
+    if (splitIndex < 0) return { type: "", name: "" };
+    return {
+      type: source.slice(0, splitIndex),
+      name: source.slice(splitIndex + 2)
+    };
+  }
+
+  async function updateTemplateFormatEntry(templateId, formatKey, patch = {}) {
+    const template = editContentTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    const { type, name } = parseTemplateFormatKey(formatKey);
+    if (!type || !name) return;
+    const formats = Array.isArray(template.blockFormats?.[type]) ? template.blockFormats[type] : [];
+    const nextFormats = formats.map((entry) => {
+      const entryName = String(entry?.name || "");
+      if (entryName !== name) return entry;
+      return {
+        ...entry,
+        ...patch
+      };
+    });
+    const nextBlockFormats = {
+      ...(template.blockFormats || {}),
+      [type]: nextFormats
+    };
+    await persistTemplatePatch(templateId, { blockFormats: nextBlockFormats });
+    const nextName = String(patch?.name || name || "");
+    setActiveTemplateFormatKey(`${type}::${nextName}`);
+  }
+
+  function runTemplateFormatHtmlCommand(command, value = null) {
+    const editor = templateFormatHtmlEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    try {
+      document.execCommand(command, false, value);
+      const active = activeTemplateEditorItem();
+      if (!active || !activeTemplateFormatKey) return;
+      const htmlTemplate = String(editor.innerHTML || "");
+      updateTemplateFormatEntry(active.id, activeTemplateFormatKey, { htmlTemplate });
+    } catch {
+      // Ignore unsupported commands.
+    }
   }
 
   function addTemplateFolder() {
@@ -2354,12 +2466,14 @@ export function WorkspacesManagerView({
       setEditContentStatusMessage("Format name already exists for this block type.");
       return;
     }
+    const typeLabel = BLOCK_BUILDING_TYPES.find((item) => item.value === type)?.label || type;
+    const defaultHtmlTemplate = String(templateFormatHtmlDraft || "").trim() || `${typeLabel} - ${name}`;
     const blockFormats = {
       ...(active.blockFormats || {}),
       [type]: [...current, {
         name,
         className: String(templateFormatClassDraft || "").trim(),
-        htmlTemplate: String(templateFormatHtmlDraft || "")
+        htmlTemplate: defaultHtmlTemplate
       }]
     };
     await persistTemplatePatch(active.id, { blockFormats });
@@ -4609,6 +4723,8 @@ export function WorkspacesManagerView({
                       };
 
                       const visibleTemplates = templatesInFolder(activeTemplateFolderId);
+                      const formatBlocks = templateFormatBlocks(activeTemplate);
+                      const selectedFormatBlock = formatBlocks.find((item) => item.key === activeTemplateFormatKey) || formatBlocks[0] || null;
 
                       return (
                         <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "14px" }}>
@@ -4625,6 +4741,11 @@ export function WorkspacesManagerView({
                               <h5 style={{ margin: 0 }}>Templates</h5>
                               <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>+ New Template</button>
                             </div>
+
+                            <label className="search full" style={{ marginBottom: "10px" }}>
+                              <span>Search templates</span>
+                              <input className="input" value={templateSearchText} onChange={(event) => setTemplateSearchText(event.target.value)} placeholder="Find template..." />
+                            </label>
 
                             <div className="chip-wrap" style={{ marginBottom: "10px" }}>
                               {visibleTemplates.map((template) => (
@@ -4671,46 +4792,105 @@ export function WorkspacesManagerView({
                                   <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
                                 </div>
 
-                                <label className="search full" style={{ marginBottom: "8px" }}>
-                                  <span>Template CSS</span>
-                                  <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
-                                </label>
-                                <div className="inline-actions">
-                                  <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Save Template Styles</button>
-                                </div>
-
                                 <article className="selection-box" style={{ marginTop: "12px" }}>
-                                  <h6 style={{ marginTop: 0 }}>Block Formats (building block -> format name -> format spec)</h6>
-                                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                                  <h6 style={{ marginTop: 0 }}>Template Block Editor</h6>
+                                  <p className="hint">Each block below is a format definition: Building Block Type + Format Name + Format Specification.</p>
+
+                                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                                     <select className="input" value={templateFormatTypeDraft} onChange={(event) => setTemplateFormatTypeDraft(event.target.value)}>
                                       {BLOCK_BUILDING_TYPES.map((option) => (
                                         <option key={`fmt-type-${option.value}`} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
-                                    <input className="input" placeholder="Format name" value={templateFormatNameDraft} onChange={(event) => setTemplateFormatNameDraft(event.target.value)} />
+                                    <input className="input" placeholder="Format name (Type 1, Citation, etc.)" value={templateFormatNameDraft} onChange={(event) => setTemplateFormatNameDraft(event.target.value)} />
                                     <input className="input" placeholder="Class name" value={templateFormatClassDraft} onChange={(event) => setTemplateFormatClassDraft(event.target.value)} />
-                                    <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Format</button>
+                                    <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Block Format</button>
                                   </div>
-                                  <label className="search full" style={{ marginTop: "8px" }}>
-                                    <span>HTML template (optional)</span>
-                                    <textarea className="input" rows={3} value={templateFormatHtmlDraft} onChange={(event) => setTemplateFormatHtmlDraft(event.target.value)} />
-                                  </label>
 
-                                  <div className="chip-stack" style={{ marginTop: "10px" }}>
-                                    {BLOCK_BUILDING_TYPES.map((typeDef) => {
-                                      const formats = Array.isArray(activeTemplate.blockFormats?.[typeDef.value]) ? activeTemplate.blockFormats[typeDef.value] : [];
-                                      return (
-                                        <div key={`fmt-list-${typeDef.value}`} className="selection-box" style={{ margin: 0 }}>
-                                          <strong>{typeDef.label}</strong>
-                                          {formats.map((formatItem) => (
-                                            <div key={`fmt-${typeDef.value}-${formatItem.name}`} className="inline-actions" style={{ justifyContent: "space-between", marginTop: "6px" }}>
-                                              <span className="hint">{formatItem.name} · class: {formatItem.className || "(none)"}</span>
-                                              <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(typeDef.value, formatItem.name)}>Remove</button>
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "12px" }}>
+                                    <div className="luna-canvas-scroll" style={{ maxHeight: "420px" }}>
+                                      {formatBlocks.map((entry) => {
+                                        const selected = entry.key === (selectedFormatBlock?.key || "");
+                                        return (
+                                          <button
+                                            key={`fmt-block-${entry.key}`}
+                                            type="button"
+                                            className={selected ? "luna-canvas-block active" : "luna-canvas-block"}
+                                            onClick={() => setActiveTemplateFormatKey(entry.key)}
+                                            style={{ width: "100%", textAlign: "left", background: "#fff" }}
+                                          >
+                                            <strong>{entry.typeLabel} - {entry.name}</strong>
+                                            <p className="hint" style={{ margin: "4px 0 0" }}>{entry.className || "(no class)"}</p>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+
+                                    <aside className="luna-inspector">
+                                      {selectedFormatBlock ? (
+                                        <>
+                                          <h6 style={{ marginTop: 0 }}>Format Block</h6>
+                                          <label className="search full">
+                                            <span>Building Block Type</span>
+                                            <select className="input" value={selectedFormatBlock.type} disabled>
+                                              {BLOCK_BUILDING_TYPES.map((option) => (
+                                                <option key={`fmt-lock-${option.value}`} value={option.value}>{option.label}</option>
+                                              ))}
+                                            </select>
+                                          </label>
+                                          <label className="search full" style={{ marginTop: "8px" }}>
+                                            <span>Format Name</span>
+                                            <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+                                              <span className="scope-chip">{selectedFormatBlock.name}</span>
+                                              <button
+                                                className="table-btn"
+                                                type="button"
+                                                onClick={async () => {
+                                                  const nextName = String(window.prompt("Format name", selectedFormatBlock.name) || "").trim();
+                                                  if (!nextName) return;
+                                                  await updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { name: nextName });
+                                                }}
+                                              >
+                                                Rename
+                                              </button>
                                             </div>
-                                          ))}
-                                        </div>
-                                      );
-                                    })}
+                                          </label>
+                                          <label className="search full" style={{ marginTop: "8px" }}>
+                                            <span>Class Name</span>
+                                            <input
+                                              className="input"
+                                              value={selectedFormatBlock.className}
+                                              onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { className: event.target.value })}
+                                            />
+                                          </label>
+
+                                          <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("bold")}><b>B</b></button>
+                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("italic")}><i>I</i></button>
+                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("underline")}><u>U</u></button>
+                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("foreColor", window.prompt("Text color", "#1f2937") || "")}>Text Color</button>
+                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("hiliteColor", window.prompt("Background color", "#f8fafc") || "")}>Background</button>
+                                          </div>
+
+                                          <label className="search full" style={{ marginTop: "8px" }}>
+                                            <span>Format Spec HTML (whole block)</span>
+                                            <div
+                                              ref={templateFormatHtmlEditorRef}
+                                              className="doc-preview"
+                                              style={{ minHeight: "120px", background: "#fff" }}
+                                              contentEditable
+                                              suppressContentEditableWarning
+                                              onInput={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { htmlTemplate: String(event.currentTarget.innerHTML || "") })}
+                                              dangerouslySetInnerHTML={{ __html: String(selectedFormatBlock.htmlTemplate || `${selectedFormatBlock.typeLabel} - ${selectedFormatBlock.name}`) }}
+                                            />
+                                          </label>
+
+                                          <div className="inline-actions" style={{ marginTop: "10px" }}>
+                                            <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(selectedFormatBlock.type, selectedFormatBlock.name)}>Delete Format</button>
+                                          </div>
+                                        </>
+                                      ) : <p className="hint">Add a block format to start editing.</p>}
+                                    </aside>
                                   </div>
                                 </article>
 
@@ -5309,21 +5489,9 @@ export function WorkspacesManagerView({
                       </select>
                     </label>
                     <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
-                    <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Apply Template Changes</button>
                     <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
                     <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
                   </div>
-                  <label className="search full" style={{ marginTop: "8px" }}>
-                    <span>Template CSS</span>
-                    <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
-                  </label>
-                  <label className="search full" style={{ marginTop: "8px" }}>
-                    <span>
-                      Template Block HTML Repository (JSON by block type with placeholders like
-                      {" {{text}}, {{html}}, {{latex}}, {{table}}, {{code}}"})
-                    </span>
-                    <textarea className="input" rows={8} value={editContentTemplateRawHtmlDraft} onChange={(event) => setEditContentTemplateRawHtmlDraft(event.target.value)} />
-                  </label>
                 </div>
 
                 <div className="luna-canvas-grid" style={{ marginTop: "10px" }}>

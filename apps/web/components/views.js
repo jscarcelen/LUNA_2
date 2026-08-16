@@ -106,7 +106,6 @@ const BLOCK_TYPE_OPTIONS = [
   { value: "heading3", label: "Heading 3" },
   { value: "paragraph", label: "Paragraph" },
   { value: "bullet_list", label: "Bullet List" },
-  { value: "inline_formula", label: "In-text Formula" },
   { value: "standalone_formula", label: "Standalone Formula" },
   { value: "table", label: "Table" },
   { value: "image", label: "Image" },
@@ -130,12 +129,6 @@ function createDefaultBlock(type = "paragraph") {
   }
   if (type === "bullet_list") {
     block.items = [""];
-    return block;
-  }
-  if (type === "inline_formula") {
-    block.textBefore = "";
-    block.latex = "";
-    block.textAfter = "";
     return block;
   }
   if (type === "standalone_formula") {
@@ -207,13 +200,7 @@ function tableTextToRows(value = "") {
 }
 
 function inlineFormulaFromText(text = "") {
-  const match = String(text || "").match(/^(.*?)\$([^$]+)\$(.*?)$/);
-  if (!match) return null;
-  return {
-    textBefore: String(match[1] || ""),
-    latex: String(match[2] || "").trim(),
-    textAfter: String(match[3] || "")
-  };
+  return null;
 }
 
 function normalizeNodeText(node) {
@@ -318,6 +305,13 @@ function htmlToBlocks(htmlSource = "") {
       }
 
       if (tag === "pre" || tag === "code") {
+        const codeText = String(node.textContent || "").trim();
+        const formulaLikeCode = codeText.replace(/^```[a-z]*\n?/i, "").replace(/```$/i, "").trim();
+        const displayMatch = formulaLikeCode.match(/^\$\$([\s\S]+)\$\$$/);
+        if (displayMatch || looksLikeStandaloneFormula(formulaLikeCode)) {
+          pushBlock({ type: "standalone_formula", latex: String((displayMatch?.[1] || formulaLikeCode) || "").replace(/^\$\$|\$\$$/g, "").trim() });
+          return;
+        }
         pushBlock({
           type: "code",
           language: "text",
@@ -353,12 +347,6 @@ function htmlToBlocks(htmlSource = "") {
         return;
       }
 
-      const inline = inlineFormulaFromText(text);
-      if (inline) {
-        pushBlock({ type: "inline_formula", ...inline });
-        return;
-      }
-
       pushBlock({ type: "paragraph", text });
     };
 
@@ -381,44 +369,66 @@ function blockToHtml(block = {}, blockClass = "") {
   const classAttr = blockClass ? ` class="${escapeHtml(blockClass)}"` : "";
   const blockIdAttr = ` data-block-id="${escapeHtml(block.id || createBlockId())}"`;
   const type = String(block.type || "paragraph");
+  const templateMap = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : null;
 
-  if (type === "heading1") return `<h1${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`;
-  if (type === "heading2") return `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`;
-  if (type === "heading3") return `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`;
-  if (type === "paragraph") return `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`;
+  function fillTemplate(template = "", vars = {}) {
+    const source = String(template || "");
+    if (!source.trim()) return "";
+    return source.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key) => {
+      const value = Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : "";
+      return String(value ?? "");
+    });
+  }
+
+  function renderWithTemplate(templateKey, fallbackHtml, vars = {}) {
+    const template = String(templateMap?.[templateKey] || "");
+    if (!template.trim()) return fallbackHtml;
+    return fillTemplate(template, vars);
+  }
+
+  if (type === "heading1") return renderWithTemplate("heading1", `<h1${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`, { text: escapeHtml(block.text || "") });
+  if (type === "heading2") return renderWithTemplate("heading2", `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`, { text: escapeHtml(block.text || "") });
+  if (type === "heading3") return renderWithTemplate("heading3", `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`, { text: escapeHtml(block.text || "") });
+  if (type === "paragraph") {
+    const htmlValue = String(block.html || "").trim();
+    if (htmlValue) {
+      return renderWithTemplate("paragraph", `<div${classAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
+    }
+    return renderWithTemplate("paragraph", `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`, { text: escapeHtml(block.text || "") });
+  }
   if (type === "bullet_list") {
     const items = Array.isArray(block.items) ? block.items : [];
     const li = items.map((item) => `<li>${escapeHtml(item || "")}</li>`).join("");
-    return `<ul${classAttr}${blockIdAttr}>${li}</ul>`;
+    return renderWithTemplate("bullet_list", `<ul${classAttr}${blockIdAttr}>${li}</ul>`, { items: li });
   }
-  if (type === "inline_formula") {
-    const textBefore = escapeHtml(block.textBefore || "");
-    const latex = escapeHtml(block.latex || "");
-    const textAfter = escapeHtml(block.textAfter || "");
-    return `<p${classAttr}${blockIdAttr}>${textBefore}<span data-inline-latex="true">$${latex}$</span>${textAfter}</p>`;
-  }
-  if (type === "standalone_formula") return `<div${classAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`;
+  if (type === "standalone_formula") return renderWithTemplate("standalone_formula", `<div${classAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`, { latex: escapeHtml(block.latex || "\\placeholder") });
   if (type === "table") {
+    const tableHtml = String(block.tableHtml || "").trim();
+    if (tableHtml) {
+      const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${blockIdAttr}$1`);
+      return renderWithTemplate("table", withAttrs, { table: withAttrs });
+    }
     const rows = Array.isArray(block.rows) ? block.rows : [];
     const rowHtml = rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("");
-    return `<table${classAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
+    const table = `<table${classAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
+    return renderWithTemplate("table", table, { table, rows: rowHtml });
   }
   if (type === "image") {
     const src = escapeHtml(block.src || "");
     const alt = escapeHtml(block.alt || "");
     const caption = String(block.caption || "").trim();
     const figureCaption = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "";
-    return `<figure${classAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`;
+    return renderWithTemplate("image", `<figure${classAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`, { src, alt, caption: escapeHtml(caption) });
   }
   if (type === "url") {
     const href = escapeHtml(block.href || "");
     const text = escapeHtml(block.text || block.href || "");
-    return `<p${classAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`;
+    return renderWithTemplate("url", `<p${classAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`, { href, text });
   }
   if (type === "code") {
     const language = escapeHtml(block.language || "text");
     const code = escapeHtml(block.code || "");
-    return `<pre${classAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`;
+    return renderWithTemplate("code", `<pre${classAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`, { language, code });
   }
 
   return `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</p>`;
@@ -435,11 +445,30 @@ function blocksToHtml(blocks = [], template = null) {
 
   const htmlBlocks = safeBlocks.map((block) => {
     const className = String(blockClasses[String(block.type || "paragraph")] || "");
-    return blockToHtml(block, className);
+    return blockToHtml({
+      ...block,
+      __templateHtml: template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object"
+        ? template.blockHtmlTemplates
+        : null
+    }, className);
   }).join("\n");
 
   const styleTag = css ? `<style data-luna-template="${escapeHtml(activeTemplate?.id || "template_default")}">${css}</style>` : "";
   return `${styleTag}<div class="${escapeHtml(containerClass)}" data-template-id="${escapeHtml(activeTemplate?.id || "template_default")}">${htmlBlocks}</div>`;
+}
+
+function normalizeBlocksForEditor(blocks = []) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  return list.map((block) => {
+    const type = String(block?.type || "paragraph");
+    if (type !== "inline_formula") return block;
+    const inlineText = `${String(block?.textBefore || "")}$${String(block?.latex || "")}$${String(block?.textAfter || "")}`;
+    return {
+      id: String(block?.id || createBlockId()),
+      type: "paragraph",
+      text: inlineText
+    };
+  });
 }
 
 function downloadBase64File(base64, filename, mimeType) {
@@ -1041,6 +1070,8 @@ export function WorkspacesManagerView({
   const sourceViewerRef = useRef(null);
   const sourceEditorRef = useRef(null);
   const editContentEditorRef = useRef(null);
+  const editContentParagraphHtmlEditorRef = useRef(null);
+  const editContentTableHtmlEditorRef = useRef(null);
   const editContentImageInputRef = useRef(null);
   const editContentWorkingHtmlRef = useRef("");
   const [activeFolderId, setActiveFolderId] = useState("");
@@ -1084,8 +1115,12 @@ export function WorkspacesManagerView({
   const [editContentTemplates, setEditContentTemplates] = useState(DEFAULT_BLOCK_TEMPLATES);
   const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
   const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
+  const [editContentTemplateRawHtmlDraft, setEditContentTemplateRawHtmlDraft] = useState("{}");
   const [editContentSelectedBlockId, setEditContentSelectedBlockId] = useState("");
   const [editContentMenuBlockId, setEditContentMenuBlockId] = useState("");
+  const [editContentMenuAddTypeByBlockId, setEditContentMenuAddTypeByBlockId] = useState({});
+  const [editContentPendingImageBlockId, setEditContentPendingImageBlockId] = useState("");
+  const [showInlineLatexInfo, setShowInlineLatexInfo] = useState(false);
   const [editContentStatusMessage, setEditContentStatusMessage] = useState("");
   const [editContentFontFamily, setEditContentFontFamily] = useState("Avenir Next");
   const [editContentFontSize, setEditContentFontSize] = useState("16");
@@ -1331,6 +1366,11 @@ export function WorkspacesManagerView({
     const activeTemplate = editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0];
     if (!activeTemplate) return;
     setEditContentTemplateCssDraft(String(activeTemplate.css || ""));
+    try {
+      setEditContentTemplateRawHtmlDraft(JSON.stringify(activeTemplate.blockHtmlTemplates || {}, null, 2));
+    } catch {
+      setEditContentTemplateRawHtmlDraft("{}");
+    }
   }, [editContentTemplateId, editContentTemplates]);
 
   useEffect(() => {
@@ -2038,8 +2078,108 @@ export function WorkspacesManagerView({
     return editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0] || DEFAULT_BLOCK_TEMPLATES[0];
   }
 
+  function parseTemplateRawHtmlDraft() {
+    const source = String(editContentTemplateRawHtmlDraft || "").trim();
+    if (!source) return {};
+    try {
+      const parsed = JSON.parse(source);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      throw new Error("Template HTML JSON must be valid JSON.");
+    }
+  }
+
+  function blockToTextSnapshot(block = {}) {
+    const type = String(block.type || "paragraph");
+    if (type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") {
+      return String(block.text || "");
+    }
+    if (type === "bullet_list") {
+      return (Array.isArray(block.items) ? block.items : []).join("\n");
+    }
+    if (type === "standalone_formula") {
+      return String(block.latex || "");
+    }
+    if (type === "table") {
+      return blockRowsToText(block.rows || []);
+    }
+    if (type === "image") {
+      return String(block.caption || block.alt || block.src || "");
+    }
+    if (type === "url") {
+      return String(block.text || block.href || "");
+    }
+    if (type === "code") {
+      return String(block.code || "");
+    }
+    if (type === "inline_formula") {
+      return `${String(block.textBefore || "")}$${String(block.latex || "")}$${String(block.textAfter || "")}`;
+    }
+    return String(block.text || "");
+  }
+
+  function convertBlockToTypeKeepingContent(block = {}, nextType = "paragraph") {
+    const targetType = String(nextType || "paragraph");
+    const replacement = createDefaultBlock(targetType);
+    replacement.id = String(block.id || replacement.id);
+    const text = blockToTextSnapshot(block);
+
+    if (targetType === "heading1" || targetType === "heading2" || targetType === "heading3" || targetType === "paragraph") {
+      replacement.text = text;
+      if (typeof block.html === "string") {
+        replacement.html = block.html;
+      }
+      return replacement;
+    }
+    if (targetType === "bullet_list") {
+      replacement.items = String(text || "").split(/\n+/).map((item) => item.trim()).filter(Boolean);
+      if (!replacement.items.length) replacement.items = [""];
+      return replacement;
+    }
+    if (targetType === "standalone_formula") {
+      replacement.latex = String((block.latex || text || "") || "").replace(/^\$\$|\$\$$/g, "").trim();
+      return replacement;
+    }
+    if (targetType === "table") {
+      if (Array.isArray(block.rows) && block.rows.length) {
+        replacement.rows = block.rows;
+      } else {
+        const split = String(text || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
+        replacement.rows = split.length
+          ? split.map((line) => [line])
+          : [["Cell 1", "Cell 2"], ["Cell 3", "Cell 4"]];
+      }
+      if (typeof block.tableHtml === "string") {
+        replacement.tableHtml = block.tableHtml;
+      }
+      return replacement;
+    }
+    if (targetType === "image") {
+      replacement.caption = String(block.caption || text || "");
+      replacement.alt = String(block.alt || block.text || "");
+      replacement.src = String(block.src || "");
+      return replacement;
+    }
+    if (targetType === "url") {
+      const href = String(block.href || "").trim();
+      replacement.href = href || "https://";
+      replacement.text = String(block.text || text || href || "Link text");
+      return replacement;
+    }
+    if (targetType === "code") {
+      replacement.code = String(block.code || text || "");
+      replacement.language = String(block.language || "text");
+      return replacement;
+    }
+
+    return {
+      ...replacement,
+      text
+    };
+  }
+
   function syncBlocksFromHtml(htmlSource = "") {
-    const nextBlocks = htmlToBlocks(htmlSource);
+    const nextBlocks = normalizeBlocksForEditor(htmlToBlocks(htmlSource));
     setEditContentBlocks(nextBlocks);
     setEditContentSelectedBlockId(String(nextBlocks[0]?.id || ""));
     setEditContentMenuBlockId("");
@@ -2067,9 +2207,18 @@ export function WorkspacesManagerView({
   }
 
   async function applyTemplateCssDraft() {
+    let blockHtmlTemplates = {};
+    try {
+      blockHtmlTemplates = parseTemplateRawHtmlDraft();
+    } catch (error) {
+      setEditContentStatusMessage(String(error.message || error));
+      return;
+    }
+
     const nextTemplates = editContentTemplates.map((item) => (item.id === editContentTemplateId ? {
       ...item,
-      css: String(editContentTemplateCssDraft || "")
+      css: String(editContentTemplateCssDraft || ""),
+      blockHtmlTemplates
     } : item));
 
     let syncedWithServer = false;
@@ -2094,7 +2243,7 @@ export function WorkspacesManagerView({
       setEditContentTemplates(nextTemplates);
       writeBlockTemplatesToStorage(nextTemplates);
     }
-    setEditContentStatusMessage("Template CSS updated.");
+    setEditContentStatusMessage("Template styles and HTML mapping updated.");
     syncHtmlFromBlocks();
   }
 
@@ -2103,11 +2252,19 @@ export function WorkspacesManagerView({
     const nextName = String(name || "").trim();
     if (!nextName) return;
     const source = activeBlockTemplate();
+    let blockHtmlTemplates = {};
+    try {
+      blockHtmlTemplates = parseTemplateRawHtmlDraft();
+    } catch (error) {
+      setEditContentStatusMessage(String(error.message || error));
+      return;
+    }
     const nextTemplate = {
       ...source,
       id: `template_${Date.now().toString(36)}`,
       name: nextName,
-      css: String(editContentTemplateCssDraft || source?.css || "")
+      css: String(editContentTemplateCssDraft || source?.css || ""),
+      blockHtmlTemplates
     };
     const nextTemplates = [...editContentTemplates, nextTemplate];
 
@@ -2201,8 +2358,7 @@ export function WorkspacesManagerView({
       const list = Array.isArray(previous) ? [...previous] : [];
       const index = list.findIndex((block) => block.id === key);
       if (index < 0) return previous;
-      const replacement = createDefaultBlock(targetType);
-      replacement.id = key;
+      const replacement = convertBlockToTypeKeepingContent(list[index], targetType);
       list[index] = replacement;
       window.requestAnimationFrame(() => {
         syncHtmlFromBlocks(list);
@@ -2413,13 +2569,17 @@ export function WorkspacesManagerView({
     if (!doc || doc.sourceType === "generated") return;
     setIsPreparingEditContent(true);
     setEditContentStatusMessage("");
+    setShowInlineLatexInfo(false);
+    setEditContentPendingImageBlockId("");
+    setEditContentMenuAddTypeByBlockId({});
     const seededHtml = String(doc.sourceRenderHtml || "").trim() || markdownToBasicHtml(String(doc.content || ""));
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
     editContentWorkingHtmlRef.current = seededHtml;
     if (Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length) {
-      setEditContentBlocks(doc.contentBlocksJson);
-      setEditContentSelectedBlockId(String(doc.contentBlocksJson[0]?.id || ""));
+      const normalizedBlocks = normalizeBlocksForEditor(doc.contentBlocksJson);
+      setEditContentBlocks(normalizedBlocks);
+      setEditContentSelectedBlockId(String(normalizedBlocks[0]?.id || ""));
     } else {
       syncBlocksFromHtml(seededHtml);
     }
@@ -2468,6 +2628,27 @@ export function WorkspacesManagerView({
     }
   }
 
+  function runBlockHtmlCommand(target = "paragraph", command, value = null) {
+    const editor = target === "table" ? editContentTableHtmlEditorRef.current : editContentParagraphHtmlEditorRef.current;
+    if (!editor) return;
+    editor.focus();
+    try {
+      document.execCommand(command, false, value);
+      const selectedBlock = getSelectedBlock();
+      if (!selectedBlock) return;
+      if (target === "table") {
+        updateContentBlock(selectedBlock.id, { tableHtml: String(editor.innerHTML || "") });
+      } else {
+        updateContentBlock(selectedBlock.id, {
+          html: String(editor.innerHTML || ""),
+          text: htmlToPlainText(String(editor.innerHTML || ""))
+        });
+      }
+    } catch {
+      // Ignore unsupported commands.
+    }
+  }
+
   function applyEditContentHeading(level = 2) {
     const normalized = Math.min(6, Math.max(1, Number(level || 2)));
     runEditContentCommand("formatBlock", `<h${normalized}>`);
@@ -2513,7 +2694,8 @@ export function WorkspacesManagerView({
     runEditContentCommand("insertImage", nextUrl);
   }
 
-  function openEditContentImageFilePicker() {
+  function openEditContentImageFilePicker(blockId = "") {
+    setEditContentPendingImageBlockId(String(blockId || ""));
     editContentImageInputRef.current?.click();
   }
 
@@ -2530,13 +2712,21 @@ export function WorkspacesManagerView({
     reader.onload = () => {
       const dataUrl = String(reader.result || "");
       if (dataUrl) {
-        runEditContentCommand("insertImage", dataUrl);
-        setEditContentStatusMessage("Inserted image from file.");
+        const blockTarget = String(editContentPendingImageBlockId || "").trim();
+        if (blockTarget && editContentMode === "blocks") {
+          updateContentBlock(blockTarget, { src: dataUrl });
+          setEditContentStatusMessage("Inserted image from file into selected image block.");
+        } else {
+          runEditContentCommand("insertImage", dataUrl);
+          setEditContentStatusMessage("Inserted image from file.");
+        }
       }
+      setEditContentPendingImageBlockId("");
       event.target.value = "";
     };
     reader.onerror = () => {
       setEditContentStatusMessage("Failed to read image file.");
+      setEditContentPendingImageBlockId("");
       event.target.value = "";
     };
     reader.readAsDataURL(file);
@@ -2607,6 +2797,9 @@ export function WorkspacesManagerView({
         setEditContentBlocks([]);
         setEditContentSelectedBlockId("");
         setEditContentMenuBlockId("");
+        setEditContentMenuAddTypeByBlockId({});
+        setEditContentPendingImageBlockId("");
+        setShowInlineLatexInfo(false);
         editContentWorkingHtmlRef.current = "";
       }
       return {
@@ -4510,6 +4703,9 @@ export function WorkspacesManagerView({
                   setEditContentBlocks([]);
                   setEditContentSelectedBlockId("");
                   setEditContentMenuBlockId("");
+                  setEditContentMenuAddTypeByBlockId({});
+                  setEditContentPendingImageBlockId("");
+                  setShowInlineLatexInfo(false);
                   editContentWorkingHtmlRef.current = "";
                   setEditContentStatusMessage("");
                 }}
@@ -4553,7 +4749,7 @@ export function WorkspacesManagerView({
                   Rich HTML
                 </button>
               </div>
-              <p className="hint" style={{ margin: 0 }}>Block mode supports add, reorder, type-switch, templates, and JSON export.</p>
+              <p className="hint" style={{ margin: 0 }}>Block mode supports add/reorder/type-switch without content loss, templates, rich formatting, and JSON export.</p>
             </div>
 
             {editContentMode === "blocks" ? (
@@ -4595,8 +4791,18 @@ export function WorkspacesManagerView({
                       </select>
                     </label>
                     <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
+                    <button className="table-btn" type="button" onClick={applyTemplateCssDraft}>Apply Template Changes</button>
+                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
                     <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
                   </div>
+                  <label className="search full" style={{ marginTop: "8px" }}>
+                    <span>Template CSS</span>
+                    <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
+                  </label>
+                  <label className="search full" style={{ marginTop: "8px" }}>
+                    <span>Template Block HTML Repository (JSON by block type with placeholders like {{text}}, {{html}}, {{latex}}, {{table}}, {{code}})</span>
+                    <textarea className="input" rows={8} value={editContentTemplateRawHtmlDraft} onChange={(event) => setEditContentTemplateRawHtmlDraft(event.target.value)} />
+                  </label>
                 </div>
 
                 <div className="luna-canvas-grid" style={{ marginTop: "10px" }}>
@@ -4631,6 +4837,24 @@ export function WorkspacesManagerView({
                               <button className="table-btn" type="button" onClick={() => { moveContentBlock(index, Math.max(0, index - 1)); }}>Move up</button>
                               <button className="table-btn" type="button" onClick={() => { moveContentBlock(index, Math.min(editContentBlocks.length - 1, index + 1)); }}>Move down</button>
                               <button className="table-btn" type="button" onClick={() => duplicateContentBlock(block.id)}>Duplicate</button>
+                              <div style={{ display: "grid", gap: "6px", margin: "4px 0" }}>
+                                <select
+                                  className="input"
+                                  value={String(editContentMenuAddTypeByBlockId[block.id] || "paragraph")}
+                                  onChange={(event) => setEditContentMenuAddTypeByBlockId((previous) => ({ ...previous, [block.id]: event.target.value }))}
+                                >
+                                  {BLOCK_TYPE_OPTIONS.map((option) => (
+                                    <option key={`menu-add-${block.id}-${option.value}`} value={option.value}>{option.label}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="table-btn"
+                                  type="button"
+                                  onClick={() => addContentBlock(String(editContentMenuAddTypeByBlockId[block.id] || "paragraph"), index)}
+                                >
+                                  Add Block Below
+                                </button>
+                              </div>
                               <button className="table-btn danger" type="button" onClick={() => removeContentBlock(block.id)}>Delete</button>
                             </div>
                           ) : null}
@@ -4657,17 +4881,21 @@ export function WorkspacesManagerView({
                             <div className="luna-display-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(block.latex, true) }} />
                           ) : null}
                           {type === "table" ? (
-                            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                              <tbody>
-                                {(Array.isArray(block.rows) ? block.rows : []).map((row, rowIndex) => (
-                                  <tr key={`${block.id}-row-${rowIndex}`}>
-                                    {(Array.isArray(row) ? row : []).map((cell, cellIndex) => (
-                                      <td key={`${block.id}-cell-${rowIndex}-${cellIndex}`} style={{ border: "1px solid #d7e1ee", padding: "6px" }}>{cell}</td>
+                            String(block.tableHtml || "").trim()
+                              ? <div dangerouslySetInnerHTML={{ __html: String(block.tableHtml || "") }} />
+                              : (
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                  <tbody>
+                                    {(Array.isArray(block.rows) ? block.rows : []).map((row, rowIndex) => (
+                                      <tr key={`${block.id}-row-${rowIndex}`}>
+                                        {(Array.isArray(row) ? row : []).map((cell, cellIndex) => (
+                                          <td key={`${block.id}-cell-${rowIndex}-${cellIndex}`} style={{ border: "1px solid #d7e1ee", padding: "6px" }}>{cell}</td>
+                                        ))}
+                                      </tr>
                                     ))}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                                  </tbody>
+                                </table>
+                              )
                           ) : null}
                           {type === "image" ? (
                             <figure style={{ margin: 0 }}>
@@ -4709,11 +4937,58 @@ export function WorkspacesManagerView({
                             </select>
                           </label>
 
-                          {(type === "heading1" || type === "heading2" || type === "heading3" || type === "paragraph") ? (
+                          {(type === "heading1" || type === "heading2" || type === "heading3") ? (
                             <label className="search full" style={{ marginTop: "8px" }}>
                               <span>Text</span>
                               <textarea className="input" rows={type.startsWith("heading") ? 2 : 5} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value })} />
                             </label>
+                          ) : null}
+
+                          {type === "paragraph" ? (
+                            <>
+                              <div className="inline-actions" style={{ marginTop: "8px", justifyContent: "space-between" }}>
+                                <strong>Paragraph Content</strong>
+                                <button className="table-btn" type="button" onClick={() => setShowInlineLatexInfo((previous) => !previous)}>
+                                  LaTeX info
+                                </button>
+                              </div>
+                              {showInlineLatexInfo ? (
+                                <div className="hint" style={{ border: "1px solid #d7e1ee", borderRadius: "8px", padding: "8px", background: "#f8fbff", marginTop: "6px" }}>
+                                  Use inline formulas with dollar signs in text, for example: <code>Area = $\\pi r^2$</code>.<br />
+                                  Symbols examples: <code>$\\sqrt{x}$</code>, <code>$\\sum_{{i=1}}^n i$</code>, <code>$\\lim_{{x\\to 0}}$</code>, <code>$\\pm$</code>, <code>$\\approx$</code>, <code>$\\neq$</code>, <code>$x^2$</code>, <code>$x_i$</code>, <code>$\\to$</code>.
+                                </div>
+                              ) : null}
+
+                              <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "bold")}><b>B</b></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "italic")}><i>I</i></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "underline")}><u>U</u></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "foreColor", window.prompt("Text color (hex or css)", "#1f3a8a") || "")}>Text Color</button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "hiliteColor", window.prompt("Background color (hex or css)", "#fff59d") || "")}>Background</button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "removeFormat")}>Clear</button>
+                              </div>
+
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Rich HTML (direct editing)</span>
+                                <div
+                                  ref={editContentParagraphHtmlEditorRef}
+                                  className="doc-preview"
+                                  style={{ minHeight: "120px", background: "#fff" }}
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={(event) => {
+                                    const html = String(event.currentTarget.innerHTML || "");
+                                    updateContentBlock(selectedBlock.id, { html, text: htmlToPlainText(html) });
+                                  }}
+                                  dangerouslySetInnerHTML={{ __html: String(selectedBlock.html || escapeHtml(String(selectedBlock.text || "")).replace(/\n/g, "<br />")) }}
+                                />
+                              </label>
+
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Plain Text</span>
+                                <textarea className="input" rows={4} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value, html: "" })} />
+                              </label>
+                            </>
                           ) : null}
 
                           {type === "bullet_list" ? (
@@ -4721,23 +4996,6 @@ export function WorkspacesManagerView({
                               <span>List (one item per line)</span>
                               <textarea className="input" rows={6} value={(Array.isArray(selectedBlock.items) ? selectedBlock.items : []).join("\n")} onChange={(event) => updateContentBlock(selectedBlock.id, { items: String(event.target.value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean) })} />
                             </label>
-                          ) : null}
-
-                          {type === "inline_formula" ? (
-                            <>
-                              <label className="search full" style={{ marginTop: "8px" }}>
-                                <span>Text before</span>
-                                <input className="input" value={String(selectedBlock.textBefore || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { textBefore: event.target.value })} />
-                              </label>
-                              <label className="search full" style={{ marginTop: "8px" }}>
-                                <span>LaTeX (inline)</span>
-                                <input className="input" value={String(selectedBlock.latex || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { latex: event.target.value.replace(/^\$|\$$/g, "") })} />
-                              </label>
-                              <label className="search full" style={{ marginTop: "8px" }}>
-                                <span>Text after</span>
-                                <input className="input" value={String(selectedBlock.textAfter || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { textAfter: event.target.value })} />
-                              </label>
-                            </>
                           ) : null}
 
                           {type === "standalone_formula" ? (
@@ -4748,14 +5006,41 @@ export function WorkspacesManagerView({
                           ) : null}
 
                           {type === "table" ? (
-                            <label className="search full" style={{ marginTop: "8px" }}>
-                              <span>Rows (use | for columns)</span>
-                              <textarea className="input" rows={6} value={blockRowsToText(selectedBlock.rows || [])} onChange={(event) => updateContentBlock(selectedBlock.id, { rows: tableTextToRows(event.target.value) })} />
-                            </label>
+                            <>
+                              <p className="hint" style={{ marginTop: "8px" }}>Direct table editor: click a cell and use formatting buttons (bold, italic, colors, and LaTeX in cells).</p>
+                              <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "bold")}><b>B</b></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "italic")}><i>I</i></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "underline")}><u>U</u></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "foreColor", window.prompt("Text color (hex or css)", "#111827") || "")}>Text Color</button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "hiliteColor", window.prompt("Cell background color", "#fff59d") || "")}>Cell Background</button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "insertText", "$\\placeholder$")}>Insert $...$</button>
+                              </div>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Editable Table HTML</span>
+                                <div
+                                  ref={editContentTableHtmlEditorRef}
+                                  className="doc-preview"
+                                  style={{ minHeight: "140px", background: "#fff" }}
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={(event) => {
+                                    const html = String(event.currentTarget.innerHTML || "");
+                                    const parsedRows = tableTextToRows(htmlToPlainText(html).replace(/\t/g, " | "));
+                                    updateContentBlock(selectedBlock.id, { tableHtml: html, rows: parsedRows.length ? parsedRows : selectedBlock.rows });
+                                  }}
+                                  dangerouslySetInnerHTML={{ __html: String(selectedBlock.tableHtml || `<table><tbody>${(Array.isArray(selectedBlock.rows) ? selectedBlock.rows : []).map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("")}</tbody></table>`) }}
+                                />
+                              </label>
+                            </>
                           ) : null}
 
                           {type === "image" ? (
                             <>
+                              <div className="inline-actions" style={{ justifyContent: "space-between", marginTop: "8px" }}>
+                                <p className="hint" style={{ margin: 0 }}>Images can be uploaded from PNG/JPEG files or pasted as URL/Data URL.</p>
+                                <button className="table-btn" type="button" onClick={() => openEditContentImageFilePicker(selectedBlock.id)}>Upload PNG/JPEG</button>
+                              </div>
                               <label className="search full" style={{ marginTop: "8px" }}>
                                 <span>Image URL / Data URL</span>
                                 <input className="input" value={String(selectedBlock.src || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { src: event.target.value })} />

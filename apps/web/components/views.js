@@ -4800,7 +4800,10 @@ export function WorkspacesManagerView({
                     <textarea className="input" rows={4} value={editContentTemplateCssDraft} onChange={(event) => updateTemplateCssDraft(event.target.value)} />
                   </label>
                   <label className="search full" style={{ marginTop: "8px" }}>
-                    <span>Template Block HTML Repository (JSON by block type with placeholders like {{text}}, {{html}}, {{latex}}, {{table}}, {{code}})</span>
+                    <span>
+                      Template Block HTML Repository (JSON by block type with placeholders like
+                      {" {{text}}, {{html}}, {{latex}}, {{table}}, {{code}}"})
+                    </span>
                     <textarea className="input" rows={8} value={editContentTemplateRawHtmlDraft} onChange={(event) => setEditContentTemplateRawHtmlDraft(event.target.value)} />
                   </label>
                 </div>

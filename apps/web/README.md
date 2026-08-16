@@ -23,3 +23,14 @@ Missing:
 Notes:
 - Current "persistence" is mock-level and file-based for local development.
 - Deleting workspace/subject with related data requires explicit force confirmation flow.
+
+## Vercel JSX Troubleshooting
+
+- Recent failure in production came from JSX text examples in `components/views.js`.
+- Symptoms:
+	- Build error: `Expected unicode escape`
+	- Runtime error page: `ReferenceError: text is not defined`
+- Do not write raw brace placeholders directly in JSX (for example `{{text}}`).
+- For LaTeX or placeholder examples, always wrap text as JSX string literals:
+	- `<code>{"$\\lim_{x\\to 0}$"}</code>`
+	- `{" {{text}}, {{html}}, {{latex}} "}`

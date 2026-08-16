@@ -54,6 +54,20 @@ This repository contains a scalable, modular scaffold for the LUNA platform base
    - `npm run lint`
    - Typecheck step (auto-enables after TypeScript migration when tsconfig files and a typecheck script are present)
 
+## Vercel Pitfall Log
+
+- Incident: Vercel build/runtime failed in `apps/web/components/views.js` after adding LaTeX/help text in JSX.
+- Error signatures seen:
+   - `Error: x Expected unicode escape`
+   - `ReferenceError: text is not defined`
+- Root causes:
+   - Raw LaTeX/help snippets with braces/backslashes were inserted directly in JSX.
+   - Placeholder text like `{{text}}` was written directly in JSX, which React parsed as an expression.
+- Prevention rules (mandatory):
+   - For code/help examples containing braces or backslashes, render as a JSX string literal: `<code>{"$\\sum_{i=1}^n i$"}</code>`.
+   - Never place raw `{{...}}` directly in JSX text. Wrap it as a string literal, for example `{" {{text}} "}`.
+   - After editing JSX-heavy content, run local diagnostics before push.
+
 ## Quick Start
 
 ### Prerequisites

@@ -216,6 +216,28 @@ function inlineFormulaFromText(text = "") {
   };
 }
 
+function normalizeNodeText(node) {
+  return String(node?.textContent || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function looksLikeStandaloneFormula(text = "") {
+  const value = String(text || "").trim();
+  if (!value) return false;
+  if (/^\$\$[\s\S]+\$\$$/.test(value)) return true;
+  const hasMathSyntax = /[=+\-*/^]|\\frac|\\sum|\\int|\\bar|√|∑/.test(value);
+  if (!hasMathSyntax) return false;
+  const tokenCount = value.split(/\s+/).filter(Boolean).length;
+  const symbolCount = (value.match(/[=+\-*/^()]/g) || []).length;
+  return symbolCount >= 2 && tokenCount <= 28;
+}
+
+function hasBlockChildren(node) {
+  const BLOCK_TAGS = "h1,h2,h3,h4,h5,h6,p,ul,ol,table,figure,pre,code,blockquote,article,section,div";
+  return Boolean(node?.querySelector?.(BLOCK_TAGS));
+}
+
 function htmlToBlocks(htmlSource = "") {
   const source = String(htmlSource || "").trim();
   if (!source) return [createDefaultBlock("paragraph")];
@@ -226,72 +248,127 @@ function htmlToBlocks(htmlSource = "") {
     const body = parsed.body;
     const blocks = [];
 
-    for (const node of Array.from(body.children || [])) {
+    const pushBlock = (block) => {
+      if (!block || typeof block !== "object") return;
+      blocks.push({ id: createBlockId(), ...block });
+    };
+
+    const parseNode = (node) => {
       const tag = String(node.tagName || "").toLowerCase();
+
       if (tag === "h1" || tag === "h2" || tag === "h3") {
-        blocks.push({ id: createBlockId(), type: `heading${tag.slice(1)}`, text: node.textContent || "" });
-        continue;
+        pushBlock({ type: `heading${tag.slice(1)}`, text: normalizeNodeText(node) });
+        return;
+      }
+
+      if (tag === "h4" || tag === "h5" || tag === "h6") {
+        pushBlock({ type: "heading3", text: normalizeNodeText(node) });
+        return;
       }
 
       if (tag === "ul" || tag === "ol") {
-        const items = Array.from(node.querySelectorAll("li")).map((li) => String(li.textContent || "").trim()).filter(Boolean);
-        blocks.push({ id: createBlockId(), type: "bullet_list", items: items.length ? items : [""] });
-        continue;
+        const items = Array.from(node.children || [])
+          .filter((child) => String(child.tagName || "").toLowerCase() === "li")
+          .map((li) => normalizeNodeText(li))
+          .filter(Boolean);
+        pushBlock({ type: "bullet_list", items: items.length ? items : [""] });
+        return;
       }
 
       if (tag === "table") {
         const rows = Array.from(node.querySelectorAll("tr")).map((tr) => Array.from(tr.querySelectorAll("th,td")).map((td) => String(td.textContent || "").trim()));
-        blocks.push({ id: createBlockId(), type: "table", rows: rows.length ? rows : [["Cell"]] });
-        continue;
+        pushBlock({ type: "table", rows: rows.length ? rows : [["Cell"]] });
+        return;
+      }
+
+      if (tag === "figure") {
+        const image = node.querySelector("img");
+        if (image) {
+          pushBlock({
+            type: "image",
+            src: String(image.getAttribute("src") || ""),
+            alt: String(image.getAttribute("alt") || ""),
+            caption: normalizeNodeText(node.querySelector("figcaption"))
+          });
+          return;
+        }
       }
 
       if (tag === "img") {
-        blocks.push({
-          id: createBlockId(),
+        pushBlock({
           type: "image",
           src: String(node.getAttribute("src") || ""),
           alt: String(node.getAttribute("alt") || ""),
           caption: ""
         });
-        continue;
+        return;
       }
 
       if (tag === "a") {
-        blocks.push({
-          id: createBlockId(),
+        const href = String(node.getAttribute("href") || "").trim();
+        const text = normalizeNodeText(node);
+        if (href || text) {
+          pushBlock({
           type: "url",
-          href: String(node.getAttribute("href") || ""),
-          text: String(node.textContent || "")
-        });
-        continue;
+            href,
+            text: text || href
+          });
+          return;
+        }
       }
 
       if (tag === "pre" || tag === "code") {
-        blocks.push({
-          id: createBlockId(),
+        pushBlock({
           type: "code",
           language: "text",
           code: String(node.textContent || "")
         });
-        continue;
+        return;
       }
 
-      const text = String(node.textContent || "").trim();
-      if (!text) continue;
+      if ((tag === "div" || tag === "section" || tag === "article") && hasBlockChildren(node)) {
+        for (const child of Array.from(node.children || [])) {
+          parseNode(child);
+        }
+        return;
+      }
+
+      const text = normalizeNodeText(node);
+      if (!text) {
+        const images = Array.from(node.querySelectorAll?.("img") || []);
+        for (const image of images) {
+          parseNode(image);
+        }
+        return;
+      }
 
       const displayMatch = text.match(/^\$\$([\s\S]+)\$\$$/);
       if (displayMatch) {
-        blocks.push({ id: createBlockId(), type: "standalone_formula", latex: String(displayMatch[1] || "").trim() });
-        continue;
+        pushBlock({ type: "standalone_formula", latex: String(displayMatch[1] || "").trim() });
+        return;
+      }
+
+      if (looksLikeStandaloneFormula(text)) {
+        pushBlock({ type: "standalone_formula", latex: text.replace(/^\$\$|\$\$$/g, "").trim() });
+        return;
       }
 
       const inline = inlineFormulaFromText(text);
       if (inline) {
-        blocks.push({ id: createBlockId(), type: "inline_formula", ...inline });
-        continue;
+        pushBlock({ type: "inline_formula", ...inline });
+        return;
       }
 
-      blocks.push({ id: createBlockId(), type: "paragraph", text });
+      pushBlock({ type: "paragraph", text });
+    };
+
+    const rootChildren = Array.from(body.children || []);
+    const roots = rootChildren.length === 1 && ["div", "article", "section"].includes(String(rootChildren[0]?.tagName || "").toLowerCase())
+      ? Array.from(rootChildren[0].children || [])
+      : rootChildren;
+
+    for (const node of roots) {
+      parseNode(node);
     }
 
     return blocks.length ? blocks : [createDefaultBlock("paragraph")];

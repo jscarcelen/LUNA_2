@@ -69,7 +69,9 @@ export function AppShell() {
       });
       const data = await response.json();
       if (response.ok) {
-        setWorkspaces(data.workspaces || []);
+        if (Array.isArray(data.workspaces)) {
+          setWorkspaces(data.workspaces);
+        }
         setStatusMessage("");
         return { ok: true, status: response.status, data };
       }

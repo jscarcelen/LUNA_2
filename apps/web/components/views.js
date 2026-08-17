@@ -187,6 +187,33 @@ function styleObjectToCss(style = {}) {
     .join(";");
 }
 
+function normalizeTemplateFormatStyle(style = {}) {
+  if (!style || typeof style !== "object") return {};
+
+  const normalizeFlatStyle = (input = {}) => {
+    if (!input || typeof input !== "object") return {};
+    const output = {};
+    for (const [key, value] of Object.entries(input)) {
+      if (!key || typeof value === "object") continue;
+      const normalizedValue = String(value || "").trim();
+      if (!normalizedValue) continue;
+      output[key] = normalizedValue;
+    }
+    return output;
+  };
+
+  const base = normalizeFlatStyle(style);
+  const nestedKeys = ["tableCell", "headerRow", "firstColumn"];
+  for (const key of nestedKeys) {
+    const scoped = normalizeFlatStyle(style[key]);
+    if (Object.keys(scoped).length) {
+      base[key] = scoped;
+    }
+  }
+
+  return base;
+}
+
 function composeTableCellStyle(baseStyle = {}, rowIndex = 0, columnIndex = 0) {
   const common = {
     fontFamily: baseStyle?.fontFamily || "",
@@ -354,7 +381,8 @@ function normalizeTemplateModel(template = {}) {
       .map((entry, index) => ({
         name: String(entry?.name || `${typeDef.label} ${index + 1}`).trim() || `${typeDef.label} ${index + 1}`,
         className: String(entry?.className || blockClasses[type] || "").trim(),
-        htmlTemplate: String(entry?.htmlTemplate || "")
+        htmlTemplate: String(entry?.htmlTemplate || ""),
+        style: normalizeTemplateFormatStyle(entry?.style)
       }))
       .filter((entry) => entry.name);
     normalizedFormats[type] = normalized.length ? normalized : defaults[type];

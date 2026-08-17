@@ -151,6 +151,28 @@ const DEFAULT_BLOCK_TEMPLATES = [
 ];
 
 const BLOCK_TYPE_OPTIONS = BLOCK_BUILDING_TYPES;
+const TEMPLATE_BUILDING_TYPES = [
+  { value: "heading", label: "Heading" },
+  { value: "paragraph", label: "Paragraph" },
+  { value: "standalone_text", label: "Standalone Text" },
+  { value: "bullet_list", label: "Bullet List" },
+  { value: "standalone_formula", label: "Standalone Formula" },
+  { value: "table", label: "Table" },
+  { value: "image", label: "Image" },
+  { value: "url", label: "URL" },
+  { value: "code", label: "Code" }
+];
+
+function mapTemplateTypeToStorage(type = "") {
+  const normalized = String(type || "").trim();
+  return normalized === "heading" ? "heading1" : normalized;
+}
+
+function mapStorageTypeToTemplate(type = "") {
+  const normalized = String(type || "").trim();
+  if (normalized === "heading1" || normalized === "heading2" || normalized === "heading3") return "heading";
+  return normalized;
+}
 
 function createBlockId() {
   return `block_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -304,6 +326,24 @@ function normalizeTemplateModel(template = {}) {
     normalizedFormats[type] = normalized.length ? normalized : defaults[type];
   }
 
+  const mergedHeadingFormats = [
+    ...(Array.isArray(normalizedFormats.heading1) ? normalizedFormats.heading1 : []),
+    ...(Array.isArray(normalizedFormats.heading2) ? normalizedFormats.heading2 : []),
+    ...(Array.isArray(normalizedFormats.heading3) ? normalizedFormats.heading3 : [])
+  ];
+  const dedupHeading = [];
+  const seenHeading = new Set();
+  for (const entry of mergedHeadingFormats) {
+    const name = String(entry?.name || "").trim();
+    if (!name || seenHeading.has(name.toLowerCase())) continue;
+    seenHeading.add(name.toLowerCase());
+    dedupHeading.push(entry);
+  }
+  const headingFallback = dedupHeading.length ? dedupHeading : defaults.heading1;
+  normalizedFormats.heading1 = headingFallback;
+  normalizedFormats.heading2 = headingFallback.map((entry) => ({ ...entry }));
+  normalizedFormats.heading3 = headingFallback.map((entry) => ({ ...entry }));
+
   return {
     ...template,
     folderId: String(template?.folderId || "tpl-folder-root"),
@@ -317,7 +357,8 @@ function normalizeTemplateModel(template = {}) {
 }
 
 function resolveBlockFormatSpec(template = {}, block = {}) {
-  const type = String(block?.type || "paragraph");
+  const rawType = String(block?.type || "paragraph");
+  const type = rawType === "heading2" || rawType === "heading3" ? "heading1" : rawType;
   const formatName = String(block?.formatName || "").trim();
   const formats = Array.isArray(template?.blockFormats?.[type]) ? template.blockFormats[type] : [];
   const fallbackClass = String(template?.blockClasses?.[type] || "").trim();
@@ -326,7 +367,8 @@ function resolveBlockFormatSpec(template = {}, block = {}) {
   return {
     formatName: String(match?.name || formatName || "Default"),
     className: String(match?.className || fallbackClass || ""),
-    htmlTemplate: String(match?.htmlTemplate || fallbackHtml || "")
+    htmlTemplate: String(match?.htmlTemplate || fallbackHtml || ""),
+    style: match?.style && typeof match.style === "object" ? match.style : {}
   };
 }
 
@@ -530,6 +572,13 @@ function blockToHtml(block = {}, blockClass = "") {
   const type = String(block.type || "paragraph");
   const templateMap = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : null;
   const explicitTemplate = String(block.__formatHtmlTemplate || "");
+  const inlineStyle = block.__formatStyle && typeof block.__formatStyle === "object"
+    ? Object.entries(block.__formatStyle)
+      .filter(([, value]) => String(value || "").trim())
+      .map(([key, value]) => `${key}:${String(value).trim()}`)
+      .join(";")
+    : "";
+  const styleAttr = inlineStyle ? ` style="${escapeHtml(inlineStyle)}"` : "";
 
   function fillTemplate(template = "", vars = {}) {
     const source = String(template || "");
@@ -546,43 +595,43 @@ function blockToHtml(block = {}, blockClass = "") {
     return fillTemplate(template, vars);
   }
 
-  if (type === "heading1") return renderWithTemplate("heading1", `<h1${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`, { text: escapeHtml(block.text || "") });
-  if (type === "heading2") return renderWithTemplate("heading2", `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`, { text: escapeHtml(block.text || "") });
-  if (type === "heading3") return renderWithTemplate("heading3", `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`, { text: escapeHtml(block.text || "") });
+  if (type === "heading1") return renderWithTemplate("heading1", `<h1${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`, { text: escapeHtml(block.text || "") });
+  if (type === "heading2") return renderWithTemplate("heading2", `<h2${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`, { text: escapeHtml(block.text || "") });
+  if (type === "heading3") return renderWithTemplate("heading3", `<h3${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`, { text: escapeHtml(block.text || "") });
   if (type === "standalone_text") {
     const htmlValue = String(block.html || "").trim();
     if (htmlValue) {
-      return renderWithTemplate("standalone_text", `<div${classAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
+      return renderWithTemplate("standalone_text", `<div${classAttr}${styleAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
     }
     const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
-    return renderWithTemplate("standalone_text", `<div${classAttr}${blockIdAttr}>${text}</div>`, { text });
+    return renderWithTemplate("standalone_text", `<div${classAttr}${styleAttr}${blockIdAttr}>${text}</div>`, { text });
   }
   if (type === "paragraph") {
     const htmlValue = String(block.html || "").trim();
     if (htmlValue) {
-      return renderWithTemplate("paragraph", `<div${classAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
+      return renderWithTemplate("paragraph", `<div${classAttr}${styleAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
     }
-    return renderWithTemplate("paragraph", `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`, { text: escapeHtml(block.text || "") });
+    return renderWithTemplate("paragraph", `<p${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`, { text: escapeHtml(block.text || "") });
   }
   if (type === "bullet_list") {
     const htmlValue = String(block.html || "").trim();
     if (htmlValue) {
-      return renderWithTemplate("bullet_list", htmlValue.replace(/<ul(\s|>)/i, `<ul${classAttr}${blockIdAttr}$1`), { html: htmlValue });
+      return renderWithTemplate("bullet_list", htmlValue.replace(/<ul(\s|>)/i, `<ul${classAttr}${styleAttr}${blockIdAttr}$1`), { html: htmlValue });
     }
     const items = Array.isArray(block.items) ? block.items : [];
     const li = items.map((item) => `<li>${escapeHtml(item || "")}</li>`).join("");
-    return renderWithTemplate("bullet_list", `<ul${classAttr}${blockIdAttr}>${li}</ul>`, { items: li });
+    return renderWithTemplate("bullet_list", `<ul${classAttr}${styleAttr}${blockIdAttr}>${li}</ul>`, { items: li });
   }
-  if (type === "standalone_formula") return renderWithTemplate("standalone_formula", `<div${classAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`, { latex: escapeHtml(block.latex || "\\placeholder") });
+  if (type === "standalone_formula") return renderWithTemplate("standalone_formula", `<div${classAttr}${styleAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`, { latex: escapeHtml(block.latex || "\\placeholder") });
   if (type === "table") {
     const tableHtml = String(block.tableHtml || "").trim();
     if (tableHtml) {
-      const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${blockIdAttr}$1`);
+      const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${styleAttr}${blockIdAttr}$1`);
       return renderWithTemplate("table", withAttrs, { table: withAttrs });
     }
     const rows = Array.isArray(block.rows) ? block.rows : [];
     const rowHtml = rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("");
-    const table = `<table${classAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
+    const table = `<table${classAttr}${styleAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
     return renderWithTemplate("table", table, { table, rows: rowHtml });
   }
   if (type === "image") {
@@ -590,20 +639,20 @@ function blockToHtml(block = {}, blockClass = "") {
     const alt = escapeHtml(block.alt || "");
     const caption = String(block.caption || "").trim();
     const figureCaption = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "";
-    return renderWithTemplate("image", `<figure${classAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`, { src, alt, caption: escapeHtml(caption) });
+    return renderWithTemplate("image", `<figure${classAttr}${styleAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`, { src, alt, caption: escapeHtml(caption) });
   }
   if (type === "url") {
     const href = escapeHtml(block.href || "");
     const text = escapeHtml(block.text || block.href || "");
-    return renderWithTemplate("url", `<p${classAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`, { href, text });
+    return renderWithTemplate("url", `<p${classAttr}${styleAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`, { href, text });
   }
   if (type === "code") {
     const language = escapeHtml(block.language || "text");
     const code = escapeHtml(block.code || "");
-    return renderWithTemplate("code", `<pre${classAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`, { language, code });
+    return renderWithTemplate("code", `<pre${classAttr}${styleAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`, { language, code });
   }
 
-  return `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</p>`;
+  return `<p${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</p>`;
 }
 
 function blocksToHtml(blocks = [], template = null) {
@@ -623,6 +672,7 @@ function blocksToHtml(blocks = [], template = null) {
       formatName: formatSpec.formatName,
       __formatClass: formatSpec.className || className,
       __formatHtmlTemplate: formatSpec.htmlTemplate,
+      __formatStyle: formatSpec.style,
       __templateHtml: template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object"
         ? template.blockHtmlTemplates
         : null
@@ -2360,17 +2410,19 @@ export function WorkspacesManagerView({
     const active = template || activeTemplateEditorItem();
     if (!active) return [];
     const blocks = [];
-    for (const typeDef of BLOCK_BUILDING_TYPES) {
-      const list = Array.isArray(active.blockFormats?.[typeDef.value]) ? active.blockFormats[typeDef.value] : [];
+    for (const typeDef of TEMPLATE_BUILDING_TYPES) {
+      const storageType = mapTemplateTypeToStorage(typeDef.value);
+      const list = Array.isArray(active.blockFormats?.[storageType]) ? active.blockFormats[storageType] : [];
       list.forEach((entry, index) => {
         const name = String(entry?.name || `${typeDef.label} ${index + 1}`);
         blocks.push({
-          key: `${typeDef.value}::${name}`,
+          key: `${storageType}::${name}`,
           type: typeDef.value,
           typeLabel: typeDef.label,
           name,
           className: String(entry?.className || ""),
-          htmlTemplate: String(entry?.htmlTemplate || "")
+          htmlTemplate: String(entry?.htmlTemplate || ""),
+          style: entry?.style && typeof entry.style === "object" ? entry.style : {}
         });
       });
     }
@@ -2392,7 +2444,7 @@ export function WorkspacesManagerView({
     if (!template) return;
     const { type, name } = parseTemplateFormatKey(formatKey);
     if (!type || !name) return;
-    const nextType = String(patch?.type || type);
+    const nextType = mapTemplateTypeToStorage(patch?.type || type);
     const nextName = String(patch?.name || name || "").trim() || name;
     const sourceEntry = (Array.isArray(template.blockFormats?.[type]) ? template.blockFormats[type] : []).find((entry) => String(entry?.name || "") === name) || {};
     const nextEntry = { ...sourceEntry, ...patch, name: nextName };
@@ -2401,8 +2453,29 @@ export function WorkspacesManagerView({
     const targetFormats = Array.isArray(nextBlockFormats[nextType]) ? nextBlockFormats[nextType].filter((entry) => String(entry?.name || "") !== nextName) : [];
     nextBlockFormats[type] = sourceFormats;
     nextBlockFormats[nextType] = [...targetFormats, nextEntry];
+    if (nextType === "heading1" || type === "heading1") {
+      const headingFormats = Array.isArray(nextBlockFormats.heading1) ? nextBlockFormats.heading1 : [];
+      nextBlockFormats.heading2 = headingFormats.map((entry) => ({ ...entry }));
+      nextBlockFormats.heading3 = headingFormats.map((entry) => ({ ...entry }));
+    }
     await persistTemplatePatch(templateId, { blockFormats: nextBlockFormats });
     setActiveTemplateFormatKey(`${nextType}::${nextName}`);
+  }
+
+  async function saveActiveTemplateEdits() {
+    const active = activeTemplateEditorItem();
+    if (!active) return;
+    await persistTemplatePatch(active.id, {});
+    setEditContentStatusMessage("Template edits saved.");
+  }
+
+  function updateActiveTemplateName(nextName = "") {
+    const active = activeTemplateEditorItem();
+    const name = String(nextName || "").trim();
+    if (!active || !name) return;
+    persistTemplatePatch(active.id, { name });
+    setTemplateNameEdit(name);
+    setEditContentStatusMessage("Template name saved.");
   }
 
   function runTemplateFormatHtmlCommand(command, value = null) {
@@ -2502,7 +2575,7 @@ export function WorkspacesManagerView({
   async function addTemplateFormat() {
     const active = activeTemplateEditorItem();
     if (!active) return;
-    const type = String(templateFormatTypeDraft || "paragraph");
+    const type = mapTemplateTypeToStorage(templateFormatTypeDraft || "paragraph");
     const name = String(templateFormatNameDraft || "").trim();
     if (!name) {
       setEditContentStatusMessage("Format name is required.");
@@ -2521,9 +2594,23 @@ export function WorkspacesManagerView({
       [type]: [...current, {
         name,
         className: String(templateFormatClassDraft || "").trim(),
-        htmlTemplate: defaultHtmlTemplate
+        htmlTemplate: defaultHtmlTemplate,
+        style: {
+          fontFamily: "",
+          fontSize: "",
+          color: "",
+          backgroundColor: "",
+          fontWeight: "",
+          fontStyle: "",
+          textDecoration: ""
+        }
       }]
     };
+    if (type === "heading1") {
+      const headingFormats = blockFormats.heading1;
+      blockFormats.heading2 = headingFormats.map((entry) => ({ ...entry }));
+      blockFormats.heading3 = headingFormats.map((entry) => ({ ...entry }));
+    }
     await persistTemplatePatch(active.id, { blockFormats });
     setTemplateFormatNameDraft("");
     setTemplateFormatClassDraft("");
@@ -2534,15 +2621,21 @@ export function WorkspacesManagerView({
   async function removeTemplateFormat(type, name) {
     const active = activeTemplateEditorItem();
     if (!active) return;
-    const current = Array.isArray(active.blockFormats?.[type]) ? active.blockFormats[type] : [];
+    const storageType = mapTemplateTypeToStorage(type);
+    const current = Array.isArray(active.blockFormats?.[storageType]) ? active.blockFormats[storageType] : [];
     if (current.length <= 1) {
       setEditContentStatusMessage("Each block type must keep at least one format.");
       return;
     }
     const blockFormats = {
       ...(active.blockFormats || {}),
-      [type]: current.filter((item) => String(item?.name || "") !== String(name || ""))
+      [storageType]: current.filter((item) => String(item?.name || "") !== String(name || ""))
     };
+    if (storageType === "heading1") {
+      const headingFormats = blockFormats.heading1;
+      blockFormats.heading2 = headingFormats.map((entry) => ({ ...entry }));
+      blockFormats.heading3 = headingFormats.map((entry) => ({ ...entry }));
+    }
     await persistTemplatePatch(active.id, { blockFormats });
     setEditContentStatusMessage(`Removed format \"${name}\".`);
   }
@@ -4910,7 +5003,7 @@ export function WorkspacesManagerView({
 
                                   <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                                     <select className="input" value={templateFormatTypeDraft} onChange={(event) => setTemplateFormatTypeDraft(event.target.value)}>
-                                      {BLOCK_BUILDING_TYPES.map((option) => (
+                                      {TEMPLATE_BUILDING_TYPES.map((option) => (
                                         <option key={`fmt-type-${option.value}`} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
@@ -4919,27 +5012,29 @@ export function WorkspacesManagerView({
                                     <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Block Format</button>
                                   </div>
 
-                                  <div style={{ display: "grid", gridTemplateColumns: showFormatInspector ? "minmax(0, 1fr) 320px" : "1fr", gap: "12px" }}>
-                                    <div className="luna-canvas-scroll" style={{ maxHeight: "62vh" }}>
+                                  <div style={{ display: "grid", gridTemplateColumns: showFormatInspector ? "minmax(0, 1fr) 320px" : "1fr", gap: "12px", alignItems: "start" }}>
+                                    <div className="luna-canvas-scroll" style={{ height: "calc(100vh - 420px)", minHeight: "320px", maxHeight: "calc(100vh - 420px)", overflowY: "auto", overflowX: "hidden" }}>
                                       {formatBlocks.map((entry) => {
                                         const selected = entry.key === (selectedFormatBlock?.key || "");
-                                        const previewHtml = blocksToHtml([
-                                          {
-                                            id: `tpl-preview-${entry.key}`,
-                                            type: entry.type,
-                                            formatName: entry.name,
-                                            text: `${entry.typeLabel} sample`,
-                                            items: ["Item 1", "Item 2"],
-                                            latex: "x^2 + y^2 = z^2",
-                                            rows: [["A", "B"], ["1", "2"]],
-                                            src: "",
-                                            alt: "",
-                                            caption: "",
-                                            href: "https://example.com",
-                                            language: "text",
-                                            code: "console.log('sample');"
-                                          }
-                                        ], activeTemplate);
+                                        const previewType = entry.type === "heading" ? "heading1" : entry.type;
+                                        const previewHtml = blockToHtml({
+                                          id: `tpl-preview-${entry.key}`,
+                                          type: previewType,
+                                          formatName: entry.name,
+                                          text: `${entry.typeLabel} sample`,
+                                          items: ["Item 1", "Item 2"],
+                                          latex: "x^2 + y^2 = z^2",
+                                          rows: [["A", "B"], ["1", "2"]],
+                                          src: "",
+                                          alt: "",
+                                          caption: "",
+                                          href: "https://example.com",
+                                          language: "text",
+                                          code: "console.log('sample');",
+                                          __formatClass: entry.className,
+                                          __formatHtmlTemplate: "",
+                                          __formatStyle: entry.style || {}
+                                        }, entry.className || "");
                                         return (
                                           <div
                                             key={`fmt-block-${entry.key}`}
@@ -4951,7 +5046,7 @@ export function WorkspacesManagerView({
                                               <strong>{entry.typeLabel} - {entry.name}</strong>
                                               <span className="scope-chip">{entry.className || "no class"}</span>
                                             </div>
-                                            <div className="doc-preview rich-html-render" style={{ margin: 0, minHeight: "48px", maxHeight: "90px", overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                                            <div className="doc-preview rich-html-render template-format-preview" style={{ margin: 0, minHeight: "48px", maxHeight: "90px", overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
                                           </div>
                                         );
                                       })}
@@ -4966,7 +5061,7 @@ export function WorkspacesManagerView({
                                         <label className="search full">
                                           <span>Building Block Type</span>
                                           <select className="input" value={selectedFormatBlock.type} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { type: event.target.value })}>
-                                            {BLOCK_BUILDING_TYPES.map((option) => (
+                                            {TEMPLATE_BUILDING_TYPES.map((option) => (
                                               <option key={`fmt-lock-${option.value}`} value={option.value}>{option.label}</option>
                                             ))}
                                           </select>
@@ -4979,30 +5074,54 @@ export function WorkspacesManagerView({
                                           <span>Class Name</span>
                                           <input className="input" value={selectedFormatBlock.className} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { className: event.target.value })} />
                                         </label>
+                                        {selectedFormatBlock.type === "heading" ? (
+                                          <>
+                                            <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                              <label className="search" style={{ minWidth: "130px" }}>
+                                                <span>Font</span>
+                                                <select className="input" value={String(selectedFormatBlock.style?.fontFamily || "")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontFamily: event.target.value } })}>
+                                                  <option value="">Default</option>
+                                                  <option value="Avenir Next">Avenir Next</option>
+                                                  <option value="Georgia">Georgia</option>
+                                                  <option value="Times New Roman">Times New Roman</option>
+                                                  <option value="Arial">Arial</option>
+                                                </select>
+                                              </label>
+                                              <label className="search" style={{ minWidth: "110px" }}>
+                                                <span>Font size</span>
+                                                <select className="input" value={String(selectedFormatBlock.style?.fontSize || "")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontSize: event.target.value } })}>
+                                                  <option value="">Default</option>
+                                                  <option value="16px">16px</option>
+                                                  <option value="20px">20px</option>
+                                                  <option value="24px">24px</option>
+                                                  <option value="28px">28px</option>
+                                                  <option value="32px">32px</option>
+                                                </select>
+                                              </label>
+                                              <label className="search" style={{ minWidth: "110px" }}>
+                                                <span>Color</span>
+                                                <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.color || "#1f2937")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), color: event.target.value } })} />
+                                              </label>
+                                              <label className="search" style={{ minWidth: "110px" }}>
+                                                <span>Background</span>
+                                                <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.backgroundColor || "#ffffff")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), backgroundColor: event.target.value } })} />
+                                              </label>
+                                            </div>
+                                            <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontWeight: String(selectedFormatBlock.style?.fontWeight || "") === "700" ? "" : "700" } })}><b>B</b></button>
+                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontStyle: String(selectedFormatBlock.style?.fontStyle || "") === "italic" ? "" : "italic" } })}><i>I</i></button>
+                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), textDecoration: String(selectedFormatBlock.style?.textDecoration || "") === "underline" ? "" : "underline" } })}><u>U</u></button>
+                                            </div>
+                                          </>
+                                        ) : null}
                                         <p className="hint" style={{ marginTop: "10px" }}>The template uses this preset automatically. No raw HTML placeholder editing needed here.</p>
                                         <div className="inline-actions" style={{ marginTop: "10px" }}>
+                                          <button className="table-btn" type="button" onClick={saveActiveTemplateEdits}>Save Edits</button>
                                           <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(selectedFormatBlock.type, selectedFormatBlock.name)}>Delete Format</button>
                                         </div>
                                       </aside>
                                     ) : null}
                                   </div>
-                                </article>
-
-                                <article className="selection-box" style={{ marginTop: "12px" }}>
-                                  <h6 style={{ marginTop: 0 }}>HTML Preview With All Blocks</h6>
-                                  <div className="doc-preview rich-html-render" dangerouslySetInnerHTML={{
-                                    __html: blocksToHtml(
-                                      [
-                                        { id: "preview-h1", type: "heading1", formatName: resolveBlockFormatSpec(activeTemplate, { type: "heading1" }).formatName, text: "heading" },
-                                        { id: "preview-p", type: "paragraph", formatName: resolveBlockFormatSpec(activeTemplate, { type: "paragraph" }).formatName, text: "paragraph" },
-                                        { id: "preview-st", type: "standalone_text", formatName: resolveBlockFormatSpec(activeTemplate, { type: "standalone_text" }).formatName, text: "standalone text" },
-                                        { id: "preview-code", type: "code", formatName: resolveBlockFormatSpec(activeTemplate, { type: "code" }).formatName, language: "text", code: "code" },
-                                        { id: "preview-image", type: "image", formatName: resolveBlockFormatSpec(activeTemplate, { type: "image" }).formatName, src: "", alt: "image", caption: "image" },
-                                        { id: "preview-table", type: "table", formatName: resolveBlockFormatSpec(activeTemplate, { type: "table" }).formatName, rows: [["table", "cell"]] }
-                                      ],
-                                      activeTemplate
-                                    )
-                                  }} />
                                 </article>
                               </>
                             ) : null}

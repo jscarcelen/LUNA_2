@@ -2367,12 +2367,36 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
   };
 
   if (isUuid) {
+    const { data: existingByName, error: findByNameError } = await client
+      .from("document_block_templates")
+      .select("id")
+      .eq("owner_user_id", ownerUserId)
+      .eq("name", templateName)
+      .maybeSingle();
+    if (findByNameError) throw findByNameError;
+
+    const targetId = existingByName?.id && String(existingByName.id) !== templateId
+      ? String(existingByName.id)
+      : templateId;
+
     const { error: updateError } = await client
       .from("document_block_templates")
       .update(row)
-      .eq("id", templateId)
+      .eq("id", targetId)
       .eq("owner_user_id", ownerUserId);
-    if (updateError) throw updateError;
+    if (updateError) {
+      if (String(updateError.code || "") === "23505") {
+        const { error: upsertFallbackError } = await client
+          .from("document_block_templates")
+          .upsert({ ...row, created_at: nowIso }, {
+            onConflict: "owner_user_id,name",
+            ignoreDuplicates: false
+          });
+        if (upsertFallbackError) throw upsertFallbackError;
+      } else {
+        throw updateError;
+      }
+    }
   } else {
     row.created_at = nowIso;
     const { error: upsertError } = await client

@@ -2347,6 +2347,7 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
   }
 
   const templateId = String(payload.id || "").trim();
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(templateId);
   const nowIso = new Date().toISOString();
   const templateName = String(payload.name || "").trim() || "Untitled Template";
   const row = {
@@ -2365,7 +2366,7 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
     updated_at: nowIso
   };
 
-  if (templateId) {
+  if (isUuid) {
     const { error: updateError } = await client
       .from("document_block_templates")
       .update(row)
@@ -2373,11 +2374,28 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
       .eq("owner_user_id", ownerUserId);
     if (updateError) throw updateError;
   } else {
-    row.created_at = nowIso;
-    const { error: insertError } = await client
+    const { data: existingByName, error: findExistingError } = await client
       .from("document_block_templates")
-      .insert(row);
-    if (insertError) throw insertError;
+      .select("id")
+      .eq("owner_user_id", ownerUserId)
+      .eq("name", templateName)
+      .maybeSingle();
+    if (findExistingError) throw findExistingError;
+
+    if (existingByName?.id) {
+      const { error: updateByNameError } = await client
+        .from("document_block_templates")
+        .update(row)
+        .eq("id", existingByName.id)
+        .eq("owner_user_id", ownerUserId);
+      if (updateByNameError) throw updateByNameError;
+    } else {
+      row.created_at = nowIso;
+      const { error: insertError } = await client
+        .from("document_block_templates")
+        .insert(row);
+      if (insertError) throw insertError;
+    }
   }
 
   const templates = await listDocumentBlockTemplates(ownerUserId);

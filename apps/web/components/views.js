@@ -2929,8 +2929,23 @@ export function WorkspacesManagerView({
 
   async function saveCurrentTemplateAsNew() {
     const source = activeBlockTemplate();
-    const nextName = String(templateNameEdit || `${String(source?.name || "My Template")} Copy`).trim();
-    if (!nextName) return;
+    const requestedName = String(templateNameEdit || `${String(source?.name || "My Template")} Copy`).trim();
+    if (!requestedName) return;
+
+    const existingNames = new Set(
+      editContentTemplates.map((item) => String(item?.name || "").trim().toLowerCase()).filter(Boolean)
+    );
+    const nextName = (() => {
+      if (!existingNames.has(requestedName.toLowerCase())) return requestedName;
+      let index = 2;
+      while (index < 1000) {
+        const candidate = `${requestedName} (${index})`;
+        if (!existingNames.has(candidate.toLowerCase())) return candidate;
+        index += 1;
+      }
+      return `${requestedName} ${Date.now().toString(36)}`;
+    })();
+
     let blockHtmlTemplates = {};
     try {
       blockHtmlTemplates = parseTemplateRawHtmlDraft();
@@ -2960,6 +2975,7 @@ export function WorkspacesManagerView({
           setEditContentTemplateId(savedId || nextTemplate.id);
           writeBlockTemplatesToStorage(normalized);
           setActiveTemplateEditId(savedId || nextTemplate.id);
+          setTemplateNameEdit(nextName);
           setEditContentStatusMessage(`Saved template: ${nextName}`);
           return;
         }
@@ -2971,6 +2987,7 @@ export function WorkspacesManagerView({
     setEditContentTemplates(nextTemplates);
     setEditContentTemplateId(nextTemplate.id);
     setActiveTemplateEditId(nextTemplate.id);
+    setTemplateNameEdit(nextName);
     writeBlockTemplatesToStorage(nextTemplates);
     setEditContentStatusMessage(`Saved template: ${nextName}`);
   }

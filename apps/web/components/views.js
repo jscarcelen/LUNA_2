@@ -5891,8 +5891,8 @@ export function WorkspacesManagerView({
                 <div className="luna-canvas-grid" style={{ marginTop: "10px" }}>
                   <div className="luna-canvas-scroll">
                     {editContentBlocks.map((block, index) => {
-                      const type = String(block.type || "paragraph");
                       const isActive = block.id === editContentSelectedBlockId;
+                      const previewHtml = renderLatexInHtml(blocksToHtml([block], activeBlockTemplate()));
                       return (
                         <div
                           key={block.id}
@@ -5941,66 +5941,11 @@ export function WorkspacesManagerView({
                               <button className="table-btn danger" type="button" onClick={() => removeContentBlock(block.id)}>Delete</button>
                             </div>
                           ) : null}
-
-                          {type === "heading1" ? <h1 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h1> : null}
-                          {type === "heading2" ? <h2 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h2> : null}
-                          {type === "heading3" ? <h3 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h3> : null}
-                          {type === "paragraph" ? <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</p> : null}
-                          {type === "standalone_text" ? (
-                            String(block.html || "").trim()
-                              ? <div style={{ margin: 0 }} dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.html || "")) }} />
-                              : <div style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</div>
-                          ) : null}
-                          {type === "bullet_list" ? (
-                            String(block.html || "").trim()
-                              ? <div dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.html || "")) }} />
-                              : (
-                                <ul style={{ margin: "0 0 0 20px" }}>
-                                  {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
-                                    <li key={`${block.id}-item-${itemIndex}`}>{renderTextWithInlineLatex(String(item || ""))}</li>
-                                  ))}
-                                </ul>
-                              )
-                          ) : null}
-                          {type === "inline_formula" ? (
-                            <p style={{ margin: 0 }}>
-                              {String(block.textBefore || "")}
-                              <span className="luna-inline-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(block.latex, false) }} />
-                              {String(block.textAfter || "")}
-                            </p>
-                          ) : null}
-                          {type === "standalone_formula" ? (
-                            <div className="luna-display-math" dangerouslySetInnerHTML={{ __html: renderLatexSnippet(block.latex, true) }} />
-                          ) : null}
-                          {type === "table" ? (
-                            String(block.tableHtml || "").trim()
-                              ? <div dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.tableHtml || "")) }} />
-                              : (
-                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                                  <tbody>
-                                    {(Array.isArray(block.rows) ? block.rows : []).map((row, rowIndex) => (
-                                      <tr key={`${block.id}-row-${rowIndex}`}>
-                                        {(Array.isArray(row) ? row : []).map((cell, cellIndex) => (
-                                          <td key={`${block.id}-cell-${rowIndex}-${cellIndex}`} style={{ border: "1px solid #d7e1ee", padding: "6px" }}>{cell}</td>
-                                        ))}
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              )
-                          ) : null}
-                          {type === "image" ? (
-                            <figure style={{ margin: 0 }}>
-                              {String(block.src || "").trim() ? <img src={String(block.src || "")} alt={String(block.alt || "")} style={{ maxWidth: "100%", borderRadius: "8px" }} /> : <div className="hint">Image URL missing</div>}
-                              {String(block.caption || "").trim() ? <figcaption className="hint">{String(block.caption || "")}</figcaption> : null}
-                            </figure>
-                          ) : null}
-                          {type === "url" ? (
-                            <p style={{ margin: 0 }}><a href={String(block.href || "#")} target="_blank" rel="noreferrer">{String(block.text || block.href || "")}</a></p>
-                          ) : null}
-                          {type === "code" ? (
-                            <pre style={{ margin: 0, background: "#0f172a", color: "#e2e8f0", padding: "10px", borderRadius: "8px", overflow: "auto" }}><code>{String(block.code || "")}</code></pre>
-                          ) : null}
+                          <div
+                            className="doc-preview rich-html-render"
+                            style={{ margin: 0, background: "transparent" }}
+                            dangerouslySetInnerHTML={{ __html: previewHtml }}
+                          />
                         </div>
                       );
                     })}

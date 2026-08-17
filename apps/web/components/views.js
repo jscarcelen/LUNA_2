@@ -411,7 +411,7 @@ function htmlToBlocks(htmlSource = "") {
           .filter((child) => String(child.tagName || "").toLowerCase() === "li")
           .map((li) => normalizeNodeText(li))
           .filter(Boolean);
-        pushBlock({ type: "bullet_list", items: items.length ? items : [""] });
+        pushBlock({ type: "bullet_list", items: items.length ? items : [""], html: node.outerHTML });
         return;
       }
 
@@ -500,6 +500,11 @@ function htmlToBlocks(htmlSource = "") {
         return;
       }
 
+      if (tag === "div" && !hasBlockChildren(node)) {
+        pushBlock({ type: "standalone_text", html: node.outerHTML, text });
+        return;
+      }
+
       pushBlock({ type: "paragraph", text });
     };
 
@@ -545,6 +550,10 @@ function blockToHtml(block = {}, blockClass = "") {
   if (type === "heading2") return renderWithTemplate("heading2", `<h2${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h2>`, { text: escapeHtml(block.text || "") });
   if (type === "heading3") return renderWithTemplate("heading3", `<h3${classAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h3>`, { text: escapeHtml(block.text || "") });
   if (type === "standalone_text") {
+    const htmlValue = String(block.html || "").trim();
+    if (htmlValue) {
+      return renderWithTemplate("standalone_text", `<div${classAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text: escapeHtml(block.text || "") });
+    }
     const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
     return renderWithTemplate("standalone_text", `<div${classAttr}${blockIdAttr}>${text}</div>`, { text });
   }
@@ -556,6 +565,10 @@ function blockToHtml(block = {}, blockClass = "") {
     return renderWithTemplate("paragraph", `<p${classAttr}${blockIdAttr}>${escapeHtml(block.text || "").replace(/\n/g, "<br />")}</p>`, { text: escapeHtml(block.text || "") });
   }
   if (type === "bullet_list") {
+    const htmlValue = String(block.html || "").trim();
+    if (htmlValue) {
+      return renderWithTemplate("bullet_list", htmlValue.replace(/<ul(\s|>)/i, `<ul${classAttr}${blockIdAttr}$1`), { html: htmlValue });
+    }
     const items = Array.isArray(block.items) ? block.items : [];
     const li = items.map((item) => `<li>${escapeHtml(item || "")}</li>`).join("");
     return renderWithTemplate("bullet_list", `<ul${classAttr}${blockIdAttr}>${li}</ul>`, { items: li });
@@ -2588,6 +2601,9 @@ export function WorkspacesManagerView({
     if (targetType === "bullet_list") {
       replacement.items = String(text || "").split(/\n+/).map((item) => item.trim()).filter(Boolean);
       if (!replacement.items.length) replacement.items = [""];
+      if (typeof block.html === "string") {
+        replacement.html = block.html;
+      }
       return replacement;
     }
     if (targetType === "standalone_formula") {
@@ -3149,6 +3165,31 @@ export function WorkspacesManagerView({
       }
     } catch {
       // Ignore unsupported commands.
+    }
+  }
+
+  function applyBlockHtmlFontSize(target = "paragraph", nextSize = "16") {
+    const editor = target === "table" ? editContentTableHtmlEditorRef.current : editContentParagraphHtmlEditorRef.current;
+    if (!editor) return;
+    const parsed = Number(nextSize || 16);
+    const sizePx = Number.isFinite(parsed) ? Math.max(10, Math.min(64, Math.round(parsed))) : 16;
+    editor.focus();
+    try {
+      document.execCommand("styleWithCSS", false, true);
+      document.execCommand("fontSize", false, "7");
+      editor.querySelectorAll("font[size='7']").forEach((node) => {
+        node.removeAttribute("size");
+        node.style.fontSize = `${sizePx}px`;
+      });
+      const selectedBlock = getSelectedBlock();
+      if (!selectedBlock) return;
+      if (target === "table") {
+        updateContentBlock(selectedBlock.id, { tableHtml: String(editor.innerHTML || "") });
+      } else {
+        updateContentBlock(selectedBlock.id, { html: String(editor.innerHTML || ""), text: htmlToPlainText(String(editor.innerHTML || "")) });
+      }
+    } catch {
+      // Ignore unsupported commands to keep the editor responsive.
     }
   }
 
@@ -4786,7 +4827,7 @@ export function WorkspacesManagerView({
                       const showFormatInspector = Boolean(selectedFormatBlock);
 
                       return (
-                        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "14px", alignItems: "start" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: "14px", alignItems: "start" }}>
                           <section className="selection-box" style={{ margin: 0 }}>
                             <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "8px" }}>
                               <h5 style={{ margin: 0 }}>Template Folders</h5>
@@ -4794,40 +4835,41 @@ export function WorkspacesManagerView({
                             </div>
                             <div className="inline-actions" style={{ marginBottom: "10px", gap: "8px", flexWrap: "wrap" }}>
                               <input className="input" value={templateFolderDraftName} onChange={(event) => setTemplateFolderDraftName(event.target.value)} placeholder="New folder name" />
+                              <button className="table-btn" type="button" onClick={addTemplateFolder}>Create Folder</button>
                             </div>
-                            <div className="hint" style={{ marginBottom: "8px" }}>Create folders here, then click a folder to browse its templates.</div>
+                            <div className="hint" style={{ marginBottom: "12px" }}>Create folders here, then click a folder to browse its templates.</div>
                             {renderTemplateFolderTree("", 0)}
+
+                            <div style={{ marginTop: "18px" }}>
+                              <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "10px" }}>
+                                <h5 style={{ margin: 0 }}>Templates</h5>
+                                <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>+ New Template</button>
+                              </div>
+                              <label className="search full" style={{ marginBottom: "10px" }}>
+                                <span>Search templates</span>
+                                <input className="input" value={templateSearchText} onChange={(event) => setTemplateSearchText(event.target.value)} placeholder="Find template..." />
+                              </label>
+                              <div className="chip-wrap" style={{ marginBottom: "10px", maxHeight: "220px", overflow: "auto", paddingRight: "4px" }}>
+                                {visibleTemplates.map((template) => (
+                                  <button
+                                    key={`tpl-pick-${template.id}`}
+                                    className="table-btn"
+                                    type="button"
+                                    style={template.id === activeTemplateEditId ? { borderColor: "#80b5ff", boxShadow: "inset 0 0 0 1px #80b5ff" } : undefined}
+                                    onClick={() => {
+                                      setActiveTemplateEditId(template.id);
+                                      setEditContentTemplateId(template.id);
+                                    }}
+                                  >
+                                    {template.name}
+                                  </button>
+                                ))}
+                                {!visibleTemplates.length ? <span className="hint">No templates in this folder.</span> : null}
+                              </div>
+                            </div>
                           </section>
 
                           <section className="selection-box" style={{ margin: 0 }}>
-                            <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "10px" }}>
-                              <h5 style={{ margin: 0 }}>Templates</h5>
-                              <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>+ New Template</button>
-                            </div>
-
-                            <label className="search full" style={{ marginBottom: "10px" }}>
-                              <span>Search templates</span>
-                              <input className="input" value={templateSearchText} onChange={(event) => setTemplateSearchText(event.target.value)} placeholder="Find template..." />
-                            </label>
-
-                            <div className="chip-wrap" style={{ marginBottom: "10px" }}>
-                              {visibleTemplates.map((template) => (
-                                <button
-                                  key={`tpl-pick-${template.id}`}
-                                  className="table-btn"
-                                  type="button"
-                                  style={template.id === activeTemplateEditId ? { borderColor: "#80b5ff", boxShadow: "inset 0 0 0 1px #80b5ff" } : undefined}
-                                  onClick={() => {
-                                    setActiveTemplateEditId(template.id);
-                                    setEditContentTemplateId(template.id);
-                                  }}
-                                >
-                                  {template.name}
-                                </button>
-                              ))}
-                              {!visibleTemplates.length ? <span className="hint">No templates in this folder.</span> : null}
-                            </div>
-
                             {activeTemplate ? (
                               <>
                                 <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px", alignItems: "center" }}>
@@ -4864,7 +4906,7 @@ export function WorkspacesManagerView({
                                     <h6 style={{ margin: 0 }}>Template Block Editor</h6>
                                     <span className="hint">Click a format to edit it.</span>
                                   </div>
-                                  <p className="hint">Each block is a format definition: block type, format name, and block-wide HTML spec.</p>
+                                  <p className="hint">Each block is a format definition. The preview updates from the preset name and type automatically.</p>
 
                                   <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                                     <select className="input" value={templateFormatTypeDraft} onChange={(event) => setTemplateFormatTypeDraft(event.target.value)}>
@@ -4877,8 +4919,8 @@ export function WorkspacesManagerView({
                                     <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Block Format</button>
                                   </div>
 
-                                  <div style={{ display: "grid", gridTemplateColumns: showFormatInspector ? "1fr 320px" : "1fr", gap: "12px" }}>
-                                    <div className="luna-canvas-scroll" style={{ maxHeight: "420px" }}>
+                                  <div style={{ display: "grid", gridTemplateColumns: showFormatInspector ? "minmax(0, 1fr) 320px" : "1fr", gap: "12px" }}>
+                                    <div className="luna-canvas-scroll" style={{ maxHeight: "62vh" }}>
                                       {formatBlocks.map((entry) => {
                                         const selected = entry.key === (selectedFormatBlock?.key || "");
                                         const previewHtml = blocksToHtml([
@@ -4903,13 +4945,13 @@ export function WorkspacesManagerView({
                                             key={`fmt-block-${entry.key}`}
                                             className={selected ? "luna-canvas-block active" : "luna-canvas-block"}
                                             onClick={() => setActiveTemplateFormatKey(entry.key)}
-                                            style={{ width: "100%", textAlign: "left", background: "#fff", padding: "12px" }}
+                                            style={{ width: "100%", textAlign: "left", background: "#fff", padding: "12px", marginBottom: "12px" }}
                                           >
                                             <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
                                               <strong>{entry.typeLabel} - {entry.name}</strong>
                                               <span className="scope-chip">{entry.className || "no class"}</span>
                                             </div>
-                                            <div className="doc-preview rich-html-render" style={{ margin: 0, minHeight: "56px" }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                                            <div className="doc-preview rich-html-render" style={{ margin: 0, minHeight: "48px", maxHeight: "90px", overflow: "hidden" }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
                                           </div>
                                         );
                                       })}
@@ -4917,54 +4959,30 @@ export function WorkspacesManagerView({
 
                                     {showFormatInspector ? (
                                       <aside className="luna-inspector">
-                                        <>
-                                          <h6 style={{ marginTop: 0 }}>Format Block</h6>
-                                          <label className="search full">
-                                            <span>Building Block Type</span>
-                                            <select className="input" value={selectedFormatBlock.type} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { type: event.target.value })}>
-                                              {BLOCK_BUILDING_TYPES.map((option) => (
-                                                <option key={`fmt-lock-${option.value}`} value={option.value}>{option.label}</option>
-                                              ))}
-                                            </select>
-                                          </label>
-                                          <label className="search full" style={{ marginTop: "8px" }}>
-                                            <span>Format Name</span>
-                                            <input className="input" value={selectedFormatBlock.name} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { name: event.target.value })} />
-                                          </label>
-                                          <label className="search full" style={{ marginTop: "8px" }}>
-                                            <span>Class Name</span>
-                                            <input
-                                              className="input"
-                                              value={selectedFormatBlock.className}
-                                              onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { className: event.target.value })}
-                                            />
-                                          </label>
-
-                                          <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
-                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("bold")}><b>B</b></button>
-                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("italic")}><i>I</i></button>
-                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("underline")}><u>U</u></button>
-                                            <input className="input color-input" type="color" defaultValue="#1f2937" onChange={(event) => runTemplateFormatHtmlCommand("foreColor", event.target.value)} />
-                                            <input className="input color-input" type="color" defaultValue="#f8fafc" onChange={(event) => runTemplateFormatHtmlCommand("hiliteColor", event.target.value)} />
-                                          </div>
-
-                                          <label className="search full" style={{ marginTop: "8px" }}>
-                                            <span>Format Spec HTML (whole block)</span>
-                                            <div
-                                              ref={templateFormatHtmlEditorRef}
-                                              className="doc-preview"
-                                              style={{ minHeight: "120px", background: "#fff" }}
-                                              contentEditable
-                                              suppressContentEditableWarning
-                                              onInput={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { htmlTemplate: String(event.currentTarget.innerHTML || "") })}
-                                              dangerouslySetInnerHTML={{ __html: String(selectedFormatBlock.htmlTemplate || `${selectedFormatBlock.typeLabel} - ${selectedFormatBlock.name}`) }}
-                                            />
-                                          </label>
-
-                                          <div className="inline-actions" style={{ marginTop: "10px" }}>
-                                            <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(selectedFormatBlock.type, selectedFormatBlock.name)}>Delete Format</button>
-                                          </div>
-                                        </>
+                                        <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                                          <h6 style={{ marginTop: 0, marginBottom: 0 }}>Format Block</h6>
+                                          <button className="table-btn icon-btn" type="button" onClick={() => setActiveTemplateFormatKey("")}>✕</button>
+                                        </div>
+                                        <label className="search full">
+                                          <span>Building Block Type</span>
+                                          <select className="input" value={selectedFormatBlock.type} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { type: event.target.value })}>
+                                            {BLOCK_BUILDING_TYPES.map((option) => (
+                                              <option key={`fmt-lock-${option.value}`} value={option.value}>{option.label}</option>
+                                            ))}
+                                          </select>
+                                        </label>
+                                        <label className="search full" style={{ marginTop: "8px" }}>
+                                          <span>Format Name</span>
+                                          <input className="input" value={selectedFormatBlock.name} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { name: event.target.value })} />
+                                        </label>
+                                        <label className="search full" style={{ marginTop: "8px" }}>
+                                          <span>Class Name</span>
+                                          <input className="input" value={selectedFormatBlock.className} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { className: event.target.value })} />
+                                        </label>
+                                        <p className="hint" style={{ marginTop: "10px" }}>The template uses this preset automatically. No raw HTML placeholder editing needed here.</p>
+                                        <div className="inline-actions" style={{ marginTop: "10px" }}>
+                                          <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(selectedFormatBlock.type, selectedFormatBlock.name)}>Delete Format</button>
+                                        </div>
                                       </aside>
                                     ) : null}
                                   </div>
@@ -5469,24 +5487,35 @@ export function WorkspacesManagerView({
           <div className="modal-card" style={{ maxWidth: "96vw", width: "96vw", maxHeight: "94vh", overflow: "auto" }}>
             <div className="modal-head">
               <h4>Visual Content Editor</h4>
-              <button
-                className="table-btn"
-                onClick={() => {
-                  setEditContentDoc(null);
-                  setEditContentHtmlDraft("");
-                  setEditContentBlocks([]);
-                  setEditContentSelectedBlockId("");
-                  setEditContentMenuBlockId("");
-                  setEditContentMenuAddTypeByBlockId({});
-                  setEditContentPendingImageBlockId("");
-                  setShowInlineLatexInfo(false);
-                  editContentWorkingHtmlRef.current = "";
-                  setEditContentStatusMessage("");
-                }}
-                type="button"
-              >
-                Close
-              </button>
+              <div className="inline-actions" style={{ gap: "8px" }}>
+                <button
+                  className="table-btn"
+                  type="button"
+                  onClick={handleSaveEditedContent}
+                  disabled={isSavingEditContent || isWorking}
+                >
+                  {isSavingEditContent ? "Saving..." : "Save Edits"}
+                </button>
+                <button
+                  className="table-btn danger"
+                  onClick={() => {
+                    setEditContentDoc(null);
+                    setEditContentHtmlDraft("");
+                    setEditContentBlocks([]);
+                    setEditContentSelectedBlockId("");
+                    setEditContentMenuBlockId("");
+                    setEditContentMenuAddTypeByBlockId({});
+                    setEditContentPendingImageBlockId("");
+                    setShowInlineLatexInfo(false);
+                    editContentWorkingHtmlRef.current = "";
+                    setEditContentStatusMessage("");
+                  }}
+                  type="button"
+                  aria-label="Close editor"
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <p className="hint" style={{ marginTop: "8px" }}>
@@ -5628,13 +5657,21 @@ export function WorkspacesManagerView({
                           {type === "heading2" ? <h2 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h2> : null}
                           {type === "heading3" ? <h3 style={{ margin: "0 0 4px" }}>{renderTextWithInlineLatex(String(block.text || ""))}</h3> : null}
                           {type === "paragraph" ? <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</p> : null}
-                          {type === "standalone_text" ? <div style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</div> : null}
+                          {type === "standalone_text" ? (
+                            String(block.html || "").trim()
+                              ? <div style={{ margin: 0 }} dangerouslySetInnerHTML={{ __html: String(block.html || "") }} />
+                              : <div style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</div>
+                          ) : null}
                           {type === "bullet_list" ? (
-                            <ul style={{ margin: "0 0 0 20px" }}>
-                              {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
-                                <li key={`${block.id}-item-${itemIndex}`}>{renderTextWithInlineLatex(String(item || ""))}</li>
-                              ))}
-                            </ul>
+                            String(block.html || "").trim()
+                              ? <div dangerouslySetInnerHTML={{ __html: String(block.html || "") }} />
+                              : (
+                                <ul style={{ margin: "0 0 0 20px" }}>
+                                  {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
+                                    <li key={`${block.id}-item-${itemIndex}`}>{renderTextWithInlineLatex(String(item || ""))}</li>
+                                  ))}
+                                </ul>
+                              )
                           ) : null}
                           {type === "inline_formula" ? (
                             <p style={{ margin: 0 }}>
@@ -5774,17 +5811,88 @@ export function WorkspacesManagerView({
                           ) : null}
 
                           {type === "standalone_text" ? (
-                            <label className="search full" style={{ marginTop: "8px" }}>
-                              <span>Standalone Text</span>
-                              <textarea className="input" rows={5} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value })} />
-                            </label>
+                            <>
+                              <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "bold")}><b>B</b></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "italic")}><i>I</i></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "underline")}><u>U</u></button>
+                                <select className="input" value={editContentFontFamily} onChange={(event) => runBlockHtmlCommand("paragraph", "fontName", event.target.value)}>
+                                  <option value="Avenir Next">Avenir Next</option>
+                                  <option value="Georgia">Georgia</option>
+                                  <option value="Times New Roman">Times New Roman</option>
+                                  <option value="Arial">Arial</option>
+                                  <option value="Courier New">Courier New</option>
+                                </select>
+                                <select className="input" value={editContentFontSize} onChange={(event) => applyBlockHtmlFontSize("paragraph", event.target.value)}>
+                                  <option value="12">12px</option>
+                                  <option value="14">14px</option>
+                                  <option value="16">16px</option>
+                                  <option value="18">18px</option>
+                                  <option value="20">20px</option>
+                                  <option value="24">24px</option>
+                                  <option value="28">28px</option>
+                                  <option value="32">32px</option>
+                                </select>
+                              </div>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>Standalone Text</span>
+                                <div
+                                  ref={editContentParagraphHtmlEditorRef}
+                                  className="doc-preview"
+                                  style={{ minHeight: "120px", background: "#fff" }}
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={(event) => {
+                                    const html = String(event.currentTarget.innerHTML || "");
+                                    updateContentBlock(selectedBlock.id, { html, text: htmlToPlainText(html) });
+                                  }}
+                                  dangerouslySetInnerHTML={{ __html: String(selectedBlock.html || escapeHtml(String(selectedBlock.text || "")).replace(/\n/g, "<br />")) }}
+                                />
+                              </label>
+                            </>
                           ) : null}
 
                           {type === "bullet_list" ? (
-                            <label className="search full" style={{ marginTop: "8px" }}>
-                              <span>List (one item per line)</span>
-                              <textarea className="input" rows={6} value={(Array.isArray(selectedBlock.items) ? selectedBlock.items : []).join("\n")} onChange={(event) => updateContentBlock(selectedBlock.id, { items: String(event.target.value || "").split(/\n+/).map((item) => item.trim()).filter(Boolean) })} />
-                            </label>
+                            <>
+                              <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "bold")}><b>B</b></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "italic")}><i>I</i></button>
+                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "underline")}><u>U</u></button>
+                                <select className="input" value={editContentFontFamily} onChange={(event) => runBlockHtmlCommand("paragraph", "fontName", event.target.value)}>
+                                  <option value="Avenir Next">Avenir Next</option>
+                                  <option value="Georgia">Georgia</option>
+                                  <option value="Times New Roman">Times New Roman</option>
+                                  <option value="Arial">Arial</option>
+                                  <option value="Courier New">Courier New</option>
+                                </select>
+                                <select className="input" value={editContentFontSize} onChange={(event) => applyBlockHtmlFontSize("paragraph", event.target.value)}>
+                                  <option value="12">12px</option>
+                                  <option value="14">14px</option>
+                                  <option value="16">16px</option>
+                                  <option value="18">18px</option>
+                                  <option value="20">20px</option>
+                                  <option value="24">24px</option>
+                                  <option value="28">28px</option>
+                                  <option value="32">32px</option>
+                                </select>
+                              </div>
+                              <label className="search full" style={{ marginTop: "8px" }}>
+                                <span>List</span>
+                                <div
+                                  ref={editContentParagraphHtmlEditorRef}
+                                  className="doc-preview"
+                                  style={{ minHeight: "120px", background: "#fff" }}
+                                  contentEditable
+                                  suppressContentEditableWarning
+                                  onInput={(event) => {
+                                    const html = String(event.currentTarget.innerHTML || "");
+                                    const plainItems = htmlToPlainText(html).split(/\n+/).map((item) => item.trim()).filter(Boolean);
+                                    updateContentBlock(selectedBlock.id, { html, items: plainItems.length ? plainItems : [""] });
+                                  }}
+                                  dangerouslySetInnerHTML={{ __html: String(selectedBlock.html || `<ul>${(Array.isArray(selectedBlock.items) ? selectedBlock.items : []).map((item) => `<li>${escapeHtml(item || "")}</li>`).join("")}</ul>`) }}
+                                />
+                              </label>
+                            </>
                           ) : null}
 
                           {type === "standalone_formula" ? (
@@ -5995,7 +6103,7 @@ export function WorkspacesManagerView({
                 Download HTML
               </button>
               <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>
-                {isSavingEditContent ? "Saving..." : "Save All Edits"}
+                {isSavingEditContent ? "Saving..." : "Save Edits"}
               </button>
             </div>
             {editContentStatusMessage ? <p className="hint" style={{ marginTop: "10px" }}>{editContentStatusMessage}</p> : null}

@@ -41,6 +41,7 @@ function hashTagName(tagName) {
 const WORKSPACES_API = "/api/workspaces-supabase";
 const BLOCK_TEMPLATE_STORAGE_KEY = "luna.blockTemplates.v1";
 const TEMPLATE_FOLDER_STORAGE_KEY = "luna.templateFolders.v1";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const BLOCK_BUILDING_TYPES = [
   { value: "heading1", label: "Heading" },
@@ -172,6 +173,39 @@ function mapStorageTypeToTemplate(type = "") {
   const normalized = String(type || "").trim();
   if (normalized === "heading1" || normalized === "heading2" || normalized === "heading3") return "heading";
   return normalized;
+}
+
+function isUuid(value = "") {
+  return UUID_PATTERN.test(String(value || "").trim());
+}
+
+function styleObjectToCss(style = {}) {
+  if (!style || typeof style !== "object") return "";
+  return Object.entries(style)
+    .filter(([key, value]) => key && typeof value !== "object" && String(value || "").trim())
+    .map(([key, value]) => `${key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`)}:${String(value).trim()}`)
+    .join(";");
+}
+
+function composeTableCellStyle(baseStyle = {}, rowIndex = 0, columnIndex = 0) {
+  const common = {
+    fontFamily: baseStyle?.fontFamily || "",
+    fontSize: baseStyle?.fontSize || "",
+    color: baseStyle?.color || "",
+    backgroundColor: baseStyle?.backgroundColor || "",
+    fontWeight: baseStyle?.fontWeight || "",
+    fontStyle: baseStyle?.fontStyle || "",
+    textDecoration: baseStyle?.textDecoration || ""
+  };
+  const tableCell = baseStyle?.tableCell && typeof baseStyle.tableCell === "object" ? baseStyle.tableCell : {};
+  const headerRow = rowIndex === 0 && baseStyle?.headerRow && typeof baseStyle.headerRow === "object" ? baseStyle.headerRow : {};
+  const firstColumn = columnIndex === 0 && baseStyle?.firstColumn && typeof baseStyle.firstColumn === "object" ? baseStyle.firstColumn : {};
+  return {
+    ...common,
+    ...tableCell,
+    ...headerRow,
+    ...firstColumn
+  };
 }
 
 function createBlockId() {
@@ -572,12 +606,7 @@ function blockToHtml(block = {}, blockClass = "") {
   const type = String(block.type || "paragraph");
   const templateMap = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : null;
   const explicitTemplate = String(block.__formatHtmlTemplate || "");
-  const inlineStyle = block.__formatStyle && typeof block.__formatStyle === "object"
-    ? Object.entries(block.__formatStyle)
-      .filter(([, value]) => String(value || "").trim())
-      .map(([key, value]) => `${key}:${String(value).trim()}`)
-      .join(";")
-    : "";
+  const inlineStyle = styleObjectToCss(block.__formatStyle && typeof block.__formatStyle === "object" ? block.__formatStyle : {});
   const styleAttr = inlineStyle ? ` style="${escapeHtml(inlineStyle)}"` : "";
 
   function fillTemplate(template = "", vars = {}) {
@@ -625,12 +654,17 @@ function blockToHtml(block = {}, blockClass = "") {
   if (type === "standalone_formula") return renderWithTemplate("standalone_formula", `<div${classAttr}${styleAttr}${blockIdAttr}>$$${escapeHtml(block.latex || "\\placeholder")}$$</div>`, { latex: escapeHtml(block.latex || "\\placeholder") });
   if (type === "table") {
     const tableHtml = String(block.tableHtml || "").trim();
+    const tableStyle = block.__formatStyle && typeof block.__formatStyle === "object" ? block.__formatStyle : {};
     if (tableHtml) {
       const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${styleAttr}${blockIdAttr}$1`);
       return renderWithTemplate("table", withAttrs, { table: withAttrs });
     }
     const rows = Array.isArray(block.rows) ? block.rows : [];
-    const rowHtml = rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("");
+    const rowHtml = rows.map((row, rowIndex) => `<tr>${(Array.isArray(row) ? row : []).map((cell, columnIndex) => {
+      const cellCss = styleObjectToCss(composeTableCellStyle(tableStyle, rowIndex, columnIndex));
+      const cellStyleAttr = cellCss ? ` style="${escapeHtml(cellCss)}"` : "";
+      return `<td${cellStyleAttr}>${escapeHtml(cell || "")}</td>`;
+    }).join("")}</tr>`).join("");
     const table = `<table${classAttr}${styleAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
     return renderWithTemplate("table", table, { table, rows: rowHtml });
   }
@@ -2478,6 +2512,27 @@ export function WorkspacesManagerView({
     setEditContentStatusMessage("Template name saved.");
   }
 
+  function updateSelectedTemplateFormatStyle(section = "base", patch = {}) {
+    const active = activeTemplateEditorItem();
+    const selected = templateFormatBlocks(active).find((item) => item.key === activeTemplateFormatKey);
+    if (!active || !selected) return;
+    const currentStyle = selected.style && typeof selected.style === "object" ? selected.style : {};
+    if (section === "base") {
+      updateTemplateFormatEntry(active.id, selected.key, { style: { ...currentStyle, ...patch } });
+      return;
+    }
+    const scoped = currentStyle[section] && typeof currentStyle[section] === "object" ? currentStyle[section] : {};
+    updateTemplateFormatEntry(active.id, selected.key, {
+      style: {
+        ...currentStyle,
+        [section]: {
+          ...scoped,
+          ...patch
+        }
+      }
+    });
+  }
+
   function runTemplateFormatHtmlCommand(command, value = null) {
     const editor = templateFormatHtmlEditorRef.current;
     if (!editor) return;
@@ -2559,7 +2614,8 @@ export function WorkspacesManagerView({
     const active = localTemplates.find((item) => item.id === templateId);
     if (active && typeof onSaveDocumentBlockTemplate === "function") {
       try {
-        const saved = await onSaveDocumentBlockTemplate(active);
+        const payloadForSave = isUuid(active.id) ? active : { ...active, id: "" };
+        const saved = await onSaveDocumentBlockTemplate(payloadForSave);
         if (Array.isArray(saved?.templates) && saved.templates.length) {
           const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
           setEditContentTemplates(normalized);
@@ -2821,7 +2877,8 @@ export function WorkspacesManagerView({
       const active = nextTemplates.find((item) => item.id === editContentTemplateId);
       if (active) {
         try {
-          const saved = await onSaveDocumentBlockTemplate(active);
+          const payloadForSave = isUuid(active.id) ? active : { ...active, id: "" };
+          const saved = await onSaveDocumentBlockTemplate(payloadForSave);
           if (Array.isArray(saved?.templates) && saved.templates.length) {
             const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
             setEditContentTemplates(normalized);
@@ -2866,7 +2923,8 @@ export function WorkspacesManagerView({
 
     if (typeof onSaveDocumentBlockTemplate === "function") {
       try {
-        const saved = await onSaveDocumentBlockTemplate(nextTemplate);
+        const payloadForSave = isUuid(nextTemplate.id) ? nextTemplate : { ...nextTemplate, id: "" };
+        const saved = await onSaveDocumentBlockTemplate(payloadForSave);
         if (Array.isArray(saved?.templates) && saved.templates.length) {
           const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
           setEditContentTemplates(normalized);
@@ -5074,43 +5132,69 @@ export function WorkspacesManagerView({
                                           <span>Class Name</span>
                                           <input className="input" value={selectedFormatBlock.className} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { className: event.target.value })} />
                                         </label>
-                                        {selectedFormatBlock.type === "heading" ? (
+                                        <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                          <label className="search" style={{ minWidth: "130px" }}>
+                                            <span>Font</span>
+                                            <select className="input" value={String(selectedFormatBlock.style?.fontFamily || "")} onChange={(event) => updateSelectedTemplateFormatStyle("base", { fontFamily: event.target.value })}>
+                                              <option value="">Default</option>
+                                              <option value="Avenir Next">Avenir Next</option>
+                                              <option value="Georgia">Georgia</option>
+                                              <option value="Times New Roman">Times New Roman</option>
+                                              <option value="Arial">Arial</option>
+                                            </select>
+                                          </label>
+                                          <label className="search" style={{ minWidth: "110px" }}>
+                                            <span>Font size</span>
+                                            <select className="input" value={String(selectedFormatBlock.style?.fontSize || "")} onChange={(event) => updateSelectedTemplateFormatStyle("base", { fontSize: event.target.value })}>
+                                              <option value="">Default</option>
+                                              <option value="14px">14px</option>
+                                              <option value="16px">16px</option>
+                                              <option value="20px">20px</option>
+                                              <option value="24px">24px</option>
+                                              <option value="28px">28px</option>
+                                              <option value="32px">32px</option>
+                                            </select>
+                                          </label>
+                                          <label className="search" style={{ minWidth: "110px" }}>
+                                            <span>Color</span>
+                                            <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.color || "#1f2937")} onChange={(event) => updateSelectedTemplateFormatStyle("base", { color: event.target.value })} />
+                                          </label>
+                                          <label className="search" style={{ minWidth: "110px" }}>
+                                            <span>Background</span>
+                                            <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.backgroundColor || "#ffffff")} onChange={(event) => updateSelectedTemplateFormatStyle("base", { backgroundColor: event.target.value })} />
+                                          </label>
+                                        </div>
+                                        <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
+                                          <button className="table-btn" type="button" onClick={() => updateSelectedTemplateFormatStyle("base", { fontWeight: String(selectedFormatBlock.style?.fontWeight || "") === "700" ? "" : "700" })}><b>B</b></button>
+                                          <button className="table-btn" type="button" onClick={() => updateSelectedTemplateFormatStyle("base", { fontStyle: String(selectedFormatBlock.style?.fontStyle || "") === "italic" ? "" : "italic" })}><i>I</i></button>
+                                          <button className="table-btn" type="button" onClick={() => updateSelectedTemplateFormatStyle("base", { textDecoration: String(selectedFormatBlock.style?.textDecoration || "") === "underline" ? "" : "underline" })}><u>U</u></button>
+                                        </div>
+                                        {selectedFormatBlock.type === "table" ? (
                                           <>
-                                            <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
-                                              <label className="search" style={{ minWidth: "130px" }}>
-                                                <span>Font</span>
-                                                <select className="input" value={String(selectedFormatBlock.style?.fontFamily || "")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontFamily: event.target.value } })}>
-                                                  <option value="">Default</option>
-                                                  <option value="Avenir Next">Avenir Next</option>
-                                                  <option value="Georgia">Georgia</option>
-                                                  <option value="Times New Roman">Times New Roman</option>
-                                                  <option value="Arial">Arial</option>
-                                                </select>
-                                              </label>
-                                              <label className="search" style={{ minWidth: "110px" }}>
-                                                <span>Font size</span>
-                                                <select className="input" value={String(selectedFormatBlock.style?.fontSize || "")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontSize: event.target.value } })}>
-                                                  <option value="">Default</option>
-                                                  <option value="16px">16px</option>
-                                                  <option value="20px">20px</option>
-                                                  <option value="24px">24px</option>
-                                                  <option value="28px">28px</option>
-                                                  <option value="32px">32px</option>
-                                                </select>
-                                              </label>
-                                              <label className="search" style={{ minWidth: "110px" }}>
-                                                <span>Color</span>
-                                                <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.color || "#1f2937")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), color: event.target.value } })} />
-                                              </label>
-                                              <label className="search" style={{ minWidth: "110px" }}>
-                                                <span>Background</span>
-                                                <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.backgroundColor || "#ffffff")} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), backgroundColor: event.target.value } })} />
-                                              </label>
+                                            <p className="hint" style={{ marginTop: "10px" }}>Table scopes: all cells, top row, and first column.</p>
+                                            <div className="inline-actions" style={{ gap: "6px", flexWrap: "wrap" }}>
+                                              <strong>All Cells</strong>
+                                              <select className="input" value={String(selectedFormatBlock.style?.tableCell?.fontSize || "")} onChange={(event) => updateSelectedTemplateFormatStyle("tableCell", { fontSize: event.target.value })}>
+                                                <option value="">Size</option>
+                                                <option value="12px">12px</option>
+                                                <option value="14px">14px</option>
+                                                <option value="16px">16px</option>
+                                                <option value="18px">18px</option>
+                                              </select>
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.tableCell?.color || "#1f2937")} onChange={(event) => updateSelectedTemplateFormatStyle("tableCell", { color: event.target.value })} />
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.tableCell?.backgroundColor || "#ffffff")} onChange={(event) => updateSelectedTemplateFormatStyle("tableCell", { backgroundColor: event.target.value })} />
                                             </div>
-                                            <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
-                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontWeight: String(selectedFormatBlock.style?.fontWeight || "") === "700" ? "" : "700" } })}><b>B</b></button>
-                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), fontStyle: String(selectedFormatBlock.style?.fontStyle || "") === "italic" ? "" : "italic" } })}><i>I</i></button>
-                                              <button className="table-btn" type="button" onClick={() => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { style: { ...(selectedFormatBlock.style || {}), textDecoration: String(selectedFormatBlock.style?.textDecoration || "") === "underline" ? "" : "underline" } })}><u>U</u></button>
+                                            <div className="inline-actions" style={{ gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                                              <strong>Top Row</strong>
+                                              <button className="table-btn" type="button" onClick={() => updateSelectedTemplateFormatStyle("headerRow", { fontWeight: String(selectedFormatBlock.style?.headerRow?.fontWeight || "") === "700" ? "" : "700" })}><b>B</b></button>
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.headerRow?.color || "#111827")} onChange={(event) => updateSelectedTemplateFormatStyle("headerRow", { color: event.target.value })} />
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.headerRow?.backgroundColor || "#eef2ff")} onChange={(event) => updateSelectedTemplateFormatStyle("headerRow", { backgroundColor: event.target.value })} />
+                                            </div>
+                                            <div className="inline-actions" style={{ gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                                              <strong>First Column</strong>
+                                              <button className="table-btn" type="button" onClick={() => updateSelectedTemplateFormatStyle("firstColumn", { fontWeight: String(selectedFormatBlock.style?.firstColumn?.fontWeight || "") === "700" ? "" : "700" })}><b>B</b></button>
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.firstColumn?.color || "#111827")} onChange={(event) => updateSelectedTemplateFormatStyle("firstColumn", { color: event.target.value })} />
+                                              <input className="input color-input" type="color" value={String(selectedFormatBlock.style?.firstColumn?.backgroundColor || "#f8fafc")} onChange={(event) => updateSelectedTemplateFormatStyle("firstColumn", { backgroundColor: event.target.value })} />
                                             </div>
                                           </>
                                         ) : null}

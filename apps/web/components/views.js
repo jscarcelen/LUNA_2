@@ -59,9 +59,10 @@ const BLOCK_BUILDING_TYPES = [
 const DEFAULT_BLOCK_TEMPLATES = [
   {
     id: "template_default",
-    name: "Default Clean",
+    name: "A4 Document",
     description: "Neutral reading layout for mixed academic documents.",
     containerClass: "luna-template-default",
+    pageSize: "a4",
     folderId: "tpl-folder-root",
     blockClasses: {
       heading1: "tpl-h1",
@@ -102,10 +103,11 @@ const DEFAULT_BLOCK_TEMPLATES = [
     ].join("\n")
   },
   {
-    id: "template_study_cards",
-    name: "Study Cards",
-    description: "Higher contrast blocks for active review sessions.",
-    containerClass: "luna-template-study-cards",
+    id: "template_presentation",
+    name: "PPT Presentation",
+    description: "Presentation layout preset for slide-style exports.",
+    containerClass: "luna-template-presentation",
+    pageSize: "ppt",
     folderId: "tpl-folder-root",
     blockClasses: {
       heading1: "tpl-h1",
@@ -137,13 +139,13 @@ const DEFAULT_BLOCK_TEMPLATES = [
       code: [{ name: "Code", className: "tpl-code", htmlTemplate: "<pre data-language=\"{{language}}\"><code>{{code}}</code></pre>" }]
     },
     css: [
-      ".luna-template-study-cards{font-family:'Avenir Next',system-ui,sans-serif;color:#0f172a}",
-      ".luna-template-study-cards .tpl-h1{font-size:2rem;font-weight:800;margin:.9rem 0;color:#7c2d12}",
-      ".luna-template-study-cards .tpl-h2{font-size:1.45rem;font-weight:700;margin:.7rem 0;color:#0f766e}",
-      ".luna-template-study-cards .tpl-card{background:#fff8ef;border:1px solid #f2c48f;border-radius:12px;padding:.7rem .8rem;margin:.45rem 0}",
-      ".luna-template-study-cards .tpl-citation{font-style:italic;opacity:.9}",
-      ".luna-template-study-cards .tpl-math-card{background:#ecfeff;border:1px solid #7dd3fc;border-radius:12px;padding:.7rem .8rem;font-family:'Times New Roman',serif}",
-      ".luna-template-study-cards .tpl-code{background:#111827;color:#f9fafb;padding:.8rem;border-radius:10px;overflow:auto}"
+      ".luna-template-presentation{font-family:Inter,system-ui,sans-serif;color:#0f172a;background:#f4f7ff}",
+      ".luna-template-presentation .tpl-h1{font-size:2.4rem;font-weight:800;margin:1rem 0;color:#1d2a57}",
+      ".luna-template-presentation .tpl-h2{font-size:1.8rem;font-weight:700;margin:.85rem 0;color:#32436f}",
+      ".luna-template-presentation .tpl-card{background:#fff;border:1px solid #d7dff6;border-radius:14px;padding:.8rem .95rem;margin:.5rem 0;box-shadow:0 10px 26px rgba(44,62,120,.08)}",
+      ".luna-template-presentation .tpl-citation{font-style:italic;opacity:.9}",
+      ".luna-template-presentation .tpl-math-card{background:#eef4ff;border:1px solid #c9d7ff;border-radius:14px;padding:.8rem .95rem;font-family:'Times New Roman',serif}",
+      ".luna-template-presentation .tpl-code{background:#121c3a;color:#f2f5ff;padding:.9rem;border-radius:12px;overflow:auto}"
     ].join("\n")
   }
 ];
@@ -305,6 +307,7 @@ function normalizeTemplateModel(template = {}) {
   return {
     ...template,
     folderId: String(template?.folderId || "tpl-folder-root"),
+    pageSize: String(template?.pageSize || "a4"),
     blockClasses,
     blockFormats: normalizedFormats,
     blockHtmlTemplates: template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object"
@@ -1101,7 +1104,6 @@ export function DashboardView() {
     </section>
   );
 }
-
 export function AIToolsHubView({ onOpenTool }) {
   const tools = [
     {
@@ -1289,6 +1291,11 @@ export function WorkspacesManagerView({
   const [templateFormatNameDraft, setTemplateFormatNameDraft] = useState("");
   const [templateFormatClassDraft, setTemplateFormatClassDraft] = useState("");
   const [templateFormatHtmlDraft, setTemplateFormatHtmlDraft] = useState("");
+  const [templateFolderDraftName, setTemplateFolderDraftName] = useState("");
+  const [templateFolderRenameId, setTemplateFolderRenameId] = useState("");
+  const [templateFolderRenameName, setTemplateFolderRenameName] = useState("");
+  const [templateNameEdit, setTemplateNameEdit] = useState("");
+  const [templatePageSizeEdit, setTemplatePageSizeEdit] = useState("a4");
   const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
   const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
   const [editContentTemplateRawHtmlDraft, setEditContentTemplateRawHtmlDraft] = useState("{}");
@@ -1545,6 +1552,8 @@ export function WorkspacesManagerView({
     const activeTemplate = editContentTemplates.find((item) => item.id === editContentTemplateId) || editContentTemplates[0];
     if (!activeTemplate) return;
     setEditContentTemplateCssDraft(String(activeTemplate.css || ""));
+    setTemplateNameEdit(String(activeTemplate.name || ""));
+    setTemplatePageSizeEdit(String(activeTemplate.pageSize || "a4"));
     try {
       setEditContentTemplateRawHtmlDraft(JSON.stringify(activeTemplate.blockHtmlTemplates || {}, null, 2));
     } catch {
@@ -1578,9 +1587,8 @@ export function WorkspacesManagerView({
       setActiveTemplateFormatKey("");
       return;
     }
-    const exists = blocks.some((item) => item.key === activeTemplateFormatKey);
-    if (!exists) {
-      setActiveTemplateFormatKey(String(blocks[0].key || ""));
+    if (activeTemplateFormatKey && !blocks.some((item) => item.key === activeTemplateFormatKey)) {
+      setActiveTemplateFormatKey("");
     }
   }, [editContentTemplates, activeTemplateEditId, activeTemplateFormatKey]);
 
@@ -2371,22 +2379,17 @@ export function WorkspacesManagerView({
     if (!template) return;
     const { type, name } = parseTemplateFormatKey(formatKey);
     if (!type || !name) return;
-    const formats = Array.isArray(template.blockFormats?.[type]) ? template.blockFormats[type] : [];
-    const nextFormats = formats.map((entry) => {
-      const entryName = String(entry?.name || "");
-      if (entryName !== name) return entry;
-      return {
-        ...entry,
-        ...patch
-      };
-    });
-    const nextBlockFormats = {
-      ...(template.blockFormats || {}),
-      [type]: nextFormats
-    };
+    const nextType = String(patch?.type || type);
+    const nextName = String(patch?.name || name || "").trim() || name;
+    const sourceEntry = (Array.isArray(template.blockFormats?.[type]) ? template.blockFormats[type] : []).find((entry) => String(entry?.name || "") === name) || {};
+    const nextEntry = { ...sourceEntry, ...patch, name: nextName };
+    const nextBlockFormats = { ...(template.blockFormats || {}) };
+    const sourceFormats = Array.isArray(nextBlockFormats[type]) ? nextBlockFormats[type].filter((entry) => String(entry?.name || "") !== name) : [];
+    const targetFormats = Array.isArray(nextBlockFormats[nextType]) ? nextBlockFormats[nextType].filter((entry) => String(entry?.name || "") !== nextName) : [];
+    nextBlockFormats[type] = sourceFormats;
+    nextBlockFormats[nextType] = [...targetFormats, nextEntry];
     await persistTemplatePatch(templateId, { blockFormats: nextBlockFormats });
-    const nextName = String(patch?.name || name || "");
-    setActiveTemplateFormatKey(`${type}::${nextName}`);
+    setActiveTemplateFormatKey(`${nextType}::${nextName}`);
   }
 
   function runTemplateFormatHtmlCommand(command, value = null) {
@@ -2405,8 +2408,7 @@ export function WorkspacesManagerView({
   }
 
   function addTemplateFolder() {
-    const name = window.prompt("Template folder name", "New Template Folder");
-    const nextName = String(name || "").trim();
+    const nextName = String(templateFolderDraftName || "").trim();
     if (!nextName) return;
     const folder = {
       id: `tpl-folder-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
@@ -2416,17 +2418,19 @@ export function WorkspacesManagerView({
     const nextFolders = [...templateFolders, folder];
     setTemplateFolders(nextFolders);
     writeTemplateFoldersToStorage(nextFolders);
+    setTemplateFolderDraftName("");
   }
 
   function renameTemplateFolder(folderId) {
     const target = templateFolders.find((item) => item.id === folderId);
     if (!target) return;
-    const name = window.prompt("Rename template folder", target.name || "");
-    const nextName = String(name || "").trim();
+    const nextName = String(templateFolderRenameName || "").trim();
     if (!nextName) return;
     const nextFolders = templateFolders.map((item) => (item.id === folderId ? { ...item, name: nextName } : item));
     setTemplateFolders(nextFolders);
     writeTemplateFoldersToStorage(nextFolders);
+    setTemplateFolderRenameId("");
+    setTemplateFolderRenameName("");
   }
 
   function removeTemplateFolder(folderId) {
@@ -2730,10 +2734,9 @@ export function WorkspacesManagerView({
   }
 
   async function saveCurrentTemplateAsNew() {
-    const name = window.prompt("Template name", "My Template");
-    const nextName = String(name || "").trim();
-    if (!nextName) return;
     const source = activeBlockTemplate();
+    const nextName = String(templateNameEdit || `${String(source?.name || "My Template")} Copy`).trim();
+    if (!nextName) return;
     let blockHtmlTemplates = {};
     try {
       blockHtmlTemplates = parseTemplateRawHtmlDraft();
@@ -2746,6 +2749,7 @@ export function WorkspacesManagerView({
       id: `template_${Date.now().toString(36)}`,
       name: nextName,
       folderId: String(activeTemplateFolderId || source?.folderId || "tpl-folder-root"),
+      pageSize: String(templatePageSizeEdit || source?.pageSize || "a4"),
       css: String(editContentTemplateCssDraft || source?.css || ""),
       blockHtmlTemplates
     };
@@ -4744,19 +4748,30 @@ export function WorkspacesManagerView({
                         return children.map((folder) => {
                           const selected = activeTemplateFolderId === folder.id;
                           const templateCount = templatesInFolder(folder.id).length;
+                          const isRenaming = templateFolderRenameId === folder.id;
                           return (
                             <div key={`tpl-folder-tree-${folder.id}`} style={{ marginLeft: `${depth * 14}px`, marginBottom: "6px" }}>
                               <div className={selected ? "folder-node on" : "folder-node"}>
                                 <div className="folder-node-head">
-                                  <button className="folder-node-main" type="button" onClick={() => setActiveTemplateFolderId(folder.id)}>
-                                    <span className="row-icon-badge">📁</span> {folder.name} <span className="hint">({templateCount})</span>
-                                  </button>
-                                  {folder.id !== "tpl-folder-root" ? (
-                                    <div className="inline-actions">
-                                      <button className="table-btn icon-btn" type="button" onClick={() => renameTemplateFolder(folder.id)}>✏️</button>
-                                      <button className="table-btn danger icon-btn" type="button" onClick={() => removeTemplateFolder(folder.id)}>🗑️</button>
+                                  {isRenaming ? (
+                                    <div className="inline-actions" style={{ width: "100%" }}>
+                                      <input className="input" value={templateFolderRenameName} onChange={(event) => setTemplateFolderRenameName(event.target.value)} />
+                                      <button className="table-btn" type="button" onClick={() => renameTemplateFolder(folder.id)}>Save</button>
+                                      <button className="table-btn" type="button" onClick={() => { setTemplateFolderRenameId(""); setTemplateFolderRenameName(""); }}>Cancel</button>
                                     </div>
-                                  ) : null}
+                                  ) : (
+                                    <>
+                                      <button className="folder-node-main" type="button" onClick={() => setActiveTemplateFolderId(folder.id)}>
+                                        <span className="row-icon-badge">📁</span> {folder.name} <span className="hint">({templateCount})</span>
+                                      </button>
+                                      {folder.id !== "tpl-folder-root" ? (
+                                        <div className="inline-actions">
+                                          <button className="table-btn icon-btn" type="button" onClick={() => { setTemplateFolderRenameId(folder.id); setTemplateFolderRenameName(folder.name); }}>✏️</button>
+                                          <button className="table-btn danger icon-btn" type="button" onClick={() => removeTemplateFolder(folder.id)}>🗑️</button>
+                                        </div>
+                                      ) : null}
+                                    </>
+                                  )}
                                 </div>
                               </div>
                               {renderTemplateFolderTree(folder.id, depth + 1)}
@@ -4767,15 +4782,20 @@ export function WorkspacesManagerView({
 
                       const visibleTemplates = templatesInFolder(activeTemplateFolderId);
                       const formatBlocks = templateFormatBlocks(activeTemplate);
-                      const selectedFormatBlock = formatBlocks.find((item) => item.key === activeTemplateFormatKey) || formatBlocks[0] || null;
+                      const selectedFormatBlock = formatBlocks.find((item) => item.key === activeTemplateFormatKey) || null;
+                      const showFormatInspector = Boolean(selectedFormatBlock);
 
                       return (
-                        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "14px" }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: "14px", alignItems: "start" }}>
                           <section className="selection-box" style={{ margin: 0 }}>
                             <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "8px" }}>
                               <h5 style={{ margin: 0 }}>Template Folders</h5>
                               <button className="table-btn" type="button" onClick={addTemplateFolder}>+ Folder</button>
                             </div>
+                            <div className="inline-actions" style={{ marginBottom: "10px", gap: "8px", flexWrap: "wrap" }}>
+                              <input className="input" value={templateFolderDraftName} onChange={(event) => setTemplateFolderDraftName(event.target.value)} placeholder="New folder name" />
+                            </div>
+                            <div className="hint" style={{ marginBottom: "8px" }}>Create folders here, then click a folder to browse its templates.</div>
                             {renderTemplateFolderTree("", 0)}
                           </section>
 
@@ -4810,19 +4830,23 @@ export function WorkspacesManagerView({
 
                             {activeTemplate ? (
                               <>
-                                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
-                                  <span className="scope-chip">Template: {activeTemplate.name}</span>
-                                  <button
-                                    className="table-btn"
-                                    type="button"
-                                    onClick={async () => {
-                                      const nextName = String(window.prompt("Template name", String(activeTemplate.name || "")) || "").trim();
-                                      if (!nextName) return;
-                                      await persistTemplatePatch(activeTemplate.id, { name: nextName });
-                                    }}
-                                  >
-                                    Rename
-                                  </button>
+                                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px", alignItems: "center" }}>
+                                  <label className="search" style={{ minWidth: "220px" }}>
+                                    <span>Template name</span>
+                                    <input className="input" value={templateNameEdit} onChange={(event) => setTemplateNameEdit(event.target.value)} />
+                                  </label>
+                                  <button className="table-btn" type="button" onClick={() => updateActiveTemplateName(templateNameEdit)}>Save name</button>
+                                  <label className="search" style={{ minWidth: "190px" }}>
+                                    <span>Page size</span>
+                                    <select className="input" value={templatePageSizeEdit} onChange={(event) => {
+                                      const nextPageSize = event.target.value;
+                                      setTemplatePageSizeEdit(nextPageSize);
+                                      persistTemplatePatch(activeTemplate.id, { pageSize: nextPageSize });
+                                    }}>
+                                      <option value="a4">A4 document</option>
+                                      <option value="ppt" disabled>PPT presentation (soon)</option>
+                                    </select>
+                                  </label>
                                   <select
                                     className="input"
                                     value={String(activeTemplate.folderId || "tpl-folder-root")}
@@ -4836,8 +4860,11 @@ export function WorkspacesManagerView({
                                 </div>
 
                                 <article className="selection-box" style={{ marginTop: "12px" }}>
-                                  <h6 style={{ marginTop: 0 }}>Template Block Editor</h6>
-                                  <p className="hint">Each block below is a format definition: Building Block Type + Format Name + Format Specification.</p>
+                                  <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                                    <h6 style={{ margin: 0 }}>Template Block Editor</h6>
+                                    <span className="hint">Click a format to edit it.</span>
+                                  </div>
+                                  <p className="hint">Each block is a format definition: block type, format name, and block-wide HTML spec.</p>
 
                                   <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", marginBottom: "8px" }}>
                                     <select className="input" value={templateFormatTypeDraft} onChange={(event) => setTemplateFormatTypeDraft(event.target.value)}>
@@ -4850,7 +4877,7 @@ export function WorkspacesManagerView({
                                     <button className="table-btn" type="button" onClick={addTemplateFormat}>Add Block Format</button>
                                   </div>
 
-                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: "12px" }}>
+                                  <div style={{ display: "grid", gridTemplateColumns: showFormatInspector ? "1fr 320px" : "1fr", gap: "12px" }}>
                                     <div className="luna-canvas-scroll" style={{ maxHeight: "420px" }}>
                                       {formatBlocks.map((entry) => {
                                         const selected = entry.key === (selectedFormatBlock?.key || "");
@@ -4888,13 +4915,13 @@ export function WorkspacesManagerView({
                                       })}
                                     </div>
 
-                                    <aside className="luna-inspector">
-                                      {selectedFormatBlock ? (
+                                    {showFormatInspector ? (
+                                      <aside className="luna-inspector">
                                         <>
                                           <h6 style={{ marginTop: 0 }}>Format Block</h6>
                                           <label className="search full">
                                             <span>Building Block Type</span>
-                                            <select className="input" value={selectedFormatBlock.type} disabled>
+                                            <select className="input" value={selectedFormatBlock.type} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { type: event.target.value })}>
                                               {BLOCK_BUILDING_TYPES.map((option) => (
                                                 <option key={`fmt-lock-${option.value}`} value={option.value}>{option.label}</option>
                                               ))}
@@ -4902,20 +4929,7 @@ export function WorkspacesManagerView({
                                           </label>
                                           <label className="search full" style={{ marginTop: "8px" }}>
                                             <span>Format Name</span>
-                                            <div className="inline-actions" style={{ justifyContent: "space-between" }}>
-                                              <span className="scope-chip">{selectedFormatBlock.name}</span>
-                                              <button
-                                                className="table-btn"
-                                                type="button"
-                                                onClick={async () => {
-                                                  const nextName = String(window.prompt("Format name", selectedFormatBlock.name) || "").trim();
-                                                  if (!nextName) return;
-                                                  await updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { name: nextName });
-                                                }}
-                                              >
-                                                Rename
-                                              </button>
-                                            </div>
+                                            <input className="input" value={selectedFormatBlock.name} onChange={(event) => updateTemplateFormatEntry(activeTemplate.id, selectedFormatBlock.key, { name: event.target.value })} />
                                           </label>
                                           <label className="search full" style={{ marginTop: "8px" }}>
                                             <span>Class Name</span>
@@ -4930,8 +4944,8 @@ export function WorkspacesManagerView({
                                             <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("bold")}><b>B</b></button>
                                             <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("italic")}><i>I</i></button>
                                             <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("underline")}><u>U</u></button>
-                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("foreColor", window.prompt("Text color", "#1f2937") || "")}>Text Color</button>
-                                            <button className="table-btn" type="button" onClick={() => runTemplateFormatHtmlCommand("hiliteColor", window.prompt("Background color", "#f8fafc") || "")}>Background</button>
+                                            <input className="input color-input" type="color" defaultValue="#1f2937" onChange={(event) => runTemplateFormatHtmlCommand("foreColor", event.target.value)} />
+                                            <input className="input color-input" type="color" defaultValue="#f8fafc" onChange={(event) => runTemplateFormatHtmlCommand("hiliteColor", event.target.value)} />
                                           </div>
 
                                           <label className="search full" style={{ marginTop: "8px" }}>
@@ -4951,8 +4965,8 @@ export function WorkspacesManagerView({
                                             <button className="table-btn danger" type="button" onClick={() => removeTemplateFormat(selectedFormatBlock.type, selectedFormatBlock.name)}>Delete Format</button>
                                           </div>
                                         </>
-                                      ) : <p className="hint">Add a block format to start editing.</p>}
-                                    </aside>
+                                      </aside>
+                                    ) : null}
                                   </div>
                                 </article>
 

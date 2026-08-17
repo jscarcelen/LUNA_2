@@ -152,6 +152,7 @@ const DEFAULT_BLOCK_TEMPLATES = [
 ];
 
 const BLOCK_TYPE_OPTIONS = BLOCK_BUILDING_TYPES;
+const EDITOR_BLOCK_TYPE_OPTIONS = BLOCK_TYPE_OPTIONS.filter((option) => option.value !== "heading2" && option.value !== "heading3");
 const TEMPLATE_BUILDING_TYPES = [
   { value: "heading", label: "Heading" },
   { value: "paragraph", label: "Paragraph" },
@@ -173,6 +174,13 @@ function mapStorageTypeToTemplate(type = "") {
   const normalized = String(type || "").trim();
   if (normalized === "heading1" || normalized === "heading2" || normalized === "heading3") return "heading";
   return normalized;
+}
+
+function normalizeEditorBlockType(type = "") {
+  const normalized = String(type || "paragraph").trim();
+  if (normalized === "heading2" || normalized === "heading3") return "heading1";
+  const known = new Set(BLOCK_BUILDING_TYPES.map((item) => item.value));
+  return known.has(normalized) ? normalized : "paragraph";
 }
 
 function isUuid(value = "") {
@@ -2828,9 +2836,14 @@ export function WorkspacesManagerView({
   function syncBlocksFromHtml(htmlSource = "") {
     const activeTemplate = activeBlockTemplate();
     const nextBlocks = normalizeBlocksForEditor(htmlToBlocks(htmlSource)).map((block) => {
-      const formatSpec = resolveBlockFormatSpec(activeTemplate, block);
+      const nextType = normalizeEditorBlockType(block.type);
+      const normalizedBlock = nextType === block.type
+        ? block
+        : convertBlockToTypeKeepingContent(block, nextType);
+      const formatSpec = resolveBlockFormatSpec(activeTemplate, normalizedBlock);
       return {
-        ...block,
+        ...normalizedBlock,
+        type: nextType,
         formatName: formatSpec.formatName
       };
     });
@@ -2864,20 +2877,32 @@ export function WorkspacesManagerView({
     const nextId = String(nextTemplateId || "").trim();
     if (!nextId) return;
     setEditContentTemplateId(nextId);
-    window.requestAnimationFrame(() => {
-      const template = editContentTemplates.find((item) => item.id === nextId) || activeBlockTemplate();
-      setEditContentBlocks((previous) => {
-        const normalized = (Array.isArray(previous) ? previous : []).map((block) => {
-          const format = resolveBlockFormatSpec(template, block);
-          return {
-            ...block,
-            formatName: format.formatName
-          };
-        });
-        syncHtmlFromBlocks(normalized);
-        return normalized;
+  }
+
+  function applyTemplateToAllBlocks() {
+    const template = activeBlockTemplate();
+    if (!template) return;
+    setEditContentBlocks((previous) => {
+      const normalized = (Array.isArray(previous) ? previous : []).map((block) => {
+        const normalizedType = normalizeEditorBlockType(block.type);
+        const hasTypeFormats = Array.isArray(template?.blockFormats?.[normalizedType]) && template.blockFormats[normalizedType].length;
+        const targetType = hasTypeFormats ? normalizedType : "paragraph";
+        const converted = targetType === block.type
+          ? block
+          : convertBlockToTypeKeepingContent(block, targetType);
+        const format = resolveBlockFormatSpec(template, converted);
+        return {
+          ...converted,
+          type: targetType,
+          formatName: format.formatName
+        };
       });
+      window.requestAnimationFrame(() => {
+        syncHtmlFromBlocks(normalized);
+      });
+      return normalized;
     });
+    setEditContentStatusMessage(`Applied template "${String(template.name || "Selected template")}" to all blocks.`);
   }
 
   function updateTemplateCssDraft(nextCss = "") {
@@ -3058,7 +3083,7 @@ export function WorkspacesManagerView({
 
   function changeContentBlockType(blockId, nextType) {
     const key = String(blockId || "");
-    const targetType = String(nextType || "paragraph");
+    const targetType = normalizeEditorBlockType(nextType);
     if (!key) return;
     setEditContentBlocks((previous) => {
       const list = Array.isArray(previous) ? [...previous] : [];
@@ -3283,13 +3308,19 @@ export function WorkspacesManagerView({
     setEditContentDoc(doc);
     setEditContentHtmlDraft(seededHtml);
     editContentWorkingHtmlRef.current = seededHtml;
-    if (Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length) {
+    const hasSavedBlocks = Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length > 0;
+    if (hasSavedBlocks) {
       const targetTemplateId = String(doc.contentTemplateId || "").trim();
       const template = editContentTemplates.find((item) => item.id === targetTemplateId) || activeBlockTemplate();
       const normalizedBlocks = normalizeBlocksForEditor(doc.contentBlocksJson).map((block) => {
-        const formatSpec = resolveBlockFormatSpec(template, block);
+        const nextType = normalizeEditorBlockType(block.type);
+        const normalizedBlock = nextType === block.type
+          ? block
+          : convertBlockToTypeKeepingContent(block, nextType);
+        const formatSpec = resolveBlockFormatSpec(template, normalizedBlock);
         return {
-          ...block,
+          ...normalizedBlock,
+          type: nextType,
           formatName: formatSpec.formatName
         };
       });
@@ -3320,9 +3351,11 @@ export function WorkspacesManagerView({
       const fullHtml = decodeBase64Utf8(data?.download?.contentBase64 || "");
       const editableHtml = extractEditableBodyHtml(fullHtml);
       if (editableHtml.trim()) {
-        setEditContentHtmlDraft(editableHtml);
-        editContentWorkingHtmlRef.current = editableHtml;
-        syncBlocksFromHtml(editableHtml);
+        if (!hasSavedBlocks) {
+          setEditContentHtmlDraft(editableHtml);
+          editContentWorkingHtmlRef.current = editableHtml;
+          syncBlocksFromHtml(editableHtml);
+        }
       }
     } catch {
       setEditContentStatusMessage("Opened editor with fallback HTML. Some original image links may need to be reinserted.");
@@ -5828,6 +5861,7 @@ export function WorkspacesManagerView({
                         ))}
                       </select>
                     </label>
+                    <button className="table-btn" type="button" onClick={applyTemplateToAllBlocks}>Apply Template To Blocks</button>
                     <label className="search" style={{ minWidth: "220px" }}>
                       <span>Add Block</span>
                       <select className="input" defaultValue="" onChange={(event) => {
@@ -5836,7 +5870,7 @@ export function WorkspacesManagerView({
                         event.target.value = "";
                       }}>
                         <option value="">Choose type...</option>
-                        {BLOCK_TYPE_OPTIONS.map((option) => (
+                        {EDITOR_BLOCK_TYPE_OPTIONS.map((option) => (
                           <option key={`add-select-${option.value}`} value={option.value}>{option.label}</option>
                         ))}
                       </select>
@@ -5885,7 +5919,7 @@ export function WorkspacesManagerView({
                                   value={String(editContentMenuAddTypeByBlockId[block.id] || "paragraph")}
                                   onChange={(event) => setEditContentMenuAddTypeByBlockId((previous) => ({ ...previous, [block.id]: event.target.value }))}
                                 >
-                                  {BLOCK_TYPE_OPTIONS.map((option) => (
+                                  {EDITOR_BLOCK_TYPE_OPTIONS.map((option) => (
                                     <option key={`menu-add-${block.id}-${option.value}`} value={option.value}>{option.label}</option>
                                   ))}
                                 </select>
@@ -5907,12 +5941,12 @@ export function WorkspacesManagerView({
                           {type === "paragraph" ? <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</p> : null}
                           {type === "standalone_text" ? (
                             String(block.html || "").trim()
-                              ? <div style={{ margin: 0 }} dangerouslySetInnerHTML={{ __html: String(block.html || "") }} />
+                              ? <div style={{ margin: 0 }} dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.html || "")) }} />
                               : <div style={{ margin: 0, whiteSpace: "pre-wrap" }}>{renderTextWithInlineLatex(String(block.text || ""))}</div>
                           ) : null}
                           {type === "bullet_list" ? (
                             String(block.html || "").trim()
-                              ? <div dangerouslySetInnerHTML={{ __html: String(block.html || "") }} />
+                              ? <div dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.html || "")) }} />
                               : (
                                 <ul style={{ margin: "0 0 0 20px" }}>
                                   {(Array.isArray(block.items) ? block.items : []).map((item, itemIndex) => (
@@ -5933,7 +5967,7 @@ export function WorkspacesManagerView({
                           ) : null}
                           {type === "table" ? (
                             String(block.tableHtml || "").trim()
-                              ? <div dangerouslySetInnerHTML={{ __html: String(block.tableHtml || "") }} />
+                              ? <div dangerouslySetInnerHTML={{ __html: renderLatexInHtml(String(block.tableHtml || "")) }} />
                               : (
                                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                                   <tbody>
@@ -5984,7 +6018,7 @@ export function WorkspacesManagerView({
                           <label className="search full">
                             <span>Type</span>
                             <select className="input" value={type} onChange={(event) => changeContentBlockType(selectedBlock.id, event.target.value)}>
-                              {BLOCK_TYPE_OPTIONS.map((option) => (
+                              {EDITOR_BLOCK_TYPE_OPTIONS.map((option) => (
                                 <option key={`inspector-${selectedBlock.id}-${option.value}`} value={option.value}>{option.label}</option>
                               ))}
                             </select>

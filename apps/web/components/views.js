@@ -2890,9 +2890,16 @@ export function WorkspacesManagerView({
         const converted = targetType === block.type
           ? block
           : convertBlockToTypeKeepingContent(block, targetType);
+        const strippedOverrides = { ...converted };
+        if (targetType === "paragraph" || targetType === "standalone_text" || targetType === "bullet_list") {
+          strippedOverrides.html = "";
+        }
+        if (targetType === "table") {
+          strippedOverrides.tableHtml = "";
+        }
         const format = resolveBlockFormatSpec(template, converted);
         return {
-          ...converted,
+          ...strippedOverrides,
           type: targetType,
           formatName: format.formatName
         };

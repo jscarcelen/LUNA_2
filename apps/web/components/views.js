@@ -219,6 +219,34 @@ function defaultTemplateFolders() {
   return [{ id: "tpl-folder-root", name: "All Templates", parentFolderId: "" }];
 }
 
+function normalizeTemplateFolders(folders = []) {
+  const root = defaultTemplateFolders()[0];
+  const raw = Array.isArray(folders) ? folders : [];
+  const map = new Map();
+  map.set(root.id, root);
+
+  for (const item of raw) {
+    const id = String(item?.id || "").trim();
+    if (!id || id === root.id) continue;
+    const name = String(item?.name || "").trim() || "Template Folder";
+    const parentRaw = String(item?.parentFolderId || "").trim();
+    const parentFolderId = parentRaw && parentRaw !== id ? parentRaw : root.id;
+    map.set(id, { id, name, parentFolderId });
+  }
+
+  const normalized = [root];
+  for (const folder of map.values()) {
+    if (folder.id === root.id) continue;
+    const parentExists = map.has(folder.parentFolderId);
+    normalized.push({
+      ...folder,
+      parentFolderId: parentExists ? folder.parentFolderId : root.id
+    });
+  }
+
+  return normalized;
+}
+
 function readTemplateFoldersFromStorage() {
   if (typeof window === "undefined") return defaultTemplateFolders();
   try {
@@ -226,7 +254,7 @@ function readTemplateFoldersFromStorage() {
     if (!raw) return defaultTemplateFolders();
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed) || !parsed.length) return defaultTemplateFolders();
-    return parsed;
+    return normalizeTemplateFolders(parsed);
   } catch {
     return defaultTemplateFolders();
   }
@@ -235,7 +263,7 @@ function readTemplateFoldersFromStorage() {
 function writeTemplateFoldersToStorage(folders = []) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(TEMPLATE_FOLDER_STORAGE_KEY, JSON.stringify(folders));
+    window.localStorage.setItem(TEMPLATE_FOLDER_STORAGE_KEY, JSON.stringify(normalizeTemplateFolders(folders)));
   } catch {
     // Ignore local storage limits.
   }
@@ -1498,7 +1526,7 @@ export function WorkspacesManagerView({
       }
 
       if (cancelled || !Array.isArray(templates) || !templates.length) return;
-      setTemplateFolders(Array.isArray(folders) && folders.length ? folders : defaultTemplateFolders());
+      setTemplateFolders(normalizeTemplateFolders(Array.isArray(folders) && folders.length ? folders : defaultTemplateFolders()));
       setEditContentTemplates(templates);
       setActiveTemplateEditId(String(templates[0].id || ""));
       if (!templates.some((item) => item.id === editContentTemplateId)) {
@@ -2267,8 +2295,9 @@ export function WorkspacesManagerView({
 
   function templateFoldersByParent() {
     const map = new Map();
-    for (const folder of templateFolders) {
-      const parent = String(folder.parentFolderId || "");
+    const normalized = normalizeTemplateFolders(templateFolders);
+    for (const folder of normalized) {
+      const parent = String(folder.parentFolderId || "").trim();
       const bucket = map.get(parent) || [];
       bucket.push(folder);
       map.set(parent, bucket);
@@ -2297,7 +2326,9 @@ export function WorkspacesManagerView({
     const descendants = templateFolderDescendants(folderId);
     const search = String(templateSearchText || "").trim().toLowerCase();
     return editContentTemplates.filter((item) => {
-      const inScope = descendants.has(String(item.folderId || "tpl-folder-root"));
+      const itemFolderId = String(item.folderId || "tpl-folder-root").trim() || "tpl-folder-root";
+      const normalizedFolderId = itemFolderId === "" ? "tpl-folder-root" : itemFolderId;
+      const inScope = descendants.has(normalizedFolderId);
       if (!inScope) return false;
       if (!search) return true;
       return String(item.name || "").toLowerCase().includes(search);
@@ -4695,6 +4726,18 @@ export function WorkspacesManagerView({
                     {(() => {
                       const folderChildren = templateFoldersByParent();
                       const activeTemplate = activeTemplateEditorItem();
+                      const templateFolderPathById = new Map();
+
+                      const collectTemplateFolderPaths = (parentId = "", parentPath = "") => {
+                        const children = folderChildren.get(parentId) || [];
+                        for (const folder of children) {
+                          const nextPath = parentPath ? `${parentPath} / ${folder.name}` : folder.name;
+                          templateFolderPathById.set(folder.id, nextPath);
+                          collectTemplateFolderPaths(folder.id, nextPath);
+                        }
+                      };
+
+                      collectTemplateFolderPaths("", "");
 
                       const renderTemplateFolderTree = (parentId = "", depth = 0) => {
                         const children = folderChildren.get(parentId) || [];
@@ -4733,7 +4776,7 @@ export function WorkspacesManagerView({
                               <h5 style={{ margin: 0 }}>Template Folders</h5>
                               <button className="table-btn" type="button" onClick={addTemplateFolder}>+ Folder</button>
                             </div>
-                            {renderTemplateFolderTree("")}
+                            {renderTemplateFolderTree("", 0)}
                           </section>
 
                           <section className="selection-box" style={{ margin: 0 }}>
@@ -4786,7 +4829,7 @@ export function WorkspacesManagerView({
                                     onChange={(event) => persistTemplatePatch(activeTemplate.id, { folderId: event.target.value })}
                                   >
                                     {templateFolders.map((folder) => (
-                                      <option key={`tpl-folder-opt-${folder.id}`} value={folder.id}>{folder.name}</option>
+                                      <option key={`tpl-folder-opt-${folder.id}`} value={folder.id}>{templateFolderPathById.get(folder.id) || folder.name}</option>
                                     ))}
                                   </select>
                                   <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
@@ -4811,17 +4854,36 @@ export function WorkspacesManagerView({
                                     <div className="luna-canvas-scroll" style={{ maxHeight: "420px" }}>
                                       {formatBlocks.map((entry) => {
                                         const selected = entry.key === (selectedFormatBlock?.key || "");
+                                        const previewHtml = blocksToHtml([
+                                          {
+                                            id: `tpl-preview-${entry.key}`,
+                                            type: entry.type,
+                                            formatName: entry.name,
+                                            text: `${entry.typeLabel} sample`,
+                                            items: ["Item 1", "Item 2"],
+                                            latex: "x^2 + y^2 = z^2",
+                                            rows: [["A", "B"], ["1", "2"]],
+                                            src: "",
+                                            alt: "",
+                                            caption: "",
+                                            href: "https://example.com",
+                                            language: "text",
+                                            code: "console.log('sample');"
+                                          }
+                                        ], activeTemplate);
                                         return (
-                                          <button
+                                          <div
                                             key={`fmt-block-${entry.key}`}
-                                            type="button"
                                             className={selected ? "luna-canvas-block active" : "luna-canvas-block"}
                                             onClick={() => setActiveTemplateFormatKey(entry.key)}
-                                            style={{ width: "100%", textAlign: "left", background: "#fff" }}
+                                            style={{ width: "100%", textAlign: "left", background: "#fff", padding: "12px" }}
                                           >
-                                            <strong>{entry.typeLabel} - {entry.name}</strong>
-                                            <p className="hint" style={{ margin: "4px 0 0" }}>{entry.className || "(no class)"}</p>
-                                          </button>
+                                            <div className="inline-actions" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                              <strong>{entry.typeLabel} - {entry.name}</strong>
+                                              <span className="scope-chip">{entry.className || "no class"}</span>
+                                            </div>
+                                            <div className="doc-preview rich-html-render" style={{ margin: 0, minHeight: "56px" }} dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                                          </div>
                                         );
                                       })}
                                     </div>

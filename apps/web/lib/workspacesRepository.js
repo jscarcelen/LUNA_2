@@ -2374,28 +2374,14 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
       .eq("owner_user_id", ownerUserId);
     if (updateError) throw updateError;
   } else {
-    const { data: existingByName, error: findExistingError } = await client
+    row.created_at = nowIso;
+    const { error: upsertError } = await client
       .from("document_block_templates")
-      .select("id")
-      .eq("owner_user_id", ownerUserId)
-      .eq("name", templateName)
-      .maybeSingle();
-    if (findExistingError) throw findExistingError;
-
-    if (existingByName?.id) {
-      const { error: updateByNameError } = await client
-        .from("document_block_templates")
-        .update(row)
-        .eq("id", existingByName.id)
-        .eq("owner_user_id", ownerUserId);
-      if (updateByNameError) throw updateByNameError;
-    } else {
-      row.created_at = nowIso;
-      const { error: insertError } = await client
-        .from("document_block_templates")
-        .insert(row);
-      if (insertError) throw insertError;
-    }
+      .upsert(row, {
+        onConflict: "owner_user_id,name",
+        ignoreDuplicates: false
+      });
+    if (upsertError) throw upsertError;
   }
 
   const templates = await listDocumentBlockTemplates(ownerUserId);

@@ -490,8 +490,17 @@ function hasBlockChildren(node) {
   return Boolean(node?.querySelector?.(BLOCK_TAGS));
 }
 
-function htmlToBlocks(htmlSource = "") {
+function stripTemplateChromeFromHtml(htmlSource = "") {
   const source = String(htmlSource || "").trim();
+  if (!source) return source;
+  return source
+    .replace(/<style\b[^>]*data-luna-template="[^"]*"[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+    .trim();
+}
+
+function htmlToBlocks(htmlSource = "") {
+  const source = stripTemplateChromeFromHtml(htmlSource);
   if (!source) return [createDefaultBlock("paragraph")];
 
   try {
@@ -751,6 +760,10 @@ function blocksToHtml(blocks = [], template = null) {
 
   const styleTag = css ? `<style data-luna-template="${escapeHtml(activeTemplate?.id || "template_default")}">${css}</style>` : "";
   return `${styleTag}<div class="${escapeHtml(containerClass)}" data-template-id="${escapeHtml(activeTemplate?.id || "template_default")}">${htmlBlocks}</div>`;
+}
+
+function renderBlockPreviewHtml(block = {}, template = null) {
+  return renderLatexInHtml(blocksToHtml([block], template));
 }
 
 function normalizeBlocksForEditor(blocks = []) {
@@ -5892,7 +5905,7 @@ export function WorkspacesManagerView({
                   <div className="luna-canvas-scroll">
                     {editContentBlocks.map((block, index) => {
                       const isActive = block.id === editContentSelectedBlockId;
-                      const previewHtml = renderLatexInHtml(blocksToHtml([block], activeBlockTemplate()));
+                      const previewHtml = renderBlockPreviewHtml(block, activeBlockTemplate());
                       return (
                         <div
                           key={block.id}

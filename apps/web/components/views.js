@@ -2720,7 +2720,7 @@ export function WorkspacesManagerView({
     setTemplateFormatNameDraft("");
     setTemplateFormatClassDraft("");
     setTemplateFormatHtmlDraft("");
-    setEditContentStatusMessage(`Added format \"${name}\".`);
+    setEditContentStatusMessage(`Added format "${name}".`);
   }
 
   async function removeTemplateFormat(type, name) {
@@ -2742,7 +2742,7 @@ export function WorkspacesManagerView({
       blockFormats.heading3 = headingFormats.map((entry) => ({ ...entry }));
     }
     await persistTemplatePatch(active.id, { blockFormats });
-    setEditContentStatusMessage(`Removed format \"${name}\".`);
+    setEditContentStatusMessage(`Removed format "${name}".`);
   }
 
   function parseTemplateRawHtmlDraft() {
@@ -3045,7 +3045,7 @@ export function WorkspacesManagerView({
       return;
     }
 
-    const confirmed = window.confirm(`Delete template \"${active.name || "Untitled"}\"?`);
+    const confirmed = window.confirm(`Delete template "${active.name || "Untitled"}"?`);
     if (!confirmed) return;
 
     if (typeof onDeleteDocumentBlockTemplate === "function") {

@@ -1491,6 +1491,8 @@ export function WorkspacesManagerView({
   const [editContentTemplateId, setEditContentTemplateId] = useState(DEFAULT_BLOCK_TEMPLATES[0].id);
   const [editContentTemplateCssDraft, setEditContentTemplateCssDraft] = useState(DEFAULT_BLOCK_TEMPLATES[0].css);
   const [editContentTemplateRawHtmlDraft, setEditContentTemplateRawHtmlDraft] = useState("{}");
+  const [showEditorTemplateTools, setShowEditorTemplateTools] = useState(false);
+  const [showEditorDownloadTools, setShowEditorDownloadTools] = useState(false);
   const [editContentSelectedBlockId, setEditContentSelectedBlockId] = useState("");
   const [editContentMenuBlockId, setEditContentMenuBlockId] = useState("");
   const [editContentMenuAddTypeByBlockId, setEditContentMenuAddTypeByBlockId] = useState({});
@@ -3383,6 +3385,8 @@ export function WorkspacesManagerView({
   async function handleStartEditContent(doc) {
     if (!doc || doc.sourceType === "generated") return;
     setIsPreparingEditContent(true);
+    setShowEditorTemplateTools(false);
+    setShowEditorDownloadTools(false);
     setEditContentStatusMessage("");
     setShowInlineLatexInfo(false);
     setEditContentPendingImageBlockId("");
@@ -5859,6 +5863,12 @@ export function WorkspacesManagerView({
                 >
                   {isSavingEditContent ? "Saving..." : "Save Edits"}
                 </button>
+                <button className={showEditorTemplateTools ? "primary-btn" : "table-btn"} type="button" onClick={() => setShowEditorTemplateTools((previous) => !previous)}>
+                  Edit Template
+                </button>
+                <button className={showEditorDownloadTools ? "primary-btn" : "table-btn"} type="button" onClick={() => setShowEditorDownloadTools((previous) => !previous)}>
+                  Download
+                </button>
                 <button
                   className="table-btn danger"
                   onClick={() => {
@@ -5870,11 +5880,14 @@ export function WorkspacesManagerView({
                     setEditContentMenuAddTypeByBlockId({});
                     setEditContentPendingImageBlockId("");
                     setShowInlineLatexInfo(false);
+                    setShowEditorTemplateTools(false);
+                    setShowEditorDownloadTools(false);
                     editContentWorkingHtmlRef.current = "";
                     setEditContentStatusMessage("");
                   }}
                   type="button"
                   aria-label="Close editor"
+                  title="Close block editor viewer"
                 >
                   ✕
                 </button>
@@ -5886,6 +5899,36 @@ export function WorkspacesManagerView({
             </p>
 
             <p className="hint" style={{ marginTop: "10px" }}>Block mode supports add/reorder/type-switch without content loss, templates, rich formatting, and JSON export.</p>
+
+            {showEditorTemplateTools ? (
+              <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
+                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", alignItems: "end" }}>
+                  <label className="search" style={{ minWidth: "220px" }}>
+                    <span>Change template to</span>
+                    <select className="input" value={editContentTemplateId} onChange={(event) => changeBlockTemplate(event.target.value)}>
+                      {editContentTemplates.map((template) => (
+                        <option key={`top-template-${template.id}`} value={template.id}>{template.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="table-btn" type="button" onClick={applyTemplateToAllBlocks}>Apply Template</button>
+                  <label className="search" style={{ minWidth: "220px" }}>
+                    <span>Save current format as template</span>
+                    <input className="input" value={templateNameEdit} onChange={(event) => setTemplateNameEdit(event.target.value)} placeholder="Template name" />
+                  </label>
+                  <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template</button>
+                </div>
+              </div>
+            ) : null}
+
+            {showEditorDownloadTools ? (
+              <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
+                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                  <button className="table-btn" type="button" onClick={handleDownloadEditedContentHtml} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>Download HTML</button>
+                  <button className="table-btn" type="button" onClick={exportContentBlocksJson} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>Download JSON</button>
+                </div>
+              </div>
+            ) : null}
 
             {editContentMode === "blocks" ? (
               <>
@@ -5927,9 +5970,7 @@ export function WorkspacesManagerView({
                         ))}
                       </select>
                     </label>
-                    <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
                     <button className="table-btn" type="button" onClick={deleteCurrentTemplate} disabled={editContentTemplateId === DEFAULT_BLOCK_TEMPLATES[0].id}>Delete Template</button>
-                    <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
                   </div>
                 </div>
 
@@ -6378,9 +6419,6 @@ export function WorkspacesManagerView({
             ) : null}
 
             <div className="inline-actions" style={{ marginTop: "12px" }}>
-              <button className="table-btn" type="button" onClick={handleDownloadEditedContentHtml} disabled={isPreparingEditContent || isSavingEditContent || isWorking}>
-                Download HTML
-              </button>
               <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>
                 {isSavingEditContent ? "Saving..." : "Save Edits"}
               </button>

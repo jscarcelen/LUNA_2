@@ -92,7 +92,8 @@ const DEFAULT_BLOCK_TEMPLATES = [
       code: [{ name: "Code", className: "tpl-code", htmlTemplate: "<pre data-language=\"{{language}}\"><code>{{code}}</code></pre>" }]
     },
     css: [
-      ".luna-template-default{font-family:Georgia,serif;color:#1f2937;line-height:1.6}",
+      "@page{size:A4;margin:20mm}",
+      ".luna-template-default{box-sizing:border-box;width:210mm;min-height:297mm;margin:0 auto;padding:20mm;background:#fff;font-family:Georgia,serif;color:#1f2937;line-height:1.6}",
       ".luna-template-default .tpl-h1{font-size:2rem;font-weight:700;margin:.8rem 0}",
       ".luna-template-default .tpl-h2{font-size:1.55rem;font-weight:700;margin:.7rem 0}",
       ".luna-template-default .tpl-h3{font-size:1.2rem;font-weight:600;margin:.6rem 0}",
@@ -424,6 +425,21 @@ function normalizeTemplateModel(template = {}) {
       ? template.blockHtmlTemplates
       : {}
   };
+}
+
+function ensureDefaultBlockTemplate(templates = []) {
+  const normalized = (Array.isArray(templates) ? templates : []).map((item) => normalizeTemplateModel(item));
+  const savedDefault = normalized.find((item) => item.id === DEFAULT_BLOCK_TEMPLATES[0].id || String(item.name || "").trim().toLowerCase() === "a4 document");
+  const defaultTemplate = normalizeTemplateModel({
+    ...DEFAULT_BLOCK_TEMPLATES[0],
+    ...(savedDefault || {}),
+    id: DEFAULT_BLOCK_TEMPLATES[0].id,
+    name: DEFAULT_BLOCK_TEMPLATES[0].name,
+    pageSize: "a4",
+    folderId: "tpl-folder-root"
+  });
+  const others = normalized.filter((item) => item !== savedDefault && item.id !== DEFAULT_BLOCK_TEMPLATES[0].id && String(item.name || "").trim().toLowerCase() !== "a4 document");
+  return [defaultTemplate, ...others];
 }
 
 function resolveBlockFormatSpec(template = {}, block = {}) {
@@ -784,6 +800,15 @@ function normalizeBlocksForEditor(blocks = []) {
       text: inlineText
     };
   });
+}
+
+function removeLegacyTemplateChromeBlocks(blocks = []) {
+  const list = Array.isArray(blocks) ? blocks : [];
+  const filtered = list.filter((block) => {
+    const text = String(block?.text || "").trim();
+    return !(text.includes(".luna-template-") && text.includes("tpl-h1") && text.includes("tpl-h2"));
+  });
+  return filtered.length ? filtered : [createDefaultBlock("paragraph")];
 }
 
 function downloadBase64File(base64, filename, mimeType) {
@@ -1425,7 +1450,7 @@ export function WorkspacesManagerView({
   const [editDocTagDraft, setEditDocTagDraft] = useState("");
   const [editContentDoc, setEditContentDoc] = useState(null);
   const [editContentHtmlDraft, setEditContentHtmlDraft] = useState("");
-  const [editContentMode, setEditContentMode] = useState("blocks");
+  const editContentMode = "blocks";
   const [editContentBlocks, setEditContentBlocks] = useState([]);
   const [editContentTemplates, setEditContentTemplates] = useState(DEFAULT_BLOCK_TEMPLATES);
   const [templateFolders, setTemplateFolders] = useState(defaultTemplateFolders());
@@ -1664,13 +1689,13 @@ export function WorkspacesManagerView({
     let cancelled = false;
 
     async function loadTemplates() {
-      let templates = readBlockTemplatesFromStorage().map((item) => normalizeTemplateModel(item));
+      let templates = ensureDefaultBlockTemplate(readBlockTemplatesFromStorage());
       const folders = readTemplateFoldersFromStorage();
       if (typeof onListDocumentBlockTemplates === "function") {
         try {
           const sharedTemplates = await onListDocumentBlockTemplates();
           if (Array.isArray(sharedTemplates) && sharedTemplates.length) {
-            templates = sharedTemplates.map((item) => normalizeTemplateModel(item));
+            templates = ensureDefaultBlockTemplate(sharedTemplates);
             writeBlockTemplatesToStorage(templates);
           }
         } catch {
@@ -2556,6 +2581,11 @@ export function WorkspacesManagerView({
     const active = activeTemplateEditorItem();
     const name = String(nextName || "").trim();
     if (!active || !name) return;
+    if (active.id === DEFAULT_BLOCK_TEMPLATES[0].id) {
+      setTemplateNameEdit(DEFAULT_BLOCK_TEMPLATES[0].name);
+      setEditContentStatusMessage("The A4 Document template name is fixed.");
+      return;
+    }
     persistTemplatePatch(active.id, { name });
     setTemplateNameEdit(name);
     setEditContentStatusMessage("Template name saved.");
@@ -2653,12 +2683,9 @@ export function WorkspacesManagerView({
   }
 
   async function persistTemplatePatch(templateId, patch = {}) {
-    let localTemplates = [];
-    setEditContentTemplates((previous) => {
-      localTemplates = previous.map((item) => (item.id === templateId ? normalizeTemplateModel({ ...item, ...patch }) : item));
-      return localTemplates;
-    });
-    if (localTemplates.length) writeBlockTemplatesToStorage(localTemplates);
+    const localTemplates = ensureDefaultBlockTemplate(editContentTemplates.map((item) => (item.id === templateId ? normalizeTemplateModel({ ...item, ...patch }) : item)));
+    setEditContentTemplates(localTemplates);
+    writeBlockTemplatesToStorage(localTemplates);
 
     const active = localTemplates.find((item) => item.id === templateId);
     if (active && typeof onSaveDocumentBlockTemplate === "function") {
@@ -2666,7 +2693,7 @@ export function WorkspacesManagerView({
         const payloadForSave = isUuid(active.id) ? active : { ...active, id: "" };
         const saved = await onSaveDocumentBlockTemplate(payloadForSave);
         if (Array.isArray(saved?.templates) && saved.templates.length) {
-          const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
+          const normalized = ensureDefaultBlockTemplate(saved.templates);
           setEditContentTemplates(normalized);
           writeBlockTemplatesToStorage(normalized);
           return;
@@ -2889,7 +2916,20 @@ export function WorkspacesManagerView({
   function changeBlockTemplate(nextTemplateId = "") {
     const nextId = String(nextTemplateId || "").trim();
     if (!nextId) return;
+    const nextTemplate = editContentTemplates.find((item) => item.id === nextId);
+    if (!nextTemplate) return;
     setEditContentTemplateId(nextId);
+    setEditContentBlocks((previous) => {
+      const nextBlocks = (Array.isArray(previous) ? previous : []).map((block) => ({
+        ...block,
+        formatName: resolveBlockFormatSpec(nextTemplate, block).formatName
+      }));
+      const html = blocksToHtml(nextBlocks, nextTemplate);
+      setEditContentHtmlDraft(html);
+      editContentWorkingHtmlRef.current = html;
+      return nextBlocks;
+    });
+    setEditContentStatusMessage(`Selected template "${nextTemplate.name}". Save Edits to apply it to this document.`);
   }
 
   function applyTemplateToAllBlocks() {
@@ -2973,7 +3013,7 @@ export function WorkspacesManagerView({
   }
 
   async function saveCurrentTemplateAsNew() {
-    const source = activeBlockTemplate();
+    const source = editContentTemplates.find((item) => item.id === DEFAULT_BLOCK_TEMPLATES[0].id) || DEFAULT_BLOCK_TEMPLATES[0];
     const requestedName = String(templateNameEdit || `${String(source?.name || "My Template")} Copy`).trim();
     if (!requestedName) return;
 
@@ -2991,13 +3031,6 @@ export function WorkspacesManagerView({
       return `${requestedName} ${Date.now().toString(36)}`;
     })();
 
-    let blockHtmlTemplates = {};
-    try {
-      blockHtmlTemplates = parseTemplateRawHtmlDraft();
-    } catch (error) {
-      setEditContentStatusMessage(String(error.message || error));
-      return;
-    }
     const nextTemplate = {
       ...source,
       id: `template_${Date.now().toString(36)}`,
@@ -3005,7 +3038,7 @@ export function WorkspacesManagerView({
       folderId: String(activeTemplateFolderId || source?.folderId || "tpl-folder-root"),
       pageSize: String(templatePageSizeEdit || source?.pageSize || "a4"),
       css: String(editContentTemplateCssDraft || source?.css || ""),
-      blockHtmlTemplates
+      blockHtmlTemplates: {}
     };
     const nextTemplates = [...editContentTemplates, normalizeTemplateModel(nextTemplate)];
 
@@ -3014,7 +3047,7 @@ export function WorkspacesManagerView({
         const payloadForSave = isUuid(nextTemplate.id) ? nextTemplate : { ...nextTemplate, id: "" };
         const saved = await onSaveDocumentBlockTemplate(payloadForSave);
         if (Array.isArray(saved?.templates) && saved.templates.length) {
-          const normalized = saved.templates.map((item) => normalizeTemplateModel(item));
+          const normalized = ensureDefaultBlockTemplate(saved.templates);
           setEditContentTemplates(normalized);
           const savedId = String(saved?.template?.id || "").trim();
           setEditContentTemplateId(savedId || nextTemplate.id);
@@ -3040,6 +3073,10 @@ export function WorkspacesManagerView({
   async function deleteCurrentTemplate() {
     const active = activeBlockTemplate();
     if (!active?.id) return;
+    if (active.id === DEFAULT_BLOCK_TEMPLATES[0].id) {
+      setEditContentStatusMessage("The A4 Document template cannot be deleted.");
+      return;
+    }
     if (editContentTemplates.length <= 1) {
       setEditContentStatusMessage("At least one template is required.");
       return;
@@ -3052,10 +3089,10 @@ export function WorkspacesManagerView({
       try {
         const templates = await onDeleteDocumentBlockTemplate(active.id);
         if (Array.isArray(templates) && templates.length) {
-          const normalized = templates.map((item) => normalizeTemplateModel(item));
+          const normalized = ensureDefaultBlockTemplate(templates);
           setEditContentTemplates(normalized);
-          setEditContentTemplateId(String(normalized[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
-          setActiveTemplateEditId(String(normalized[0].id || DEFAULT_BLOCK_TEMPLATES[0].id));
+          setEditContentTemplateId(String(normalized[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
+          setActiveTemplateEditId(String(normalized[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
           writeBlockTemplatesToStorage(normalized);
           setEditContentStatusMessage("Template deleted.");
           return;
@@ -3065,7 +3102,7 @@ export function WorkspacesManagerView({
       }
     }
 
-    const nextTemplates = editContentTemplates.filter((item) => item.id !== active.id);
+    const nextTemplates = ensureDefaultBlockTemplate(editContentTemplates.filter((item) => item.id !== active.id));
     setEditContentTemplates(nextTemplates);
     setEditContentTemplateId(String(nextTemplates[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
     setActiveTemplateEditId(String(nextTemplates[0]?.id || DEFAULT_BLOCK_TEMPLATES[0].id));
@@ -3329,15 +3366,17 @@ export function WorkspacesManagerView({
     setEditContentHtmlDraft(seededHtml);
     editContentWorkingHtmlRef.current = seededHtml;
     const hasSavedBlocks = Array.isArray(doc.contentBlocksJson) && doc.contentBlocksJson.length > 0;
+    const savedTemplateId = String(doc.contentTemplateId || "").trim();
+    const defaultTemplate = editContentTemplates.find((item) => item.id === DEFAULT_BLOCK_TEMPLATES[0].id) || DEFAULT_BLOCK_TEMPLATES[0];
+    const targetTemplate = editContentTemplates.find((item) => item.id === savedTemplateId) || defaultTemplate;
+    setEditContentTemplateId(String(targetTemplate.id));
     if (hasSavedBlocks) {
-      const targetTemplateId = String(doc.contentTemplateId || "").trim();
-      const template = editContentTemplates.find((item) => item.id === targetTemplateId) || activeBlockTemplate();
-      const normalizedBlocks = normalizeBlocksForEditor(doc.contentBlocksJson).map((block) => {
+      const normalizedBlocks = removeLegacyTemplateChromeBlocks(normalizeBlocksForEditor(doc.contentBlocksJson)).map((block) => {
         const nextType = normalizeEditorBlockType(block.type);
         const normalizedBlock = nextType === block.type
           ? block
           : convertBlockToTypeKeepingContent(block, nextType);
-        const formatSpec = resolveBlockFormatSpec(template, normalizedBlock);
+        const formatSpec = resolveBlockFormatSpec(targetTemplate, normalizedBlock);
         return {
           ...normalizedBlock,
           type: nextType,
@@ -3348,9 +3387,6 @@ export function WorkspacesManagerView({
       setEditContentSelectedBlockId(String(normalizedBlocks[0]?.id || ""));
     } else {
       syncBlocksFromHtml(seededHtml);
-    }
-    if (String(doc.contentTemplateId || "").trim()) {
-      setEditContentTemplateId(String(doc.contentTemplateId || ""));
     }
     try {
       const response = await fetch(WORKSPACES_API, {
@@ -5147,7 +5183,7 @@ export function WorkspacesManagerView({
                                       <option key={`tpl-folder-opt-${folder.id}`} value={folder.id}>{templateFolderPathById.get(folder.id) || folder.name}</option>
                                     ))}
                                   </select>
-                                  <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
+                                  <button className="table-btn" type="button" onClick={deleteCurrentTemplate} disabled={activeTemplate.id === DEFAULT_BLOCK_TEMPLATES[0].id}>Delete Template</button>
                                 </div>
 
                                 <article className="selection-box" style={{ marginTop: "12px" }}>
@@ -5823,38 +5859,7 @@ export function WorkspacesManagerView({
               Edit directly in the viewer like a document editor. Save applies changes to review center, downloads (HTML/Markdown), and LLM input.
             </p>
 
-            <div className="inline-actions" style={{ marginTop: "10px", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
-              <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
-                <button
-                  className={editContentMode === "blocks" ? "primary-btn" : "table-btn"}
-                  type="button"
-                  onClick={() => {
-                    const sourceHtml = editContentEditorRef.current
-                      ? String(editContentEditorRef.current.innerHTML || "")
-                      : String(editContentWorkingHtmlRef.current || editContentHtmlDraft || "");
-                    if (sourceHtml.trim()) {
-                      syncBlocksFromHtml(sourceHtml);
-                    }
-                    setEditContentMode("blocks");
-                  }}
-                >
-                  Block Editor
-                </button>
-                <button
-                  className={editContentMode === "rich" ? "primary-btn" : "table-btn"}
-                  type="button"
-                  onClick={() => {
-                    const nextHtml = syncHtmlFromBlocks();
-                    setEditContentHtmlDraft(nextHtml);
-                    editContentWorkingHtmlRef.current = nextHtml;
-                    setEditContentMode("rich");
-                  }}
-                >
-                  Rich HTML
-                </button>
-              </div>
-              <p className="hint" style={{ margin: 0 }}>Block mode supports add/reorder/type-switch without content loss, templates, rich formatting, and JSON export.</p>
-            </div>
+            <p className="hint" style={{ marginTop: "10px" }}>Block mode supports add/reorder/type-switch without content loss, templates, rich formatting, and JSON export.</p>
 
             {editContentMode === "blocks" ? (
               <>
@@ -5896,7 +5901,7 @@ export function WorkspacesManagerView({
                       </select>
                     </label>
                     <button className="table-btn" type="button" onClick={saveCurrentTemplateAsNew}>Save Template As New</button>
-                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate}>Delete Template</button>
+                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate} disabled={editContentTemplateId === DEFAULT_BLOCK_TEMPLATES[0].id}>Delete Template</button>
                     <button className="table-btn" type="button" onClick={exportContentBlocksJson}>Download Blocks JSON</button>
                   </div>
                 </div>

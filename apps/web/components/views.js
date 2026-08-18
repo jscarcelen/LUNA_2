@@ -60,7 +60,7 @@ const BLOCK_BUILDING_TYPES = [
 const DEFAULT_BLOCK_TEMPLATES = [
   {
     id: "template_default",
-    name: "A4 Document",
+    name: "Default",
     description: "Neutral reading layout for mixed academic documents.",
     containerClass: "luna-template-default",
     pageSize: "a4",
@@ -429,7 +429,7 @@ function normalizeTemplateModel(template = {}) {
 
 function ensureDefaultBlockTemplate(templates = []) {
   const normalized = (Array.isArray(templates) ? templates : []).map((item) => normalizeTemplateModel(item));
-  const savedDefault = normalized.find((item) => item.id === DEFAULT_BLOCK_TEMPLATES[0].id || String(item.name || "").trim().toLowerCase() === "a4 document");
+  const savedDefault = normalized.find((item) => item.id === DEFAULT_BLOCK_TEMPLATES[0].id || ["default", "a4 document"].includes(String(item.name || "").trim().toLowerCase()));
   const defaultTemplate = normalizeTemplateModel({
     ...DEFAULT_BLOCK_TEMPLATES[0],
     ...(savedDefault || {}),
@@ -438,8 +438,19 @@ function ensureDefaultBlockTemplate(templates = []) {
     pageSize: "a4",
     folderId: "tpl-folder-root"
   });
-  const others = normalized.filter((item) => item !== savedDefault && item.id !== DEFAULT_BLOCK_TEMPLATES[0].id && String(item.name || "").trim().toLowerCase() !== "a4 document");
-  return [defaultTemplate, ...others];
+  const others = normalized.filter((item) => item !== savedDefault && item.id !== DEFAULT_BLOCK_TEMPLATES[0].id && !["default", "a4 document"].includes(String(item.name || "").trim().toLowerCase()));
+  const usedNames = new Set(["default"]);
+  return [defaultTemplate, ...others.map((item) => {
+    const baseName = String(item.name || "Untitled Template").trim() || "Untitled Template";
+    let name = baseName;
+    let suffix = 2;
+    while (usedNames.has(name.toLowerCase())) {
+      name = `${baseName} (${suffix})`;
+      suffix += 1;
+    }
+    usedNames.add(name.toLowerCase());
+    return name === item.name ? item : { ...item, name };
+  })];
 }
 
 function resolveBlockFormatSpec(template = {}, block = {}) {
@@ -682,7 +693,17 @@ function blockToHtml(block = {}, blockClass = "") {
   function renderWithTemplate(templateKey, fallbackHtml, vars = {}) {
     const template = explicitTemplate || String(templateMap?.[templateKey] || "");
     if (!template.trim()) return fallbackHtml;
-    return fillTemplate(template, vars);
+    const rendered = fillTemplate(template, vars);
+    if (!effectiveClass && !inlineStyle && !blockIdAttr) return rendered;
+    return rendered.replace(/^(\s*<[a-z][^>]*)(>)/i, (_, openingTag, close) => {
+      const hasClass = /\sclass\s*=/.test(openingTag);
+      const hasStyle = /\sstyle\s*=/.test(openingTag);
+      const hasBlockId = /\sdata-block-id\s*=/.test(openingTag);
+      const classText = effectiveClass && !hasClass ? ` class="${escapeHtml(effectiveClass)}"` : "";
+      const styleText = inlineStyle && !hasStyle ? ` style="${escapeHtml(inlineStyle)}"` : "";
+      const blockIdText = !hasBlockId ? blockIdAttr : "";
+      return `${openingTag}${classText}${styleText}${blockIdText}${close}`;
+    });
   }
 
   if (type === "heading1") return renderWithTemplate("heading1", `<h1${classAttr}${styleAttr}${blockIdAttr}>${escapeHtml(block.text || "")}</h1>`, { text: escapeHtml(block.text || "") });
@@ -2582,8 +2603,13 @@ export function WorkspacesManagerView({
     const name = String(nextName || "").trim();
     if (!active || !name) return;
     if (active.id === DEFAULT_BLOCK_TEMPLATES[0].id) {
-      setTemplateNameEdit(DEFAULT_BLOCK_TEMPLATES[0].name);
-      setEditContentStatusMessage("The A4 Document template name is fixed.");
+      setTemplateNameEdit("Default");
+      setEditContentStatusMessage("The Default template name is fixed.");
+      return;
+    }
+    const duplicate = editContentTemplates.some((item) => item.id !== active.id && String(item.name || "").trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) {
+      setEditContentStatusMessage("Each template must have a unique name.");
       return;
     }
     persistTemplatePatch(active.id, { name });
@@ -3074,7 +3100,7 @@ export function WorkspacesManagerView({
     const active = activeBlockTemplate();
     if (!active?.id) return;
     if (active.id === DEFAULT_BLOCK_TEMPLATES[0].id) {
-      setEditContentStatusMessage("The A4 Document template cannot be deleted.");
+      setEditContentStatusMessage("The Default template cannot be deleted.");
       return;
     }
     if (editContentTemplates.length <= 1) {

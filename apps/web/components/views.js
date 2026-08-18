@@ -5893,6 +5893,7 @@ export function WorkspacesManagerView({
                   .luna-canvas-grid { display:grid; grid-template-columns: 1fr 320px; gap:14px; height: calc(100vh - 310px); min-height: 520px; }
                   .luna-canvas-scroll { overflow:auto; background:#ffffff; border:1px solid #d9e3f2; border-radius:12px; padding:16px; }
                   .luna-canvas-block { position:relative; border:1px solid transparent; border-radius:10px; padding:8px 10px; margin-bottom:10px; cursor:pointer; }
+                  .luna-canvas-block .luna-template-default, .luna-canvas-block .luna-template-presentation { width:auto; min-height:0; margin:0; padding:0; }
                   .luna-canvas-block:hover { border-color:#d3dcf0; background:#fbfcff; }
                   .luna-canvas-block.active { border-color:#8aa6ff; box-shadow:0 0 0 2px rgba(95,120,214,.18); }
                   .luna-block-menu-btn { position:absolute; top:8px; right:8px; opacity:0; transition:opacity .12s ease; }

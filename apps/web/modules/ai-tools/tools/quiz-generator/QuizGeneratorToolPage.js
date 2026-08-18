@@ -553,6 +553,8 @@ export function QuizGeneratorToolPage({ toolContext }) {
     const tagDraft = isContent ? contentUploadTagDraft : referenceUploadTagDraft;
     const isUploading = isContent ? isUploadingContent : isUploadingReference;
 
+    if (!showPanel) return null;
+
     return (
       <div className="selection-box quiz-upload-box-lite">
         <div className="inline-actions" style={{ justifyContent: "space-between" }}>

@@ -89,6 +89,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewDownloadOpen, setPreviewDownloadOpen] = useState(false);
   const [previewSaveOpen, setPreviewSaveOpen] = useState(false);
+  const [previewAnswerMode, setPreviewAnswerMode] = useState("answers");
   const [saveFolderIds, setSaveFolderIds] = useState([]);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -170,6 +171,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
     setShowPreviewModal(false);
     setPreviewSaveOpen(false);
     setPreviewDownloadOpen(false);
+    setPreviewAnswerMode("answers");
     setSaveFolderIds([]);
     setReviewingDocumentId("");
     setReviewDraftById({});
@@ -354,6 +356,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
       }
 
       setResult(data);
+      setPreviewAnswerMode("answers");
       setWizardStep(4);
       setShowPreviewModal(true);
     } catch (error) {
@@ -926,6 +929,10 @@ export function QuizGeneratorToolPage({ toolContext }) {
             <div className="quiz-preview-modal-head">
               <h4 style={{ margin: 0 }}>Quiz Preview</h4>
               <div className="quiz-preview-actions">
+                <div className="quiz-preview-mode-toggle" role="group" aria-label="Preview mode">
+                  <button className={previewAnswerMode === "answers" ? "primary-btn" : "table-btn"} type="button" onClick={() => setPreviewAnswerMode("answers")}>With answers</button>
+                  <button className={previewAnswerMode === "interactive" ? "primary-btn" : "table-btn"} type="button" onClick={() => setPreviewAnswerMode("interactive")}>Quiz view</button>
+                </div>
                 <button
                   className="table-btn"
                   type="button"
@@ -950,11 +957,18 @@ export function QuizGeneratorToolPage({ toolContext }) {
                 </button>
                 {previewDownloadOpen ? (
                   <div className="quiz-submenu-stack">
-                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.txt, "quiz.txt", "text/plain")}>TXT</button>
-                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.json, "quiz.json", "application/json")}>JSON</button>
-                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.html, "quiz.html", "text/html")}>HTML</button>
-                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.docx, "quiz.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>DOCX</button>
-                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.pdf, "quiz.pdf", "application/pdf")}>PDF</button>
+                    <strong className="quiz-download-heading">With answers</strong>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.txt, "quiz-with-answers.txt", "text/plain")}>TXT</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.json, "quiz-with-answers.json", "application/json")}>JSON</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.html, "quiz-with-answers.html", "text/html")}>HTML</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.docx, "quiz-with-answers.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>DOCX</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.downloads.pdf, "quiz-with-answers.pdf", "application/pdf")}>PDF</button>
+                    <strong className="quiz-download-heading">Without answers</strong>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.studentDownloads.txt, "quiz-without-answers.txt", "text/plain")}>TXT</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.studentDownloads.json, "quiz-without-answers.json", "application/json")}>JSON</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.studentDownloads.html, "quiz-quiz-view.html", "text/html")}>HTML</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.studentDownloads.docx, "quiz-without-answers.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")}>DOCX</button>
+                    <button className="table-btn" type="button" onClick={() => downloadBase64File(result.studentDownloads.pdf, "quiz-without-answers.pdf", "application/pdf")}>PDF</button>
                   </div>
                 ) : null}
                 {previewSaveOpen ? (
@@ -978,7 +992,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
               <button className="table-btn" type="button" onClick={() => setShowPreviewModal(false)}>Close</button>
             </div>
 
-            <div className="quiz-preview-card" dangerouslySetInnerHTML={{ __html: result.htmlPreview }} />
+            <div className="quiz-preview-card" dangerouslySetInnerHTML={{ __html: previewAnswerMode === "interactive" ? result.studentHtmlPreview : result.htmlPreview }} />
           </div>
         </div>
       ) : null}

@@ -37,6 +37,8 @@ export async function POST(request) {
       quizJson: result.quizJson,
       htmlPreview: rendered.html,
       downloads: rendered.files,
+      studentHtmlPreview: rendered.studentHtml,
+      studentDownloads: rendered.studentFiles,
       scopeSummary: result.scopeSummary,
       retrieval: {
         selectedChunkCount: result.rankedChunks.length,

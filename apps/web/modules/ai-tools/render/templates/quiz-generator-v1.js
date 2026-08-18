@@ -1,3 +1,5 @@
+import katex from "katex";
+
 function escapeHtml(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -7,6 +9,29 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function renderLatexText(value) {
+  const source = String(value || "");
+  const parts = [];
+  const pattern = /\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g;
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(source))) {
+    if (match.index > cursor) parts.push(escapeHtml(source.slice(cursor, match.index)));
+    const latex = match[1] ?? match[2] ?? "";
+    try {
+      parts.push(katex.renderToString(latex.trim(), {
+        displayMode: Boolean(match[1]),
+        throwOnError: false
+      }));
+    } catch {
+      parts.push(escapeHtml(match[0]));
+    }
+    cursor = match.index + match[0].length;
+  }
+  if (cursor < source.length) parts.push(escapeHtml(source.slice(cursor)));
+  return parts.join("");
+}
+
 function formatQuestionType(type) {
   const normalized = String(type || "").trim().toLowerCase();
   if (normalized === "true-false") return "True / False";
@@ -14,10 +39,14 @@ function formatQuestionType(type) {
   return "Multiple choice";
 }
 
-function renderQuestion(question, index) {
-  const options = Array.isArray(question.options) && question.options.length
-    ? `<ol class="quiz-options" type="A">${question.options.map((option) => `<li>${escapeHtml(option)}</li>`).join("")}</ol>`
-    : "";
+function renderQuestion(question, index, renderOptions = {}) {
+  const showAnswers = renderOptions.showAnswers !== false;
+  const interactive = Boolean(renderOptions.interactive);
+  const choiceOptions = Array.isArray(question.options) && question.options.length
+    ? `<ol class="quiz-options" type="A">${question.options.map((option) => interactive
+      ? `<li><button class="quiz-answer-choice" type="button" data-answer="${escapeHtml(option)}">${renderLatexText(option)}</button></li>`
+      : `<li>${renderLatexText(option)}</li>`).join("")}</ol>`
+    : interactive ? `<div class="quiz-short-answer"><input class="quiz-answer-input" type="text" placeholder="Type your answer" /><button class="quiz-answer-submit" type="button">Check answer</button></div>` : "";
 
   const refs = (question.sourceRefs || [])
     .map((ref) => {
@@ -34,18 +63,18 @@ function renderQuestion(question, index) {
         <span class="quiz-number">Q${index + 1}</span>
         <span class="quiz-type">${escapeHtml(formatQuestionType(question.type))}</span>
       </div>
-      <h3>${escapeHtml(question.prompt)}</h3>
-      ${options}
-      <div class="quiz-answer-block">
-        <p><strong>Answer:</strong> ${escapeHtml(question.answer)}</p>
-        <p><strong>Explanation:</strong> ${escapeHtml(question.explanation)}</p>
+      <h3>${renderLatexText(question.prompt)}</h3>
+      ${choiceOptions}
+      ${showAnswers ? `<div class="quiz-answer-block">
+        <p><strong>Answer:</strong> ${renderLatexText(question.answer)}</p>
+        <p><strong>Explanation:</strong> ${renderLatexText(question.explanation)}</p>
         ${refs ? `<ul class="quiz-source-list">${refs}</ul>` : ""}
-      </div>
+      </div>` : interactive ? `<div class="quiz-interactive-result" data-correct-answer="${escapeHtml(question.answer)}" data-explanation="${escapeHtml(question.explanation)}">Select an answer to reveal the solution.</div>` : ""}
     </article>
   `;
 }
 
-export function renderQuizHtmlDocument(quizJson) {
+export function renderQuizHtmlDocument(quizJson, options = {}) {
   const quiz = quizJson.quiz;
   return `<!doctype html>
   <html>
@@ -195,6 +224,24 @@ export function renderQuizHtmlDocument(quizJson) {
           padding-left: 18px;
           color: #5f6788;
         }
+        .quiz-answer-choice {
+          border: 1px solid rgba(132, 129, 205, 0.2);
+          border-radius: 12px;
+          background: #fff;
+          padding: 8px 10px;
+          color: inherit;
+          font: inherit;
+          text-align: left;
+          cursor: pointer;
+          width: 100%;
+        }
+        .quiz-answer-choice:hover { border-color: #8b78e8; background: #f7f4ff; }
+        .quiz-short-answer { display: flex; gap: 8px; margin-top: 10px; }
+        .quiz-answer-input { flex: 1; border: 1px solid rgba(132, 129, 205, 0.25); border-radius: 12px; padding: 9px 10px; font: inherit; }
+        .quiz-answer-submit { border: 0; border-radius: 12px; padding: 9px 12px; background: #6553d8; color: #fff; font: inherit; cursor: pointer; }
+        .quiz-interactive-result { margin-top: 14px; border-radius: 16px; padding: 12px 14px; background: #f5f2ff; color: #5f6788; }
+        .quiz-interactive-result.correct { background: #e8f8f0; color: #176b48; }
+        .quiz-interactive-result.incorrect { background: #fff0f3; color: #a43d5b; }
         @media print {
           body { background: white; }
           .quiz-page { padding: 0; }
@@ -215,8 +262,25 @@ export function renderQuizHtmlDocument(quizJson) {
             <div class="quiz-meta-card"><span>Topic prompt</span><strong>${escapeHtml(quiz.topicPrompt || "Selected material")}</strong></div>
           </div>
         </section>
-        ${quiz.questions.map((question, index) => renderQuestion(question, index)).join("")}
+        ${quiz.questions.map((question, index) => renderQuestion(question, index, options)).join("")}
       </main>
+      ${options.interactive ? `<script>
+        function revealSolution(element, selected) {
+          const result = element.closest('.quiz-card')?.querySelector('.quiz-interactive-result');
+          if (!result) return;
+          const correct = result.dataset.correctAnswer || '';
+          const isCorrect = selected.trim().toLowerCase() === correct.trim().toLowerCase();
+          result.className = 'quiz-interactive-result ' + (isCorrect ? 'correct' : 'incorrect');
+          result.textContent = (isCorrect ? 'Correct. ' : 'Not quite. Correct answer: ' + correct + '. ') + (result.dataset.explanation || '');
+        }
+        document.querySelectorAll('.quiz-answer-choice').forEach((choice) => choice.addEventListener('click', () => {
+          revealSolution(choice, choice.dataset.answer || '');
+        }));
+        document.querySelectorAll('.quiz-answer-submit').forEach((submit) => submit.addEventListener('click', () => {
+          const input = submit.parentElement?.querySelector('.quiz-answer-input');
+          revealSolution(submit, input?.value || '');
+        }));
+      </script>` : ""}
     </body>
   </html>`;
 }

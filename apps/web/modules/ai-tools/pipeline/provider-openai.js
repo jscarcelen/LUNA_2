@@ -77,6 +77,7 @@ function buildChunksContext(chunks, maxChunks = 12) {
 
 async function callOpenAiQuiz(config, chunks, scopeSummary) {
   const apiKey = required("OPENAI_API_KEY");
+  const requestedCount = Math.max(1, Number(config.questionCount || 6));
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -86,7 +87,7 @@ async function callOpenAiQuiz(config, chunks, scopeSummary) {
     body: JSON.stringify({
       model: DEFAULT_QUIZ_MODEL,
       temperature: 0.2,
-      max_tokens: 2400,
+      max_tokens: Math.min(12000, Math.max(2400, requestedCount * 700)),
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -153,7 +154,7 @@ async function callOpenAiQuiz(config, chunks, scopeSummary) {
               title: config.title || "",
               topicPrompt: config.topicPrompt || "",
               difficulty: config.difficulty || "medium",
-              questionCount: Number(config.questionCount || 6),
+              questionCount: requestedCount,
               questionTypes: config.questionTypes?.length ? config.questionTypes : ["multiple-choice"]
             },
             scopeSummary,
@@ -191,8 +192,8 @@ export async function generateQuizJsonWithOpenAi({ config, chunks, scopeSummary 
     .map((question, index) => normalizeQuestion(question, index, config.difficulty))
     .filter((question) => question.prompt && question.answer && question.explanation);
 
-  if (!questions.length) {
-    throw new Error("OpenAI returned no usable quiz questions");
+  if (questions.length < requestedCount) {
+    throw new Error(`OpenAI returned ${questions.length} usable questions; ${requestedCount} were requested.`);
   }
 
   return {

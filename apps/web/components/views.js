@@ -1493,6 +1493,7 @@ export function WorkspacesManagerView({
   const [editContentTemplateRawHtmlDraft, setEditContentTemplateRawHtmlDraft] = useState("{}");
   const [showEditorTemplateTools, setShowEditorTemplateTools] = useState(false);
   const [showEditorDownloadTools, setShowEditorDownloadTools] = useState(false);
+  const [showEditorAddBlockTools, setShowEditorAddBlockTools] = useState(false);
   const [editContentSelectedBlockId, setEditContentSelectedBlockId] = useState("");
   const [editContentMenuBlockId, setEditContentMenuBlockId] = useState("");
   const [editContentMenuAddTypeByBlockId, setEditContentMenuAddTypeByBlockId] = useState({});
@@ -3387,6 +3388,7 @@ export function WorkspacesManagerView({
     setIsPreparingEditContent(true);
     setShowEditorTemplateTools(false);
     setShowEditorDownloadTools(false);
+    setShowEditorAddBlockTools(false);
     setEditContentStatusMessage("");
     setShowInlineLatexInfo(false);
     setEditContentPendingImageBlockId("");
@@ -5864,10 +5866,13 @@ export function WorkspacesManagerView({
                   {isSavingEditContent ? "Saving..." : "Save Edits"}
                 </button>
                 <button className={showEditorTemplateTools ? "primary-btn" : "table-btn"} type="button" onClick={() => setShowEditorTemplateTools((previous) => !previous)}>
-                  Edit Template
+                  ✎ Edit Template
                 </button>
                 <button className={showEditorDownloadTools ? "primary-btn" : "table-btn"} type="button" onClick={() => setShowEditorDownloadTools((previous) => !previous)}>
-                  Download
+                  ↓ Download
+                </button>
+                <button className={showEditorAddBlockTools ? "primary-btn" : "table-btn"} type="button" onClick={() => setShowEditorAddBlockTools((previous) => !previous)}>
+                  + Add Block
                 </button>
                 <button
                   className="table-btn danger"
@@ -5882,6 +5887,7 @@ export function WorkspacesManagerView({
                     setShowInlineLatexInfo(false);
                     setShowEditorTemplateTools(false);
                     setShowEditorDownloadTools(false);
+                    setShowEditorAddBlockTools(false);
                     editContentWorkingHtmlRef.current = "";
                     setEditContentStatusMessage("");
                   }}
@@ -5930,6 +5936,24 @@ export function WorkspacesManagerView({
               </div>
             ) : null}
 
+            {showEditorAddBlockTools ? (
+              <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
+                <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap", alignItems: "end" }}>
+                  <label className="search" style={{ minWidth: "220px" }}>
+                    <span>Block type</span>
+                    <select className="input" defaultValue="" onChange={(event) => {
+                      const value = String(event.target.value || "").trim();
+                      if (value) addContentBlock(value);
+                      event.target.value = "";
+                    }}>
+                      <option value="">Choose type...</option>
+                      {EDITOR_BLOCK_TYPE_OPTIONS.map((option) => <option key={`top-add-${option.value}`} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                </div>
+              </div>
+            ) : null}
+
             {editContentMode === "blocks" ? (
               <>
                 <style>{`
@@ -5941,38 +5965,11 @@ export function WorkspacesManagerView({
                   .luna-canvas-block.active { border-color:#8aa6ff; box-shadow:0 0 0 2px rgba(95,120,214,.18); }
                   .luna-block-menu-btn { position:absolute; top:8px; right:8px; opacity:0; transition:opacity .12s ease; }
                   .luna-canvas-block:hover .luna-block-menu-btn, .luna-canvas-block.active .luna-block-menu-btn { opacity:1; }
-                  .luna-inspector { background:#fff; border:1px solid #d9e3f2; border-radius:12px; padding:12px; overflow:auto; }
+                  .luna-inspector { position:relative; background:#fff; border:1px solid #d9e3f2; border-radius:12px; padding:12px; overflow:auto; }
+                  .luna-inspector-close { position:absolute; top:10px; right:10px; z-index:2; }
                   .luna-inline-math { display:inline-block; margin:0 4px; }
                   .luna-display-math { background:#f6f9ff; border:1px solid #d7e4ff; border-radius:10px; padding:10px; overflow:auto; }
                 `}</style>
-
-                <div className="panel" style={{ marginTop: "10px", background: "#fff" }}>
-                  <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
-                    <label className="search" style={{ minWidth: "220px" }}>
-                      <span>Template</span>
-                      <select className="input" value={editContentTemplateId} onChange={(event) => changeBlockTemplate(event.target.value)}>
-                        {editContentTemplates.map((template) => (
-                          <option key={template.id} value={template.id}>{template.name}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <button className="table-btn" type="button" onClick={applyTemplateToAllBlocks}>Apply Template To Blocks</button>
-                    <label className="search" style={{ minWidth: "220px" }}>
-                      <span>Add Block</span>
-                      <select className="input" defaultValue="" onChange={(event) => {
-                        const value = String(event.target.value || "").trim();
-                        if (value) addContentBlock(value);
-                        event.target.value = "";
-                      }}>
-                        <option value="">Choose type...</option>
-                        {EDITOR_BLOCK_TYPE_OPTIONS.map((option) => (
-                          <option key={`add-select-${option.value}`} value={option.value}>{option.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <button className="table-btn" type="button" onClick={deleteCurrentTemplate} disabled={editContentTemplateId === DEFAULT_BLOCK_TEMPLATES[0].id}>Delete Template</button>
-                  </div>
-                </div>
 
                 <div className="luna-canvas-grid" style={{ marginTop: "10px" }}>
                   <div className="luna-canvas-scroll">
@@ -6037,12 +6034,13 @@ export function WorkspacesManagerView({
                     })}
                   </div>
 
-                  <aside className="luna-inspector">
+                  {editContentSelectedBlockId ? <aside className="luna-inspector">
+                    <button className="table-btn danger icon-btn luna-inspector-close" type="button" onClick={() => setEditContentSelectedBlockId("")} aria-label="Close block editor" title="Close block editor">×</button>
                     {(() => {
                       const selectedBlock = getSelectedBlock();
                       const selectedIndex = getSelectedBlockIndex();
                       if (!selectedBlock) {
-                        return <p className="hint">Select a block to edit.</p>;
+                        return null;
                       }
 
                       const type = String(selectedBlock.type || "paragraph");
@@ -6098,33 +6096,8 @@ export function WorkspacesManagerView({
                                 </div>
                               ) : null}
 
-                              <div className="inline-actions" style={{ marginTop: "8px", gap: "6px", flexWrap: "wrap" }}>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "bold")}><b>B</b></button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "italic")}><i>I</i></button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "underline")}><u>U</u></button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "foreColor", window.prompt("Text color (hex or css)", "#1f3a8a") || "")}>Text Color</button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "hiliteColor", window.prompt("Background color (hex or css)", "#fff59d") || "")}>Background</button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("paragraph", "removeFormat")}>Clear</button>
-                              </div>
-
                               <label className="search full" style={{ marginTop: "8px" }}>
-                                <span>Rich HTML (direct editing)</span>
-                                <div
-                                  ref={editContentParagraphHtmlEditorRef}
-                                  className="doc-preview"
-                                  style={{ minHeight: "120px", background: "#fff" }}
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onInput={(event) => {
-                                    const html = String(event.currentTarget.innerHTML || "");
-                                    updateContentBlock(selectedBlock.id, { html, text: htmlToPlainText(html) });
-                                  }}
-                                  dangerouslySetInnerHTML={{ __html: String(selectedBlock.html || escapeHtml(String(selectedBlock.text || "")).replace(/\n/g, "<br />")) }}
-                                />
-                              </label>
-
-                              <label className="search full" style={{ marginTop: "8px" }}>
-                                <span>Plain Text</span>
+                                <span>Paragraph Text</span>
                                 <textarea className="input" rows={4} value={String(selectedBlock.text || "")} onChange={(event) => updateContentBlock(selectedBlock.id, { text: event.target.value, html: "" })} />
                               </label>
                             </>
@@ -6300,6 +6273,7 @@ export function WorkspacesManagerView({
                           ) : null}
 
                           <div className="inline-actions" style={{ marginTop: "12px", flexWrap: "wrap" }}>
+                            <button className="primary-btn" type="button" onClick={handleSaveEditedContent} disabled={isSavingEditContent || isWorking}>{isSavingEditContent ? "Saving..." : "Save Edits"}</button>
                             <button className="table-btn" type="button" onClick={() => moveContentBlock(selectedIndex, Math.max(0, selectedIndex - 1))}>Move Up</button>
                             <button className="table-btn" type="button" onClick={() => moveContentBlock(selectedIndex, Math.min(editContentBlocks.length - 1, selectedIndex + 1))}>Move Down</button>
                             <button className="table-btn" type="button" onClick={() => duplicateContentBlock(selectedBlock.id)}>Duplicate</button>
@@ -6308,7 +6282,7 @@ export function WorkspacesManagerView({
                         </>
                       );
                     })()}
-                  </aside>
+                  </aside> : null}
                 </div>
               </>
             ) : (

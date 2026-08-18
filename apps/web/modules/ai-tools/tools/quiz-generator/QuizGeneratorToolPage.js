@@ -73,6 +73,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
   const [questionStep, setQuestionStep] = useState(1);
   const [showContentUploader, setShowContentUploader] = useState(false);
   const [showReferenceUploader, setShowReferenceUploader] = useState(false);
+  const [documentSearchText, setDocumentSearchText] = useState("");
 
   const [contentPendingFiles, setContentPendingFiles] = useState([]);
   const [contentUploadFolderIds, setContentUploadFolderIds] = useState([]);
@@ -172,6 +173,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
     setSaveFolderIds([]);
     setReviewingDocumentId("");
     setReviewDraftById({});
+    setDocumentSearchText("");
   }, [workspaceId, subjectId]);
 
   useEffect(() => {
@@ -427,13 +429,21 @@ export function QuizGeneratorToolPage({ toolContext }) {
     setWizardOpen(false);
   }
 
-  function renderDocumentPicker(selectedIds, setSelectedIds, modeLabel) {
+  function renderDocumentPicker(selectedIds, setSelectedIds, modeLabel, description, tone = "content") {
+    const search = documentSearchText.trim().toLowerCase();
+    const visibleDocuments = approvedDocuments.filter((document) => !search || String(document.name || "").toLowerCase().includes(search));
     return (
-      <div className="selection-box quiz-doc-picker-box">
-        <h5 style={{ marginTop: 0 }}>{modeLabel}</h5>
+      <div className={`selection-box quiz-doc-picker-box quiz-doc-picker-${tone}`}>
+        <div className="quiz-picker-heading">
+          <div>
+            <span className="quiz-picker-kicker">{tone === "content" ? "Main material" : "Question style"}</span>
+            <h5 style={{ margin: "3px 0 0" }}>{modeLabel}</h5>
+            <p className="hint quiz-mini-copy">{description}</p>
+          </div>
+          <strong className="quiz-selection-count">{selectedIds.length} selected</strong>
+        </div>
         <div className="quiz-section-grid">
           <div>
-            <p className="hint quiz-mini-copy">Pick from existing files (tick boxes). You can select whole folders, then unselect individual files.</p>
             <div className="quiz-folder-pick-list">
               {folders.map((folder) => {
                 const selected = isFolderFullySelected(folder.id, selectedIds);
@@ -452,7 +462,7 @@ export function QuizGeneratorToolPage({ toolContext }) {
             </div>
 
             <div className="quiz-doc-select-list">
-              {approvedDocuments.map((document) => {
+              {visibleDocuments.map((document) => {
                 const selected = selectedIds.includes(document.id);
                 return (
                   <label className={selected ? "quiz-picker-row on" : "quiz-picker-row"} key={`${modeLabel}-${document.id}`}>
@@ -465,8 +475,11 @@ export function QuizGeneratorToolPage({ toolContext }) {
                   </label>
                 );
               })}
-              {!approvedDocuments.length ? <p className="hint">No approved documents yet.</p> : null}
+              {!visibleDocuments.length ? <p className="hint">{search ? "No matching approved documents." : "No approved documents yet."}</p> : null}
             </div>
+            <button className="table-btn quiz-upload-link" type="button" onClick={() => tone === "content" ? setShowContentUploader((previous) => !previous) : setShowReferenceUploader((previous) => !previous)}>
+              {tone === "content" ? "+ Add main documents" : "+ Add reference documents"}
+            </button>
           </div>
         </div>
       </div>
@@ -802,18 +815,34 @@ export function QuizGeneratorToolPage({ toolContext }) {
               {wizardStep === 1 ? (
                 <div className="view-stack">
                   {renderReviewQueue()}
-                  {renderDocumentPicker(
-                    contentDocumentIds,
-                    setContentDocumentIds,
-                    "Documents for quiz content (what questions are based on)"
-                  )}
+                  <div className="quiz-materials-toolbar">
+                    <div>
+                      <span className="quiz-picker-kicker">Step 1</span>
+                      <h5 style={{ margin: "3px 0 0" }}>Select content</h5>
+                      <p className="hint quiz-mini-copy">Choose the material the AI should learn from, then add optional documents that show the question style and level you want.</p>
+                    </div>
+                    <label className="search quiz-document-search">
+                      <span>Search documents</span>
+                      <input className="input" value={documentSearchText} onChange={(event) => setDocumentSearchText(event.target.value)} placeholder="Search by filename" />
+                    </label>
+                  </div>
+                  <div className="quiz-document-pair">
+                    {renderDocumentPicker(
+                      contentDocumentIds,
+                      setContentDocumentIds,
+                      "Documents for quiz content",
+                      "Questions are generated from the files selected here.",
+                      "content"
+                    )}
+                    {renderDocumentPicker(
+                      referenceDocumentIds,
+                      setReferenceDocumentIds,
+                      "Reference documents",
+                      "Use these to guide question format, tone, and difficulty. They are not the main source material.",
+                      "reference"
+                    )}
+                  </div>
                   {renderUploadPanel("content")}
-
-                  {renderDocumentPicker(
-                    referenceDocumentIds,
-                    setReferenceDocumentIds,
-                    "Reference documents for exam style and level"
-                  )}
                   {renderUploadPanel("reference")}
 
                   <div className="inline-actions quiz-step-actions">

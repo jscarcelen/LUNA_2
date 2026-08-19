@@ -62,13 +62,19 @@ export function renderQuizTextDocument(quizJson, options = {}) {
       lines.push(`   Explanation: ${question.explanation}`);
     }
 
-    if (question.sourceRefs?.length) {
-      lines.push("   Source refs:");
+    if (showAnswers && question.sourceRefs?.length) {
+      lines.push("   Source:");
       for (const ref of question.sourceRefs) {
         const eq = Array.isArray(ref?.equationIds) && ref.equationIds.length
           ? ` · equations ${ref.equationIds.join(", ")}`
           : "";
-        lines.push(`   * ${ref.documentName} · chunk ${ref.chunkIndex}${eq}`);
+        lines.push(`   * ${ref.documentName}${eq}`);
+        const excerpt = String(ref.excerpt || "").trim();
+        if (excerpt) {
+          for (const line of wrapText(excerpt, 84)) {
+            lines.push(`     ${line}`);
+          }
+        }
       }
     }
 
@@ -111,6 +117,21 @@ export async function renderQuizDocxBuffer(quizJson, options = {}) {
     if (showAnswers) {
       children.push(new Paragraph({ text: `Answer: ${question.answer}` }));
       children.push(new Paragraph({ text: `Explanation: ${question.explanation}` }));
+    }
+
+    if (showAnswers && question.sourceRefs?.length) {
+      for (const ref of question.sourceRefs) {
+        const eq = Array.isArray(ref?.equationIds) && ref.equationIds.length
+          ? ` · equations ${ref.equationIds.join(", ")}`
+          : "";
+        children.push(new Paragraph({
+          children: [new TextRun({ text: `Source: ${ref.documentName}${eq}`, italics: true, color: "6e7390" })]
+        }));
+        const excerpt = String(ref.excerpt || "").trim();
+        if (excerpt) {
+          children.push(new Paragraph({ text: excerpt }));
+        }
+      }
     }
   }
 
@@ -178,13 +199,21 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
       }
     }
 
-    if (question.sourceRefs?.length) {
-      lines.push({ text: "Source refs:", size: 9.5, bold: true, color: QUIZ_COLORS.muted });
+    if (showAnswers && question.sourceRefs?.length) {
+      lines.push({ text: "Source:", size: 9.5, bold: true, color: QUIZ_COLORS.muted });
       for (const ref of question.sourceRefs) {
         const eq = Array.isArray(ref?.equationIds) && ref.equationIds.length
           ? ` · equations ${ref.equationIds.join(", ")}`
           : "";
-        lines.push({ text: `${ref.documentName} · chunk ${ref.chunkIndex}${eq}`, size: 9.5, color: QUIZ_COLORS.muted });
+        for (const line of wrapText(`${ref.documentName}${eq}`, 76)) {
+          lines.push({ text: line, size: 9.5, color: QUIZ_COLORS.muted });
+        }
+        const excerpt = String(ref.excerpt || "").trim();
+        if (excerpt) {
+          for (const line of wrapText(excerpt, 76)) {
+            lines.push({ text: line, size: 9, color: QUIZ_COLORS.muted });
+          }
+        }
       }
     }
 

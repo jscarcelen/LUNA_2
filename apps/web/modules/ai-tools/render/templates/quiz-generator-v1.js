@@ -53,7 +53,7 @@ function renderQuestion(question, index, renderOptions = {}) {
       const equationLabel = Array.isArray(ref?.equationIds) && ref.equationIds.length
         ? ` · equations ${escapeHtml(ref.equationIds.join(", "))}`
         : "";
-      const label = `${escapeHtml(ref.documentName)} · chunk ${ref.chunkIndex}${equationLabel}`;
+      const label = `Source: ${escapeHtml(ref.documentName)}${equationLabel}`;
       const excerpt = String(ref?.excerpt || "").trim();
       if (!excerpt) return `<li>${label}</li>`;
       // Reveals the actual chunk text the answer was drawn from, instead of a static "chunk N" label.

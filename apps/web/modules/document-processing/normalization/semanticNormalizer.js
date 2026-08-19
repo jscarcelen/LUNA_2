@@ -28,6 +28,38 @@ function isHeaderFooterHeading(block = {}) {
   return text === "headers" || text === "footers";
 }
 
+// Word stores a Unicode-math "linear format" fallback alongside the real oMath equation; if it
+// survives extraction as plain text it has no real words (letters longer than 3 chars).
+function looksLikeMathArtifactText(text = "") {
+  const words = String(text || "").match(/[A-Za-z]+/g) || [];
+  return !words.some((word) => word.length >= 4);
+}
+
+// The linear-format fallback can be glued directly onto the following sentence with no space
+// (e.g. "Sx2Units are..."). Strip only the leading math-artifact tokens, keeping real prose intact.
+function stripLeadingMathArtifactPrefix(text = "") {
+  const tokens = String(text || "").split(/(\s+)/);
+  let index = 0;
+  let sawDigit = false;
+  let removedTokenCount = 0;
+
+  while (index < tokens.length && removedTokenCount < 30) {
+    const token = tokens[index];
+    if (/^\s*$/.test(token)) {
+      index += 1;
+      continue;
+    }
+    const letters = token.match(/[A-Za-z]+/g) || [];
+    if (letters.some((word) => word.length >= 3)) break;
+    if (/[0-9]/.test(token)) sawDigit = true;
+    index += 1;
+    removedTokenCount += 1;
+  }
+
+  if (!sawDigit || !removedTokenCount) return text;
+  return tokens.slice(index).join("").replace(/^\s+/, "");
+}
+
 function removeMathArtifactText(children = []) {
   const source = Array.isArray(children) ? children : [];
   const cleaned = [];
@@ -53,8 +85,20 @@ function removeMathArtifactText(children = []) {
     const prev = source[i - 1];
     const next = source[i + 1];
     const adjacentMath = [prev, next].find((node) => node?.type === "inline_math");
-    if (adjacentMath && strippedText === String(adjacentMath?.latex || "").trim()) {
-      continue;
+    if (adjacentMath) {
+      const latexText = String(adjacentMath?.latex || "").trim();
+      if (strippedText === latexText || looksLikeMathArtifactText(strippedText)) {
+        continue;
+      }
+    }
+
+    if (prev?.type === "inline_math" && !/^\s/.test(rawText)) {
+      const cleanedText = stripLeadingMathArtifactPrefix(rawText);
+      if (cleanedText !== rawText) {
+        const spaced = cleanedText && !/^\s/.test(cleanedText) ? ` ${cleanedText}` : cleanedText;
+        cleaned.push({ ...child, text: spaced });
+        continue;
+      }
     }
 
     cleaned.push({ ...child, text: rawText });
@@ -62,6 +106,7 @@ function removeMathArtifactText(children = []) {
 
   return cleaned;
 }
+
 
 function normalizeInlineChildren(children = [], equationLatexById = {}) {
   const normalized = (Array.isArray(children) ? children : []).map((child) => {

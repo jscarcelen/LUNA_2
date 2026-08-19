@@ -1,4 +1,4 @@
-import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
+import { chunkDocuments, stripLeakedStyleTextPrefix, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
 import { isEmbeddingProviderConfigured } from "./embeddings.js";
 import { generateQuizJsonLocal } from "./provider-local.js";
 import { generateQuizJsonWithOpenAi, isQuizLlmConfigured } from "./provider-openai.js";
@@ -92,7 +92,7 @@ async function loadChunksForScope(selectedDocuments, chunking) {
       section: chunk.section || "",
       headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
       page: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
-      content: chunk.content,
+      content: stripLeakedStyleTextPrefix(chunk.content),
       keywords: chunk.keywords,
       equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : [],
       semanticScore: chunk.semanticScore
@@ -142,7 +142,7 @@ async function loadVectorMatchesForScope(selectedDocuments, config, chunking) {
       section: chunk.section || "",
       headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath : [],
       page: Number.isFinite(Number(chunk.page)) ? Number(chunk.page) : null,
-      content: chunk.content,
+      content: stripLeakedStyleTextPrefix(chunk.content),
       keywords: chunk.keywords,
       equationIds: Array.isArray(chunk.equationIds) ? chunk.equationIds : [],
       semanticScore: chunk.semanticScore,

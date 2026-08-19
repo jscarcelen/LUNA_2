@@ -1181,6 +1181,8 @@ function injectDocxFormulaTokensIntoHtml(sourceRenderHtml = "", formulaTokens = 
 function htmlToPlainText(html = "") {
   return cleanExtractedText(
     String(html || "")
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, "")
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
       .replace(/<br\s*\/?\s*>/gi, "\n")
       .replace(/<\/p>/gi, "\n\n")
       .replace(/<\/h[1-6]>/gi, "\n\n")

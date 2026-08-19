@@ -7,6 +7,22 @@ export const DEFAULT_OVERLAP_WORDS = 80;
 
 const EMBEDDING_SAFE_MAX_TOKENS = 7600;
 
+// Matches CSS-rule-shaped prefixes (e.g. "@page{...}" or ".class{...}") that can leak into
+// stored plain text when a template's <style> tag content survives HTML-to-text conversion.
+const LEAKED_STYLE_RULE_PATTERN = /^\s*[.#@][\w-]+(?:[\s,>+~]+[.#]?[\w-]+)*\{[^{}]*\}/;
+
+export function stripLeakedStyleTextPrefix(text = "") {
+  let source = String(text || "");
+  let iterations = 0;
+  while (iterations < 200) {
+    const match = source.match(LEAKED_STYLE_RULE_PATTERN);
+    if (!match) break;
+    source = source.slice(match[0].length);
+    iterations += 1;
+  }
+  return source.trimStart();
+}
+
 function estimateTokens(text) {
   const words = String(text || "").trim().split(/\s+/).filter(Boolean).length;
   if (!words) return 0;
@@ -400,7 +416,7 @@ function semanticChunkMarkdown(markdown, options = {}) {
 }
 
 export function chunkDocument(document, options = {}) {
-  const markdown = String(document?.content || "").trim();
+  const markdown = stripLeakedStyleTextPrefix(String(document?.content || "").trim());
   if (!markdown) return [];
 
   const semanticChunks = semanticChunkMarkdown(markdown, options);

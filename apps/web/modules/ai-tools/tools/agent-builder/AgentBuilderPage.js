@@ -65,6 +65,7 @@ export function AgentBuilderPage({ toolContext }) {
   const workspaces = toolContext?.workspaces || [];
   const defaultWorkspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
   const onSaveGeneratedQuizDocument = toolContext?.onSaveGeneratedQuizDocument;
+  const onUpdateGeneratedDocument = toolContext?.onUpdateGeneratedDocument;
 
   const [workspaceId] = useState(defaultWorkspaceId);
   const [subjectId] = useState(toolContext?.selectedSubjectId || "");
@@ -95,6 +96,7 @@ export function AgentBuilderPage({ toolContext }) {
   const [pricingType, setPricingType] = useState(PRICING_TYPE_OPTIONS[0].value);
   const [publishStatusMessage, setPublishStatusMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [editingDocumentId, setEditingDocumentId] = useState("");
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) || null;
   const subjects = selectedWorkspace?.subjects || [];
@@ -195,17 +197,17 @@ export function AgentBuilderPage({ toolContext }) {
     try {
       const configPayload = { ...buildAgentConfig(), name, savedOutput: output };
       const textContent = JSON.stringify(configPayload, null, 2);
-      const saved = await onSaveGeneratedQuizDocument({
-        folderIds: [],
-        tags: ["ai-agent"],
-        file: {
-          name: `${name}.agent.json`,
-          content: textContent,
-          sizeBytes: textContent.length
-        }
-      });
+      const file = {
+        name: `${name}.agent.json`,
+        content: textContent,
+        sizeBytes: textContent.length
+      };
+      const saved = editingDocumentId && typeof onUpdateGeneratedDocument === "function"
+        ? await onUpdateGeneratedDocument(editingDocumentId, { file })
+        : await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["ai-agent"], file });
       if (!saved) throw new Error("Agent could not be saved to the workspace.");
-      setPublishStatusMessage(`Saved "${name}" to AI Tools workspace. You can reopen it below to edit.`);
+      setEditingDocumentId(saved.id || editingDocumentId);
+      setPublishStatusMessage(`Saved "${name}" to AI Tools workspace. It now appears as its own tool.`);
     } catch (error) {
       setPublishStatusMessage(String(error.message || error));
     } finally {
@@ -216,6 +218,7 @@ export function AgentBuilderPage({ toolContext }) {
   function handleLoadAgentForEdit(document) {
     try {
       const parsed = JSON.parse(String(document.content || "{}"));
+      setEditingDocumentId(document.id);
       setAgentName(String(parsed.name || document.name || ""));
       setInstructions(String(parsed.instructions || ""));
       setOutputExample(String(parsed.outputExample || ""));

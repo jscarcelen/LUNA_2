@@ -27,6 +27,7 @@ import {
   saveDocumentBlockTemplate,
   updateDocumentMeta,
   updateDocumentContent,
+  updateGeneratedDocumentContent,
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
@@ -176,6 +177,11 @@ export async function POST(request) {
         folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
         tags: payload.tags || []
       });
+      return await ok(ownerUserId, { savedDocument });
+    }
+
+    if (action === "updateGeneratedDocument") {
+      const savedDocument = await updateGeneratedDocumentContent(payload.subjectId, payload.documentId, payload.file || {});
       return await ok(ownerUserId, { savedDocument });
     }
 

@@ -7,7 +7,7 @@ import { navByRole, pageTitles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
-import { AIToolsHubPage, AIToolRuntimePage, findAiToolById } from "../modules/ai-tools";
+import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
 const defaultPage = { student: "workspaces", teacher: "workspaces" };
@@ -24,6 +24,7 @@ export function AppShell() {
 
   const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "") : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
+  const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "") : "";
   const title = currentAiTool ? currentAiTool.name : (pageTitles[page] || "LUNA");
   const navItems = navByRole[role] || [];
 
@@ -141,7 +142,15 @@ export function AppShell() {
       );
     }
     if (page === "ai-tools") {
-      return <AIToolsHubPage onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)} />;
+      return (
+        <AIToolsHubPage
+          onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)}
+          onOpenCustomAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+        />
+      );
     }
     if (currentAiTool) {
       const ToolComponent = currentAiTool.component;
@@ -154,7 +163,26 @@ export function AppShell() {
               selectedSubjectId,
               onUploadTxt: handleUploadTxt,
               onReviewDocumentExtraction: handleReviewDocumentExtraction,
-              onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument
+              onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
+              onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
+              onListDocumentBlockTemplates: handleListDocumentBlockTemplates
+            }}
+          />
+        </AIToolRuntimePage>
+      );
+    }
+    if (currentCustomAgentId) {
+      return (
+        <AIToolRuntimePage title="Run Agent" description="Generate output with your saved agent." onBack={() => setPage("ai-tools")}>
+          <RunAgentPage
+            agentDocumentId={currentCustomAgentId}
+            toolContext={{
+              workspaces,
+              selectedWorkspaceId,
+              selectedSubjectId,
+              onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
+              onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
+              onListDocumentBlockTemplates: handleListDocumentBlockTemplates
             }}
           />
         </AIToolRuntimePage>
@@ -164,7 +192,7 @@ export function AppShell() {
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return <DashboardPage />;
-  }, [page, role, currentAiTool, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
+  }, [page, role, currentAiTool, currentCustomAgentId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);
@@ -509,6 +537,18 @@ export function AppShell() {
       tags: Array.isArray(payload?.tags) ? payload.tags : [],
       file: payload?.file || {},
       downloads: payload?.downloads || {}
+    });
+
+    return result?.savedDocument || null;
+  }
+
+  async function handleUpdateGeneratedDocument(documentId, payload) {
+    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return null;
+    const result = await runWorkspaceAction("updateGeneratedDocument", {
+      workspaceId: selectedWorkspaceId,
+      subjectId: selectedSubjectId,
+      documentId,
+      file: payload?.file || {}
     });
 
     return result?.savedDocument || null;

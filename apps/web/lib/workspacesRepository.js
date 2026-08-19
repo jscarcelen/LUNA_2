@@ -2031,6 +2031,29 @@ export async function saveGeneratedQuizDocument(subjectId, file, options = {}) {
   return saved[0] || null;
 }
 
+export async function updateGeneratedDocumentContent(subjectId, documentId, file = {}) {
+  const client = createSupabaseAdminClient();
+  const name = normalizeDocumentName(file.name || "");
+  const content = String(file.content || "");
+  const preview = String(file.preview || content).trim().slice(0, 180) || "(empty file)";
+  const sizeBytes = Number(file.sizeBytes || Buffer.byteLength(content, "utf8") || 0);
+  const nowIso = new Date().toISOString();
+
+  const updatePayload = { content, preview, size_bytes: sizeBytes, updated_at: nowIso };
+  if (name) updatePayload.name = name;
+
+  const { data, error } = await client
+    .from("documents")
+    .update(updatePayload)
+    .eq("id", documentId)
+    .eq("subject_id", subjectId)
+    .select("id, subject_id, name, content")
+    .maybeSingle();
+  if (error) throw error;
+
+  return data || null;
+}
+
 export async function saveGeneratedQuizBundle(subjectId, file, downloads, options = {}) {
   const plainText = String(file.content || "");
   const bundledFile = {

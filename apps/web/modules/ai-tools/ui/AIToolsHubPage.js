@@ -1,6 +1,30 @@
 import { aiToolsRegistry } from "../registry";
 
-export function AIToolsHubPage({ onOpenTool }) {
+function parseAgentName(document) {
+  try {
+    const parsed = JSON.parse(String(document.content || "{}"));
+    return String(parsed.name || document.name || "Untitled Agent").trim() || "Untitled Agent";
+  } catch {
+    return document.name || "Untitled Agent";
+  }
+}
+
+function parseAgentDescription(document) {
+  try {
+    const parsed = JSON.parse(String(document.content || "{}"));
+    return String(parsed.instructions || "").trim().slice(0, 140) || "Custom AI agent.";
+  } catch {
+    return "Custom AI agent.";
+  }
+}
+
+export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, workspaces = [], selectedWorkspaceId, selectedSubjectId }) {
+  const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
+  const selectedSubject = selectedWorkspace?.subjects?.find((subject) => subject.id === selectedSubjectId) || null;
+  const customAgents = (selectedSubject?.documents || []).filter(
+    (document) => document.sourceType === "generated" && (document.tags || []).includes("ai-agent")
+  );
+
   return (
     <section className="view-stack">
       <article className="panel accent">
@@ -14,6 +38,19 @@ export function AIToolsHubPage({ onOpenTool }) {
             <h4>{tool.name}</h4>
             <p>{tool.description}</p>
             <button className="primary-btn" type="button" onClick={() => onOpenTool(tool.id)}>{tool.runLabel}</button>
+          </article>
+        ))}
+        {customAgents.map((document) => (
+          <article key={document.id} className="panel ai-tool-card">
+            <h4>{parseAgentName(document)}</h4>
+            <p>{parseAgentDescription(document)}</p>
+            <button
+              className="primary-btn"
+              type="button"
+              onClick={() => (typeof onOpenCustomAgent === "function" ? onOpenCustomAgent(document.id) : null)}
+            >
+              Open Agent
+            </button>
           </article>
         ))}
       </div>

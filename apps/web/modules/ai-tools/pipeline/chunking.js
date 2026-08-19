@@ -173,6 +173,7 @@ function splitMarkdownIntoUnits(markdown) {
         type: "heading",
         content: line,
         headingPath: [...headingPath],
+        headingDepth: depth,
         tokenCount: estimateTokens(line)
       });
       continue;
@@ -325,6 +326,10 @@ function buildChunkFromUnits(units, startWordApprox, index) {
   };
 }
 
+// Chapter/section-level headings (depth 1-3) force a chunk boundary so a chunk never blends two sections.
+const HEADING_HARD_SPLIT_MAX_DEPTH = 3;
+const MIN_HARD_SPLIT_TOKENS = 40;
+
 function semanticChunkMarkdown(markdown, options = {}) {
   const targetTokens = Math.max(300, Number(options.chunkWords || DEFAULT_CHUNK_WORDS));
   const configuredMaxTokens = Math.max(targetTokens, Number(options.maxTokens || 1000));
@@ -340,13 +345,14 @@ function semanticChunkMarkdown(markdown, options = {}) {
   let bucketTokens = 0;
   let startWordApprox = 0;
 
-  function pushBucket() {
+  function pushBucket(pushOptions = {}) {
     if (!bucket.length) return;
     const chunk = buildChunkFromUnits(bucket, startWordApprox, chunks.length);
     chunks.push(chunk);
     startWordApprox = chunk.endWord;
 
-    if (overlapTokens <= 0) {
+    // Hard section boundaries start the next chunk fresh so section metadata stays unambiguous.
+    if (pushOptions.hardBoundary || overlapTokens <= 0) {
       bucket = [];
       bucketTokens = 0;
       return;
@@ -366,8 +372,11 @@ function semanticChunkMarkdown(markdown, options = {}) {
 
   for (const unit of units) {
     const nextTokens = bucketTokens + unit.tokenCount;
+    const isHardHeadingBoundary = unit.type === "heading" && Number(unit.headingDepth || 6) <= HEADING_HARD_SPLIT_MAX_DEPTH;
 
-    if (bucket.length && nextTokens > maxTokens) {
+    if (isHardHeadingBoundary && bucket.length && bucketTokens >= MIN_HARD_SPLIT_TOKENS) {
+      pushBucket({ hardBoundary: true });
+    } else if (bucket.length && nextTokens > maxTokens) {
       pushBucket();
     }
 

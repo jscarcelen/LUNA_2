@@ -160,7 +160,7 @@ export function AppShell() {
         </AIToolRuntimePage>
       );
     }
-    if (page === "marketplace") return <AgentMarketplacePage onGoBuilder={() => setPage("builder")} />;
+    if (page === "marketplace") return <AgentMarketplacePage onGoBuilder={() => setPage("ai-tool:agent-builder")} />;
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return <DashboardPage />;

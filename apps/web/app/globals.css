@@ -2716,6 +2716,64 @@ body {
   background: linear-gradient(180deg, rgba(232, 249, 245, 0.95), rgba(238, 232, 255, 0.95));
 }
 
+.agent-builder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.agent-field-list {
+  display: grid;
+  gap: 6px;
+}
+
+.agent-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(132, 129, 205, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 8px 10px;
+}
+
+.agent-field-name {
+  flex: 1;
+  font-weight: 600;
+}
+
+.agent-output-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.agent-output-card {
+  border: 1px solid rgba(132, 129, 205, 0.2);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.agent-publish-toggle {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (max-width: 1024px) {
+  .agent-builder-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-publish-toggle {
+    grid-template-columns: 1fr;
+  }
+}
+
 .quiz-preview-modal-card {
   width: min(1160px, 100%);
   max-height: 86vh;

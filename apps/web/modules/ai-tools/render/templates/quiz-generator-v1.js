@@ -53,7 +53,11 @@ function renderQuestion(question, index, renderOptions = {}) {
       const equationLabel = Array.isArray(ref?.equationIds) && ref.equationIds.length
         ? ` · equations ${escapeHtml(ref.equationIds.join(", "))}`
         : "";
-      return `<li>${escapeHtml(ref.documentName)} · chunk ${ref.chunkIndex}${equationLabel}</li>`;
+      const label = `${escapeHtml(ref.documentName)} · chunk ${ref.chunkIndex}${equationLabel}`;
+      const excerpt = String(ref?.excerpt || "").trim();
+      if (!excerpt) return `<li>${label}</li>`;
+      // Reveals the actual chunk text the answer was drawn from, instead of a static "chunk N" label.
+      return `<li><details class="quiz-source-ref"><summary>${label}</summary><div class="quiz-source-excerpt">${renderLatexText(excerpt)}</div></details></li>`;
     })
     .join("");
 
@@ -223,6 +227,21 @@ export function renderQuizHtmlDocument(quizJson, options = {}) {
           margin: 10px 0 0;
           padding-left: 18px;
           color: #5f6788;
+        }
+        .quiz-source-ref summary {
+          cursor: pointer;
+          color: #5d4ae6;
+          text-decoration: underline;
+        }
+        .quiz-source-excerpt {
+          margin-top: 6px;
+          padding: 8px 10px;
+          background: #f8f7ff;
+          border: 1px solid rgba(132, 129, 205, 0.16);
+          border-radius: 10px;
+          font-size: 13px;
+          line-height: 1.5;
+          color: #3d4257;
         }
         .quiz-answer-choice {
           border: 1px solid rgba(132, 129, 205, 0.2);

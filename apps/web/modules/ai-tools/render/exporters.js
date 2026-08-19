@@ -19,6 +19,79 @@ function formatQuestionType(type) {
   return "Multiple choice";
 }
 
+// pdf-lib's standard fonts only support WinAnsi encoding, so LaTeX is converted to a plain
+// ASCII-safe approximation instead of Unicode math symbols (which would fail to encode).
+function convertLatexToReadableText(latex = "") {
+  return String(latex || "")
+    .replace(/\\frac\{([^{}]*)\}\{([^{}]*)\}/g, "($1)/($2)")
+    .replace(/\\sqrt\{([^{}]*)\}/g, "sqrt($1)")
+    .replace(/\\bar\{([^{}]*)\}/g, "$1-bar")
+    .replace(/\\sum/g, "sum")
+    .replace(/\\int/g, "integral")
+    .replace(/\\prod/g, "product")
+    .replace(/\\pm/g, "+/-")
+    .replace(/\\times/g, "*")
+    .replace(/\\cdot/g, "\u00b7")
+    .replace(/\\neq/g, "!=")
+    .replace(/\\approx/g, "~=")
+    .replace(/\\leq/g, "<=")
+    .replace(/\\geq/g, ">=")
+    .replace(/\\to/g, "->")
+    .replace(/_\{([^{}]+)\}/g, "_$1")
+    .replace(/\^\{([^{}]+)\}/g, "^$1")
+    .replace(/[{}]/g, "")
+    .replace(/\\/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function renderLatexForPdf(text = "") {
+  const source = String(text || "");
+  const pattern = /\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$/g;
+  let result = "";
+  let cursor = 0;
+  let match;
+  while ((match = pattern.exec(source))) {
+    result += source.slice(cursor, match.index);
+    const latex = match[1] ?? match[2] ?? "";
+    result += convertLatexToReadableText(latex);
+    cursor = match.index + match[0].length;
+  }
+  result += source.slice(cursor);
+  return result;
+}
+
+const PDF_TEXT_REPLACEMENTS = {
+  "\u2212": "-",
+  "\u2013": "-",
+  "\u2014": "-",
+  "\u2018": "'",
+  "\u2019": "'",
+  "\u201c": '"',
+  "\u201d": '"',
+  "\u2026": "...",
+  "\u00d7": "x",
+  "\u2260": "!=",
+  "\u2248": "~=",
+  "\u2264": "<=",
+  "\u2265": ">=",
+  "\u2192": "->",
+  "\u221a": "sqrt",
+  "\u03a3": "sum",
+  "\u222b": "integral",
+  "\u03a0": "product",
+  "\u0304": ""
+};
+
+// pdf-lib's standard fonts only support WinAnsi encoding; any other character crashes drawText.
+function sanitizeForPdfText(text = "") {
+  let result = String(text || "");
+  for (const [from, to] of Object.entries(PDF_TEXT_REPLACEMENTS)) {
+    result = result.split(from).join(to);
+  }
+  return result.replace(/[^\x20-\x7E\u00A0-\u00FF]/g, "");
+}
+
 function wrapText(text, maxChars = 88) {
   const words = String(text || "").split(/\s+/).filter(Boolean);
   const lines = [];
@@ -168,7 +241,7 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
     if (y < 60) {
       createPage();
     }
-    page.drawText(text, {
+    page.drawText(sanitizeForPdfText(text), {
       x,
       y,
       size,
@@ -182,23 +255,23 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
     const lines = [];
     // Wrap the prompt (it can span multiple sentences/paragraphs) so the card height matches
     // the real number of rendered lines instead of assuming a single line.
-    for (const line of wrapText(`${index + 1}. ${question.prompt}`, 64)) {
+    for (const line of wrapText(renderLatexForPdf(`${index + 1}. ${question.prompt}`), 64)) {
       lines.push({ text: line, bold: true, size: 13, color: QUIZ_COLORS.ink });
     }
     lines.push({ text: `Type: ${formatQuestionType(question.type)} · Difficulty: ${question.difficulty || quiz.difficulty}`, size: 9.5, color: QUIZ_COLORS.muted });
 
     for (const option of question.options || []) {
-      for (const line of wrapText(`- ${option}`, 76)) {
+      for (const line of wrapText(renderLatexForPdf(`- ${option}`), 76)) {
         lines.push({ text: line, size: 10.5, color: QUIZ_COLORS.ink });
       }
     }
 
     if (showAnswers) {
-      for (const line of wrapText(`Answer: ${question.answer}`, 76)) {
+      for (const line of wrapText(renderLatexForPdf(`Answer: ${question.answer}`), 76)) {
         lines.push({ text: line, size: 10.5, bold: true, color: QUIZ_COLORS.violet });
       }
 
-      for (const line of wrapText(`Explanation: ${question.explanation}`, 76)) {
+      for (const line of wrapText(renderLatexForPdf(`Explanation: ${question.explanation}`), 76)) {
         lines.push({ text: line, size: 10.5, color: QUIZ_COLORS.muted });
       }
     }
@@ -214,7 +287,7 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
         }
         const excerpt = String(ref.excerpt || "").trim();
         if (excerpt) {
-          for (const line of wrapText(excerpt, 76)) {
+          for (const line of wrapText(renderLatexForPdf(excerpt), 76)) {
             lines.push({ text: line, size: 9, color: QUIZ_COLORS.muted });
           }
         }
@@ -226,7 +299,11 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
 
   function drawQuestionCard(question, index) {
     const lines = wrapQuestionLines(question, index);
-    const totalHeight = lines.reduce((sum, line) => sum + (line.size + 6), 0) + 24;
+    const headerHeight = 32;
+    const headerToContentGap = 14;
+    const bottomPadding = 14;
+    const contentHeight = lines.reduce((sum, line) => sum + (line.size + 6), 0);
+    const totalHeight = headerHeight + headerToContentGap + contentHeight + bottomPadding;
 
     if (y - totalHeight < 64) {
       createPage();
@@ -245,14 +322,21 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
 
     page.drawRectangle({
       x: 36,
-      y: cardTop - 28,
+      y: cardTop - headerHeight,
       width: 540,
-      height: 28,
+      height: headerHeight,
       color: rgb(0.94, 0.9, 1)
     });
 
-    y = cardTop - 18;
-    drawLine(`Question ${index + 1}`, { x: 50, size: 10, bold: true, color: QUIZ_COLORS.violet, spacing: 18 });
+    page.drawText(sanitizeForPdfText(`Question ${index + 1}`), {
+      x: 50,
+      y: cardTop - headerHeight / 2 - 3.5,
+      size: 10,
+      font: boldFont,
+      color: QUIZ_COLORS.violet
+    });
+
+    y = cardTop - headerHeight - headerToContentGap;
 
     for (const line of lines) {
       drawLine(line.text, { x: 50, size: line.size, bold: line.bold, color: line.color, spacing: line.size + 4 });
@@ -262,14 +346,35 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
   }
 
   createPage();
-  drawLine("AI Quiz Generator", { x: 44, size: 10, bold: true, color: QUIZ_COLORS.violet, spacing: 16 });
-  drawLine(quiz.title, { x: 44, size: 22, bold: true, spacing: 26 });
-  drawLine(`Difficulty: ${quiz.difficulty}`, { x: 44, size: 12, spacing: 18, color: QUIZ_COLORS.muted });
-  drawLine(`Questions: ${quiz.questions.length}`, { x: 184, size: 12, spacing: 18, color: QUIZ_COLORS.muted });
-  drawLine(`Topic: ${quiz.topicPrompt || "Selected material"}`, { x: 44, size: 11, spacing: 18, color: QUIZ_COLORS.muted });
-  drawLine(quiz.instructions, { x: 44, size: 11, spacing: 22, color: QUIZ_COLORS.ink });
+  drawLine("AI QUIZ GENERATOR", { x: 44, size: 10, bold: true, color: QUIZ_COLORS.violet, spacing: 20 });
+  for (const line of wrapText(quiz.title, 46)) {
+    drawLine(line, { x: 44, size: 24, bold: true, spacing: 28 });
+  }
 
   y -= 4;
+  const metaColumns = [
+    { label: "Difficulty", value: String(quiz.difficulty || "medium") },
+    { label: "Questions", value: String(quiz.questions.length) },
+    { label: "Topic", value: String(quiz.topicPrompt || "Selected material") }
+  ];
+  const metaY = y;
+  let metaRowHeight = 0;
+  metaColumns.forEach((column, columnIndex) => {
+    const columnX = 44 + columnIndex * 170;
+    page.drawText(sanitizeForPdfText(column.label.toUpperCase()), { x: columnX, y: metaY, size: 8.5, font: boldFont, color: QUIZ_COLORS.muted });
+    const valueLines = wrapText(column.value, 24);
+    valueLines.forEach((line, lineIndex) => {
+      page.drawText(sanitizeForPdfText(line), { x: columnX, y: metaY - 15 - lineIndex * 13, size: 11, font, color: QUIZ_COLORS.ink });
+    });
+    metaRowHeight = Math.max(metaRowHeight, 15 + valueLines.length * 13);
+  });
+  y = metaY - metaRowHeight - 14;
+
+  for (const line of wrapText(quiz.instructions, 92)) {
+    drawLine(line, { x: 44, size: 11, spacing: 16, color: QUIZ_COLORS.ink });
+  }
+
+  y -= 8;
 
   for (const [index, question] of quiz.questions.entries()) {
     drawQuestionCard(question, index);

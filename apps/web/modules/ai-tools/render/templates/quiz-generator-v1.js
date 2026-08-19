@@ -19,9 +19,11 @@ function renderLatexText(value) {
     if (match.index > cursor) parts.push(escapeHtml(source.slice(cursor, match.index)));
     const latex = match[1] ?? match[2] ?? "";
     try {
+      // Downloaded HTML has no katex.css to hide the MathML fallback, so it would render twice.
       parts.push(katex.renderToString(latex.trim(), {
         displayMode: Boolean(match[1]),
-        throwOnError: false
+        throwOnError: false,
+        output: "html"
       }));
     } catch {
       parts.push(escapeHtml(match[0]));

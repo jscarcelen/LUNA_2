@@ -180,7 +180,11 @@ export async function renderQuizPdfBuffer(quizJson, options = {}) {
 
   function wrapQuestionLines(question, index) {
     const lines = [];
-    lines.push({ text: `${index + 1}. ${question.prompt}`, bold: true, size: 13, color: QUIZ_COLORS.ink });
+    // Wrap the prompt (it can span multiple sentences/paragraphs) so the card height matches
+    // the real number of rendered lines instead of assuming a single line.
+    for (const line of wrapText(`${index + 1}. ${question.prompt}`, 64)) {
+      lines.push({ text: line, bold: true, size: 13, color: QUIZ_COLORS.ink });
+    }
     lines.push({ text: `Type: ${formatQuestionType(question.type)} · Difficulty: ${question.difficulty || quiz.difficulty}`, size: 9.5, color: QUIZ_COLORS.muted });
 
     for (const option of question.options || []) {

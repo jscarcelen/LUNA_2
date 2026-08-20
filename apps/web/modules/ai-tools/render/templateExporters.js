@@ -29,22 +29,41 @@ function hexToRgb(hex = "#1f2937") {
 
 // Expands components and repeated (array-bound) blocks into a flat, ordered render list.
 export function buildCanvasRenderList(template = {}, sampleData = {}) {
-  const canvasBlocks = Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [];
+  const pageLayouts = Array.isArray(template.pageLayouts) ? template.pageLayouts : [];
+  const activePage = pageLayouts.find((page) => page.id === template.activePageId) || pageLayouts[0] || null;
+  const canvasBlocks = Array.isArray(activePage?.blocks) && activePage.blocks.length
+    ? activePage.blocks
+    : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []);
   const components = Array.isArray(template.components) ? template.components : [];
   const blockFormats = template.blockFormats && typeof template.blockFormats === "object" ? template.blockFormats : {};
   const blockClasses = template.blockClasses && typeof template.blockClasses === "object" ? template.blockClasses : {};
+  const formatSets = Array.isArray(template.formatSets) ? template.formatSets : [];
+  const activeFormatSet = formatSets.find((set) => set.id === template.activeFormatSetId) || formatSets[0] || null;
 
   function expandEntry(entry) {
     if (entry.componentRefId) {
       const component = components.find((item) => item.id === entry.componentRefId);
-      return Array.isArray(component?.blocks) ? component.blocks : [];
+      return Array.isArray(component?.blocks)
+        ? component.blocks.map((block, index) => ({
+          ...block,
+          position: block.position || (entry.position ? {
+            ...entry.position,
+            y: Number(entry.position.y || 0) + index * 14,
+            height: Number(block.position?.height || block.position?.h || 12)
+          } : null)
+        }))
+        : [];
     }
     return [entry];
   }
 
   function resolveFormat(type, formatName) {
     const list = Array.isArray(blockFormats[type]) ? blockFormats[type] : [];
-    return list.find((item) => item.name === formatName) || list[0] || null;
+    const setFormatName = activeFormatSet?.formats?.[type];
+    return list.find((item) => item.name === setFormatName)
+      || list.find((item) => item.name === formatName)
+      || list[0]
+      || null;
   }
 
   const rendered = [];
@@ -68,6 +87,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
             className,
             style,
             htmlTemplate,
+            position: spec.position || entry.position || null,
+            pageId: activePage?.id || "page-1",
+            hidden: Boolean(spec.hidden || entry.hidden),
             text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
             index: index + 1,
             letter: letterForIndex(index)
@@ -83,6 +105,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         className,
         style,
         htmlTemplate,
+        position: spec.position || entry.position || null,
+        pageId: activePage?.id || "page-1",
+        hidden: Boolean(spec.hidden || entry.hidden),
         text: Array.isArray(value) ? value.join(", ") : String(value ?? "")
       });
     }
@@ -109,18 +134,32 @@ function styleObjectToCss(style = {}) {
   if (style.borderWidth && style.borderColor) rules.push(`border:${style.borderWidth} solid ${style.borderColor}`);
   if (style.radius) rules.push(`border-radius:${style.radius}`);
   if (style.keepTogether) rules.push("break-inside:avoid");
+  if (style.layoutMode === "Absolute") rules.push("position:absolute");
   return rules.join(";");
+}
+
+function positionObjectToCss(position = {}) {
+  if (!position || typeof position !== "object") return "";
+  const unit = String(position.unit || "mm");
+  const value = (key) => position[key] === undefined || position[key] === "" ? "" : `${position[key]}${unit}`;
+  return [
+    ["left", value("x")],
+    ["top", value("y")],
+    ["width", value("width") || value("w")],
+    ["min-height", value("height") || value("h")]
+  ].filter(([, rule]) => rule).map(([property, rule]) => `${property}:${rule}`).join(";");
 }
 
 function renderBlockHtml(block) {
   const classAttr = block.className ? ` class="${escapeHtml(block.className)}"` : "";
-  const css = styleObjectToCss(block.style);
+  const css = [block.position ? "position:absolute" : "", styleObjectToCss(block.style), positionObjectToCss(block.position)].filter(Boolean).join(";");
   const styleAttr = css ? ` style="${escapeHtml(css)}"` : "";
   const text = escapeHtml(block.text || "");
   const vars = { text, value: text, index: block.index ?? "", letter: block.letter ?? "" };
 
   if (block.htmlTemplate.trim()) {
-    return fillTemplate(block.htmlTemplate, vars);
+    const renderedTemplate = fillTemplate(block.htmlTemplate, vars);
+    return block.position ? `<div${classAttr}${styleAttr}>${renderedTemplate}</div>` : renderedTemplate;
   }
 
   if (block.type === "heading1") return `<h1${classAttr}${styleAttr}>${text}</h1>`;
@@ -165,8 +204,9 @@ export function renderTemplateHtml(template = {}, sampleData = {}) {
   const containerClass = String(template.containerClass || "luna-template-default");
   const isContinuous = String(template.pageFormat || "") === "html-continuous";
   const dimensions = isContinuous ? null : getPageFormatDimensionsMm(template.pageFormat, template.customPageSize);
+  const hasPositionedLayout = blocks.some((block) => block.position && (block.position.x !== undefined || block.position.y !== undefined));
   const pageCss = dimensions
-    ? `.${containerClass}{width:${dimensions.width}mm;min-height:${dimensions.height}mm;box-sizing:border-box;padding:16mm;margin:0 auto;background:#fff;}`
+    ? `.${containerClass}{position:relative;width:${dimensions.width}mm;min-height:${dimensions.height}mm;box-sizing:border-box;padding:16mm;margin:0 auto;background:#fff;}${hasPositionedLayout ? `.${containerClass}>*{box-sizing:border-box;}` : ""}`
     : "";
   const body = blocks.map(renderBlockHtml).join("\n");
   const styleTag = css || pageCss ? `<style>${pageCss}${css}</style>` : "";
@@ -192,7 +232,9 @@ function wrapPlainText(text, size, maxWidth, useFont) {
 
 export async function renderTemplatePdfBuffer(template = {}, sampleData = {}) {
   const blocks = buildCanvasRenderList(template, sampleData);
-  const dimensions = getPageFormatDimensionsMm(template.pageFormat, template.customPageSize);
+  const activePage = (Array.isArray(template.pageLayouts) ? template.pageLayouts : []).find((page) => page.id === template.activePageId)
+    || (Array.isArray(template.pageLayouts) ? template.pageLayouts[0] : null);
+  const dimensions = getPageFormatDimensionsMm(activePage?.pageFormat || template.pageFormat, activePage?.customPageSize || template.customPageSize);
   const pageWidth = (dimensions.width / 25.4) * 72;
   const pageHeight = (dimensions.height / 25.4) * 72;
   const marginX = 48;
@@ -205,6 +247,7 @@ export async function renderTemplatePdfBuffer(template = {}, sampleData = {}) {
   let y = pageHeight - 48;
 
   for (const block of blocks) {
+    if (block.hidden) continue;
     const baseSize = Number(String(block.style?.fontSize || "").replace("px", "")) || (block.type.startsWith("heading") ? 18 : 11);
     const minSize = Number(block.style?.minFontSize) || Math.min(9, baseSize);
     const isBold = block.style?.fontWeight === "700" || block.type.startsWith("heading");
@@ -219,15 +262,22 @@ export async function renderTemplatePdfBuffer(template = {}, sampleData = {}) {
       lines = wrapPlainText(label, size, maxWidth, useFont);
     }
 
+    const positioned = block.position && (block.position.x !== undefined || block.position.y !== undefined);
+    const positionUnit = String(block.position?.unit || "mm");
+    const positionScale = positionUnit === "pt" ? 1 : 72 / 25.4;
+    const blockX = positioned ? marginX + Number(block.position?.x || 0) * positionScale : marginX;
+    const blockY = positioned ? pageHeight - 48 - Number(block.position?.y || 0) * positionScale : y;
+    let lineY = blockY;
     for (const line of lines) {
       if (y < 60) {
         page = pdf.addPage([pageWidth, pageHeight]);
         y = pageHeight - 48;
       }
-      page.drawText(line, { x: marginX, y, size, font: useFont, color });
-      y -= size + 6;
+      page.drawText(line, { x: blockX, y: positioned ? lineY : y, size, font: useFont, color });
+      lineY -= size + 6;
+      if (!positioned) y -= size + 6;
     }
-    y -= 6;
+    if (!positioned) y -= 6;
   }
 
   return Buffer.from(await pdf.save());

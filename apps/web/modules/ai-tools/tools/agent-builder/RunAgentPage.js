@@ -255,11 +255,27 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
       const textContent = output.items
         .map((item) => fields.map((field) => renderFieldAsMarkdown(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n\n"))
         .join("\n\n---\n\n");
-      const name = `${agentConfig?.name || "Agent Output"}.txt`;
+      let renderedContent = textContent;
+      let name = `${agentConfig?.name || "Agent Output"}.txt`;
+      if (activeTemplate) {
+        const renderedItems = [];
+        for (const item of output.items) {
+          const response = await fetch("/api/templates/render-preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ template: activeTemplate, sampleData: item, format: "html" })
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result?.error || "Template rendering failed");
+          renderedItems.push(result.html || "");
+        }
+        renderedContent = renderedItems.join("<div style=\"page-break-after:always;\"></div>");
+        name = `${agentConfig?.name || "Agent Output"}.html`;
+      }
       const saved = await onSaveGeneratedQuizDocument({
         folderIds: saveFolderId ? [saveFolderId] : [],
         tags: [],
-        file: { name, content: textContent, sizeBytes: textContent.length }
+        file: { name, content: renderedContent, preview: textContent, sizeBytes: renderedContent.length }
       });
       if (!saved) throw new Error("Output could not be saved to the workspace.");
       setStatusMessage(`Saved output as "${name}" in the workspace.`);

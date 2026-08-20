@@ -136,9 +136,13 @@ function splitTemplateBlockClassesMeta(raw = {}) {
   const canvasBlocks = Array.isArray(meta.canvasBlocks) ? meta.canvasBlocks : [];
   const pageFormat = String(meta.pageFormat || "a4-portrait").trim() || "a4-portrait";
   const dataBindings = meta.dataBindings && typeof meta.dataBindings === "object" ? meta.dataBindings : {};
+  const formatSets = Array.isArray(meta.formatSets) ? meta.formatSets : [];
+  const pageLayouts = Array.isArray(meta.pageLayouts) ? meta.pageLayouts : [];
+  const activeFormatSetId = String(meta.activeFormatSetId || "").trim();
+  const activePageId = String(meta.activePageId || "").trim();
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId };
 }
 
 function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root", extra = {}) {
@@ -152,7 +156,11 @@ function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates =
     components: Array.isArray(extra?.components) ? extra.components : [],
     canvasBlocks: Array.isArray(extra?.canvasBlocks) ? extra.canvasBlocks : [],
     pageFormat: String(extra?.pageFormat || "a4-portrait").trim() || "a4-portrait",
-    dataBindings: extra?.dataBindings && typeof extra.dataBindings === "object" ? extra.dataBindings : {}
+    dataBindings: extra?.dataBindings && typeof extra.dataBindings === "object" ? extra.dataBindings : {},
+    formatSets: Array.isArray(extra?.formatSets) ? extra.formatSets : [],
+    pageLayouts: Array.isArray(extra?.pageLayouts) ? extra.pageLayouts : [],
+    activeFormatSetId: String(extra?.activeFormatSetId || "").trim(),
+    activePageId: String(extra?.activePageId || "").trim()
   };
   return classes;
 }
@@ -168,9 +176,15 @@ function resolveBlockFormatSpec(template = {}, block = {}) {
   const type = String(block?.type || "paragraph");
   const formatName = String(block?.formatName || "").trim();
   const formats = Array.isArray(template?.blockFormats?.[type]) ? template.blockFormats[type] : [];
+  const formatSets = Array.isArray(template?.formatSets) ? template.formatSets : [];
+  const activeFormatSet = formatSets.find((set) => set.id === template?.activeFormatSetId) || formatSets[0] || null;
+  const setFormatName = String(activeFormatSet?.formats?.[type] || "").trim();
   const fallbackClass = String(template?.blockClasses?.[type] || "").trim();
   const fallbackHtml = String(template?.blockHtmlTemplates?.[type] || "");
-  const match = formats.find((item) => String(item?.name || "").trim() === formatName) || formats[0] || null;
+  const match = formats.find((item) => String(item?.name || "").trim() === setFormatName)
+    || formats.find((item) => String(item?.name || "").trim() === formatName)
+    || formats[0]
+    || null;
   return {
     className: String(match?.className || fallbackClass || ""),
     htmlTemplate: String(match?.htmlTemplate || fallbackHtml || "")
@@ -183,9 +197,20 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
   const blockHtmlTemplates = template?.blockHtmlTemplates && typeof template.blockHtmlTemplates === "object" ? template.blockHtmlTemplates : {};
   const css = String(template?.css || "").trim();
   const containerClass = String(template?.containerClass || "luna-template-default");
+  const pageLayouts = Array.isArray(template?.pageLayouts) ? template.pageLayouts : [];
+  const activePage = pageLayouts.find((page) => page.id === template?.activePageId) || pageLayouts[0] || null;
+  const layoutBlocks = Array.isArray(activePage?.blocks) ? activePage.blocks : [];
 
-  const renderByType = (block = {}, className = "") => {
+  const renderByType = (block = {}, className = "", position = null) => {
     const classAttr = className ? ` class="${escapeHtml(className)}"` : "";
+    const positionStyle = position && typeof position === "object" ? [
+      "position:absolute",
+      position.x !== undefined ? `left:${Number(position.x) || 0}${position.unit || "mm"}` : "",
+      position.y !== undefined ? `top:${Number(position.y) || 0}${position.unit || "mm"}` : "",
+      (position.width ?? position.w) !== undefined ? `width:${Number(position.width ?? position.w) || 0}${position.unit || "mm"}` : "",
+      (position.height ?? position.h) !== undefined ? `min-height:${Number(position.height ?? position.h) || 0}${position.unit || "mm"}` : ""
+    ].filter(Boolean).join(";") : "";
+    const styleAttr = positionStyle ? ` style="${escapeHtml(positionStyle)}"` : "";
     const blockIdAttr = ` data-block-id="${escapeHtml(block.id || `block_${Date.now().toString(36)}`)}"`;
     const type = String(block.type || "paragraph");
     const overrideTemplates = block.__templateHtml && typeof block.__templateHtml === "object" ? block.__templateHtml : {};
@@ -199,42 +224,42 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
     if (type === "heading1" || type === "heading2" || type === "heading3") {
       const tag = type === "heading1" ? "h1" : (type === "heading2" ? "h2" : "h3");
       const text = escapeHtml(block.text || "");
-      return applyTemplate(`<${tag}${classAttr}${blockIdAttr}>${text}</${tag}>`, { text });
+      return applyTemplate(`<${tag}${classAttr}${styleAttr}${blockIdAttr}>${text}</${tag}>`, { text });
     }
 
     if (type === "standalone_text") {
       const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
-      return applyTemplate(`<div${classAttr}${blockIdAttr}>${text}</div>`, { text });
+      return applyTemplate(`<div${classAttr}${styleAttr}${blockIdAttr}>${text}</div>`, { text });
     }
 
     if (type === "paragraph") {
       const htmlValue = String(block.html || "").trim();
       const text = escapeHtml(block.text || "").replace(/\n/g, "<br />");
       return htmlValue
-        ? applyTemplate(`<div${classAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text })
-        : applyTemplate(`<p${classAttr}${blockIdAttr}>${text}</p>`, { text });
+        ? applyTemplate(`<div${classAttr}${styleAttr}${blockIdAttr}>${htmlValue}</div>`, { html: htmlValue, text })
+        : applyTemplate(`<p${classAttr}${styleAttr}${blockIdAttr}>${text}</p>`, { text });
     }
 
     if (type === "bullet_list") {
       const items = Array.isArray(block.items) ? block.items : [];
       const itemHtml = items.map((item) => `<li>${escapeHtml(item || "")}</li>`).join("");
-      return applyTemplate(`<ul${classAttr}${blockIdAttr}>${itemHtml}</ul>`, { items: itemHtml });
+      return applyTemplate(`<ul${classAttr}${styleAttr}${blockIdAttr}>${itemHtml}</ul>`, { items: itemHtml });
     }
 
     if (type === "standalone_formula") {
       const latex = escapeHtml(block.latex || "\\placeholder");
-      return applyTemplate(`<div${classAttr}${blockIdAttr}>$$${latex}$$</div>`, { latex });
+      return applyTemplate(`<div${classAttr}${styleAttr}${blockIdAttr}>$$${latex}$$</div>`, { latex });
     }
 
     if (type === "table") {
       const tableHtml = String(block.tableHtml || "").trim();
       if (tableHtml) {
-        const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${blockIdAttr}$1`);
+        const withAttrs = tableHtml.replace(/<table(\s|>)/i, `<table${classAttr}${styleAttr}${blockIdAttr}$1`);
         return applyTemplate(withAttrs, { table: withAttrs });
       }
       const rows = Array.isArray(block.rows) ? block.rows : [];
       const rowHtml = rows.map((row) => `<tr>${(Array.isArray(row) ? row : []).map((cell) => `<td>${escapeHtml(cell || "")}</td>`).join("")}</tr>`).join("");
-      const table = `<table${classAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
+      const table = `<table${classAttr}${styleAttr}${blockIdAttr}><tbody>${rowHtml}</tbody></table>`;
       return applyTemplate(table, { table, rows: rowHtml });
     }
 
@@ -243,26 +268,26 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
       const alt = escapeHtml(block.alt || "");
       const caption = String(block.caption || "").trim();
       const figureCaption = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : "";
-      return applyTemplate(`<figure${classAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`, { src, alt, caption: escapeHtml(caption) });
+      return applyTemplate(`<figure${classAttr}${styleAttr}${blockIdAttr}><img src="${src}" alt="${alt}" />${figureCaption}</figure>`, { src, alt, caption: escapeHtml(caption) });
     }
 
     if (type === "url") {
       const href = escapeHtml(block.href || "");
       const text = escapeHtml(block.text || block.href || "");
-      return applyTemplate(`<p${classAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`, { href, text });
+      return applyTemplate(`<p${classAttr}${styleAttr}${blockIdAttr}><a href="${href}">${text}</a></p>`, { href, text });
     }
 
     if (type === "code") {
       const language = escapeHtml(block.language || "text");
       const code = escapeHtml(block.code || "");
-      return applyTemplate(`<pre${classAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`, { language, code });
+      return applyTemplate(`<pre${classAttr}${styleAttr}${blockIdAttr} data-language="${language}"><code>${code}</code></pre>`, { language, code });
     }
 
     const fallbackText = escapeHtml(block.text || "");
-    return applyTemplate(`<p${classAttr}${blockIdAttr}>${fallbackText}</p>`, { text: fallbackText });
+    return applyTemplate(`<p${classAttr}${styleAttr}${blockIdAttr}>${fallbackText}</p>`, { text: fallbackText });
   };
 
-  const htmlBlocks = safeBlocks.map((block) => {
+  const htmlBlocks = safeBlocks.map((block, index) => {
     const className = String(blockClasses[String(block.type || "paragraph")] || "");
     const formatSpec = resolveBlockFormatSpec(template, block);
     const nextBlock = {
@@ -271,11 +296,14 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
         [String(block.type || "paragraph")]: formatSpec.htmlTemplate
       }
     };
-    return renderByType(nextBlock, formatSpec.className || className);
+    const layout = layoutBlocks[index];
+    return layout?.hidden ? "" : renderByType(nextBlock, formatSpec.className || className, layout?.position);
   }).join("\n");
 
+  const pageDimensions = String(activePage?.pageFormat || template?.pageFormat || "") === "a4-landscape" ? "width:297mm;min-height:210mm;" : "width:210mm;min-height:297mm;";
+  const layoutStyle = layoutBlocks.length ? `<style data-luna-layout="${escapeHtml(template?.id || "template_default")}">.${escapeHtml(containerClass)}{position:relative;box-sizing:border-box;${pageDimensions}padding:16mm;margin:0 auto;background:#fff;}</style>` : "";
   const styleTag = css ? `<style data-luna-template="${escapeHtml(template?.id || "template_default")}">${css}</style>` : "";
-  return `${styleTag}<div class="${escapeHtml(containerClass)}" data-template-id="${escapeHtml(template?.id || "template_default")}">${htmlBlocks}</div>`;
+  return `${styleTag}${layoutStyle}<div class="${escapeHtml(containerClass)}" data-template-id="${escapeHtml(template?.id || "template_default")}">${htmlBlocks}</div>`;
 }
 
 async function ensureTopicTags(client, subjectId, tags) {
@@ -2216,7 +2244,7 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       .maybeSingle();
     if (templateError) throw templateError;
     if (templateRow) {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
       renderedFromBlocksHtml = renderDocumentBlocksHtml(contentBlocksJson, {
         id: templateRow.id,
         name: templateRow.name,
@@ -2226,6 +2254,14 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
         blockClasses,
         blockHtmlTemplates,
         blockFormats,
+        components,
+        canvasBlocks,
+        pageFormat,
+        dataBindings,
+        formatSets,
+        pageLayouts,
+        activeFormatSetId,
+        activePageId,
         css: templateRow.css || ""
       });
     }
@@ -2253,7 +2289,7 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       },
       template: selectedTemplate.data ? {
         ...(function mapTemplateForPayload() {
-          const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
+          const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
           return {
             id: selectedTemplate.data.id,
             name: selectedTemplate.data.name,
@@ -2263,6 +2299,14 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
             blockClasses,
             blockHtmlTemplates,
             blockFormats,
+            components,
+            canvasBlocks,
+            pageFormat,
+            dataBindings,
+            formatSets,
+            pageLayouts,
+            activeFormatSetId,
+            activePageId,
             css: selectedTemplate.data.css || ""
           };
         })()
@@ -2352,7 +2396,7 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         id: row.id,
         ownerUserId: row.owner_user_id,
@@ -2367,6 +2411,10 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
         canvasBlocks,
         pageFormat,
         dataBindings,
+        formatSets,
+        pageLayouts,
+        activeFormatSetId,
+        activePageId,
         css: row.css || "",
         sourceDocumentId: row.source_document_id || "",
         createdAt: row.created_at || "",
@@ -2402,6 +2450,8 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
         canvasBlocks: payload.canvasBlocks,
         pageFormat: payload.pageFormat,
         dataBindings: payload.dataBindings
+        ,formatSets: payload.formatSets
+        ,pageLayouts: payload.pageLayouts
       }
     ),
     css: String(payload.css || ""),
@@ -2477,7 +2527,7 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
       .eq("id", resolvedTemplateId)
       .maybeSingle();
     if (!data) return null;
-    const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(data.block_classes);
+    const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(data.block_classes);
     return {
       id: data.id,
       name: data.name,
@@ -2487,6 +2537,14 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
       blockClasses,
       blockHtmlTemplates,
       blockFormats,
+      components,
+      canvasBlocks,
+      pageFormat,
+      dataBindings,
+      formatSets,
+      pageLayouts,
+      activeFormatSetId,
+      activePageId,
       css: data.css || ""
     };
   })());

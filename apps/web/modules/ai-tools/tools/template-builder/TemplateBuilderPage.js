@@ -78,6 +78,14 @@ function starterCanvasBlocks(components) {
   return [{ id: createId("canvas"), componentRefId: components[0]?.id || "" }];
 }
 
+function defaultFormatSets() {
+  return [{ id: "format-set-default", name: "Default", formats: {} }];
+}
+
+function defaultPageLayouts(canvasBlocks = []) {
+  return [{ id: "page-1", name: "Page 1", pageFormat: "a4-portrait", blocks: canvasBlocks }];
+}
+
 function defaultBlockFormats() {
   const formats = {};
   for (const item of BLOCK_TYPE_LIBRARY) {
@@ -98,6 +106,10 @@ function createBlankTemplateDraft() {
     folderId: "tpl-folder-root",
     blockClasses: {},
     blockFormats: defaultBlockFormats(),
+      formatSets: defaultFormatSets(),
+      activeFormatSetId: "format-set-default",
+      activePageId: "page-1",
+      pageLayouts: defaultPageLayouts(),
     components: starterComponents(),
     canvasBlocks: []
   };
@@ -119,6 +131,31 @@ function summarizeBinding(spec) {
 
 function getSampleKeys(sampleData, arraysOnly) {
   return Object.keys(sampleData || {}).filter((key) => (arraysOnly ? Array.isArray(sampleData[key]) : !Array.isArray(sampleData[key])));
+}
+
+function pageRatio(pageFormat) {
+  const ratios = {
+    "a4-portrait": 297 / 210,
+    "a4-landscape": 210 / 297,
+    "letter-portrait": 279 / 216,
+    "letter-landscape": 216 / 279,
+    "ppt-16-9": 9 / 16,
+    "ppt-4-3": 3 / 4
+  };
+  return ratios[pageFormat] || 297 / 210;
+}
+
+function positionToCanvasStyle(position = {}, pageFormat = "a4-portrait") {
+  const pageWidth = pageFormat === "a4-landscape" || pageFormat === "letter-landscape" || pageFormat.startsWith("ppt-") ? 297 : 210;
+  const pageHeight = pageWidth * pageRatio(pageFormat);
+  const value = (key, fallback = 0) => Number(position[key] ?? fallback);
+  return {
+    position: "absolute",
+    left: `${(value("x") / pageWidth) * 100}%`,
+    top: `${(value("y") / pageHeight) * 100}%`,
+    width: `${(value("width", value("w", pageWidth - 24)) / pageWidth) * 100}%`,
+    minHeight: `${(value("height", value("h", 14)) / pageHeight) * 100}%`
+  };
 }
 
 export function TemplateBuilderPage({ toolContext }) {
@@ -174,6 +211,8 @@ export function TemplateBuilderPage({ toolContext }) {
   function updateDraft(mutator) {
     setDraft((previous) => {
       const next = typeof mutator === "function" ? mutator(cloneDraft(previous)) : mutator;
+      const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? next.pageLayouts : defaultPageLayouts();
+      next.pageLayouts = pageLayouts.map((page) => page.id === next.activePageId ? { ...page, pageFormat: next.pageFormat, blocks: next.canvasBlocks } : page);
       pushHistory(next);
       return next;
     });
@@ -209,8 +248,12 @@ export function TemplateBuilderPage({ toolContext }) {
       folderId: template.folderId || "tpl-folder-root",
       blockClasses: template.blockClasses || {},
       blockFormats: Object.keys(template.blockFormats || {}).length ? template.blockFormats : defaultBlockFormats(),
+        formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
+        activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
+        activePageId: template.activePageId || template.pageLayouts?.[0]?.id || "page-1",
+        pageLayouts: Array.isArray(template.pageLayouts) && template.pageLayouts.length ? template.pageLayouts : defaultPageLayouts(template.canvasBlocks || []),
       components: Array.isArray(template.components) && template.components.length ? template.components : starterComponents(),
-      canvasBlocks: Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []
+        canvasBlocks: Array.isArray(template.pageLayouts?.[0]?.blocks) ? template.pageLayouts[0].blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
     };
     setDraft(nextDraft);
     setActiveTemplateId(template.id);
@@ -241,7 +284,13 @@ export function TemplateBuilderPage({ toolContext }) {
       if (!next.blockFormats[type]) {
         next.blockFormats[type] = [{ name: "Default", className: `tplb-${type}`, htmlTemplate: "", style: {} }];
       }
-      const entry = { id: createId("canvas"), type, formatName: formatName, bindField: "" };
+      const entry = {
+        id: createId("canvas"),
+        type,
+        formatName,
+        bindField: "",
+        position: { x: 12, y: 18 + next.canvasBlocks.length * 20, width: 180, height: 14, unit: "mm" }
+      };
       next.canvasBlocks = [...next.canvasBlocks, entry];
       return next;
     });
@@ -249,7 +298,11 @@ export function TemplateBuilderPage({ toolContext }) {
 
   function addComponentToCanvas(componentId) {
     updateDraft((next) => {
-      next.canvasBlocks = [...next.canvasBlocks, { id: createId("canvas"), componentRefId: componentId }];
+      next.canvasBlocks = [...next.canvasBlocks, {
+        id: createId("canvas"),
+        componentRefId: componentId,
+        position: { x: 12, y: 18 + next.canvasBlocks.length * 42, width: 180, height: 38, unit: "mm" }
+      }];
       return next;
     });
   }
@@ -306,6 +359,54 @@ export function TemplateBuilderPage({ toolContext }) {
       ));
       return next;
     });
+  }
+
+  function addPageLayout() {
+        updateDraft((next) => {
+          const page = { id: createId("page"), name: `Page ${(next.pageLayouts || []).length + 1}`, pageFormat: next.pageFormat, blocks: [] };
+          next.pageLayouts = [...(next.pageLayouts || []), page];
+          next.activePageId = page.id;
+          next.canvasBlocks = [];
+          return next;
+        });
+        setSelectedEntryId("");
+  }
+
+      function selectPageLayout(pageId) {
+        setDraft((previous) => {
+          const pages = (previous.pageLayouts || []).map((page) => page.id === previous.activePageId ? { ...page, blocks: previous.canvasBlocks } : page);
+          const nextPage = pages.find((page) => page.id === pageId) || pages[0];
+          const next = { ...previous, pageLayouts: pages, activePageId: nextPage.id, pageFormat: nextPage.pageFormat || previous.pageFormat, canvasBlocks: nextPage.blocks || [] };
+          setHistory((historyItems) => [...historyItems, cloneDraft(next)].slice(-40));
+          setHistoryIndex((previousIndex) => Math.min(previousIndex + 1, 39));
+          return next;
+        });
+        setSelectedEntryId("");
+        setIsDirty(true);
+  }
+
+      function addFormatSet() {
+        updateDraft((next) => {
+          const id = createId("format-set");
+          const set = { id, name: `Format Set ${(next.formatSets || []).length + 1}`, formats: {} };
+          next.formatSets = [...(next.formatSets || []), set];
+          next.activeFormatSetId = id;
+          return next;
+        });
+  }
+
+  function captureCurrentFormatsInSet() {
+    updateDraft((next) => {
+      const activeId = next.activeFormatSetId || next.formatSets?.[0]?.id;
+      next.formatSets = (next.formatSets || []).map((formatSet) => formatSet.id === activeId
+        ? {
+          ...formatSet,
+          formats: Object.fromEntries(Object.entries(next.blockFormats || {}).map(([type, formats]) => [type, formats?.[0]?.name || "Default"]))
+        }
+        : formatSet);
+      return next;
+    });
+    setStatusMessage("Current block formats captured in the active format set.");
   }
 
   function toggleMultiSelect(entryId) {
@@ -426,7 +527,11 @@ export function TemplateBuilderPage({ toolContext }) {
         components: draft.components,
         canvasBlocks: draft.canvasBlocks,
         pageFormat: draft.pageFormat,
-        dataBindings: {}
+        dataBindings: {},
+        formatSets: draft.formatSets,
+        pageLayouts: draft.pageLayouts,
+        activeFormatSetId: draft.activeFormatSetId,
+        activePageId: draft.activePageId
       });
       const list = await onListDocumentBlockTemplates();
       setTemplates(Array.isArray(list) ? list : []);
@@ -463,6 +568,17 @@ export function TemplateBuilderPage({ toolContext }) {
       mappingRows.push({ key: entry.id, label: labelForType(entry.type), entryId: entry.id, spec: entry });
     }
   });
+
+  const canvasPageStyle = {
+    position: "relative",
+    width: "min(100%, 720px)",
+    margin: "0 auto",
+    aspectRatio: `1 / ${pageRatio(draft.pageFormat)}`,
+    minHeight: 520,
+    overflow: "hidden",
+    padding: 0,
+    background: "#fff"
+  };
 
   return (
     <div className="tplb-tool-page">
@@ -526,6 +642,30 @@ export function TemplateBuilderPage({ toolContext }) {
         {statusMessage ? <p className="hint" style={{ color: "#1c7a3c", marginTop: 8 }}>{statusMessage}</p> : null}
       </article>
 
+      <article className="panel">
+        <div className="inline-actions" style={{ gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
+          <div>
+            <h4 style={{ margin: 0 }}>Document Pages &amp; Format Sets</h4>
+            <p className="hint" style={{ margin: "5px 0 0" }}>Build reusable page arrangements for A4 documents and presentation slides. Block formats remain shared across every page.</p>
+          </div>
+          <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+            <select className="table-btn" value={draft.activePageId} onChange={(event) => selectPageLayout(event.target.value)}>
+              {(draft.pageLayouts || []).map((page) => <option key={page.id} value={page.id}>{page.name} ({page.pageFormat || draft.pageFormat})</option>)}
+            </select>
+            <button className="table-btn" type="button" onClick={addPageLayout}>Add Page</button>
+            <select
+              className="table-btn"
+              value={draft.activeFormatSetId || ""}
+              onChange={(event) => updateDraft((next) => ({ ...next, activeFormatSetId: event.target.value }))}
+            >
+              {(draft.formatSets || []).map((formatSet) => <option key={formatSet.id} value={formatSet.id}>{formatSet.name} format set</option>)}
+            </select>
+            <button className="table-btn" type="button" onClick={addFormatSet}>Add Format Set</button>
+            <button className="table-btn" type="button" onClick={captureCurrentFormatsInSet}>Capture Current Formats</button>
+          </div>
+        </div>
+      </article>
+
       <div className="tplb-main-grid">
         <article className="panel">
           <h4 style={{ marginTop: 0 }}>Blocks</h4>
@@ -557,7 +697,7 @@ export function TemplateBuilderPage({ toolContext }) {
         <article className="panel">
           <h4 style={{ marginTop: 0 }}>Canvas</h4>
           <p className="hint">Select a block with the checkbox to include it when creating a component. Click a row to edit its properties.</p>
-          <div className="tplb-canvas-page">
+          <div className="tplb-canvas-page" style={canvasPageStyle}>
             {draft.canvasBlocks.length === 0 ? <p className="hint">Canvas is empty. Add a block or component from the left sidebar.</p> : null}
             {draft.canvasBlocks.map((entry, index) => {
               const isComponent = Boolean(entry.componentRefId);
@@ -566,6 +706,7 @@ export function TemplateBuilderPage({ toolContext }) {
                 <div
                   key={entry.id}
                   className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
+                  style={positionToCanvasStyle(entry.position, draft.pageFormat)}
                   onClick={() => setSelectedEntryId(entry.id)}
                 >
                   <div className="tplb-canvas-entry-head">

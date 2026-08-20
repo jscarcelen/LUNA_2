@@ -5,12 +5,14 @@ export const navByRole = {
     { key: "workspaces", label: "Workspaces" },
     { key: "dashboard", label: "Dashboard" },
     { key: "ai-tools", label: "AI Tools" },
+    { key: "ai-tool:template-builder", label: "Template Builder" },
     { key: "marketplace", label: "Agent Marketplace" }
   ],
   teacher: [
     { key: "workspaces", label: "Workspaces" },
     { key: "dashboard", label: "Dashboard" },
     { key: "ai-tools", label: "AI Tools" },
+    { key: "ai-tool:template-builder", label: "Template Builder" },
     { key: "marketplace", label: "Agent Marketplace" }
   ]
 };

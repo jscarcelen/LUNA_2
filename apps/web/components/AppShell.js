@@ -165,7 +165,9 @@ export function AppShell() {
               onReviewDocumentExtraction: handleReviewDocumentExtraction,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
-              onListDocumentBlockTemplates: handleListDocumentBlockTemplates
+                  onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
+                  onSaveDocumentBlockTemplate: handleSaveDocumentBlockTemplate,
+                  onDeleteDocumentBlockTemplate: handleDeleteDocumentBlockTemplate
             }}
           />
         </AIToolRuntimePage>

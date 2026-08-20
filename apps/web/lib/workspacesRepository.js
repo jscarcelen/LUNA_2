@@ -132,19 +132,27 @@ function splitTemplateBlockClassesMeta(raw = {}) {
     ? meta.blockFormats
     : {};
   const folderId = String(meta.folderId || "").trim() || "tpl-folder-root";
+  const components = Array.isArray(meta.components) ? meta.components : [];
+  const canvasBlocks = Array.isArray(meta.canvasBlocks) ? meta.canvasBlocks : [];
+  const pageFormat = String(meta.pageFormat || "a4-portrait").trim() || "a4-portrait";
+  const dataBindings = meta.dataBindings && typeof meta.dataBindings === "object" ? meta.dataBindings : {};
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates, blockFormats, folderId };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings };
 }
 
-function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root") {
+function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root", extra = {}) {
   const classes = blockClasses && typeof blockClasses === "object" ? { ...blockClasses } : {};
   const htmlTemplates = blockHtmlTemplates && typeof blockHtmlTemplates === "object" ? blockHtmlTemplates : {};
   const formats = blockFormats && typeof blockFormats === "object" ? blockFormats : {};
   classes.__luna_meta = {
     blockHtmlTemplates: htmlTemplates,
     blockFormats: formats,
-    folderId: String(folderId || "").trim() || "tpl-folder-root"
+    folderId: String(folderId || "").trim() || "tpl-folder-root",
+    components: Array.isArray(extra?.components) ? extra.components : [],
+    canvasBlocks: Array.isArray(extra?.canvasBlocks) ? extra.canvasBlocks : [],
+    pageFormat: String(extra?.pageFormat || "a4-portrait").trim() || "a4-portrait",
+    dataBindings: extra?.dataBindings && typeof extra.dataBindings === "object" ? extra.dataBindings : {}
   };
   return classes;
 }
@@ -2344,7 +2352,7 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         id: row.id,
         ownerUserId: row.owner_user_id,
@@ -2355,6 +2363,10 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
         blockClasses,
         blockHtmlTemplates,
         blockFormats,
+        components,
+        canvasBlocks,
+        pageFormat,
+        dataBindings,
         css: row.css || "",
         sourceDocumentId: row.source_document_id || "",
         createdAt: row.created_at || "",
@@ -2384,7 +2396,13 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
       payload.blockClasses && typeof payload.blockClasses === "object" ? payload.blockClasses : {},
       payload.blockHtmlTemplates && typeof payload.blockHtmlTemplates === "object" ? payload.blockHtmlTemplates : {},
       payload.blockFormats && typeof payload.blockFormats === "object" ? payload.blockFormats : {},
-      String(payload.folderId || "tpl-folder-root")
+      String(payload.folderId || "tpl-folder-root"),
+      {
+        components: payload.components,
+        canvasBlocks: payload.canvasBlocks,
+        pageFormat: payload.pageFormat,
+        dataBindings: payload.dataBindings
+      }
     ),
     css: String(payload.css || ""),
     source_document_id: String(payload.sourceDocumentId || "").trim() || null,

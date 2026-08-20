@@ -138,13 +138,14 @@ function splitTemplateBlockClassesMeta(raw = {}) {
   const dataBindings = meta.dataBindings && typeof meta.dataBindings === "object" ? meta.dataBindings : {};
   const dataFields = Array.isArray(meta.dataFields) ? meta.dataFields : [];
   const renderVariants = Array.isArray(meta.renderVariants) ? meta.renderVariants : [];
+  const repeatCollectionField = String(meta.repeatCollectionField || "").trim();
   const formatSets = Array.isArray(meta.formatSets) ? meta.formatSets : [];
   const pageLayouts = Array.isArray(meta.pageLayouts) ? meta.pageLayouts : [];
   const activeFormatSetId = String(meta.activeFormatSetId || "").trim();
   const activePageId = String(meta.activePageId || "").trim();
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, formatSets, pageLayouts, activeFormatSetId, activePageId };
 }
 
 function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root", extra = {}) {
@@ -161,6 +162,7 @@ function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates =
     dataBindings: extra?.dataBindings && typeof extra.dataBindings === "object" ? extra.dataBindings : {},
     dataFields: Array.isArray(extra?.dataFields) ? extra.dataFields : [],
     renderVariants: Array.isArray(extra?.renderVariants) ? extra.renderVariants : [],
+    repeatCollectionField: String(extra?.repeatCollectionField || "").trim(),
     formatSets: Array.isArray(extra?.formatSets) ? extra.formatSets : [],
     pageLayouts: Array.isArray(extra?.pageLayouts) ? extra.pageLayouts : [],
     activeFormatSetId: String(extra?.activeFormatSetId || "").trim(),
@@ -2404,7 +2406,7 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         id: row.id,
         ownerUserId: row.owner_user_id,
@@ -2421,6 +2423,7 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
         dataBindings,
         dataFields,
         renderVariants,
+        repeatCollectionField,
         formatSets,
         pageLayouts,
         activeFormatSetId,
@@ -2461,7 +2464,8 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
         pageFormat: payload.pageFormat,
         dataBindings: payload.dataBindings,
         dataFields: payload.dataFields,
-        renderVariants: payload.renderVariants
+        renderVariants: payload.renderVariants,
+        repeatCollectionField: payload.repeatCollectionField
         ,formatSets: payload.formatSets
         ,pageLayouts: payload.pageLayouts
       }

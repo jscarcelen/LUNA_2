@@ -261,23 +261,22 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
       let renderedContent = textContent;
       let name = `${agentConfig?.name || "Agent Output"}.txt`;
       if (activeTemplate) {
-        const renderedItems = [];
-        for (const item of output.items) {
-          const templateData = templateFields.reduce((mapped, field) => {
+        const mappedItems = output.items.map((item) => templateFields.reduce((mapped, field) => {
             const sourceName = fieldMappingByTemplateField[field.name] || field.name;
             mapped[field.name] = item[sourceName];
             return mapped;
-          }, {});
-          const response = await fetch("/api/templates/render-preview", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
-          });
-          const result = await response.json();
-          if (!response.ok) throw new Error(result?.error || "Template rendering failed");
-          renderedItems.push(result.html || "");
-        }
-        renderedContent = renderedItems.join("<div style=\"page-break-after:always;\"></div>");
+          }, {}));
+        const templateData = activeTemplate.repeatCollectionField
+          ? { [activeTemplate.repeatCollectionField]: mappedItems }
+          : (mappedItems[0] || {});
+        const response = await fetch("/api/templates/render-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result?.error || "Template rendering failed");
+        renderedContent = result.html || "";
         name = `${agentConfig?.name || "Agent Output"}.html`;
       }
       const saved = await onSaveGeneratedQuizDocument({

@@ -39,6 +39,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
   const blockClasses = template.blockClasses && typeof template.blockClasses === "object" ? template.blockClasses : {};
   const formatSets = Array.isArray(template.formatSets) ? template.formatSets : [];
   const activeFormatSet = formatSets.find((set) => set.id === template.activeFormatSetId) || formatSets[0] || null;
+  const collection = template.repeatCollectionField ? getPath(sampleData, template.repeatCollectionField) : null;
+  const outputRecords = Array.isArray(collection) && collection.length ? collection : [sampleData];
+  const hasOutputCollection = Array.isArray(collection);
 
   function expandEntry(entry) {
     if (entry.componentRefId) {
@@ -46,6 +49,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
       return Array.isArray(component?.blocks)
         ? component.blocks.map((block, index) => ({
           ...block,
+          repeatScope: block.repeatScope || entry.repeatScope || "once",
           position: block.position || (entry.position ? {
             ...entry.position,
             y: Number(entry.position.y || 0) + index * 14,
@@ -70,6 +74,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
 
   for (const entry of canvasBlocks) {
     for (const spec of expandEntry(entry)) {
+      const repeatScope = spec.repeatScope || entry.repeatScope || "once";
+      const records = repeatScope === "per-item" && hasOutputCollection ? outputRecords : [sampleData];
+      for (const record of records) {
       const type = String(spec.type || "paragraph");
       const formatName = String(spec.formatName || "");
       const format = resolveFormat(type, formatName);
@@ -78,7 +85,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
       const htmlTemplate = String(format?.htmlTemplate || "");
 
       if (spec.repeatField) {
-        const values = getPath(sampleData, spec.repeatField);
+        const values = getPath(record, spec.repeatField);
         const items = Array.isArray(values) ? values : [];
         items.forEach((value, index) => {
           rendered.push({
@@ -98,7 +105,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         continue;
       }
 
-      const value = spec.bindField ? getPath(sampleData, spec.bindField) : "";
+      const value = spec.bindField ? getPath(record, spec.bindField) : "";
       rendered.push({
         type,
         formatName,
@@ -110,6 +117,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         hidden: Boolean(spec.hidden || entry.hidden),
         text: Array.isArray(value) ? value.join(", ") : String(value ?? "")
       });
+      }
     }
   }
 

@@ -2912,6 +2912,23 @@ body {
   margin-top: 12px;
 }
 
+.tplb-repeat-config {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tplb-line);
+}
+
+.tplb-repeat-config > .hint:last-child {
+  padding-bottom: 8px;
+}
+
+.tplb-block-btn:first-letter {
+  font-size: 15px;
+}
+
 .tplb-variant-row {
   grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 1fr);
   padding: 7px 9px;

@@ -3,21 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const BLOCK_TYPE_LIBRARY = [
-  { type: "heading1", label: "Heading" },
-  { type: "paragraph", label: "Paragraph" },
-  { type: "standalone_text", label: "Text" },
-  { type: "bullet_list", label: "Bullet List" },
-  { type: "numbered_list", label: "Numbered List" },
-  { type: "image", label: "Image" },
-  { type: "table", label: "Table" },
-  { type: "standalone_formula", label: "Formula" },
-  { type: "divider", label: "Divider" },
-  { type: "badge", label: "Badge" },
-  { type: "spacer", label: "Spacer" },
-  { type: "page_break", label: "Page Break" },
-  { type: "question_number", label: "Question #" },
-  { type: "answer_choice", label: "Answer Choice" },
-  { type: "explanation", label: "Explanation" }
+  { type: "heading1", label: "Heading", emoji: "📝" },
+  { type: "paragraph", label: "Paragraph", emoji: "¶️" },
+  { type: "standalone_text", label: "Text", emoji: "🔤" },
+  { type: "bullet_list", label: "Bullet List", emoji: "•" },
+  { type: "numbered_list", label: "Numbered List", emoji: "🔢" },
+  { type: "image", label: "Image", emoji: "🖼️" },
+  { type: "table", label: "Table", emoji: "▦" },
+  { type: "standalone_formula", label: "Formula", emoji: "ƒ" },
+  { type: "divider", label: "Divider", emoji: "━" },
+  { type: "badge", label: "Badge", emoji: "🏷️" },
+  { type: "spacer", label: "Spacer", emoji: "↕️" },
+  { type: "page_break", label: "Page Break", emoji: "📄" },
+  { type: "question_number", label: "Question #", emoji: "❓" },
+  { type: "answer_choice", label: "Answer Choice", emoji: "🔘" },
+  { type: "explanation", label: "Explanation", emoji: "💡" }
 ];
 
 const PAGE_FORMAT_OPTIONS = [
@@ -36,6 +36,10 @@ const VERTICAL_POSITION_OPTIONS = ["After previous", "Top of page", "Bottom of p
 const ANCHOR_OPTIONS = ["Page", "Previous block", "Parent component", "Header", "Footer"];
 const OVERFLOW_OPTIONS = ["Expand height", "Reduce font size", "Clip", "Continue on next page"];
 const DATA_TYPE_OPTIONS = ["string", "number", "boolean", "array", "object"];
+const REPEAT_SCOPE_OPTIONS = [
+  { value: "once", label: "Once per document" },
+  { value: "per-item", label: "Repeat for each output item" }
+];
 
 const DEFAULT_SAMPLE_DATA = {
   question_number: 1,
@@ -126,6 +130,7 @@ function createBlankTemplateDraft() {
     blockClasses: {},
     dataFields: defaultDataFields(),
     renderVariants: defaultRenderVariants(),
+    repeatCollectionField: "",
     blockFormats: defaultBlockFormats(),
       formatSets: defaultFormatSets(),
       activeFormatSetId: "format-set-default",
@@ -148,6 +153,10 @@ function summarizeBinding(spec) {
   if (spec.repeatField) return `Repeats over "${spec.repeatField}"`;
   if (spec.bindField) return `Bound to "${spec.bindField}"`;
   return "Not mapped";
+}
+
+function blockEmoji(type) {
+  return BLOCK_TYPE_LIBRARY.find((item) => item.type === type)?.emoji || "▪️";
 }
 
 function getSampleKeys(sampleData, arraysOnly) {
@@ -205,6 +214,7 @@ export function TemplateBuilderPage({ toolContext }) {
   const [fieldTypeDraft, setFieldTypeDraft] = useState("string");
   const [fieldRequiredDraft, setFieldRequiredDraft] = useState(false);
   const [openBlockMenuId, setOpenBlockMenuId] = useState("");
+  const [selectedVariantId, setSelectedVariantId] = useState("variant-pdf");
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -280,6 +290,7 @@ export function TemplateBuilderPage({ toolContext }) {
       blockClasses: template.blockClasses || {},
       dataFields: Array.isArray(template.dataFields) ? template.dataFields : defaultDataFields(),
       renderVariants: Array.isArray(template.renderVariants) && template.renderVariants.length ? template.renderVariants : defaultRenderVariants(),
+      repeatCollectionField: String(template.repeatCollectionField || ""),
       blockFormats: Object.keys(template.blockFormats || {}).length ? template.blockFormats : defaultBlockFormats(),
         formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
         activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
@@ -536,6 +547,11 @@ export function TemplateBuilderPage({ toolContext }) {
     updateDraft((next) => ({ ...next, renderVariants: (next.renderVariants || []).map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) }));
   }
 
+  function inspectRenderVariant(variant) {
+    setSelectedVariantId(variant.id);
+    if (variant.pageLayoutId && variant.pageLayoutId !== draft.activePageId) selectPageLayout(variant.pageLayoutId);
+  }
+
       function selectPageLayout(pageId) {
         setDraft((previous) => {
           const pages = (previous.pageLayouts || []).map((page) => page.id === previous.activePageId ? { ...page, blocks: previous.canvasBlocks } : page);
@@ -608,7 +624,21 @@ export function TemplateBuilderPage({ toolContext }) {
       const entry = next.canvasBlocks[index];
       const component = next.components.find((item) => item.id === entry.componentRefId);
       if (!component) return next;
-      const expanded = component.blocks.map((block) => ({ id: createId("canvas"), type: block.type, formatName: block.formatName, bindField: block.bindField, repeatField: block.repeatField }));
+      const groupPosition = entry.position || { x: 12, y: 18, width: 180, height: 38, unit: "mm" };
+      const childHeight = Math.max(8, Number(groupPosition.height || groupPosition.h || 38) / Math.max(1, component.blocks.length));
+      const expanded = component.blocks.map((block, childIndex) => ({
+        id: createId("canvas"),
+        type: block.type,
+        formatName: block.formatName,
+        bindField: block.bindField,
+        repeatField: block.repeatField,
+        repeatScope: entry.repeatScope || block.repeatScope || "once",
+        position: {
+          ...groupPosition,
+          y: Number(groupPosition.y || 0) + childIndex * childHeight,
+          height: childHeight
+        }
+      }));
       next.canvasBlocks.splice(index, 1, ...expanded);
       return next;
     });
@@ -694,6 +724,7 @@ export function TemplateBuilderPage({ toolContext }) {
         dataBindings: {},
         dataFields: draft.dataFields,
         renderVariants: draft.renderVariants,
+        repeatCollectionField: draft.repeatCollectionField,
         formatSets: draft.formatSets,
         pageLayouts: draft.pageLayouts,
         activeFormatSetId: draft.activeFormatSetId,
@@ -737,11 +768,13 @@ export function TemplateBuilderPage({ toolContext }) {
     }
   });
 
+  const selectedVariant = (draft.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
+  const canvasDisplayPageFormat = selectedVariant?.pageFormat || draft.pageFormat;
   const canvasPageStyle = {
     position: "relative",
     width: "min(100%, 720px)",
     margin: "0 auto",
-    aspectRatio: `1 / ${pageRatio(draft.pageFormat)}`,
+    aspectRatio: `1 / ${pageRatio(canvasDisplayPageFormat)}`,
     minHeight: 520,
     overflow: "hidden",
     padding: 0,
@@ -834,11 +867,21 @@ export function TemplateBuilderPage({ toolContext }) {
             <button className="table-btn" type="button" onClick={addFormatSet}>Add Format Set</button>
             <button className="table-btn" type="button" onClick={captureCurrentFormatsInSet}>Capture Current Formats</button>
           </div>
+          <div className="tplb-repeat-config">
+            <label className="hint">AI output collection to repeat
+              <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={draft.repeatCollectionField || ""} onChange={(event) => updateDraft((next) => ({ ...next, repeatCollectionField: event.target.value }))}>
+                <option value="">No collection repeat</option>
+                {arrayFields.map((field) => <option key={field.name} value={field.name}>{field.name} ({field.dataType})</option>)}
+              </select>
+            </label>
+            <span className="hint">Set a block to “Once” for headers, and “Per output item” for the question/card block.</span>
+          </div>
           <div className="tplb-variant-grid">
             {(draft.renderVariants || []).map((variant) => (
               <label className="tplb-variant-row" key={variant.id}>
                 <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
                 <strong>{variant.label}</strong>
+                <button className={`table-btn ${selectedVariantId === variant.id ? "primary" : ""}`} type="button" onClick={() => inspectRenderVariant(variant)}>Inspect layout</button>
                 <select className="table-btn" value={variant.pageFormat} onChange={(event) => updateRenderVariant(variant.id, { pageFormat: event.target.value })}>
                   {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
@@ -857,7 +900,7 @@ export function TemplateBuilderPage({ toolContext }) {
           <div className="tplb-block-grid">
             {BLOCK_TYPE_LIBRARY.map((item) => (
               <button key={item.type} type="button" className="tplb-block-btn" onClick={() => addCanvasBlock(item.type)}>
-                {item.label}
+                {item.emoji} {item.label}
               </button>
             ))}
           </div>
@@ -895,7 +938,7 @@ export function TemplateBuilderPage({ toolContext }) {
               <div className="tplb-component-block-list">
                 {(activeComponentEditor.blocks || []).map((block, index) => (
                   <div className="tplb-component-block-row" key={block.id}>
-                    <span>{index + 1}. {labelForType(block.type)}</span>
+                    <span>{blockEmoji(block.type)} {index + 1}. {labelForType(block.type)}</span>
                     <select className="table-btn" value={block.bindField ? `field:${block.bindField}` : (block.repeatField ? `repeat:${block.repeatField}` : "")} onChange={(event) => {
                       const value = event.target.value;
                       updateComponentChildBinding(activeComponentEditor.id, block.id, value.startsWith("repeat:") ? { repeatField: value.slice(7), bindField: "" } : { bindField: value.replace("field:", ""), repeatField: "" });
@@ -928,7 +971,7 @@ export function TemplateBuilderPage({ toolContext }) {
                 <div
                   key={entry.id}
                   className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
-                  style={positionToCanvasStyle(entry.position, draft.pageFormat)}
+                  style={positionToCanvasStyle(entry.position, canvasDisplayPageFormat)}
                   onPointerDown={(event) => startPointerInteraction(event, entry)}
                   onClick={() => setSelectedEntryId(entry.id)}
                 >
@@ -941,8 +984,8 @@ export function TemplateBuilderPage({ toolContext }) {
                       />
                     </label>
                     <div style={{ flex: 1 }}>
-                      <strong>{isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : summarizeBinding(entry)} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
+                      <strong>{isComponent ? "🧩" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
+                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : summarizeBinding(entry)} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
                     </div>
                     <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                       <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>↑</button>
@@ -955,7 +998,8 @@ export function TemplateBuilderPage({ toolContext }) {
                           <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
                         </div>
                       ) : null}
-                      {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Ungroup</button> : null}
+                      {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
+                      {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
                     </div>
                   </div>
                   <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
@@ -978,6 +1022,11 @@ export function TemplateBuilderPage({ toolContext }) {
               {selectedEntry && selectedComponent ? (
                 <div>
                   <h4>{selectedComponent.name}</h4>
+                  <label className="hint">Component repeat scope
+                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.repeatScope || "once"} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
+                      {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
                   {selectedComponent.blocks.map((block) => (
                     <div key={block.id} className="tplb-mapping-row">
                       <span className="hint">{labelForType(block.type)}</span>
@@ -1007,6 +1056,11 @@ export function TemplateBuilderPage({ toolContext }) {
               {selectedEntry && !selectedComponent ? (
                 <div>
                   <h4>{labelForType(selectedEntry.type)}</h4>
+                  <label className="hint">Repeat scope
+                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.repeatScope || "once"} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
+                      {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
                   <label className="hint">Data binding
                     <select
                       className="table-btn"

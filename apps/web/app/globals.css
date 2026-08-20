@@ -2764,6 +2764,40 @@ body {
   gap: 10px;
 }
 
+.agent-pipeline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.agent-pipeline-step {
+  border: 1px solid rgba(132, 129, 205, 0.2);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.agent-pipeline-step span:last-child {
+  color: var(--soft-ink);
+  font-size: 12px;
+}
+
+.agent-pipeline-index {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: #4836a8;
+  background: rgba(155, 124, 255, 0.18);
+}
+
 @media (max-width: 1024px) {
   .agent-builder-grid {
     grid-template-columns: 1fr;

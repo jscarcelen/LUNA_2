@@ -128,13 +128,15 @@ async function callOpenAiAgent(config, chunks, schema) {
       messages: [
         {
           role: "system",
-          content: "You are a configurable AI agent runtime. Follow the operator's instructions and only use the supplied reference material and output example as guidance. Output only valid JSON matching the schema."
+          content: "You are a configurable AI agent runtime. Follow the operator's instructions and the user's question answers. Use the supplied reference material or context prompt as the source content, and the output example as a formatting guide. Output only valid JSON matching the schema."
         },
         {
           role: "user",
           content: JSON.stringify({
             task: "Generate agent output",
             agentInstructions: config.instructions || "",
+            contextPrompt: config.contextPrompt || "",
+            questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
             outputExample: config.outputExample || "",
             refinementPrompt: config.refinementPrompt || "",
             previousOutput: config.previousOutput || null,
@@ -159,8 +161,15 @@ async function callOpenAiAgent(config, chunks, schema) {
   return { items: parsed.items, model };
 }
 
-function generateAgentOutputLocally(chunks, fields) {
-  const sampleText = chunks.map((chunk) => String(chunk.content || "")).join(" ").trim();
+function generateAgentOutputLocally(chunks, fields, config = {}) {
+  const answerText = (Array.isArray(config.questionAnswers) ? config.questionAnswers : [])
+    .map((entry) => String(entry?.answer ?? ""))
+    .join(". ");
+  const sampleText = [
+    chunks.map((chunk) => String(chunk.content || "")).join(" "),
+    String(config.contextPrompt || ""),
+    answerText
+  ].join(" ").trim();
   const sentences = sampleText.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);
   const itemCount = sentences.length ? Math.min(6, Math.max(2, Math.ceil(sentences.length / 3))) : 3;
   const items = [];
@@ -221,7 +230,7 @@ export async function runAgentGeneration(config) {
   }
 
   if (!result) {
-    result = generateAgentOutputLocally(rankedChunks, fields);
+    result = generateAgentOutputLocally(rankedChunks, fields, config);
   }
 
   return {

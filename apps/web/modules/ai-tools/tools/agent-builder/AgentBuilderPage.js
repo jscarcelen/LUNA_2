@@ -15,6 +15,13 @@ const CREATIVITY_OPTIONS = [
 ];
 
 const FIELD_TYPE_OPTIONS = ["string", "number", "boolean", "array"];
+const QUESTION_TYPE_OPTIONS = [
+  { value: "text", label: "Text" },
+  { value: "number", label: "Number" },
+  { value: "single-select", label: "Single choice" },
+  { value: "multi-select", label: "Multi select" },
+  { value: "yes-no", label: "Yes / No" }
+];
 const AGENT_MARKETPLACE_STORAGE_KEY = "luna.agentMarketplaceListings.v1";
 const PRICING_TYPE_OPTIONS = [
   { value: "pay-as-you-go", label: "Pay as you go" },
@@ -24,6 +31,10 @@ const PRICING_TYPE_OPTIONS = [
 
 function createFieldId() {
   return `field-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function createQuestionId() {
+  return `question-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function defaultFields() {
@@ -75,6 +86,13 @@ export function AgentBuilderPage({ toolContext }) {
   const [outputExample, setOutputExample] = useState("");
   const [referenceDocumentIds, setReferenceDocumentIds] = useState([]);
   const [documentSearchText, setDocumentSearchText] = useState("");
+  const [contextPrompt, setContextPrompt] = useState("");
+
+  const [questions, setQuestions] = useState([]);
+  const [questionTextDraft, setQuestionTextDraft] = useState("");
+  const [questionTypeDraft, setQuestionTypeDraft] = useState("text");
+  const [questionOptionsDraft, setQuestionOptionsDraft] = useState("");
+  const [questionRequiredDraft, setQuestionRequiredDraft] = useState(true);
 
   const [fields, setFields] = useState(defaultFields());
   const [fieldNameDraft, setFieldNameDraft] = useState("");
@@ -137,10 +155,40 @@ export function AgentBuilderPage({ toolContext }) {
     setFields((previous) => (previous.length > 1 ? previous.filter((field) => field.id !== fieldId) : previous));
   }
 
+  function addQuestion() {
+    const text = String(questionTextDraft || "").trim();
+    if (!text) return;
+    const needsOptions = questionTypeDraft === "single-select" || questionTypeDraft === "multi-select";
+    const options = needsOptions
+      ? questionOptionsDraft.split(",").map((option) => option.trim()).filter(Boolean)
+      : [];
+    if (needsOptions && !options.length) {
+      setErrorMessage("Add at least one option for this question type.");
+      return;
+    }
+    setQuestions((previous) => [...previous, {
+      id: createQuestionId(),
+      text,
+      type: questionTypeDraft,
+      options,
+      required: questionRequiredDraft
+    }]);
+    setQuestionTextDraft("");
+    setQuestionOptionsDraft("");
+    setQuestionRequiredDraft(true);
+    setErrorMessage("");
+  }
+
+  function removeQuestion(questionId) {
+    setQuestions((previous) => previous.filter((question) => question.id !== questionId));
+  }
+
   function buildAgentConfig() {
     return {
       name: agentName,
       instructions,
+      contextPrompt,
+      questions,
       outputExample,
       template: { fields: fields.map(({ id: _id, ...field }) => field) },
       model,
@@ -221,6 +269,8 @@ export function AgentBuilderPage({ toolContext }) {
       setEditingDocumentId(document.id);
       setAgentName(String(parsed.name || document.name || ""));
       setInstructions(String(parsed.instructions || ""));
+      setContextPrompt(String(parsed.contextPrompt || ""));
+      setQuestions(Array.isArray(parsed.questions) ? parsed.questions : []);
       setOutputExample(String(parsed.outputExample || ""));
       setModel(String(parsed.model || AGENT_MODEL_OPTIONS[0].value));
       setCreativity(String(parsed.creativity || "medium"));
@@ -271,7 +321,8 @@ export function AgentBuilderPage({ toolContext }) {
       <div className="agent-builder-grid">
         <div className="view-stack">
           <div className="selection-box">
-            <h5 style={{ marginTop: 0 }}>1. Agent name and instructions</h5>
+            <span className="quiz-picker-kicker">Step 1 · Configure</span>
+            <h5 style={{ marginTop: "4px" }}>Agent instructions (meta prompt)</h5>
             <label className="search full" style={{ marginBottom: "8px" }}>
               <span>Agent name</span>
               <input className="input" value={agentName} onChange={(event) => setAgentName(event.target.value)} placeholder="Example: Spanish Vocabulary Coach" />
@@ -291,10 +342,10 @@ export function AgentBuilderPage({ toolContext }) {
 
           <div className="selection-box">
             <div className="inline-actions" style={{ justifyContent: "space-between" }}>
-              <h5 style={{ margin: 0 }}>2. Reference material</h5>
+              <h5 style={{ margin: 0 }}>Reference material (preferred)</h5>
               <strong className="quiz-selection-count">{referenceDocumentIds.length} selected</strong>
             </div>
-            <p className="hint quiz-mini-copy">Documents the agent can use as knowledge when generating output.</p>
+            <p className="hint quiz-mini-copy">Documents the agent can learn from and apply to all runs.</p>
             <label className="search full" style={{ marginBottom: "8px" }}>
               <span>Search documents</span>
               <input className="input" value={documentSearchText} onChange={(event) => setDocumentSearchText(event.target.value)} placeholder="Search by filename" />
@@ -314,7 +365,20 @@ export function AgentBuilderPage({ toolContext }) {
           </div>
 
           <div className="selection-box">
-            <h5 style={{ marginTop: 0 }}>3. Output example (optional)</h5>
+            <h5 style={{ marginTop: 0 }}>Context / secondary prompt (alternative)</h5>
+            <p className="hint quiz-mini-copy">Instead of uploading files, describe the specific context or content the agent should use.</p>
+            <textarea
+              className="input"
+              rows={4}
+              value={contextPrompt}
+              onChange={(event) => setContextPrompt(event.target.value.slice(0, 1000))}
+              placeholder="Example: Spanish animal vocabulary to English for flashcards"
+            />
+            <p className="hint" style={{ marginTop: "6px" }}>{contextPrompt.length} / 1000</p>
+          </div>
+
+          <div className="selection-box">
+            <h5 style={{ marginTop: 0 }}>Output example (optional)</h5>
             <p className="hint quiz-mini-copy">Provide an example of what the agent should generate so it learns the format.</p>
             <textarea
               className="input"
@@ -328,7 +392,41 @@ export function AgentBuilderPage({ toolContext }) {
 
         <div className="view-stack">
           <div className="selection-box">
-            <h5 style={{ marginTop: 0 }}>4. Template / output format</h5>
+            <span className="quiz-picker-kicker">Step 2 · User options</span>
+            <h5 style={{ marginTop: "4px" }}>Questions the agent will ask</h5>
+            <p className="hint quiz-mini-copy">Define the questions your agent will ask each time it's used.</p>
+            <div className="agent-field-list">
+              {questions.map((question) => (
+                <div className="agent-field-row" key={question.id}>
+                  <span className="agent-field-name">{question.text}</span>
+                  <span className="scope-chip">{QUESTION_TYPE_OPTIONS.find((option) => option.value === question.type)?.label || question.type}</span>
+                  <span className="scope-chip">{question.required ? "Required" : "Optional"}</span>
+                  <button className="table-btn danger icon-btn" type="button" onClick={() => removeQuestion(question.id)}>×</button>
+                </div>
+              ))}
+              {!questions.length ? <p className="hint">No questions yet. Add one below.</p> : null}
+            </div>
+            <div className="form-stack" style={{ marginTop: "10px" }}>
+              <input className="input" value={questionTextDraft} onChange={(event) => setQuestionTextDraft(event.target.value)} placeholder="Question text (e.g. How many flashcards do you want?)" />
+              <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
+                <select className="input" value={questionTypeDraft} onChange={(event) => setQuestionTypeDraft(event.target.value)}>
+                  {QUESTION_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <label className="scope-chip-row" style={{ margin: 0 }}>
+                  <input type="checkbox" checked={questionRequiredDraft} onChange={(event) => setQuestionRequiredDraft(event.target.checked)} />
+                  <span className="scope-chip">Required</span>
+                </label>
+              </div>
+              {questionTypeDraft === "single-select" || questionTypeDraft === "multi-select" ? (
+                <input className="input" value={questionOptionsDraft} onChange={(event) => setQuestionOptionsDraft(event.target.value)} placeholder="Options, comma separated (e.g. Easy, Medium, Hard)" />
+              ) : null}
+              <button className="table-btn" type="button" onClick={addQuestion}>Add question</button>
+            </div>
+          </div>
+
+          <div className="selection-box">
+            <span className="quiz-picker-kicker">Step 3 · Template mapping</span>
+            <h5 style={{ marginTop: "4px" }}>Output structure</h5>
             <p className="hint quiz-mini-copy">Define the fields every generated item should include.</p>
             <div className="agent-field-list">
               {fields.map((field) => (
@@ -366,7 +464,8 @@ export function AgentBuilderPage({ toolContext }) {
 
         <div className="view-stack">
           <div className="selection-box">
-            <h5 style={{ marginTop: 0 }}>5. Test &amp; refine</h5>
+            <span className="quiz-picker-kicker">Step 4 · Test &amp; refine</span>
+            <h5 style={{ marginTop: "4px" }}>See it in action</h5>
             <p className="hint quiz-mini-copy">Generate output, review it, and improve it with follow-up instructions.</p>
             <div className="inline-actions" style={{ gap: "8px", flexWrap: "wrap" }}>
               <label className="search" style={{ minWidth: "220px" }}>
@@ -423,7 +522,8 @@ export function AgentBuilderPage({ toolContext }) {
           </div>
 
           <div className="selection-box">
-            <h5 style={{ marginTop: 0 }}>6. Publish options</h5>
+            <span className="quiz-picker-kicker">Step 5 · Publish</span>
+            <h5 style={{ marginTop: "4px" }}>Use or share your agent</h5>
             <div className="agent-publish-toggle">
               <button className={publishMode === "self" ? "quiz-choice-card on" : "quiz-choice-card"} type="button" onClick={() => setPublishMode("self")}>
                 <strong>Use for myself</strong>
@@ -454,6 +554,38 @@ export function AgentBuilderPage({ toolContext }) {
               </div>
             )}
             {publishStatusMessage ? <p className="hint" style={{ marginTop: "10px" }}>{publishStatusMessage}</p> : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="selection-box">
+        <h5 style={{ marginTop: 0 }}>Your agent pipeline (how it will work for future users)</h5>
+        <p className="hint quiz-mini-copy">This is the flow your agent will follow every time it's used.</p>
+        <div className="agent-pipeline-grid">
+          <div className="agent-pipeline-step">
+            <span className="agent-pipeline-index">1</span>
+            <strong>Provide reference</strong>
+            <span>User uploads or selects reference material.</span>
+          </div>
+          <div className="agent-pipeline-step">
+            <span className="agent-pipeline-index">2</span>
+            <strong>Answer questions</strong>
+            <span>User answers the questions you defined.</span>
+          </div>
+          <div className="agent-pipeline-step">
+            <span className="agent-pipeline-index">3</span>
+            <strong>Choose template</strong>
+            <span>User selects or customizes the output template.</span>
+          </div>
+          <div className="agent-pipeline-step">
+            <span className="agent-pipeline-index">4</span>
+            <strong>Generate output</strong>
+            <span>Agent generates content based on everything above.</span>
+          </div>
+          <div className="agent-pipeline-step">
+            <span className="agent-pipeline-index">5</span>
+            <strong>Save to workspace</strong>
+            <span>User reviews and saves the output.</span>
           </div>
         </div>
       </div>

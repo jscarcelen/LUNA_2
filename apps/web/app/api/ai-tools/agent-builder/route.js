@@ -8,6 +8,15 @@ function normalizeConfig(input = {}) {
   return {
     name: String(input.name || "").trim(),
     instructions: String(input.instructions || "").trim(),
+    contextPrompt: String(input.contextPrompt || "").trim(),
+    questionAnswers: Array.isArray(input.questionAnswers)
+      ? input.questionAnswers
+        .map((entry) => ({
+          question: String(entry?.question || "").trim(),
+          answer: Array.isArray(entry?.answer) ? entry.answer.join(", ") : String(entry?.answer ?? "").trim()
+        }))
+        .filter((entry) => entry.question)
+      : [],
     outputExample: String(input.outputExample || "").trim(),
     refinementPrompt: String(input.refinementPrompt || "").trim(),
     previousOutput: input.previousOutput || null,

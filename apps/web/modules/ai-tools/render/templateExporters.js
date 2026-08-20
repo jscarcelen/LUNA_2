@@ -137,6 +137,9 @@ function styleObjectToCss(style = {}) {
   if (style.fontWeight) rules.push(`font-weight:${style.fontWeight}`);
   if (style.fontStyle) rules.push(`font-style:${style.fontStyle}`);
   if (style.textDecoration) rules.push(`text-decoration:${style.textDecoration}`);
+  if (style.textAlign) rules.push(`text-align:${style.textAlign}`);
+  if (style.lineHeight) rules.push(`line-height:${style.lineHeight}`);
+  if (style.letterSpacing) rules.push(`letter-spacing:${style.letterSpacing}`);
   if (style.padding) rules.push(`padding:${style.padding}`);
   if (style.margin) rules.push(`margin:${style.margin}`);
   if (style.borderWidth && style.borderColor) rules.push(`border:${style.borderWidth} solid ${style.borderColor}`);

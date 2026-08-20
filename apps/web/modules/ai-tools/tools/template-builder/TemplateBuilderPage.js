@@ -102,10 +102,10 @@ function defaultDataFields() {
 
 function defaultRenderVariants() {
   return [
-    { id: "variant-html", format: "html", label: "HTML", pageFormat: "html-continuous", pageLayoutId: "page-1", enabled: true },
-    { id: "variant-pdf", format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: "page-1", enabled: true },
-    { id: "variant-docx", format: "docx", label: "Word", pageFormat: "a4-portrait", pageLayoutId: "page-1", enabled: true },
-    { id: "variant-pptx", format: "pptx", label: "PowerPoint", pageFormat: "ppt-16-9", pageLayoutId: "page-1", enabled: true }
+    { id: "variant-html", format: "html", label: "HTML", pageFormat: "html-continuous", pageLayoutId: "page-1", blocks: [], enabled: true },
+    { id: "variant-pdf", format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], enabled: true },
+    { id: "variant-docx", format: "docx", label: "Word", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], enabled: true },
+    { id: "variant-pptx", format: "pptx", label: "PowerPoint", pageFormat: "ppt-16-9", pageLayoutId: "page-1", blocks: [], enabled: true }
   ];
 }
 
@@ -136,6 +136,7 @@ function createBlankTemplateDraft() {
       activeFormatSetId: "format-set-default",
       activePageId: "page-1",
       pageLayouts: defaultPageLayouts(),
+      canvasSettings: { showGrid: true, showMargins: true, snapToGrid: true, gridSize: 5, margin: 16 },
     components: starterComponents(),
     canvasBlocks: []
   };
@@ -251,6 +252,7 @@ export function TemplateBuilderPage({ toolContext }) {
       const next = typeof mutator === "function" ? mutator(cloneDraft(previous)) : mutator;
       const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? next.pageLayouts : defaultPageLayouts();
       next.pageLayouts = pageLayouts.map((page) => page.id === next.activePageId ? { ...page, pageFormat: next.pageFormat, blocks: next.canvasBlocks } : page);
+      next.renderVariants = (next.renderVariants || []).map((variant) => variant.id === selectedVariantId ? { ...variant, blocks: next.canvasBlocks } : variant);
       pushHistory(next);
       return next;
     });
@@ -291,6 +293,7 @@ export function TemplateBuilderPage({ toolContext }) {
       dataFields: Array.isArray(template.dataFields) ? template.dataFields : defaultDataFields(),
       renderVariants: Array.isArray(template.renderVariants) && template.renderVariants.length ? template.renderVariants : defaultRenderVariants(),
       repeatCollectionField: String(template.repeatCollectionField || ""),
+      canvasSettings: template.canvasSettings || { showGrid: true, showMargins: true, snapToGrid: true, gridSize: 5, margin: 16 },
       blockFormats: Object.keys(template.blockFormats || {}).length ? template.blockFormats : defaultBlockFormats(),
         formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
         activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
@@ -299,6 +302,8 @@ export function TemplateBuilderPage({ toolContext }) {
       components: Array.isArray(template.components) && template.components.length ? template.components : starterComponents(),
         canvasBlocks: Array.isArray(savedActivePage?.blocks) ? savedActivePage.blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
     };
+      const firstVariant = nextDraft.renderVariants.find((variant) => variant.id === selectedVariantId);
+      if (firstVariant?.blocks?.length) nextDraft.canvasBlocks = firstVariant.blocks;
     setDraft(nextDraft);
     setActiveTemplateId(template.id);
     setHistory([cloneDraft(nextDraft)]);
@@ -415,9 +420,15 @@ export function TemplateBuilderPage({ toolContext }) {
     const deltaX = ((event.clientX - drag.startX) / rect.width) * pageWidth;
     const deltaY = ((event.clientY - drag.startY) / rect.height) * pageHeight;
     const start = drag.position;
-    const nextPosition = mode === "resize"
+    let nextPosition = mode === "resize"
       ? { ...start, width: Math.max(12, start.width + deltaX), height: Math.max(8, start.height + deltaY) }
       : { ...start, x: Math.max(0, start.x + deltaX), y: Math.max(0, start.y + deltaY) };
+    if (draft.canvasSettings?.snapToGrid) {
+      const grid = Number(draft.canvasSettings.gridSize) || 5;
+      nextPosition = Object.fromEntries(Object.entries(nextPosition).map(([key, value]) => (
+        [key, ["x", "y", "width", "height"].includes(key) ? Math.round(Number(value) / grid) * grid : value]
+      )));
+    }
     setDraft((previous) => ({
       ...previous,
       canvasBlocks: previous.canvasBlocks.map((entry) => entry.id === drag.entryId ? { ...entry, position: nextPosition } : entry),
@@ -523,6 +534,51 @@ export function TemplateBuilderPage({ toolContext }) {
     });
   }
 
+  function alignSelected(alignment) {
+    if (multiSelectedIds.length < 2) return;
+    updateDraft((next) => {
+      const entries = next.canvasBlocks.filter((entry) => multiSelectedIds.includes(entry.id));
+      const left = Math.min(...entries.map((entry) => Number(entry.position?.x || 0)));
+      const top = Math.min(...entries.map((entry) => Number(entry.position?.y || 0)));
+      const right = Math.max(...entries.map((entry) => Number(entry.position?.x || 0) + Number(entry.position?.width || entry.position?.w || 0)));
+      const bottom = Math.max(...entries.map((entry) => Number(entry.position?.y || 0) + Number(entry.position?.height || entry.position?.h || 0)));
+      const centerX = (left + right) / 2;
+      const centerY = (top + bottom) / 2;
+      next.canvasBlocks = next.canvasBlocks.map((entry) => {
+        if (!multiSelectedIds.includes(entry.id)) return entry;
+        const position = entry.position || {};
+        const width = Number(position.width || position.w || 0);
+        const height = Number(position.height || position.h || 0);
+        const patch = alignment.includes("left") ? { x: left } : alignment.includes("right") ? { x: right - width } : alignment.includes("center") ? { x: centerX - width / 2 } : {};
+        const verticalPatch = alignment.includes("top") ? { y: top } : alignment.includes("bottom") ? { y: bottom - height } : alignment.includes("middle") ? { y: centerY - height / 2 } : {};
+        return { ...entry, position: { ...position, ...patch, ...verticalPatch } };
+      });
+      return next;
+    });
+  }
+
+  function distributeSelected(axis) {
+    if (multiSelectedIds.length < 3) return;
+    updateDraft((next) => {
+      const selected = next.canvasBlocks.filter((entry) => multiSelectedIds.includes(entry.id)).sort((a, b) => Number(a.position?.[axis === "x" ? "x" : "y"] || 0) - Number(b.position?.[axis === "x" ? "x" : "y"] || 0));
+      const first = selected[0];
+      const last = selected[selected.length - 1];
+      const key = axis === "x" ? "x" : "y";
+      const endKey = axis === "x" ? "width" : "height";
+      const startValue = Number(first.position?.[key] || 0);
+      const endValue = Number(last.position?.[key] || 0) + Number(last.position?.[endKey] || last.position?.[axis === "x" ? "w" : "h"] || 0);
+      const span = endValue - startValue;
+      const step = span / (selected.length - 1);
+      const ids = new Set(selected.slice(1, -1).map((entry) => entry.id));
+      next.canvasBlocks = next.canvasBlocks.map((entry) => {
+        if (!ids.has(entry.id)) return entry;
+        const index = selected.findIndex((item) => item.id === entry.id);
+        return { ...entry, position: { ...entry.position, [key]: startValue + step * index - Number(entry.position?.[endKey] || 0) / 2 + Number(entry.position?.[endKey] || 0) / 2 } };
+      });
+      return next;
+    });
+  }
+
   function addPageLayout() {
         updateDraft((next) => {
           const page = { id: createId("page"), name: `Page ${(next.pageLayouts || []).length + 1}`, pageFormat: next.pageFormat, blocks: [] };
@@ -548,8 +604,22 @@ export function TemplateBuilderPage({ toolContext }) {
   }
 
   function inspectRenderVariant(variant) {
+    const currentVariantId = selectedVariantId;
+    const currentBlocks = cloneDraft(draft.canvasBlocks || []);
+    const targetBlocks = variant.blocks?.length
+      ? cloneDraft(variant.blocks)
+      : cloneDraft((draft.pageLayouts || []).find((page) => page.id === variant.pageLayoutId)?.blocks || draft.canvasBlocks || []);
+    setDraft((previous) => ({
+      ...previous,
+      canvasBlocks: targetBlocks,
+      renderVariants: (previous.renderVariants || []).map((item) => item.id === currentVariantId
+        ? { ...item, blocks: currentBlocks }
+        : item.id === variant.id ? { ...item, blocks: targetBlocks } : item),
+      pageFormat: variant.pageFormat || previous.pageFormat
+    }));
     setSelectedVariantId(variant.id);
-    if (variant.pageLayoutId && variant.pageLayoutId !== draft.activePageId) selectPageLayout(variant.pageLayoutId);
+    setSelectedEntryId("");
+    setIsDirty(true);
   }
 
       function selectPageLayout(pageId) {
@@ -729,6 +799,7 @@ export function TemplateBuilderPage({ toolContext }) {
         pageLayouts: draft.pageLayouts,
         activeFormatSetId: draft.activeFormatSetId,
         activePageId: draft.activePageId
+        ,canvasSettings: draft.canvasSettings
       });
       const list = await onListDocumentBlockTemplates();
       setTemplates(Array.isArray(list) ? list : []);
@@ -778,7 +849,11 @@ export function TemplateBuilderPage({ toolContext }) {
     minHeight: 520,
     overflow: "hidden",
     padding: 0,
-    background: "#fff"
+    background: "#fff",
+    backgroundImage: draft.canvasSettings?.showGrid
+      ? "linear-gradient(rgba(112, 99, 183, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(112, 99, 183, 0.1) 1px, transparent 1px)"
+      : "none",
+    backgroundSize: `${Math.max(2, Number(draft.canvasSettings?.gridSize || 5))}mm ${Math.max(2, Number(draft.canvasSettings?.gridSize || 5))}mm`
   };
 
   return (
@@ -960,9 +1035,26 @@ export function TemplateBuilderPage({ toolContext }) {
         </article>
 
         <article className="panel">
-          <h4 style={{ marginTop: 0 }}>Canvas</h4>
-          <p className="hint">Select a block with the checkbox to include it when creating a component. Click a row to edit its properties.</p>
+          <div className="inline-actions" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+            <h4 style={{ margin: 0 }}>Canvas</h4>
+            <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} · {canvasDisplayPageFormat}</span>
+          </div>
+          <div className="tplb-canvas-toolbar">
+            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
+            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
+            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
+            <label className="hint">Grid mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.gridSize || 5} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, gridSize: event.target.value } }))} /></label>
+            <label className="hint">Margin mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.margin || 16} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, margin: event.target.value } }))} /></label>
+          </div>
+          <div className="tplb-align-toolbar">
+            <span className="hint">Align</span>
+            {[["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]].map(([value, label]) => <button className="table-btn" type="button" key={value} disabled={multiSelectedIds.length < 2} onClick={() => alignSelected(value)}>{label}</button>)}
+            <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("x")}>Distribute H</button>
+            <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("y")}>Distribute V</button>
+          </div>
+          <p className="hint">Select blocks with the checkboxes to align or distribute them. Drag blocks to reposition; drag the corner handle to resize.</p>
           <div className="tplb-canvas-page" style={canvasPageStyle}>
+            {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
             {draft.canvasBlocks.length === 0 ? <p className="hint">Canvas is empty. Add a block or component from the left sidebar.</p> : null}
             {draft.canvasBlocks.map((entry, index) => {
               const isComponent = Boolean(entry.componentRefId);
@@ -1137,6 +1229,22 @@ export function TemplateBuilderPage({ toolContext }) {
                     </label>
                     <label className="hint">Font size
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.fontSize || ""} onChange={(event) => patchSelectedEntryStyle({ fontSize: event.target.value })} />
+                    </label>
+                    <label className="hint">Font weight
+                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.fontWeight || "400"} onChange={(event) => patchSelectedEntryStyle({ fontWeight: event.target.value })}>
+                        <option value="400">Regular</option><option value="500">Medium</option><option value="700">Bold</option>
+                      </select>
+                    </label>
+                    <label className="hint">Text alignment
+                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.textAlign || "left"} onChange={(event) => patchSelectedEntryStyle({ textAlign: event.target.value })}>
+                        <option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justify</option>
+                      </select>
+                    </label>
+                    <label className="hint">Line height
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="1.4" value={selectedFormat?.style?.lineHeight || ""} onChange={(event) => patchSelectedEntryStyle({ lineHeight: event.target.value })} />
+                    </label>
+                    <label className="hint">Letter spacing
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="0px" value={selectedFormat?.style?.letterSpacing || ""} onChange={(event) => patchSelectedEntryStyle({ letterSpacing: event.target.value })} />
                     </label>
                     <label className="hint">Text color
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.color || ""} onChange={(event) => patchSelectedEntryStyle({ color: event.target.value })} />

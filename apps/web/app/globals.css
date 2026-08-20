@@ -2981,6 +2981,43 @@ body {
   box-shadow: 0 20px 40px rgba(99, 84, 168, 0.1);
 }
 
+.tplb-document-badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid rgba(139, 120, 232, 0.35);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #5542a7;
+  background: #f2edff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tplb-canvas-toolbar,
+.tplb-align-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+  padding: 8px;
+  border: 1px solid var(--tplb-line);
+  border-radius: 10px;
+  background: #fbfaff;
+}
+
+.tplb-small-input {
+  width: 50px;
+  margin-left: 4px;
+}
+
+.tplb-margin-guides {
+  position: absolute;
+  z-index: 0;
+  border: 1px dashed rgba(221, 117, 117, 0.7);
+  pointer-events: none;
+}
+
 .tplb-canvas-entry {
   position: relative;
   border: 1px solid transparent;
@@ -2990,6 +3027,7 @@ body {
   background: #fbfaff;
   cursor: pointer;
   user-select: none;
+  z-index: 1;
 }
 
 .tplb-canvas-entry:hover {

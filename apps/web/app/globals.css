@@ -2866,6 +2866,85 @@ body {
   background: var(--tplb-lavender);
 }
 
+.tplb-component-card.selected {
+  border-color: #8b78e8;
+  box-shadow: 0 0 0 2px rgba(139, 120, 232, 0.18);
+}
+
+.tplb-component-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tplb-component-card > .table-btn {
+  margin-top: 8px;
+}
+
+.tplb-component-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--tplb-line);
+}
+
+.tplb-component-block-row,
+.tplb-field-editor-row,
+.tplb-field-create-row,
+.tplb-variant-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto auto;
+  gap: 6px;
+  align-items: center;
+  margin-top: 7px;
+}
+
+.tplb-component-block-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.tplb-variant-grid {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.tplb-variant-row {
+  grid-template-columns: auto auto minmax(0, 1fr) minmax(0, 1fr);
+  padding: 7px 9px;
+  border: 1px solid var(--tplb-line);
+  border-radius: 9px;
+}
+
+.tplb-block-menu {
+  position: absolute;
+  z-index: 5;
+  right: 8px;
+  top: 38px;
+  display: grid;
+  min-width: 100px;
+  padding: 5px;
+  border: 1px solid var(--tplb-line);
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 24px rgba(56, 45, 112, 0.18);
+}
+
+.tplb-block-menu button {
+  border: 0;
+  background: transparent;
+  padding: 7px 9px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tplb-block-menu button:hover {
+  background: var(--tplb-lavender);
+}
+
 .tplb-component-card strong {
   display: block;
   font-size: 13px;
@@ -2893,6 +2972,7 @@ body {
   margin-bottom: 8px;
   background: #fbfaff;
   cursor: pointer;
+  user-select: none;
 }
 
 .tplb-canvas-entry:hover {
@@ -2902,6 +2982,18 @@ body {
 .tplb-canvas-entry.selected {
   border-color: #8b78e8;
   box-shadow: 0 0 0 2px rgba(139, 120, 232, 0.2);
+}
+
+.tplb-resize-handle {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #8b78e8;
+  border-radius: 3px;
+  background: #fff;
+  cursor: nwse-resize;
 }
 
 .tplb-canvas-entry.hidden-entry {

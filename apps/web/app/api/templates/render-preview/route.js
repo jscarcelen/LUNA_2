@@ -4,6 +4,19 @@ import { renderTemplateHtml, renderTemplatePdfBuffer, renderTemplateDocxBuffer }
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function resolveRenderVariant(template, format) {
+  const variants = Array.isArray(template?.renderVariants) ? template.renderVariants : [];
+  const variant = variants.find((item) => item.format === format && item.enabled !== false);
+  if (!variant) return template;
+  const page = (template.pageLayouts || []).find((item) => item.id === variant.pageLayoutId);
+  return {
+    ...template,
+    pageFormat: variant.pageFormat || template.pageFormat,
+    activePageId: page?.id || template.activePageId,
+    canvasBlocks: page?.blocks || template.canvasBlocks
+  };
+}
+
 export async function POST(request) {
   try {
     const body = await request.json();
@@ -11,15 +24,16 @@ export async function POST(request) {
     const sampleData = body?.sampleData && typeof body.sampleData === "object" ? body.sampleData : {};
     const format = String(body?.format || "html").trim();
 
+    const resolvedTemplate = resolveRenderVariant(template, format);
     if (format === "html") {
-      return NextResponse.json({ html: renderTemplateHtml(template, sampleData) });
+      return NextResponse.json({ html: renderTemplateHtml(resolvedTemplate, sampleData) });
     }
     if (format === "pdf") {
-      const buffer = await renderTemplatePdfBuffer(template, sampleData);
+      const buffer = await renderTemplatePdfBuffer(resolvedTemplate, sampleData);
       return NextResponse.json({ fileBase64: buffer.toString("base64"), mimeType: "application/pdf" });
     }
     if (format === "docx") {
-      const buffer = await renderTemplateDocxBuffer(template, sampleData);
+      const buffer = await renderTemplateDocxBuffer(resolvedTemplate, sampleData);
       return NextResponse.json({
         fileBase64: buffer.toString("base64"),
         mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

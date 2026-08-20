@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const BLOCK_TYPE_LIBRARY = [
   { type: "heading1", label: "Heading" },
@@ -35,6 +35,7 @@ const LAYOUT_MODE_OPTIONS = ["Flow", "Fixed", "Absolute", "Relative"];
 const VERTICAL_POSITION_OPTIONS = ["After previous", "Top of page", "Bottom of page", "Centered"];
 const ANCHOR_OPTIONS = ["Page", "Previous block", "Parent component", "Header", "Footer"];
 const OVERFLOW_OPTIONS = ["Expand height", "Reduce font size", "Clip", "Continue on next page"];
+const DATA_TYPE_OPTIONS = ["string", "number", "boolean", "array", "object"];
 
 const DEFAULT_SAMPLE_DATA = {
   question_number: 1,
@@ -86,6 +87,24 @@ function defaultPageLayouts(canvasBlocks = []) {
   return [{ id: "page-1", name: "Page 1", pageFormat: "a4-portrait", blocks: canvasBlocks }];
 }
 
+function defaultDataFields() {
+  return [
+    { id: "field-question-number", name: "question_number", label: "Question number", dataType: "number", required: false },
+    { id: "field-question", name: "question", label: "Question", dataType: "string", required: true },
+    { id: "field-answers", name: "answers", label: "Answer choices", dataType: "array", required: false },
+    { id: "field-explanation", name: "explanation", label: "Explanation", dataType: "string", required: false }
+  ];
+}
+
+function defaultRenderVariants() {
+  return [
+    { id: "variant-html", format: "html", label: "HTML", pageFormat: "html-continuous", pageLayoutId: "page-1", enabled: true },
+    { id: "variant-pdf", format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: "page-1", enabled: true },
+    { id: "variant-docx", format: "docx", label: "Word", pageFormat: "a4-portrait", pageLayoutId: "page-1", enabled: true },
+    { id: "variant-pptx", format: "pptx", label: "PowerPoint", pageFormat: "ppt-16-9", pageLayoutId: "page-1", enabled: true }
+  ];
+}
+
 function defaultBlockFormats() {
   const formats = {};
   for (const item of BLOCK_TYPE_LIBRARY) {
@@ -105,6 +124,8 @@ function createBlankTemplateDraft() {
     customPageSize: { width: 210, height: 297 },
     folderId: "tpl-folder-root",
     blockClasses: {},
+    dataFields: defaultDataFields(),
+    renderVariants: defaultRenderVariants(),
     blockFormats: defaultBlockFormats(),
       formatSets: defaultFormatSets(),
       activeFormatSetId: "format-set-default",
@@ -178,6 +199,13 @@ export function TemplateBuilderPage({ toolContext }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isBusyFormat, setIsBusyFormat] = useState("");
+  const [componentEditorId, setComponentEditorId] = useState("");
+  const [fieldNameDraft, setFieldNameDraft] = useState("");
+  const [fieldLabelDraft, setFieldLabelDraft] = useState("");
+  const [fieldTypeDraft, setFieldTypeDraft] = useState("string");
+  const [fieldRequiredDraft, setFieldRequiredDraft] = useState(false);
+  const [openBlockMenuId, setOpenBlockMenuId] = useState("");
+  const pointerDragRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -237,6 +265,9 @@ export function TemplateBuilderPage({ toolContext }) {
   }
 
   function loadTemplateIntoDraft(template) {
+    const savedPages = Array.isArray(template.pageLayouts) && template.pageLayouts.length ? template.pageLayouts : defaultPageLayouts(template.canvasBlocks || []);
+    const savedActivePageId = template.activePageId || savedPages[0]?.id || "page-1";
+    const savedActivePage = savedPages.find((page) => page.id === savedActivePageId) || savedPages[0];
     const nextDraft = {
       id: template.id,
       name: template.name || "Untitled Template",
@@ -247,13 +278,15 @@ export function TemplateBuilderPage({ toolContext }) {
       customPageSize: template.customPageSize || { width: 210, height: 297 },
       folderId: template.folderId || "tpl-folder-root",
       blockClasses: template.blockClasses || {},
+      dataFields: Array.isArray(template.dataFields) ? template.dataFields : defaultDataFields(),
+      renderVariants: Array.isArray(template.renderVariants) && template.renderVariants.length ? template.renderVariants : defaultRenderVariants(),
       blockFormats: Object.keys(template.blockFormats || {}).length ? template.blockFormats : defaultBlockFormats(),
         formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
         activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
-        activePageId: template.activePageId || template.pageLayouts?.[0]?.id || "page-1",
-        pageLayouts: Array.isArray(template.pageLayouts) && template.pageLayouts.length ? template.pageLayouts : defaultPageLayouts(template.canvasBlocks || []),
+        activePageId: savedActivePageId,
+        pageLayouts: savedPages,
       components: Array.isArray(template.components) && template.components.length ? template.components : starterComponents(),
-        canvasBlocks: Array.isArray(template.pageLayouts?.[0]?.blocks) ? template.pageLayouts[0].blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
+        canvasBlocks: Array.isArray(savedActivePage?.blocks) ? savedActivePage.blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
     };
     setDraft(nextDraft);
     setActiveTemplateId(template.id);
@@ -307,6 +340,117 @@ export function TemplateBuilderPage({ toolContext }) {
     });
   }
 
+  function updateComponent(componentId, patch) {
+    updateDraft((next) => {
+      next.components = (next.components || []).map((component) => component.id === componentId ? { ...component, ...patch } : component);
+      return next;
+    });
+  }
+
+  function addComponentBlock(componentId, type) {
+    updateDraft((next) => {
+      next.components = (next.components || []).map((component) => component.id === componentId
+        ? { ...component, blocks: [...(component.blocks || []), { id: createId("blk"), type, formatName: "Default", bindField: "" }] }
+        : component);
+      return next;
+    });
+  }
+
+  function removeComponentBlock(componentId, blockId) {
+    updateDraft((next) => {
+      next.components = (next.components || []).map((component) => component.id === componentId
+        ? { ...component, blocks: (component.blocks || []).filter((block) => block.id !== blockId) }
+        : component);
+      return next;
+    });
+  }
+
+  function deleteComponent(componentId) {
+    updateDraft((next) => {
+      next.components = (next.components || []).filter((component) => component.id !== componentId);
+      next.canvasBlocks = (next.canvasBlocks || []).filter((entry) => entry.componentRefId !== componentId);
+      return next;
+    });
+    setComponentEditorId("");
+  }
+
+  function addDataField() {
+    const name = fieldNameDraft.trim().replace(/\s+/g, "_");
+    if (!name || (draft.dataFields || []).some((field) => field.name === name)) return;
+    updateDraft((next) => ({
+      ...next,
+      dataFields: [...(next.dataFields || []), { id: createId("field"), name, label: fieldLabelDraft.trim() || name, dataType: fieldTypeDraft, required: fieldRequiredDraft }]
+    }));
+    setFieldNameDraft("");
+    setFieldLabelDraft("");
+    setFieldTypeDraft("string");
+    setFieldRequiredDraft(false);
+  }
+
+  function updateDataField(fieldId, patch) {
+    updateDraft((next) => ({ ...next, dataFields: (next.dataFields || []).map((field) => field.id === fieldId ? { ...field, ...patch } : field) }));
+  }
+
+  function deleteDataField(fieldId) {
+    updateDraft((next) => ({ ...next, dataFields: (next.dataFields || []).filter((field) => field.id !== fieldId) }));
+  }
+
+  function updatePositionFromPointer(event, mode = "move") {
+    const drag = pointerDragRef.current;
+    if (!drag) return;
+    const rect = drag.canvasRect;
+    const pageWidth = drag.pageWidth;
+    const pageHeight = drag.pageHeight;
+    const deltaX = ((event.clientX - drag.startX) / rect.width) * pageWidth;
+    const deltaY = ((event.clientY - drag.startY) / rect.height) * pageHeight;
+    const start = drag.position;
+    const nextPosition = mode === "resize"
+      ? { ...start, width: Math.max(12, start.width + deltaX), height: Math.max(8, start.height + deltaY) }
+      : { ...start, x: Math.max(0, start.x + deltaX), y: Math.max(0, start.y + deltaY) };
+    setDraft((previous) => ({
+      ...previous,
+      canvasBlocks: previous.canvasBlocks.map((entry) => entry.id === drag.entryId ? { ...entry, position: nextPosition } : entry),
+      pageLayouts: previous.pageLayouts.map((page) => page.id === previous.activePageId ? { ...page, blocks: previous.canvasBlocks.map((entry) => entry.id === drag.entryId ? { ...entry, position: nextPosition } : entry) } : page)
+    }));
+    setIsDirty(true);
+  }
+
+  function startPointerInteraction(event, entry, mode = "move") {
+    if (event.button !== 0 || entry.locked) return;
+    const canvas = event.currentTarget.closest(".tplb-canvas-page");
+    if (!canvas) return;
+    event.stopPropagation();
+    setSelectedEntryId(entry.id);
+    pointerDragRef.current = {
+      entryId: entry.id,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      position: { x: Number(entry.position?.x || 0), y: Number(entry.position?.y || 0), width: Number(entry.position?.width || entry.position?.w || 60), height: Number(entry.position?.height || entry.position?.h || 14), unit: "mm" },
+      canvasRect: canvas.getBoundingClientRect(),
+      pageWidth: draft.pageFormat.startsWith("ppt-") ? 297 : (draft.pageFormat.includes("letter") ? 216 : 210),
+      pageHeight: draft.pageFormat.startsWith("ppt-") ? (draft.pageFormat === "ppt-16-9" ? 167 : 222) : (draft.pageFormat.includes("landscape") ? 210 : (draft.pageFormat.includes("letter") ? 279 : 297))
+    };
+  }
+
+  useEffect(() => {
+    function handlePointerMove(event) {
+      if (pointerDragRef.current) updatePositionFromPointer(event, pointerDragRef.current.mode);
+    }
+    function handlePointerUp() {
+      if (pointerDragRef.current) {
+        pointerDragRef.current = null;
+        setHistory((previous) => [...previous, cloneDraft(draft)].slice(-40));
+      }
+    }
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [draft]);
+
   function moveCanvasEntry(fromIndex, toIndex) {
     updateDraft((next) => {
       const list = [...next.canvasBlocks];
@@ -325,6 +469,13 @@ export function TemplateBuilderPage({ toolContext }) {
       next.canvasBlocks.splice(index + 1, 0, copy);
       return next;
     });
+  }
+
+  function copyCanvasEntry(entryId) {
+    const entry = draft.canvasBlocks.find((item) => item.id === entryId);
+    if (!entry) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard) navigator.clipboard.writeText(JSON.stringify(entry));
+    setStatusMessage("Block copied as JSON. You can paste it into another template workflow.");
   }
 
   function removeCanvasEntry(entryId) {
@@ -370,6 +521,19 @@ export function TemplateBuilderPage({ toolContext }) {
           return next;
         });
         setSelectedEntryId("");
+  }
+
+  function updateActivePageFormat(pageFormat) {
+    updateDraft((next) => ({
+      ...next,
+      pageFormat,
+      pageLayouts: (next.pageLayouts || []).map((page) => page.id === next.activePageId ? { ...page, pageFormat } : page),
+      renderVariants: (next.renderVariants || []).map((variant) => variant.pageLayoutId === next.activePageId ? { ...variant, pageFormat: variant.format === "html" ? "html-continuous" : (variant.format === "pptx" ? "ppt-16-9" : pageFormat) } : variant)
+    }));
+  }
+
+  function updateRenderVariant(variantId, patch) {
+    updateDraft((next) => ({ ...next, renderVariants: (next.renderVariants || []).map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) }));
   }
 
       function selectPageLayout(pageId) {
@@ -528,6 +692,8 @@ export function TemplateBuilderPage({ toolContext }) {
         canvasBlocks: draft.canvasBlocks,
         pageFormat: draft.pageFormat,
         dataBindings: {},
+        dataFields: draft.dataFields,
+        renderVariants: draft.renderVariants,
         formatSets: draft.formatSets,
         pageLayouts: draft.pageLayouts,
         activeFormatSetId: draft.activeFormatSetId,
@@ -554,8 +720,10 @@ export function TemplateBuilderPage({ toolContext }) {
     ? (draft.blockFormats[selectedEntry.type] || []).find((item) => item.name === selectedEntry.formatName)
     : null;
 
-  const scalarKeys = getSampleKeys(sampleData, false);
-  const arrayKeys = getSampleKeys(sampleData, true);
+  const templateFields = Array.isArray(draft.dataFields) ? draft.dataFields : [];
+  const scalarFields = templateFields.filter((field) => field.dataType !== "array" && field.dataType !== "object");
+  const arrayFields = templateFields.filter((field) => field.dataType === "array");
+  const activeComponentEditor = (draft.components || []).find((component) => component.id === componentEditorId) || null;
 
   const mappingRows = [];
   draft.canvasBlocks.forEach((entry) => {
@@ -652,6 +820,9 @@ export function TemplateBuilderPage({ toolContext }) {
             <select className="table-btn" value={draft.activePageId} onChange={(event) => selectPageLayout(event.target.value)}>
               {(draft.pageLayouts || []).map((page) => <option key={page.id} value={page.id}>{page.name} ({page.pageFormat || draft.pageFormat})</option>)}
             </select>
+            <select className="table-btn" value={draft.pageLayouts.find((page) => page.id === draft.activePageId)?.pageFormat || draft.pageFormat} onChange={(event) => updateActivePageFormat(event.target.value)}>
+              {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
             <button className="table-btn" type="button" onClick={addPageLayout}>Add Page</button>
             <select
               className="table-btn"
@@ -662,6 +833,20 @@ export function TemplateBuilderPage({ toolContext }) {
             </select>
             <button className="table-btn" type="button" onClick={addFormatSet}>Add Format Set</button>
             <button className="table-btn" type="button" onClick={captureCurrentFormatsInSet}>Capture Current Formats</button>
+          </div>
+          <div className="tplb-variant-grid">
+            {(draft.renderVariants || []).map((variant) => (
+              <label className="tplb-variant-row" key={variant.id}>
+                <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
+                <strong>{variant.label}</strong>
+                <select className="table-btn" value={variant.pageFormat} onChange={(event) => updateRenderVariant(variant.id, { pageFormat: event.target.value })}>
+                  {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select className="table-btn" value={variant.pageLayoutId || ""} onChange={(event) => updateRenderVariant(variant.id, { pageLayoutId: event.target.value })}>
+                  {(draft.pageLayouts || []).map((page) => <option key={page.id} value={page.id}>{page.name}</option>)}
+                </select>
+              </label>
+            ))}
           </div>
         </div>
       </article>
@@ -678,9 +863,12 @@ export function TemplateBuilderPage({ toolContext }) {
           </div>
           <h4>Components</h4>
           {draft.components.map((component) => (
-            <div key={component.id} className="tplb-component-card" onClick={() => addComponentToCanvas(component.id)}>
-              <strong>{component.name}</strong>
-              <span>{component.blocks.length} blocks &middot; click to insert</span>
+            <div key={component.id} className={`tplb-component-card ${componentEditorId === component.id ? "selected" : ""}`}>
+              <button className="tplb-component-open" type="button" onClick={() => addComponentToCanvas(component.id)}>
+                <strong>{component.name}</strong>
+                <span>{component.blocks.length} blocks &middot; click to insert</span>
+              </button>
+              <button className="table-btn" type="button" onClick={() => setComponentEditorId(component.id)}>Edit</button>
             </div>
           ))}
           <button
@@ -692,6 +880,40 @@ export function TemplateBuilderPage({ toolContext }) {
           >
             Create Component From Selection ({multiSelectedIds.length})
           </button>
+          {activeComponentEditor ? (
+            <div className="tplb-component-editor">
+              <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+                <h5 style={{ margin: 0 }}>Edit Component</h5>
+                <button className="table-btn" type="button" onClick={() => setComponentEditorId("")}>Close</button>
+              </div>
+              <label className="hint">Name
+                <input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={activeComponentEditor.name} onChange={(event) => updateComponent(activeComponentEditor.id, { name: event.target.value })} />
+              </label>
+              <label className="hint">Description
+                <textarea className="table-btn" rows={2} style={{ display: "block", marginTop: 4, width: "100%" }} value={activeComponentEditor.description || ""} onChange={(event) => updateComponent(activeComponentEditor.id, { description: event.target.value })} />
+              </label>
+              <div className="tplb-component-block-list">
+                {(activeComponentEditor.blocks || []).map((block, index) => (
+                  <div className="tplb-component-block-row" key={block.id}>
+                    <span>{index + 1}. {labelForType(block.type)}</span>
+                    <select className="table-btn" value={block.bindField ? `field:${block.bindField}` : (block.repeatField ? `repeat:${block.repeatField}` : "")} onChange={(event) => {
+                      const value = event.target.value;
+                      updateComponentChildBinding(activeComponentEditor.id, block.id, value.startsWith("repeat:") ? { repeatField: value.slice(7), bindField: "" } : { bindField: value.replace("field:", ""), repeatField: "" });
+                    }}>
+                      <option value="">Not mapped</option>
+                      {scalarFields.map((field) => <option key={`field:${field.name}`} value={`field:${field.name}`}>{field.name}</option>)}
+                      {arrayFields.map((field) => <option key={`repeat:${field.name}`} value={`repeat:${field.name}`}>Repeat: {field.name}</option>)}
+                    </select>
+                    <button className="table-btn" type="button" onClick={() => removeComponentBlock(activeComponentEditor.id, block.id)}>Delete</button>
+                  </div>
+                ))}
+              </div>
+              <div className="inline-actions" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                {BLOCK_TYPE_LIBRARY.slice(0, 8).map((item) => <button className="table-btn" type="button" key={item.type} onClick={() => addComponentBlock(activeComponentEditor.id, item.type)}>+ {item.label}</button>)}
+                <button className="table-btn danger" type="button" onClick={() => deleteComponent(activeComponentEditor.id)}>Delete Component</button>
+              </div>
+            </div>
+          ) : null}
         </article>
 
         <article className="panel">
@@ -707,10 +929,11 @@ export function TemplateBuilderPage({ toolContext }) {
                   key={entry.id}
                   className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
                   style={positionToCanvasStyle(entry.position, draft.pageFormat)}
+                  onPointerDown={(event) => startPointerInteraction(event, entry)}
                   onClick={() => setSelectedEntryId(entry.id)}
                 >
                   <div className="tplb-canvas-entry-head">
-                    <label onClick={(event) => event.stopPropagation()}>
+                    <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={multiSelectedIds.includes(entry.id)}
@@ -719,16 +942,23 @@ export function TemplateBuilderPage({ toolContext }) {
                     </label>
                     <div style={{ flex: 1 }}>
                       <strong>{isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : summarizeBinding(entry)}</div>
+                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : summarizeBinding(entry)} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
                     </div>
-                    <div className="inline-actions" style={{ gap: 4 }} onClick={(event) => event.stopPropagation()}>
+                    <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                       <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>↑</button>
                       <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>↓</button>
-                      <button className="table-btn" type="button" onClick={() => duplicateCanvasEntry(entry.id)}>Duplicate</button>
+                      <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
+                      {openBlockMenuId === entry.id ? (
+                        <div className="tplb-block-menu">
+                          <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
+                          <button type="button" onClick={() => { copyCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Copy</button>
+                          <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
+                        </div>
+                      ) : null}
                       {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Ungroup</button> : null}
-                      <button className="table-btn" type="button" onClick={() => removeCanvasEntry(entry.id)}>Delete</button>
                     </div>
                   </div>
+                  <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
                 </div>
               );
             })}
@@ -766,8 +996,8 @@ export function TemplateBuilderPage({ toolContext }) {
                         }}
                       >
                         <option value="">Not mapped</option>
-                        {scalarKeys.map((key) => <option key={`field:${key}`} value={`field:${key}`}>Field: {key}</option>)}
-                        {arrayKeys.map((key) => <option key={`repeat:${key}`} value={`repeat:${key}`}>Repeat: {key}</option>)}
+                        {scalarFields.map((field) => <option key={`field:${field.name}`} value={`field:${field.name}`}>Field: {field.name} ({field.dataType})</option>)}
+                        {arrayFields.map((field) => <option key={`repeat:${field.name}`} value={`repeat:${field.name}`}>Repeat: {field.name} (array)</option>)}
                       </select>
                     </div>
                   ))}
@@ -790,8 +1020,8 @@ export function TemplateBuilderPage({ toolContext }) {
                       }}
                     >
                       <option value="">Not mapped</option>
-                      {scalarKeys.map((key) => <option key={`field:${key}`} value={`field:${key}`}>Field: {key}</option>)}
-                      {arrayKeys.map((key) => <option key={`repeat:${key}`} value={`repeat:${key}`}>Repeat: {key}</option>)}
+                      {scalarFields.map((field) => <option key={`field:${field.name}`} value={`field:${field.name}`}>Field: {field.name} ({field.dataType})</option>)}
+                      {arrayFields.map((field) => <option key={`repeat:${field.name}`} value={`repeat:${field.name}`}>Repeat: {field.name} (array)</option>)}
                     </select>
                   </label>
 
@@ -898,13 +1128,30 @@ export function TemplateBuilderPage({ toolContext }) {
 
       <div className="tplb-bottom-grid">
         <article className="panel">
-          <h4 style={{ marginTop: 0 }}>Data Mapping</h4>
-          {mappingRows.map((row) => (
-            <div key={row.key} className="tplb-mapping-row">
-              <span className="hint">{row.label}</span>
-              <span className="hint">{summarizeBinding(row.spec)}</span>
+          <h4 style={{ marginTop: 0 }}>Data Fields &amp; Mapping</h4>
+          <p className="hint">These are the contract between this template and uploaded material or an AI Agent output.</p>
+          {(draft.dataFields || []).map((field) => (
+            <div className="tplb-field-editor-row" key={field.id}>
+              <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
+              <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />
+              <select className="table-btn" value={field.dataType} onChange={(event) => updateDataField(field.id, { dataType: event.target.value })}>
+                {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+              <label className="hint"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => updateDataField(field.id, { required: event.target.checked })} /> Required</label>
+              <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
             </div>
           ))}
+          <div className="tplb-field-create-row">
+            <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
+            <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
+            <select className="table-btn" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
+              {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+            </select>
+            <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
+            <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
+          </div>
+          <h5>Canvas bindings</h5>
+          {mappingRows.map((row) => <div key={row.key} className="tplb-mapping-row"><span className="hint">{row.label}</span><span className="hint">{summarizeBinding(row.spec)}</span></div>)}
         </article>
 
         <article className="panel">

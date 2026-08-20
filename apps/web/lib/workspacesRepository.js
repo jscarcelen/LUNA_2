@@ -136,13 +136,15 @@ function splitTemplateBlockClassesMeta(raw = {}) {
   const canvasBlocks = Array.isArray(meta.canvasBlocks) ? meta.canvasBlocks : [];
   const pageFormat = String(meta.pageFormat || "a4-portrait").trim() || "a4-portrait";
   const dataBindings = meta.dataBindings && typeof meta.dataBindings === "object" ? meta.dataBindings : {};
+  const dataFields = Array.isArray(meta.dataFields) ? meta.dataFields : [];
+  const renderVariants = Array.isArray(meta.renderVariants) ? meta.renderVariants : [];
   const formatSets = Array.isArray(meta.formatSets) ? meta.formatSets : [];
   const pageLayouts = Array.isArray(meta.pageLayouts) ? meta.pageLayouts : [];
   const activeFormatSetId = String(meta.activeFormatSetId || "").trim();
   const activePageId = String(meta.activePageId || "").trim();
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId };
 }
 
 function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root", extra = {}) {
@@ -157,6 +159,8 @@ function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates =
     canvasBlocks: Array.isArray(extra?.canvasBlocks) ? extra.canvasBlocks : [],
     pageFormat: String(extra?.pageFormat || "a4-portrait").trim() || "a4-portrait",
     dataBindings: extra?.dataBindings && typeof extra.dataBindings === "object" ? extra.dataBindings : {},
+    dataFields: Array.isArray(extra?.dataFields) ? extra.dataFields : [],
+    renderVariants: Array.isArray(extra?.renderVariants) ? extra.renderVariants : [],
     formatSets: Array.isArray(extra?.formatSets) ? extra.formatSets : [],
     pageLayouts: Array.isArray(extra?.pageLayouts) ? extra.pageLayouts : [],
     activeFormatSetId: String(extra?.activeFormatSetId || "").trim(),
@@ -2244,7 +2248,7 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       .maybeSingle();
     if (templateError) throw templateError;
     if (templateRow) {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(templateRow.block_classes || {});
       renderedFromBlocksHtml = renderDocumentBlocksHtml(contentBlocksJson, {
         id: templateRow.id,
         name: templateRow.name,
@@ -2258,6 +2262,8 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
         canvasBlocks,
         pageFormat,
         dataBindings,
+        dataFields,
+        renderVariants,
         formatSets,
         pageLayouts,
         activeFormatSetId,
@@ -2289,7 +2295,7 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
       },
       template: selectedTemplate.data ? {
         ...(function mapTemplateForPayload() {
-          const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
+          const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(selectedTemplate.data.block_classes || {});
           return {
             id: selectedTemplate.data.id,
             name: selectedTemplate.data.name,
@@ -2303,6 +2309,8 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
             canvasBlocks,
             pageFormat,
             dataBindings,
+            dataFields,
+            renderVariants,
             formatSets,
             pageLayouts,
             activeFormatSetId,
@@ -2396,7 +2404,7 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         id: row.id,
         ownerUserId: row.owner_user_id,
@@ -2411,6 +2419,8 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
         canvasBlocks,
         pageFormat,
         dataBindings,
+        dataFields,
+        renderVariants,
         formatSets,
         pageLayouts,
         activeFormatSetId,
@@ -2449,7 +2459,9 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
         components: payload.components,
         canvasBlocks: payload.canvasBlocks,
         pageFormat: payload.pageFormat,
-        dataBindings: payload.dataBindings
+        dataBindings: payload.dataBindings,
+        dataFields: payload.dataFields,
+        renderVariants: payload.renderVariants
         ,formatSets: payload.formatSets
         ,pageLayouts: payload.pageLayouts
       }
@@ -2527,7 +2539,7 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
       .eq("id", resolvedTemplateId)
       .maybeSingle();
     if (!data) return null;
-    const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(data.block_classes);
+    const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, formatSets, pageLayouts, activeFormatSetId, activePageId } = splitTemplateBlockClassesMeta(data.block_classes);
     return {
       id: data.id,
       name: data.name,
@@ -2541,6 +2553,8 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
       canvasBlocks,
       pageFormat,
       dataBindings,
+      dataFields,
+      renderVariants,
       formatSets,
       pageLayouts,
       activeFormatSetId,

@@ -64,6 +64,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const [templates, setTemplates] = useState([]);
   const [templateId, setTemplateId] = useState("");
   const [fieldTypeByName, setFieldTypeByName] = useState({});
+  const [fieldMappingByTemplateField, setFieldMappingByTemplateField] = useState({});
 
   const [output, setOutput] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,6 +81,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
       setAgentConfig(parsed);
       const savedMapping = parsed.outputMapping?.fieldTypeByName || {};
       setFieldTypeByName(savedMapping);
+      setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
       setTemplateId(String(parsed.outputMapping?.templateId || ""));
       setReferenceDocumentIds(Array.isArray(parsed.scope?.documentIds) ? parsed.scope.documentIds : []);
       setContextPromptDraft(String(parsed.contextPrompt || ""));
@@ -127,6 +129,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const fields = Array.isArray(agentConfig?.template?.fields) ? agentConfig.template.fields : [];
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
   const activeTemplate = templates.find((template) => template.id === templateId) || null;
+  const templateFields = Array.isArray(activeTemplate?.dataFields) ? activeTemplate.dataFields : [];
   const answeredQuestionCount = questions.filter((question) => {
     const answer = answersByQuestionId[question.id];
     return Array.isArray(answer) ? answer.length > 0 : String(answer || "").trim().length > 0;
@@ -232,7 +235,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
       const nextConfig = {
         ...agentConfig,
         scope: { ...(agentConfig.scope || {}), documentIds: referenceDocumentIds },
-        outputMapping: { templateId, fieldTypeByName }
+        outputMapping: { templateId, fieldTypeByName, fieldMappingByTemplateField }
       };
       const textContent = JSON.stringify(nextConfig, null, 2);
       await onUpdateGeneratedDocument(agentDocument.id, {
@@ -260,10 +263,15 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
       if (activeTemplate) {
         const renderedItems = [];
         for (const item of output.items) {
+          const templateData = templateFields.reduce((mapped, field) => {
+            const sourceName = fieldMappingByTemplateField[field.name] || field.name;
+            mapped[field.name] = item[sourceName];
+            return mapped;
+          }, {});
           const response = await fetch("/api/templates/render-preview", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ template: activeTemplate, sampleData: item, format: "html" })
+            body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
           });
           const result = await response.json();
           if (!response.ok) throw new Error(result?.error || "Template rendering failed");
@@ -391,6 +399,20 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
               </div>
             ))}
           </div>
+          {templateFields.length ? (
+            <div className="selection-box" style={{ marginTop: 10 }}>
+              <p className="hint" style={{ marginTop: 0 }}>Template data fields</p>
+              {templateFields.map((field) => (
+                <div className="agent-field-row" key={field.id || field.name}>
+                  <span className="agent-field-name">{field.label || field.name} <small>({field.dataType})</small></span>
+                  <select className="input" value={fieldMappingByTemplateField[field.name] || field.name} onChange={(event) => setFieldMappingByTemplateField((previous) => ({ ...previous, [field.name]: event.target.value }))}>
+                    <option value={field.name}>{field.name}</option>
+                    {fields.map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {activeTemplate ? <p className="hint" style={{ marginTop: "8px" }}>Using "{activeTemplate.name}" as the reference layout for this mapping.</p> : null}
           <button className="table-btn" type="button" style={{ marginTop: "10px" }} onClick={handleSavePreset} disabled={isSavingPreset}>
             {isSavingPreset ? "Saving preset..." : "Save mapping as preset for next time"}

@@ -1037,11 +1037,6 @@ export function TemplateBuilderPage({ toolContext }) {
     ? (draft.blockFormats[selectedEntry.type] || []).find((item) => item.name === selectedEntry.formatName)
     : null;
 
-  const templateFields = Array.isArray(draft.dataFields) ? draft.dataFields : [];
-  const scalarFields = templateFields.filter((field) => field.dataType !== "array" && field.dataType !== "object");
-  const arrayFields = templateFields.filter((field) => field.dataType === "array");
-  const activeComponentEditor = (draft.components || []).find((component) => component.id === componentEditorId) || null;
-
   const mappingRows = [];
   draft.canvasBlocks.forEach((entry) => {
     if (entry.componentRefId) {
@@ -1053,6 +1048,19 @@ export function TemplateBuilderPage({ toolContext }) {
       mappingRows.push({ key: entry.id, label: labelForType(entry.type), entryId: entry.id, spec: entry });
     }
   });
+  const allTemplateFields = Array.isArray(draft.dataFields) ? draft.dataFields : [];
+  const usedFieldNames = new Set();
+  if (draft.repeatCollectionField) usedFieldNames.add(String(draft.repeatCollectionField));
+  mappingRows.forEach((row) => {
+    if (row.spec.bindField) usedFieldNames.add(String(row.spec.bindField));
+    if (row.spec.repeatField) usedFieldNames.add(String(row.spec.repeatField));
+  });
+  const templateFields = usedFieldNames.size
+    ? allTemplateFields.filter((field) => usedFieldNames.has(field.name))
+    : allTemplateFields;
+  const scalarFields = allTemplateFields.filter((field) => field.dataType !== "array" && field.dataType !== "object");
+  const arrayFields = allTemplateFields.filter((field) => field.dataType === "array");
+  const activeComponentEditor = (draft.components || []).find((component) => component.id === componentEditorId) || null;
 
   const selectedVariant = (draft.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
   const canvasDisplayPageFormat = selectedVariant?.pageFormat || draft.pageFormat;
@@ -1617,7 +1625,7 @@ export function TemplateBuilderPage({ toolContext }) {
           <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
         </div>
         <h5>Data fields</h5>
-        {(draft.dataFields || []).map((field) => (
+        {templateFields.map((field) => (
           <div className="tplb-field-editor-row" key={field.id}>
             <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
             <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />

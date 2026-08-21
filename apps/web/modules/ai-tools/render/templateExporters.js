@@ -27,6 +27,22 @@ function hexToRgb(hex = "#1f2937") {
   return rgb(((value >> 16) & 255) / 255, ((value >> 8) & 255) / 255, (value & 255) / 255);
 }
 
+function positionMetrics(position = {}) {
+  const y = Number(position?.y || 0);
+  const height = Number(position?.height || position?.h || 14);
+  return {
+    y,
+    height,
+    bottom: y + height
+  };
+}
+
+function shiftPosition(position, offsetY = 0) {
+  if (!position || typeof position !== "object") return position;
+  const nextY = Number(position.y || 0) + offsetY;
+  return { ...position, y: nextY };
+}
+
 // Expands components and repeated (array-bound) blocks into a flat, ordered render list.
 export function buildCanvasRenderList(template = {}, sampleData = {}) {
   const pageLayouts = Array.isArray(template.pageLayouts) ? template.pageLayouts : [];
@@ -73,16 +89,28 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
   const rendered = [];
 
   for (const entry of canvasBlocks) {
-    for (const spec of expandEntry(entry)) {
+    const expandedSpecs = expandEntry(entry);
+    const positionedSpecs = expandedSpecs.filter((spec) => spec.position && typeof spec.position === "object");
+    const baseY = positionedSpecs.length ? Math.min(...positionedSpecs.map((spec) => positionMetrics(spec.position).y)) : 0;
+    const maxBottom = positionedSpecs.length ? Math.max(...positionedSpecs.map((spec) => positionMetrics(spec.position).bottom)) : 0;
+    const entryStackGap = 6;
+    const entrySpan = Math.max(14, maxBottom - baseY) + entryStackGap;
+    for (const spec of expandedSpecs) {
       const repeatScope = spec.repeatScope || entry.repeatScope || "once";
       const records = repeatScope === "per-item" && hasOutputCollection ? outputRecords : [sampleData];
-      for (const record of records) {
+      for (const [recordIndex, record] of records.entries()) {
       const type = String(spec.type || "paragraph");
       const formatName = String(spec.formatName || "");
       const format = resolveFormat(type, formatName);
       const className = format?.className || blockClasses[type] || "";
       const style = format?.style && typeof format.style === "object" ? format.style : {};
       const htmlTemplate = String(format?.htmlTemplate || "");
+      const specPosition = spec.position || entry.position || null;
+      const blockMetrics = positionMetrics(specPosition || {});
+      const blockStackGap = 4;
+      const repeatedPosition = specPosition
+        ? shiftPosition(specPosition, recordIndex * entrySpan)
+        : null;
 
       if (spec.repeatField) {
         const values = getPath(record, spec.repeatField);
@@ -94,7 +122,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
             className,
             style,
             htmlTemplate,
-            position: spec.position || entry.position || null,
+            position: repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
             pageId: activePage?.id || "page-1",
             hidden: Boolean(spec.hidden || entry.hidden),
             text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
@@ -113,7 +141,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         className,
         style,
         htmlTemplate,
-        position: spec.position || entry.position || null,
+        position: repeatedPosition,
         pageId: activePage?.id || "page-1",
         hidden: Boolean(spec.hidden || entry.hidden),
         text: value === undefined || value === null || value === ""

@@ -31,6 +31,13 @@ const PAGE_FORMAT_OPTIONS = [
   { value: "custom", label: "Custom" }
 ];
 
+const OUTPUT_FORMAT_OPTIONS = [
+  { value: "html", label: "HTML", icon: "🌐", pageFormat: "html-continuous", extension: "html" },
+  { value: "pdf", label: "PDF", icon: "📄", pageFormat: "a4-portrait", extension: "pdf" },
+  { value: "docx", label: "Word", icon: "📝", pageFormat: "a4-portrait", extension: "docx" },
+  { value: "pptx", label: "PowerPoint", icon: "📊", pageFormat: "ppt-16-9", extension: "pptx" }
+];
+
 const LAYOUT_MODE_OPTIONS = ["Flow", "Fixed", "Absolute", "Relative"];
 const VERTICAL_POSITION_OPTIONS = ["After previous", "Top of page", "Bottom of page", "Centered"];
 const ANCHOR_OPTIONS = ["Page", "Previous block", "Parent component", "Header", "Footer"];
@@ -50,8 +57,30 @@ const DEFAULT_SAMPLE_DATA = {
   points: 2
 };
 
+const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
+
 function createId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function readTemplatesFromStorage() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_BUILDER_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTemplatesToStorage(templates = []) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TEMPLATE_BUILDER_STORAGE_KEY, JSON.stringify(Array.isArray(templates) ? templates : []));
+  } catch {
+    // Ignore localStorage limits and keep in-memory state only.
+  }
 }
 
 function starterComponents() {
@@ -181,6 +210,23 @@ function illustrativeText(type) {
   return examples[type] || "Content placeholder";
 }
 
+function outputFormatMeta(format) {
+  return OUTPUT_FORMAT_OPTIONS.find((item) => item.value === format) || OUTPUT_FORMAT_OPTIONS[0];
+}
+
+function setPathValue(target, path, value) {
+  if (!path) return;
+  const keys = String(path).split(".").filter(Boolean);
+  if (!keys.length) return;
+  let current = target;
+  while (keys.length > 1) {
+    const key = keys.shift();
+    if (!current[key] || typeof current[key] !== "object") current[key] = {};
+    current = current[key];
+  }
+  current[keys[0]] = value;
+}
+
 function pageRatio(pageFormat) {
   const ratios = {
     "a4-portrait": 297 / 210,
@@ -232,21 +278,35 @@ export function TemplateBuilderPage({ toolContext }) {
   const [fieldRequiredDraft, setFieldRequiredDraft] = useState(false);
   const [openBlockMenuId, setOpenBlockMenuId] = useState("");
   const [selectedVariantId, setSelectedVariantId] = useState("variant-pdf");
-  const [collapsedSections, setCollapsedSections] = useState({ blocks: false, components: false, data: true, exports: true });
   const [mappingExpanded, setMappingExpanded] = useState(false);
   const [showOverflowMenu, setShowOverflowMenu] = useState(false);
   const [showComponentPopover, setShowComponentPopover] = useState(false);
+  const [showFormatPopover, setShowFormatPopover] = useState(false);
   const [newComponentName, setNewComponentName] = useState("");
   const [newComponentBase, setNewComponentBase] = useState("table");
+  const [newFormatType, setNewFormatType] = useState("pdf");
   const [zoomLevel, setZoomLevel] = useState(100);
+  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
+  const [previewFormat, setPreviewFormat] = useState("html");
+  const [previewPdfUrl, setPreviewPdfUrl] = useState("");
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
     async function loadTemplates() {
-      if (!onListDocumentBlockTemplates) return;
-      const list = await onListDocumentBlockTemplates();
-      if (!cancelled) setTemplates(Array.isArray(list) ? list : []);
+      let nextTemplates = readTemplatesFromStorage();
+      if (onListDocumentBlockTemplates) {
+        try {
+          const list = await onListDocumentBlockTemplates();
+          if (Array.isArray(list)) {
+            nextTemplates = list;
+            writeTemplatesToStorage(list);
+          }
+        } catch {
+          if (!cancelled) setStatusMessage("Using locally cached templates while shared storage is unavailable.");
+        }
+      }
+      if (!cancelled) setTemplates(Array.isArray(nextTemplates) ? nextTemplates : []);
     }
     loadTemplates();
     return () => { cancelled = true; };
@@ -335,6 +395,8 @@ export function TemplateBuilderPage({ toolContext }) {
     setSelectedEntryId("");
     setMultiSelectedIds([]);
     setPreviewHtml("");
+    setPreviewPdfUrl("");
+    setShowPreviewPanel(false);
   }
 
   function handleNewTemplate() {
@@ -348,6 +410,8 @@ export function TemplateBuilderPage({ toolContext }) {
     setSelectedEntryId("");
     setMultiSelectedIds([]);
     setPreviewHtml("");
+    setPreviewPdfUrl("");
+    setShowPreviewPanel(false);
   }
 
   function addCanvasBlock(type) {
@@ -604,25 +668,38 @@ export function TemplateBuilderPage({ toolContext }) {
     });
   }
 
-  function addPageLayout() {
-        updateDraft((next) => {
-          const page = { id: createId("page"), name: `Page ${(next.pageLayouts || []).length + 1}`, pageFormat: next.pageFormat, blocks: [] };
-          next.pageLayouts = [...(next.pageLayouts || []), page];
-          next.activePageId = page.id;
-          next.canvasBlocks = [];
-          return next;
-        });
-        setSelectedEntryId("");
-  }
-
-  function addFormatPage() {
+  function addFormatPage(format = newFormatType) {
+    const meta = outputFormatMeta(format);
     const pageId = createId("page");
     const variantId = createId("variant");
-    const nextPage = { id: pageId, name: `Page ${(draft.pageLayouts || []).length + 1}`, pageFormat: "a4-portrait", blocks: cloneDraft(draft.canvasBlocks || []) };
-    const nextVariant = { id: variantId, format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: pageId, blocks: cloneDraft(draft.canvasBlocks || []), enabled: true };
-    updateDraft((next) => ({ ...next, pageLayouts: [...(next.pageLayouts || []), nextPage], renderVariants: [...(next.renderVariants || []), nextVariant], activePageId: pageId, pageFormat: nextPage.pageFormat, canvasBlocks: cloneDraft(nextPage.blocks) }));
+    const sameFormatCount = (draft.renderVariants || []).filter((variant) => variant.format === format).length;
+    const suffix = sameFormatCount ? ` ${sameFormatCount + 1}` : "";
+    const nextPage = {
+      id: pageId,
+      name: `${meta.label}${suffix}`,
+      pageFormat: meta.pageFormat,
+      blocks: cloneDraft(draft.canvasBlocks || [])
+    };
+    const nextVariant = {
+      id: variantId,
+      format: meta.value,
+      label: `${meta.label}${suffix}`,
+      pageFormat: meta.pageFormat,
+      pageLayoutId: pageId,
+      blocks: cloneDraft(draft.canvasBlocks || []),
+      enabled: true
+    };
+    updateDraft((next) => ({
+      ...next,
+      pageLayouts: [...(next.pageLayouts || []), nextPage],
+      renderVariants: [...(next.renderVariants || []), nextVariant],
+      activePageId: pageId,
+      pageFormat: nextPage.pageFormat,
+      canvasBlocks: cloneDraft(nextPage.blocks)
+    }));
     setSelectedVariantId(variantId);
     setSelectedEntryId("");
+    setShowFormatPopover(false);
   }
 
   function updateActivePageFormat(pageFormat) {
@@ -655,43 +732,6 @@ export function TemplateBuilderPage({ toolContext }) {
     setSelectedVariantId(variant.id);
     setSelectedEntryId("");
     setIsDirty(true);
-  }
-
-      function selectPageLayout(pageId) {
-        setDraft((previous) => {
-          const pages = (previous.pageLayouts || []).map((page) => page.id === previous.activePageId ? { ...page, blocks: previous.canvasBlocks } : page);
-          const nextPage = pages.find((page) => page.id === pageId) || pages[0];
-          const next = { ...previous, pageLayouts: pages, activePageId: nextPage.id, pageFormat: nextPage.pageFormat || previous.pageFormat, canvasBlocks: nextPage.blocks || [] };
-          setHistory((historyItems) => [...historyItems, cloneDraft(next)].slice(-40));
-          setHistoryIndex((previousIndex) => Math.min(previousIndex + 1, 39));
-          return next;
-        });
-        setSelectedEntryId("");
-        setIsDirty(true);
-  }
-
-      function addFormatSet() {
-        updateDraft((next) => {
-          const id = createId("format-set");
-          const set = { id, name: `Format Set ${(next.formatSets || []).length + 1}`, formats: {} };
-          next.formatSets = [...(next.formatSets || []), set];
-          next.activeFormatSetId = id;
-          return next;
-        });
-  }
-
-  function captureCurrentFormatsInSet() {
-    updateDraft((next) => {
-      const activeId = next.activeFormatSetId || next.formatSets?.[0]?.id;
-      next.formatSets = (next.formatSets || []).map((formatSet) => formatSet.id === activeId
-        ? {
-          ...formatSet,
-          formats: Object.fromEntries(Object.entries(next.blockFormats || {}).map(([type, formats]) => [type, formats?.[0]?.name || "Default"]))
-        }
-        : formatSet);
-      return next;
-    });
-    setStatusMessage("Current block formats captured in the active format set.");
   }
 
   function toggleMultiSelect(entryId) {
@@ -740,6 +780,54 @@ export function TemplateBuilderPage({ toolContext }) {
     setShowComponentPopover(false);
   }
 
+  function createIllustrativeRecords(count) {
+    return Array.from({ length: Math.max(1, Number(count) || 1) }, (_, index) => ({
+      index: index + 1,
+      title: `Item ${index + 1}`,
+      question_number: index + 1,
+      question: `Illustrative item ${index + 1}`,
+      explanation: `Illustrative explanation ${index + 1}`,
+      answers: DEFAULT_SAMPLE_DATA.answers
+    }));
+  }
+
+  function getIllustrativeRepeatCount() {
+    const specs = [];
+    for (const entry of draft.canvasBlocks || []) {
+      if (entry.componentRefId) {
+        const component = (draft.components || []).find((item) => item.id === entry.componentRefId);
+        for (const block of component?.blocks || []) {
+          specs.push({
+            repeatScope: block.repeatScope || entry.repeatScope || "once",
+            illustrativeRepeatCount: Number(block.illustrativeRepeatCount || entry.illustrativeRepeatCount || 0)
+          });
+        }
+      } else {
+        specs.push({
+          repeatScope: entry.repeatScope || "once",
+          illustrativeRepeatCount: Number(entry.illustrativeRepeatCount || 0)
+        });
+      }
+    }
+    const counts = specs
+      .filter((item) => item.repeatScope === "per-item")
+      .map((item) => Math.max(0, item.illustrativeRepeatCount || 0))
+      .filter(Boolean);
+    return counts.length ? Math.max(...counts) : 0;
+  }
+
+  function buildRenderRequest(format) {
+    const nextTemplate = cloneDraft(draft);
+    const nextSampleData = cloneDraft(sampleData);
+    const illustrativeRepeatCount = getIllustrativeRepeatCount();
+    if (illustrativeRepeatCount > 0) {
+      const collectionPath = nextTemplate.repeatCollectionField || "preview_items";
+      nextTemplate.repeatCollectionField = collectionPath;
+      setPathValue(nextSampleData, collectionPath, createIllustrativeRecords(illustrativeRepeatCount));
+    }
+    return { template: nextTemplate, sampleData: nextSampleData, format };
+  }
+
   function ungroupComponentEntry(entryId) {
     updateDraft((next) => {
       const index = next.canvasBlocks.findIndex((item) => item.id === entryId);
@@ -778,19 +866,45 @@ export function TemplateBuilderPage({ toolContext }) {
     });
   }
 
-  async function handleRefreshPreview() {
+  async function requestRender(format) {
+    const response = await fetch("/api/templates/render-preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildRenderRequest(format))
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result?.error || "Render failed");
+    return result;
+  }
+
+  function downloadHtmlFile(html, name = "template") {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${name}.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function openPreview(format = "html") {
     setErrorMessage("");
+    setShowPreviewPanel(true);
+    setPreviewFormat(format);
+    setIsBusyFormat(`preview-${format}`);
     try {
-      const response = await fetch("/api/templates/render-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: draft, sampleData, format: "html" })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "Preview failed");
-      setPreviewHtml(result.html || "");
+      const result = await requestRender(format);
+      if (format === "html") {
+        setPreviewHtml(result.html || "");
+        setPreviewPdfUrl("");
+      } else if (format === "pdf") {
+        setPreviewPdfUrl(`data:${result.mimeType};base64,${result.fileBase64}`);
+        setPreviewHtml("");
+      }
     } catch (error) {
       setErrorMessage(String(error.message || error));
+    } finally {
+      setIsBusyFormat("");
     }
   }
 
@@ -798,19 +912,13 @@ export function TemplateBuilderPage({ toolContext }) {
     setErrorMessage("");
     setIsBusyFormat(format);
     try {
-      const response = await fetch("/api/templates/render-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: draft, sampleData, format })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "Export failed");
+      const result = await requestRender(format);
       if (format === "html") {
-        setPreviewHtml(result.html || "");
+        downloadHtmlFile(result.html || "", draft.name || "template");
       } else {
         const link = document.createElement("a");
         link.href = `data:${result.mimeType};base64,${result.fileBase64}`;
-        link.download = `${draft.name || "template"}.${format === "docx" ? "docx" : "pdf"}`;
+        link.download = `${draft.name || "template"}.${outputFormatMeta(format).extension}`;
         link.click();
       }
     } catch (error) {
@@ -823,15 +931,14 @@ export function TemplateBuilderPage({ toolContext }) {
   async function handleGenerateAllFormats() {
     await handleExport("pdf");
     await handleExport("docx");
-    await handleRefreshPreview();
+    await openPreview("html");
   }
 
   async function handleSaveTemplate() {
-    if (!onSaveDocumentBlockTemplate) return;
     setIsSaving(true);
     setErrorMessage("");
     try {
-      const saved = await onSaveDocumentBlockTemplate({
+      const payload = {
         id: activeTemplateId || undefined,
         name: draft.name,
         description: draft.description,
@@ -853,15 +960,70 @@ export function TemplateBuilderPage({ toolContext }) {
         activeFormatSetId: draft.activeFormatSetId,
         activePageId: draft.activePageId
         ,canvasSettings: draft.canvasSettings
-      });
-      const list = await onListDocumentBlockTemplates();
-      setTemplates(Array.isArray(list) ? list : []);
-      const savedId = saved?.id || saved?.template?.id || activeTemplateId;
+      };
+      let savedId = activeTemplateId;
+      let nextTemplates = [];
+      if (onSaveDocumentBlockTemplate) {
+        const saved = await onSaveDocumentBlockTemplate(payload);
+        let list = saved?.templates;
+        if (typeof onListDocumentBlockTemplates === "function") {
+          try {
+            list = await onListDocumentBlockTemplates();
+          } catch {
+            list = saved?.templates || readTemplatesFromStorage();
+          }
+        }
+        nextTemplates = Array.isArray(list) ? list : [];
+        savedId = saved?.id || saved?.template?.id || activeTemplateId;
+      } else {
+        const localId = activeTemplateId || createId("template");
+        const localTemplate = { ...payload, id: localId };
+        const existing = readTemplatesFromStorage();
+        const withoutCurrent = existing.filter((item) => item.id !== localId);
+        nextTemplates = [...withoutCurrent, localTemplate];
+        writeTemplatesToStorage(nextTemplates);
+        savedId = localId;
+      }
+      setTemplates(nextTemplates);
+      writeTemplatesToStorage(nextTemplates);
       if (savedId) setActiveTemplateId(savedId);
       setIsDirty(false);
       setStatusMessage("Template saved.");
     } catch (error) {
-      setErrorMessage(String(error.message || error));
+      const message = String(error.message || error);
+      if (message.toLowerCase().includes("supabase not configured")) {
+        const localId = activeTemplateId || createId("template");
+        const localTemplate = {
+          id: localId,
+          name: draft.name,
+          description: draft.description,
+          containerClass: draft.containerClass,
+          css: draft.css,
+          folderId: draft.folderId,
+          blockClasses: draft.blockClasses,
+          blockFormats: draft.blockFormats,
+          components: draft.components,
+          canvasBlocks: draft.canvasBlocks,
+          pageFormat: draft.pageFormat,
+          dataFields: draft.dataFields,
+          renderVariants: draft.renderVariants,
+          repeatCollectionField: draft.repeatCollectionField,
+          formatSets: draft.formatSets,
+          pageLayouts: draft.pageLayouts,
+          activeFormatSetId: draft.activeFormatSetId,
+          activePageId: draft.activePageId,
+          canvasSettings: draft.canvasSettings
+        };
+        const existing = readTemplatesFromStorage();
+        const nextTemplates = [...existing.filter((item) => item.id !== localId), localTemplate];
+        writeTemplatesToStorage(nextTemplates);
+        setTemplates(nextTemplates);
+        setActiveTemplateId(localId);
+        setIsDirty(false);
+        setStatusMessage("Template saved locally because shared storage is unavailable.");
+      } else {
+        setErrorMessage(message);
+      }
     } finally {
       setIsSaving(false);
     }
@@ -931,22 +1093,9 @@ export function TemplateBuilderPage({ toolContext }) {
           </div>
         </div>
         <div className="tplb-header-right">
-          <select
-            className="table-btn"
-            value={activeTemplateId}
-            onChange={(event) => {
-              const template = templates.find((item) => item.id === event.target.value);
-              if (template) loadTemplateIntoDraft(template);
-            }}
-          >
-            <option value="">Choose saved template...</option>
-            {templates.map((template) => (
-              <option key={template.id} value={template.id}>{template.name}</option>
-            ))}
-          </select>
           <button className="table-btn" type="button" onClick={handleUndo} disabled={historyIndex <= 0}>Undo</button>
           <button className="table-btn" type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>Redo</button>
-          <button className="table-btn" type="button" onClick={handleRefreshPreview}>Preview</button>
+          <button className="table-btn" type="button" onClick={() => openPreview("html")}>Preview</button>
           <button className="table-btn primary" type="button" onClick={handleSaveTemplate} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save Template"}
           </button>
@@ -965,13 +1114,74 @@ export function TemplateBuilderPage({ toolContext }) {
       {errorMessage ? <p className="hint tplb-status-error">{errorMessage}</p> : null}
       {statusMessage ? <p className="hint tplb-status-ok">{statusMessage}</p> : null}
 
+      <section className="panel tplb-template-gallery">
+        <div className="tplb-panel-header" style={{ marginBottom: 8 }}>
+          <span className="tplb-panel-title">TEMPLATES</span>
+          <span className="hint">Browse saved templates visually.</span>
+        </div>
+        <div className="tplb-template-card-row">
+          <button className={`tplb-template-card ${!activeTemplateId ? "active" : ""}`} type="button" onClick={handleNewTemplate}>
+            <strong>New blank template</strong>
+            <span>Start from a clean shared-block layout.</span>
+          </button>
+          {templates.map((template) => (
+            <button
+              key={template.id}
+              className={`tplb-template-card ${activeTemplateId === template.id ? "active" : ""}`}
+              type="button"
+              onClick={() => loadTemplateIntoDraft(template)}
+            >
+              <strong>{template.name || "Untitled Template"}</strong>
+              <span>{(template.renderVariants || []).filter((variant) => variant.enabled !== false).map((variant) => variant.label).join(" · ") || "No outputs yet"}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {showPreviewPanel ? (
+        <section className="panel tplb-preview-panel">
+          <div className="tplb-preview-header">
+            <div>
+              <h4 style={{ margin: 0 }}>Preview</h4>
+              <p className="hint" style={{ margin: "4px 0 0" }}>Generate HTML or PDF from the same shared blocks.</p>
+            </div>
+            <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className={`table-btn ${previewFormat === "html" ? "primary" : ""}`} type="button" onClick={() => openPreview("html")} disabled={isBusyFormat === "preview-html"}>HTML Preview</button>
+              <button className={`table-btn ${previewFormat === "pdf" ? "primary" : ""}`} type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>PDF Preview</button>
+              <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download HTML</button>
+              <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download PDF</button>
+              <button className="table-btn" type="button" onClick={() => setShowPreviewPanel(false)}>Close</button>
+            </div>
+          </div>
+          <div className="tplb-preview-surface">
+            {previewFormat === "html" ? (
+              previewHtml ? <iframe className="tplb-preview-frame" title="HTML template preview" srcDoc={previewHtml} /> : <p className="hint">Generate an HTML preview to inspect the rendered layout.</p>
+            ) : (
+              previewPdfUrl ? <iframe className="tplb-preview-frame" title="PDF template preview" src={previewPdfUrl} /> : <p className="hint">Generate a PDF preview to inspect the rendered document.</p>
+            )}
+          </div>
+        </section>
+      ) : null}
+
       <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
         {(draft.renderVariants || []).map((variant) => (
           <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
             {variant.format === "pdf" ? "\ud83d\udcc4" : variant.format === "docx" ? "\ud83d\udcdd" : variant.format === "pptx" ? "\ud83d\udcca" : "\ud83c\udf10"} {variant.label}
           </button>
         ))}
-        <button className="tplb-format-tab add" type="button" onClick={addFormatPage} aria-label="Add document format and page">+</button>
+        <div className="tplb-format-popover-wrap">
+          <button className="tplb-format-tab add" type="button" onClick={() => setShowFormatPopover((previous) => !previous)} aria-label="Add document format and page">+</button>
+          {showFormatPopover ? (
+            <div className="tplb-block-menu tplb-format-menu">
+              <label className="hint">Output format
+                <select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
+                  {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                </select>
+              </label>
+              <button type="button" onClick={() => addFormatPage(newFormatType)}>Add format</button>
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div className="tplb-main-grid">
@@ -1017,7 +1227,10 @@ export function TemplateBuilderPage({ toolContext }) {
 
           {(draft.components || []).length ? (
             <>
-              <div className="tplb-panel-subheader">COMPONENTS</div>
+              <div className="tplb-panel-subheader tplb-panel-subheader-row">
+                <span>COMPONENTS</span>
+                <button className="tplb-icon-btn" type="button" aria-label="Create component from components section" onClick={() => setShowComponentPopover((previous) => !previous)}>+</button>
+              </div>
               {draft.components.map((component) => (
                 <div key={component.id} className={`tplb-component-card ${componentEditorId === component.id ? "selected" : ""}`}>
                   <button className="tplb-component-open" type="button" onClick={() => addComponentToCanvas(component.id)}>
@@ -1185,6 +1398,20 @@ export function TemplateBuilderPage({ toolContext }) {
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
+                  {(selectedEntry.repeatScope || "once") === "per-item" ? (
+                    <div className="tplb-repeat-count-editor">
+                      <span className="hint">Illustrative repetitions</span>
+                      {[5, 10].map((count) => (
+                        <button key={count} className="table-btn" type="button" onClick={() => patchSelectedEntry({ illustrativeRepeatCount: count })}>{count}</button>
+                      ))}
+                      <input
+                        className="table-btn tplb-repeat-input"
+                        value={selectedEntry.illustrativeRepeatCount || ""}
+                        placeholder="Custom"
+                        onChange={(event) => patchSelectedEntry({ illustrativeRepeatCount: event.target.value })}
+                      />
+                    </div>
+                  ) : null}
                   {selectedComponent.blocks.map((block) => (
                     <div key={block.id} className="tplb-mapping-row">
                       <span className="hint">{labelForType(block.type)}</span>
@@ -1219,6 +1446,20 @@ export function TemplateBuilderPage({ toolContext }) {
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
+                  {(selectedEntry.repeatScope || "once") === "per-item" ? (
+                    <div className="tplb-repeat-count-editor">
+                      <span className="hint">Illustrative repetitions</span>
+                      {[5, 10].map((count) => (
+                        <button key={count} className="table-btn" type="button" onClick={() => patchSelectedEntry({ illustrativeRepeatCount: count })}>{count}</button>
+                      ))}
+                      <input
+                        className="table-btn tplb-repeat-input"
+                        value={selectedEntry.illustrativeRepeatCount || ""}
+                        placeholder="Custom"
+                        onChange={(event) => patchSelectedEntry({ illustrativeRepeatCount: event.target.value })}
+                      />
+                    </div>
+                  ) : null}
                   <label className="hint">Data binding
                     <select
                       className="table-btn"
@@ -1426,21 +1667,37 @@ export function TemplateBuilderPage({ toolContext }) {
               {variant.label}
             </label>
           ))}
-          <button className="table-btn" type="button" onClick={addFormatPage}>+ Add format</button>
+          <button className="table-btn" type="button" onClick={() => setShowFormatPopover(true)}>+ Add format</button>
         </div>
-        <div className="tplb-mapping-row">
+        {showFormatPopover ? (
+          <div className="tplb-repeat-count-editor" style={{ marginTop: 0, marginBottom: 12 }}>
+            <span className="hint">Add output format</span>
+            <select className="table-btn" value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
+              {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+            </select>
+            <button className="table-btn primary" type="button" onClick={() => addFormatPage(newFormatType)}>Add</button>
+            <button className="table-btn" type="button" onClick={() => setShowFormatPopover(false)}>Cancel</button>
+          </div>
+        ) : null}
+        <div className="tplb-export-action-row">
           <span>HTML (Continuous)</span>
-          <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Preview</button>
+          <div className="inline-actions" style={{ gap: 8 }}>
+            <button className="table-btn" type="button" onClick={() => openPreview("html")} disabled={isBusyFormat === "preview-html"}>Preview</button>
+            <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download</button>
+          </div>
         </div>
-        <div className="tplb-mapping-row">
+        <div className="tplb-export-action-row">
           <span>PDF ({draft.pageFormat})</span>
-          <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
+          <div className="inline-actions" style={{ gap: 8 }}>
+            <button className="table-btn" type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>Preview</button>
+            <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
+          </div>
         </div>
-        <div className="tplb-mapping-row">
+        <div className="tplb-export-action-row">
           <span>Word</span>
           <button className="table-btn" type="button" onClick={() => handleExport("docx")} disabled={isBusyFormat === "docx"}>Download</button>
         </div>
-        <div className="tplb-mapping-row">
+        <div className="tplb-export-action-row">
           <span>PowerPoint</span>
           <button className="table-btn" type="button" disabled title="Coming soon: requires adding a pptx export dependency (e.g. pptxgenjs).">Coming soon</button>
         </div>

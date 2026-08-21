@@ -207,7 +207,10 @@ function renderDocumentBlocksHtml(blocks = [], template = {}) {
   const containerClass = String(template?.containerClass || "luna-template-default");
   const pageLayouts = Array.isArray(template?.pageLayouts) ? template.pageLayouts : [];
   const activePage = pageLayouts.find((page) => page.id === template?.activePageId) || pageLayouts[0] || null;
-  const layoutBlocks = Array.isArray(activePage?.blocks) ? activePage.blocks : [];
+  const htmlVariant = Array.isArray(template?.renderVariants) ? template.renderVariants.find((variant) => variant.format === "html" && variant.enabled !== false) : null;
+  const layoutBlocks = Array.isArray(htmlVariant?.blocks) && htmlVariant.blocks.length
+    ? htmlVariant.blocks
+    : (Array.isArray(activePage?.blocks) ? activePage.blocks : []);
 
   const renderByType = (block = {}, className = "", position = null) => {
     const classAttr = className ? ` class="${escapeHtml(className)}"` : "";

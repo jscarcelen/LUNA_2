@@ -106,6 +106,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
       }
 
       const value = spec.bindField ? getPath(record, spec.bindField) : "";
+      const fallbackText = String(spec.illustrativeText || entry.illustrativeText || "Content placeholder");
       rendered.push({
         type,
         formatName,
@@ -115,7 +116,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         position: spec.position || entry.position || null,
         pageId: activePage?.id || "page-1",
         hidden: Boolean(spec.hidden || entry.hidden),
-        text: Array.isArray(value) ? value.join(", ") : String(value ?? "")
+        text: value === undefined || value === null || value === ""
+          ? fallbackText
+          : (Array.isArray(value) ? value.join(", ") : String(value))
       });
       }
     }

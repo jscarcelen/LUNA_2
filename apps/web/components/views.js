@@ -4970,7 +4970,6 @@ export function WorkspacesManagerView({
             <button className={workspaceTab === "folders" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("folders")}>📁 Folders</button>
             <button className={workspaceTab === "files" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("files")}>📄 Files</button>
             <button className={workspaceTab === "generated" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("generated")}>🤖 Generated</button>
-            <button className={workspaceTab === "templates" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("templates")}>🧩 Templates</button>
             <button className={workspaceTab === "shared" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("shared")}>👥 Shared With Me</button>
             <button className={workspaceTab === "review-center" ? "workspace-tab on" : "workspace-tab"} type="button" onClick={() => setWorkspaceTab("review-center")}>🛡️ Review Center</button>
           </div>

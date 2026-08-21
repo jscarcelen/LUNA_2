@@ -2837,6 +2837,51 @@ body {
   gap: 8px;
 }
 
+.tplb-side-nav {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--tplb-line);
+}
+
+.tplb-side-nav .table-btn {
+  display: flex;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.tplb-format-tabs {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--tplb-line);
+}
+
+.tplb-format-tab {
+  border: 1px solid var(--tplb-line);
+  border-radius: 9px;
+  background: #fff;
+  padding: 8px 12px;
+  color: var(--tplb-ink);
+  cursor: pointer;
+}
+
+.tplb-format-tab.on {
+  border-color: #8b78e8;
+  background: var(--tplb-lavender);
+  color: #5542a7;
+  font-weight: 700;
+}
+
+.tplb-format-tab.add {
+  width: 36px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 .tplb-block-btn {
   border: 1px solid var(--tplb-line);
   border-radius: 10px;
@@ -2900,6 +2945,17 @@ body {
   gap: 6px;
   align-items: center;
   margin-top: 7px;
+}
+
+.tplb-mapping-expanded {
+  grid-column: 1 / -1;
+  min-height: 420px;
+}
+
+.tplb-mapping-expanded .tplb-field-editor-row,
+.tplb-mapping-expanded .tplb-field-create-row {
+  grid-template-columns: minmax(140px, 1fr) minmax(160px, 1.2fr) 150px auto auto;
+  padding: 6px 0;
 }
 
 .tplb-component-block-row {

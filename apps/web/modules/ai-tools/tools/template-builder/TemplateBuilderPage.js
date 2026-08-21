@@ -61,10 +61,10 @@ function starterComponents() {
       name: "Question Card",
       description: "Question, answer choices, and explanation.",
       blocks: [
-        { id: createId("blk"), type: "question_number", formatName: "Default", bindField: "question_number" },
-        { id: createId("blk"), type: "heading3", formatName: "Default", bindField: "question" },
-        { id: createId("blk"), type: "answer_choice", formatName: "Default", repeatField: "answers" },
-        { id: createId("blk"), type: "explanation", formatName: "Default", bindField: "explanation" }
+        { id: createId("blk"), type: "question_number", formatName: "Default", bindField: "question_number", illustrativeText: "Q1" },
+        { id: createId("blk"), type: "heading3", formatName: "Default", bindField: "question", illustrativeText: "What is the question?" },
+        { id: createId("blk"), type: "answer_choice", formatName: "Default", repeatField: "answers", illustrativeText: "Answer choice" },
+        { id: createId("blk"), type: "explanation", formatName: "Default", bindField: "explanation", illustrativeText: "Explanation text" }
       ]
     },
     {
@@ -72,8 +72,8 @@ function starterComponents() {
       name: "Section Header",
       description: "Divider with a heading.",
       blocks: [
-        { id: createId("blk"), type: "heading2", formatName: "Default", bindField: "question" },
-        { id: createId("blk"), type: "divider", formatName: "Default" }
+        { id: createId("blk"), type: "heading2", formatName: "Default", bindField: "question", illustrativeText: "Section heading" },
+        { id: createId("blk"), type: "divider", formatName: "Default", illustrativeText: "Section divider" }
       ]
     }
   ];
@@ -160,8 +160,25 @@ function blockEmoji(type) {
   return BLOCK_TYPE_LIBRARY.find((item) => item.type === type)?.emoji || "▪️";
 }
 
-function getSampleKeys(sampleData, arraysOnly) {
-  return Object.keys(sampleData || {}).filter((key) => (arraysOnly ? Array.isArray(sampleData[key]) : !Array.isArray(sampleData[key])));
+function illustrativeText(type) {
+  const examples = {
+    heading1: "Exam title",
+    paragraph: "Write a paragraph of content here.",
+    standalone_text: "Supporting text",
+    bullet_list: "List item",
+    numbered_list: "Numbered item",
+    image: "Image placeholder",
+    table: "Table data",
+    standalone_formula: "x = a + b",
+    divider: "Section divider",
+    badge: "Label",
+    spacer: "Spacing",
+    page_break: "New page",
+    question_number: "Q1",
+    answer_choice: "Answer choice",
+    explanation: "Explanation text"
+  };
+  return examples[type] || "Content placeholder";
 }
 
 function pageRatio(pageFormat) {
@@ -202,8 +219,7 @@ export function TemplateBuilderPage({ toolContext }) {
   const [selectedEntryId, setSelectedEntryId] = useState("");
   const [multiSelectedIds, setMultiSelectedIds] = useState([]);
   const [rightTab, setRightTab] = useState("properties");
-  const [sampleDataText, setSampleDataText] = useState(JSON.stringify(DEFAULT_SAMPLE_DATA, null, 2));
-  const [sampleDataTab, setSampleDataTab] = useState("json");
+  const [sampleDataText] = useState(JSON.stringify(DEFAULT_SAMPLE_DATA, null, 2));
   const [previewHtml, setPreviewHtml] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
@@ -216,6 +232,8 @@ export function TemplateBuilderPage({ toolContext }) {
   const [fieldRequiredDraft, setFieldRequiredDraft] = useState(false);
   const [openBlockMenuId, setOpenBlockMenuId] = useState("");
   const [selectedVariantId, setSelectedVariantId] = useState("variant-pdf");
+  const [collapsedSections, setCollapsedSections] = useState({ blocks: false, components: false, data: true, exports: true });
+  const [mappingExpanded, setMappingExpanded] = useState(false);
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -338,6 +356,7 @@ export function TemplateBuilderPage({ toolContext }) {
         type,
         formatName,
         bindField: "",
+        illustrativeText: illustrativeText(type),
         position: { x: 12, y: 18 + next.canvasBlocks.length * 20, width: 180, height: 14, unit: "mm" }
       };
       next.canvasBlocks = [...next.canvasBlocks, entry];
@@ -350,6 +369,7 @@ export function TemplateBuilderPage({ toolContext }) {
       next.canvasBlocks = [...next.canvasBlocks, {
         id: createId("canvas"),
         componentRefId: componentId,
+        illustrativeText: "Reusable component",
         position: { x: 12, y: 18 + next.canvasBlocks.length * 42, width: 180, height: 38, unit: "mm" }
       }];
       return next;
@@ -366,7 +386,7 @@ export function TemplateBuilderPage({ toolContext }) {
   function addComponentBlock(componentId, type) {
     updateDraft((next) => {
       next.components = (next.components || []).map((component) => component.id === componentId
-        ? { ...component, blocks: [...(component.blocks || []), { id: createId("blk"), type, formatName: "Default", bindField: "" }] }
+          ? { ...component, blocks: [...(component.blocks || []), { id: createId("blk"), type, formatName: "Default", bindField: "", illustrativeText: illustrativeText(type) }] }
         : component);
       return next;
     });
@@ -588,6 +608,16 @@ export function TemplateBuilderPage({ toolContext }) {
           return next;
         });
         setSelectedEntryId("");
+  }
+
+  function addFormatPage() {
+    const pageId = createId("page");
+    const variantId = createId("variant");
+    const nextPage = { id: pageId, name: `Page ${(draft.pageLayouts || []).length + 1}`, pageFormat: "a4-portrait", blocks: cloneDraft(draft.canvasBlocks || []) };
+    const nextVariant = { id: variantId, format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: pageId, blocks: cloneDraft(draft.canvasBlocks || []), enabled: true };
+    updateDraft((next) => ({ ...next, pageLayouts: [...(next.pageLayouts || []), nextPage], renderVariants: [...(next.renderVariants || []), nextVariant], activePageId: pageId, pageFormat: nextPage.pageFormat, canvasBlocks: cloneDraft(nextPage.blocks) }));
+    setSelectedVariantId(variantId);
+    setSelectedEntryId("");
   }
 
   function updateActivePageFormat(pageFormat) {
@@ -966,29 +996,53 @@ export function TemplateBuilderPage({ toolContext }) {
               </label>
             ))}
           </div>
+          <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
+            {(draft.renderVariants || []).map((variant) => (
+              <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
+                {variant.format === "pdf" ? "📄" : variant.format === "docx" ? "📝" : variant.format === "pptx" ? "📊" : "🌐"} {variant.label}
+              </button>
+            ))}
+            <button className="tplb-format-tab add" type="button" onClick={addFormatPage} aria-label="Add document format and page">+</button>
+          </div>
         </div>
       </article>
 
       <div className="tplb-main-grid">
         <article className="panel">
-          <h4 style={{ marginTop: 0 }}>Blocks</h4>
-          <div className="tplb-block-grid">
-            {BLOCK_TYPE_LIBRARY.map((item) => (
-              <button key={item.type} type="button" className="tplb-block-btn" onClick={() => addCanvasBlock(item.type)}>
-                {item.emoji} {item.label}
+          <div className="tplb-side-nav">
+            {["blocks", "components", "data", "exports"].map((section) => (
+              <button key={section} className="table-btn" type="button" onClick={() => {
+                if (section === "data") document.getElementById("tplb-data-mapping")?.scrollIntoView({ behavior: "smooth" });
+                if (section === "exports") document.getElementById("tplb-export-test")?.scrollIntoView({ behavior: "smooth" });
+                setCollapsedSections((previous) => ({ ...previous, [section]: !previous[section] }));
+              }}>
+                {section === "blocks" ? "🧱 Blocks" : section === "components" ? "🧩 Components" : section === "data" ? "🔗 Data & fields" : "📤 Exports"} {collapsedSections[section] ? "▸" : "▾"}
               </button>
             ))}
           </div>
+          {!collapsedSections.blocks ? <>
+            <h4 style={{ marginTop: 12 }}>Blocks</h4>
+            <div className="tplb-block-grid">
+              {BLOCK_TYPE_LIBRARY.map((item) => (
+                <button key={item.type} type="button" className="tplb-block-btn" onClick={() => addCanvasBlock(item.type)}>
+                  {item.emoji} {item.label}
+                </button>
+              ))}
+            </div>
+          </> : null}
+          {!collapsedSections.components ? <>
           <h4>Components</h4>
           {draft.components.map((component) => (
             <div key={component.id} className={`tplb-component-card ${componentEditorId === component.id ? "selected" : ""}`}>
               <button className="tplb-component-open" type="button" onClick={() => addComponentToCanvas(component.id)}>
-                <strong>{component.name}</strong>
+                <strong>🧩 {component.name}</strong>
                 <span>{component.blocks.length} blocks &middot; click to insert</span>
               </button>
-              <button className="table-btn" type="button" onClick={() => setComponentEditorId(component.id)}>Edit</button>
+              <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === `component:${component.id}` ? "" : `component:${component.id}`)}>•••</button>
+              {openBlockMenuId === `component:${component.id}` ? <div className="tplb-block-menu"><button type="button" onClick={() => { setComponentEditorId(component.id); setOpenBlockMenuId(""); }}>Edit</button><button type="button" onClick={() => { updateDraft((next) => ({ ...next, components: [...next.components, { ...component, id: createId("comp"), name: `${component.name} Copy` }] })); setOpenBlockMenuId(""); }}>Duplicate</button><button type="button" onClick={() => { deleteComponent(component.id); setOpenBlockMenuId(""); }}>Delete</button></div> : null}
             </div>
           ))}
+          </> : null}
           <button
             className="table-btn"
             type="button"
@@ -1077,7 +1131,7 @@ export function TemplateBuilderPage({ toolContext }) {
                     </label>
                     <div style={{ flex: 1 }}>
                       <strong>{isComponent ? "🧩" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : summarizeBinding(entry)} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
+                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
                     </div>
                     <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
                       <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>↑</button>
@@ -1289,8 +1343,11 @@ export function TemplateBuilderPage({ toolContext }) {
       </div>
 
       <div className="tplb-bottom-grid">
-        <article className="panel">
-          <h4 style={{ marginTop: 0 }}>Data Fields &amp; Mapping</h4>
+        <article id="tplb-data-mapping" className={mappingExpanded ? "panel tplb-mapping-expanded" : "panel"}>
+          <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+            <h4 style={{ marginTop: 0 }}>Data Fields &amp; Mapping</h4>
+            <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
+          </div>
           <p className="hint">These are the contract between this template and uploaded material or an AI Agent output.</p>
           {(draft.dataFields || []).map((field) => (
             <div className="tplb-field-editor-row" key={field.id}>
@@ -1316,38 +1373,7 @@ export function TemplateBuilderPage({ toolContext }) {
           {mappingRows.map((row) => <div key={row.key} className="tplb-mapping-row"><span className="hint">{row.label}</span><span className="hint">{summarizeBinding(row.spec)}</span></div>)}
         </article>
 
-        <article className="panel">
-          <h4 style={{ marginTop: 0 }}>Sample Preview</h4>
-          <div className="inline-actions" style={{ gap: 8 }}>
-            <button className={`table-btn ${sampleDataTab === "json" ? "primary" : ""}`} type="button" onClick={() => setSampleDataTab("json")}>JSON</button>
-            <button className={`table-btn ${sampleDataTab === "table" ? "primary" : ""}`} type="button" onClick={() => setSampleDataTab("table")}>Table</button>
-            <button className="table-btn" type="button" onClick={handleRefreshPreview}>Refresh preview</button>
-          </div>
-          {sampleDataTab === "json" ? (
-            <textarea
-              className="table-btn"
-              style={{ width: "100%", minHeight: 140, marginTop: 8, fontFamily: "monospace" }}
-              value={sampleDataText}
-              onChange={(event) => setSampleDataText(event.target.value)}
-            />
-          ) : (
-            <div style={{ marginTop: 8 }}>
-              {Object.entries(sampleData).map(([key, value]) => (
-                <div key={key} className="tplb-mapping-row">
-                  <span className="hint">{key}</span>
-                  <span className="hint">{Array.isArray(value) ? value.join(", ") : String(value)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {previewHtml ? (
-            <div style={{ marginTop: 10, border: "1px solid var(--tplb-line)", borderRadius: 10, padding: 10, maxHeight: 260, overflow: "auto", background: "#fff" }}
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
-            />
-          ) : null}
-        </article>
-
-        <article className="panel">
+        <article id="tplb-export-test" className="panel">
           <h4 style={{ marginTop: 0 }}>Export &amp; Test</h4>
           <div className="tplb-mapping-row">
             <span>HTML (Continuous)</span>

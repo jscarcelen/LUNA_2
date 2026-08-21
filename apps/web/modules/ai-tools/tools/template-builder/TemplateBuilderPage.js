@@ -234,6 +234,11 @@ export function TemplateBuilderPage({ toolContext }) {
   const [selectedVariantId, setSelectedVariantId] = useState("variant-pdf");
   const [collapsedSections, setCollapsedSections] = useState({ blocks: false, components: false, data: true, exports: true });
   const [mappingExpanded, setMappingExpanded] = useState(false);
+  const [showOverflowMenu, setShowOverflowMenu] = useState(false);
+  const [showComponentPopover, setShowComponentPopover] = useState(false);
+  const [newComponentName, setNewComponentName] = useState("");
+  const [newComponentBase, setNewComponentBase] = useState("table");
+  const [zoomLevel, setZoomLevel] = useState(100);
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -717,6 +722,24 @@ export function TemplateBuilderPage({ toolContext }) {
     setMultiSelectedIds([]);
   }
 
+  function createNamedComponent() {
+    const name = newComponentName.trim();
+    if (!name) return;
+    updateDraft((next) => {
+      const newComponent = {
+        id: createId("comp"),
+        name,
+        description: `Based on ${labelForType(newComponentBase)}.`,
+        blocks: [{ id: createId("blk"), type: newComponentBase, formatName: "Default", bindField: "", illustrativeText: illustrativeText(newComponentBase) }]
+      };
+      next.components = [...(next.components || []), newComponent];
+      return next;
+    });
+    setNewComponentName("");
+    setNewComponentBase("table");
+    setShowComponentPopover(false);
+  }
+
   function ungroupComponentEntry(entryId) {
     updateDraft((next) => {
       const index = next.canvasBlocks.findIndex((item) => item.id === entryId);
@@ -888,170 +911,138 @@ export function TemplateBuilderPage({ toolContext }) {
 
   return (
     <div className="tplb-tool-page">
-      <article className="panel">
-        <div className="inline-actions" style={{ justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-          <div>
-            <p className="hint" style={{ margin: 0 }}>Templates &gt; {draft.name}</p>
-            <div className="inline-actions" style={{ gap: 8 }}>
-              <h4 style={{ margin: 0 }}>{draft.name}</h4>
+      <header className="tplb-header">
+        <div className="tplb-header-left">
+          <button className="tplb-icon-btn" type="button" aria-label="Back" onClick={() => window.history?.back?.()}>&larr;</button>
+          <div className="tplb-header-title">
+            <div className="inline-actions" style={{ gap: 8, alignItems: "center" }}>
+              <strong>Template Builder</strong>
               <span className="chip" style={{ background: isDirty ? "#fff3cd" : "#e6f6ea", color: isDirty ? "#8a6d1d" : "#1c7a3c" }}>
-                {isDirty ? "Draft" : "Saved"}
+                {isDirty ? "Draft" : "Saved \u2713"}
               </span>
+              <input
+                className="tplb-name-input"
+                value={draft.name}
+                onChange={(event) => updateDraft((next) => ({ ...next, name: event.target.value }))}
+                aria-label="Template name"
+              />
             </div>
-          </div>
-          <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-            <select
-              className="table-btn"
-              value={activeTemplateId}
-              onChange={(event) => {
-                const template = templates.find((item) => item.id === event.target.value);
-                if (template) loadTemplateIntoDraft(template);
-              }}
-            >
-              <option value="">Choose saved template...</option>
-              {templates.map((template) => (
-                <option key={template.id} value={template.id}>{template.name}</option>
-              ))}
-            </select>
-            <button className="table-btn" type="button" onClick={handleNewTemplate}>New Template</button>
-            <button className="table-btn" type="button" onClick={handleUndo} disabled={historyIndex <= 0}>Undo</button>
-            <button className="table-btn" type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>Redo</button>
-            <button className="table-btn" type="button" onClick={handleRefreshPreview}>Preview</button>
-            <button className="table-btn primary" type="button" onClick={handleSaveTemplate} disabled={isSaving}>
-              {isSaving ? "Saving..." : "Save Template"}
-            </button>
+            <p className="hint tplb-header-subtitle">One template &middot; Shared blocks &middot; Export anywhere</p>
           </div>
         </div>
-        <div className="inline-actions" style={{ gap: 10, marginTop: 10, flexWrap: "wrap" }}>
-          <label className="hint">Template name
-            <input
-              className="table-btn"
-              style={{ display: "block", marginTop: 4 }}
-              value={draft.name}
-              onChange={(event) => updateDraft((next) => ({ ...next, name: event.target.value }))}
-            />
-          </label>
-          <label className="hint">Page format
-            <select
-              className="table-btn"
-              style={{ display: "block", marginTop: 4 }}
-              value={draft.pageFormat}
-              onChange={(event) => updateDraft((next) => ({ ...next, pageFormat: event.target.value }))}
-            >
-              {PAGE_FORMAT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
-              ))}
-            </select>
-          </label>
+        <div className="tplb-header-right">
+          <select
+            className="table-btn"
+            value={activeTemplateId}
+            onChange={(event) => {
+              const template = templates.find((item) => item.id === event.target.value);
+              if (template) loadTemplateIntoDraft(template);
+            }}
+          >
+            <option value="">Choose saved template...</option>
+            {templates.map((template) => (
+              <option key={template.id} value={template.id}>{template.name}</option>
+            ))}
+          </select>
+          <button className="table-btn" type="button" onClick={handleUndo} disabled={historyIndex <= 0}>Undo</button>
+          <button className="table-btn" type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>Redo</button>
+          <button className="table-btn" type="button" onClick={handleRefreshPreview}>Preview</button>
+          <button className="table-btn primary" type="button" onClick={handleSaveTemplate} disabled={isSaving}>
+            {isSaving ? "Saving..." : "Save Template"}
+          </button>
+          <div className="tplb-overflow-wrap">
+            <button className="table-btn" type="button" aria-label="More actions" onClick={() => setShowOverflowMenu((previous) => !previous)}>&#8942;</button>
+            {showOverflowMenu ? (
+              <div className="tplb-block-menu">
+                <button type="button" onClick={() => { handleNewTemplate(); setShowOverflowMenu(false); }}>New Template</button>
+                <button type="button" onClick={() => { updateDraft((next) => ({ ...next })); setActiveTemplateId(""); setShowOverflowMenu(false); }}>Save As New</button>
+              </div>
+            ) : null}
+          </div>
         </div>
-        {errorMessage ? <p className="hint" style={{ color: "#b3261e", marginTop: 8 }}>{errorMessage}</p> : null}
-        {statusMessage ? <p className="hint" style={{ color: "#1c7a3c", marginTop: 8 }}>{statusMessage}</p> : null}
-      </article>
+      </header>
 
-      <article className="panel">
-        <div className="inline-actions" style={{ gap: 10, flexWrap: "wrap", justifyContent: "space-between" }}>
-          <div>
-            <h4 style={{ margin: 0 }}>Document Pages &amp; Format Sets</h4>
-            <p className="hint" style={{ margin: "5px 0 0" }}>Build reusable page arrangements for A4 documents and presentation slides. Block formats remain shared across every page.</p>
-          </div>
-          <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
-            <select className="table-btn" value={draft.activePageId} onChange={(event) => selectPageLayout(event.target.value)}>
-              {(draft.pageLayouts || []).map((page) => <option key={page.id} value={page.id}>{page.name} ({page.pageFormat || draft.pageFormat})</option>)}
-            </select>
-            <select className="table-btn" value={draft.pageLayouts.find((page) => page.id === draft.activePageId)?.pageFormat || draft.pageFormat} onChange={(event) => updateActivePageFormat(event.target.value)}>
-              {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <button className="table-btn" type="button" onClick={addPageLayout}>Add Page</button>
-            <select
-              className="table-btn"
-              value={draft.activeFormatSetId || ""}
-              onChange={(event) => updateDraft((next) => ({ ...next, activeFormatSetId: event.target.value }))}
-            >
-              {(draft.formatSets || []).map((formatSet) => <option key={formatSet.id} value={formatSet.id}>{formatSet.name} format set</option>)}
-            </select>
-            <button className="table-btn" type="button" onClick={addFormatSet}>Add Format Set</button>
-            <button className="table-btn" type="button" onClick={captureCurrentFormatsInSet}>Capture Current Formats</button>
-          </div>
-          <div className="tplb-repeat-config">
-            <label className="hint">AI output collection to repeat
-              <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={draft.repeatCollectionField || ""} onChange={(event) => updateDraft((next) => ({ ...next, repeatCollectionField: event.target.value }))}>
-                <option value="">No collection repeat</option>
-                {arrayFields.map((field) => <option key={field.name} value={field.name}>{field.name} ({field.dataType})</option>)}
-              </select>
-            </label>
-            <span className="hint">Set a block to “Once” for headers, and “Per output item” for the question/card block.</span>
-          </div>
-          <div className="tplb-variant-grid">
-            {(draft.renderVariants || []).map((variant) => (
-              <label className="tplb-variant-row" key={variant.id}>
-                <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
-                <strong>{variant.label}</strong>
-                <button className={`table-btn ${selectedVariantId === variant.id ? "primary" : ""}`} type="button" onClick={() => inspectRenderVariant(variant)}>Inspect layout</button>
-                <select className="table-btn" value={variant.pageFormat} onChange={(event) => updateRenderVariant(variant.id, { pageFormat: event.target.value })}>
-                  {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-                <select className="table-btn" value={variant.pageLayoutId || ""} onChange={(event) => updateRenderVariant(variant.id, { pageLayoutId: event.target.value })}>
-                  {(draft.pageLayouts || []).map((page) => <option key={page.id} value={page.id}>{page.name}</option>)}
-                </select>
-              </label>
-            ))}
-          </div>
-          <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
-            {(draft.renderVariants || []).map((variant) => (
-              <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
-                {variant.format === "pdf" ? "📄" : variant.format === "docx" ? "📝" : variant.format === "pptx" ? "📊" : "🌐"} {variant.label}
-              </button>
-            ))}
-            <button className="tplb-format-tab add" type="button" onClick={addFormatPage} aria-label="Add document format and page">+</button>
-          </div>
-        </div>
-      </article>
+      {errorMessage ? <p className="hint tplb-status-error">{errorMessage}</p> : null}
+      {statusMessage ? <p className="hint tplb-status-ok">{statusMessage}</p> : null}
+
+      <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
+        {(draft.renderVariants || []).map((variant) => (
+          <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
+            {variant.format === "pdf" ? "\ud83d\udcc4" : variant.format === "docx" ? "\ud83d\udcdd" : variant.format === "pptx" ? "\ud83d\udcca" : "\ud83c\udf10"} {variant.label}
+          </button>
+        ))}
+        <button className="tplb-format-tab add" type="button" onClick={addFormatPage} aria-label="Add document format and page">+</button>
+      </div>
 
       <div className="tplb-main-grid">
-        <article className="panel">
-          <div className="tplb-side-nav">
-            {["blocks", "components", "data", "exports"].map((section) => (
-              <button key={section} className="table-btn" type="button" onClick={() => {
-                if (section === "data") document.getElementById("tplb-data-mapping")?.scrollIntoView({ behavior: "smooth" });
-                if (section === "exports") document.getElementById("tplb-export-test")?.scrollIntoView({ behavior: "smooth" });
-                setCollapsedSections((previous) => ({ ...previous, [section]: !previous[section] }));
-              }}>
-                {section === "blocks" ? "🧱 Blocks" : section === "components" ? "🧩 Components" : section === "data" ? "🔗 Data & fields" : "📤 Exports"} {collapsedSections[section] ? "▸" : "▾"}
+        <article className="panel tplb-left-panel">
+          <div className="tplb-panel-header">
+            <span className="tplb-panel-title">BLOCKS</span>
+            <button className="tplb-icon-btn" type="button" aria-label="Create component" onClick={() => setShowComponentPopover((previous) => !previous)}>+</button>
+          </div>
+
+          {showComponentPopover ? (
+            <div className="tplb-component-popover">
+              <strong>Create component</strong>
+              <label className="hint">Name
+                <input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={newComponentName} onChange={(event) => setNewComponentName(event.target.value)} placeholder="Financial KPI" />
+              </label>
+              <label className="hint">Based on
+                <select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={newComponentBase} onChange={(event) => setNewComponentBase(event.target.value)}>
+                  {BLOCK_TYPE_LIBRARY.map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}
+                </select>
+              </label>
+              <div className="inline-actions" style={{ justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                <button className="table-btn" type="button" onClick={() => setShowComponentPopover(false)}>Cancel</button>
+                <button className="table-btn primary" type="button" onClick={createNamedComponent} disabled={!newComponentName.trim()}>Create</button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="tplb-block-list">
+            {BLOCK_TYPE_LIBRARY.map((item) => (
+              <button
+                key={item.type}
+                type="button"
+                className="tplb-block-row"
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData("text/tplb-block-type", item.type)}
+                onClick={() => addCanvasBlock(item.type)}
+              >
+                <span className="tplb-block-emoji">{item.emoji}</span>
+                <span>{item.label}</span>
               </button>
             ))}
           </div>
-          {!collapsedSections.blocks ? <>
-            <h4 style={{ marginTop: 12 }}>Blocks</h4>
-            <div className="tplb-block-grid">
-              {BLOCK_TYPE_LIBRARY.map((item) => (
-                <button key={item.type} type="button" className="tplb-block-btn" onClick={() => addCanvasBlock(item.type)}>
-                  {item.emoji} {item.label}
-                </button>
+
+          {(draft.components || []).length ? (
+            <>
+              <div className="tplb-panel-subheader">COMPONENTS</div>
+              {draft.components.map((component) => (
+                <div key={component.id} className={`tplb-component-card ${componentEditorId === component.id ? "selected" : ""}`}>
+                  <button className="tplb-component-open" type="button" onClick={() => addComponentToCanvas(component.id)}>
+                    <strong>{"\ud83e\udde9"} {component.name}</strong>
+                    <span>{component.blocks.length} blocks &middot; click to insert</span>
+                  </button>
+                  <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === `component:${component.id}` ? "" : `component:${component.id}`)}>&bull;&bull;&bull;</button>
+                  {openBlockMenuId === `component:${component.id}` ? (
+                    <div className="tplb-block-menu">
+                      <button type="button" onClick={() => { setComponentEditorId(component.id); setOpenBlockMenuId(""); }}>Edit</button>
+                      <button type="button" onClick={() => { updateDraft((next) => ({ ...next, components: [...next.components, { ...component, id: createId("comp"), name: `${component.name} Copy` }] })); setOpenBlockMenuId(""); }}>Duplicate</button>
+                      <button type="button" onClick={() => { deleteComponent(component.id); setOpenBlockMenuId(""); }}>Delete</button>
+                    </div>
+                  ) : null}
+                </div>
               ))}
-            </div>
-          </> : null}
-          {!collapsedSections.components ? <>
-          <h4>Components</h4>
-          {draft.components.map((component) => (
-            <div key={component.id} className={`tplb-component-card ${componentEditorId === component.id ? "selected" : ""}`}>
-              <button className="tplb-component-open" type="button" onClick={() => addComponentToCanvas(component.id)}>
-                <strong>🧩 {component.name}</strong>
-                <span>{component.blocks.length} blocks &middot; click to insert</span>
-              </button>
-              <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === `component:${component.id}` ? "" : `component:${component.id}`)}>•••</button>
-              {openBlockMenuId === `component:${component.id}` ? <div className="tplb-block-menu"><button type="button" onClick={() => { setComponentEditorId(component.id); setOpenBlockMenuId(""); }}>Edit</button><button type="button" onClick={() => { updateDraft((next) => ({ ...next, components: [...next.components, { ...component, id: createId("comp"), name: `${component.name} Copy` }] })); setOpenBlockMenuId(""); }}>Duplicate</button><button type="button" onClick={() => { deleteComponent(component.id); setOpenBlockMenuId(""); }}>Delete</button></div> : null}
-            </div>
-          ))}
-          </> : null}
-          <button
-            className="table-btn"
-            type="button"
-            onClick={createComponentFromSelection}
-            disabled={multiSelectedIds.length < 2}
-            style={{ width: "100%" }}
-          >
-            Create Component From Selection ({multiSelectedIds.length})
-          </button>
+            </>
+          ) : null}
+
+          {multiSelectedIds.length >= 2 ? (
+            <button className="table-btn" type="button" onClick={createComponentFromSelection} style={{ width: "100%", marginTop: 8 }}>
+              Create Component From Selection ({multiSelectedIds.length})
+            </button>
+          ) : null}
+
           {activeComponentEditor ? (
             <div className="tplb-component-editor">
               <div className="inline-actions" style={{ justifyContent: "space-between" }}>
@@ -1086,76 +1077,97 @@ export function TemplateBuilderPage({ toolContext }) {
               </div>
             </div>
           ) : null}
+
+          <p className="hint tplb-left-hint">Drag blocks onto the canvas or click + to create a new component.</p>
         </article>
 
-        <article className="panel">
-          <div className="inline-actions" style={{ justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-            <h4 style={{ margin: 0 }}>Canvas</h4>
-            <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} · {canvasDisplayPageFormat}</span>
-          </div>
+        <article className="panel tplb-canvas-panel">
           <div className="tplb-canvas-toolbar">
+            <select className="table-btn" value={draft.pageLayouts.find((page) => page.id === draft.activePageId)?.pageFormat || draft.pageFormat} onChange={(event) => updateActivePageFormat(event.target.value)}>
+              {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <div className="tplb-zoom-control">
+              <button className="table-btn" type="button" onClick={() => setZoomLevel((value) => Math.max(50, value - 10))}>-</button>
+              <span className="hint">{zoomLevel}%</span>
+              <button className="table-btn" type="button" onClick={() => setZoomLevel((value) => Math.min(200, value + 10))}>+</button>
+            </div>
             <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
             <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
             <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
             <label className="hint">Grid mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.gridSize || 5} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, gridSize: event.target.value } }))} /></label>
             <label className="hint">Margin mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.margin || 16} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, margin: event.target.value } }))} /></label>
+            <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} &middot; {canvasDisplayPageFormat}</span>
           </div>
-          <div className="tplb-align-toolbar">
-            <span className="hint">Align</span>
-            {[["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]].map(([value, label]) => <button className="table-btn" type="button" key={value} disabled={multiSelectedIds.length < 2} onClick={() => alignSelected(value)}>{label}</button>)}
-            <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("x")}>Distribute H</button>
-            <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("y")}>Distribute V</button>
-          </div>
-          <p className="hint">Select blocks with the checkboxes to align or distribute them. Drag blocks to reposition; drag the corner handle to resize.</p>
-          <div className="tplb-canvas-page" style={canvasPageStyle}>
-            {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
-            {draft.canvasBlocks.length === 0 ? <p className="hint">Canvas is empty. Add a block or component from the left sidebar.</p> : null}
-            {draft.canvasBlocks.map((entry, index) => {
-              const isComponent = Boolean(entry.componentRefId);
-              const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
-              return (
-                <div
-                  key={entry.id}
-                  className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
-                  style={positionToCanvasStyle(entry.position, canvasDisplayPageFormat)}
-                  onPointerDown={(event) => startPointerInteraction(event, entry)}
-                  onClick={() => setSelectedEntryId(entry.id)}
-                >
-                  <div className="tplb-canvas-entry-head">
-                    <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={multiSelectedIds.includes(entry.id)}
-                        onChange={() => toggleMultiSelect(entry.id)}
-                      />
-                    </label>
-                    <div style={{ flex: 1 }}>
-                      <strong>{isComponent ? "🧩" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                      <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
+
+          {multiSelectedIds.length >= 2 ? (
+            <div className="tplb-align-toolbar">
+              <span className="hint">Align</span>
+              {[["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]].map(([value, label]) => <button className="table-btn" type="button" key={value} onClick={() => alignSelected(value)}>{label}</button>)}
+              <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("x")}>Distribute H</button>
+              <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("y")}>Distribute V</button>
+            </div>
+          ) : null}
+
+          <div className="tplb-canvas-scroll">
+            <div
+              className="tplb-canvas-page"
+              style={{ ...canvasPageStyle, transform: `scale(${zoomLevel / 100})`, transformOrigin: "top center" }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                event.preventDefault();
+                const type = event.dataTransfer.getData("text/tplb-block-type");
+                if (type) addCanvasBlock(type);
+              }}
+            >
+              {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
+              {draft.canvasBlocks.length === 0 ? <p className="hint tplb-empty-canvas">Canvas is empty. Add a block or component from the left sidebar.</p> : null}
+              {draft.canvasBlocks.map((entry, index) => {
+                const isComponent = Boolean(entry.componentRefId);
+                const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
+                    style={positionToCanvasStyle(entry.position, canvasDisplayPageFormat)}
+                    onPointerDown={(event) => startPointerInteraction(event, entry)}
+                    onClick={() => setSelectedEntryId(entry.id)}
+                  >
+                    <div className="tplb-canvas-entry-head">
+                      <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={multiSelectedIds.includes(entry.id)}
+                          onChange={() => toggleMultiSelect(entry.id)}
+                        />
+                      </label>
+                      <div style={{ flex: 1 }}>
+                        <strong>{isComponent ? "\ud83e\udde9" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
+                        <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
+                      </div>
+                      <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                        <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>&uarr;</button>
+                        <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>&darr;</button>
+                        <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
+                        {openBlockMenuId === entry.id ? (
+                          <div className="tplb-block-menu">
+                            <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
+                            <button type="button" onClick={() => { copyCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Copy</button>
+                            <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
+                          </div>
+                        ) : null}
+                        {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
+                        {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
+                      </div>
                     </div>
-                    <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                      <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>↑</button>
-                      <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>↓</button>
-                      <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
-                      {openBlockMenuId === entry.id ? (
-                        <div className="tplb-block-menu">
-                          <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
-                          <button type="button" onClick={() => { copyCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Copy</button>
-                          <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
-                        </div>
-                      ) : null}
-                      {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
-                      {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
-                    </div>
+                    <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
                   </div>
-                  <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </article>
 
-        <article className="panel">
+        <article className="panel tplb-right-panel">
           <div className="inline-actions" style={{ gap: 8 }}>
             <button className={`table-btn ${rightTab === "properties" ? "primary" : ""}`} type="button" onClick={() => setRightTab("properties")}>Properties</button>
             <button className={`table-btn ${rightTab === "layers" ? "primary" : ""}`} type="button" onClick={() => setRightTab("layers")}>Layers</button>
@@ -1163,7 +1175,7 @@ export function TemplateBuilderPage({ toolContext }) {
 
           {rightTab === "properties" ? (
             <div style={{ marginTop: 10 }}>
-              {!selectedEntry ? <p className="hint">Select a canvas block to edit its properties.</p> : null}
+              {!selectedEntry ? <p className="hint">Select a block to edit its properties.</p> : null}
 
               {selectedEntry && selectedComponent ? (
                 <div>
@@ -1242,8 +1254,8 @@ export function TemplateBuilderPage({ toolContext }) {
                     </label>
                   </div>
 
-                  <div className="tplb-property-section">
-                    <strong>Layout</strong>
+                  <details className="tplb-property-section">
+                    <summary>Layout</summary>
                     <label className="hint">Layout mode
                       <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.layoutMode || "Flow"} onChange={(event) => patchSelectedEntryStyle({ layoutMode: event.target.value })}>
                         {LAYOUT_MODE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
@@ -1254,10 +1266,10 @@ export function TemplateBuilderPage({ toolContext }) {
                         {VERTICAL_POSITION_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
                       </select>
                     </label>
-                  </div>
+                  </details>
 
-                  <div className="tplb-property-section">
-                    <strong>Constraints</strong>
+                  <details className="tplb-property-section">
+                    <summary>Constraints</summary>
                     <label className="hint" style={{ display: "block" }}>
                       <input type="checkbox" checked={Boolean(selectedFormat?.style?.keepTogether)} onChange={(event) => patchSelectedEntryStyle({ keepTogether: event.target.checked })} /> Keep together
                     </label>
@@ -1274,10 +1286,10 @@ export function TemplateBuilderPage({ toolContext }) {
                         <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.minFontSize || ""} onChange={(event) => patchSelectedEntryStyle({ minFontSize: event.target.value })} />
                       </label>
                     ) : null}
-                  </div>
+                  </details>
 
-                  <div className="tplb-property-section">
-                    <strong>Appearance</strong>
+                  <details className="tplb-property-section" open>
+                    <summary>Typography</summary>
                     <label className="hint">Font family
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.fontFamily || ""} onChange={(event) => patchSelectedEntryStyle({ fontFamily: event.target.value })} />
                     </label>
@@ -1303,6 +1315,17 @@ export function TemplateBuilderPage({ toolContext }) {
                     <label className="hint">Text color
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.color || ""} onChange={(event) => patchSelectedEntryStyle({ color: event.target.value })} />
                     </label>
+                  </details>
+
+                  <details className="tplb-property-section">
+                    <summary>Spacing</summary>
+                    <label className="hint">Padding
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.padding || ""} onChange={(event) => patchSelectedEntryStyle({ padding: event.target.value })} />
+                    </label>
+                  </details>
+
+                  <details className="tplb-property-section">
+                    <summary>Borders &amp; Background</summary>
                     <label className="hint">Background color
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.backgroundColor || ""} onChange={(event) => patchSelectedEntryStyle({ backgroundColor: event.target.value })} />
                     </label>
@@ -1315,10 +1338,12 @@ export function TemplateBuilderPage({ toolContext }) {
                     <label className="hint">Radius
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.radius || ""} onChange={(event) => patchSelectedEntryStyle({ radius: event.target.value })} />
                     </label>
-                    <label className="hint">Padding
-                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedFormat?.style?.padding || ""} onChange={(event) => patchSelectedEntryStyle({ padding: event.target.value })} />
-                    </label>
-                  </div>
+                  </details>
+
+                  <details className="tplb-property-section">
+                    <summary>Conditional Display</summary>
+                    <p className="hint">Show or hide this block using layer visibility controls.</p>
+                  </details>
                 </div>
               ) : null}
             </div>
@@ -1342,63 +1367,90 @@ export function TemplateBuilderPage({ toolContext }) {
         </article>
       </div>
 
-      <div className="tplb-bottom-grid">
-        <article id="tplb-data-mapping" className={mappingExpanded ? "panel tplb-mapping-expanded" : "panel"}>
-          <div className="inline-actions" style={{ justifyContent: "space-between" }}>
-            <h4 style={{ marginTop: 0 }}>Data Fields &amp; Mapping</h4>
-            <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
+      <article id="tplb-data-mapping" className="panel tplb-full-width-section">
+        <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+          <div>
+            <h4 style={{ margin: 0 }}>Data &amp; Mapping</h4>
+            <p className="hint" style={{ margin: "5px 0 0" }}>Connect template blocks to your AI output and data fields.</p>
           </div>
-          <p className="hint">These are the contract between this template and uploaded material or an AI Agent output.</p>
-          {(draft.dataFields || []).map((field) => (
-            <div className="tplb-field-editor-row" key={field.id}>
-              <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
-              <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />
-              <select className="table-btn" value={field.dataType} onChange={(event) => updateDataField(field.id, { dataType: event.target.value })}>
-                {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
-              </select>
-              <label className="hint"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => updateDataField(field.id, { required: event.target.checked })} /> Required</label>
-              <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
-            </div>
-          ))}
-          <div className="tplb-field-create-row">
-            <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
-            <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
-            <select className="table-btn" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
+          <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
+        </div>
+        <h5>Data fields</h5>
+        {(draft.dataFields || []).map((field) => (
+          <div className="tplb-field-editor-row" key={field.id}>
+            <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
+            <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />
+            <select className="table-btn" value={field.dataType} onChange={(event) => updateDataField(field.id, { dataType: event.target.value })}>
               {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
-            <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
-            <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
+            <label className="hint"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => updateDataField(field.id, { required: event.target.checked })} /> Required</label>
+            <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
           </div>
-          <h5>Canvas bindings</h5>
-          {mappingRows.map((row) => <div key={row.key} className="tplb-mapping-row"><span className="hint">{row.label}</span><span className="hint">{summarizeBinding(row.spec)}</span></div>)}
-        </article>
+        ))}
+        <div className="tplb-field-create-row">
+          <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
+          <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
+          <select className="table-btn" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
+            {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+          </select>
+          <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
+          <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
+        </div>
 
-        <article id="tplb-export-test" className="panel">
-          <h4 style={{ marginTop: 0 }}>Export &amp; Test</h4>
-          <div className="tplb-mapping-row">
-            <span>HTML (Continuous)</span>
-            <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Preview</button>
+        <h5>Block &rarr; Data &rarr; Output</h5>
+        <div className="tplb-mapping-table">
+          <div className="tplb-mapping-table-head">
+            <span>Block</span>
+            <span>Data field</span>
+            <span>Type</span>
+            <span>Repeat</span>
           </div>
-          <div className="tplb-mapping-row">
-            <span>PDF ({draft.pageFormat})</span>
-            <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
-          </div>
-          <div className="tplb-mapping-row">
-            <span>Word</span>
-            <button className="table-btn" type="button" onClick={() => handleExport("docx")} disabled={isBusyFormat === "docx"}>Download</button>
-          </div>
-          <div className="tplb-mapping-row">
-            <span>PowerPoint</span>
-            <button className="table-btn" type="button" disabled title="Coming soon: requires adding a pptx export dependency (e.g. pptxgenjs).">Coming soon</button>
-          </div>
-          <button className="table-btn primary" type="button" style={{ width: "100%", marginTop: 8 }} onClick={handleGenerateAllFormats}>
-            Generate all formats
-          </button>
-          <p className="hint" style={{ marginTop: 8 }}>
-            PowerPoint export is not implemented yet \u2014 no pptx generation library is installed in this project. All other formats render from the same underlying template model.
-          </p>
-        </article>
-      </div>
+          {mappingRows.map((row) => (
+            <div key={row.key} className="tplb-mapping-table-row">
+              <span>{row.label}</span>
+              <span>{summarizeBinding(row.spec)}</span>
+              <span>{row.spec.repeatField ? (templateFields.find((field) => field.name === row.spec.repeatField)?.dataType || "array") : (templateFields.find((field) => field.name === row.spec.bindField)?.dataType || "\u2014")}</span>
+              <span>{row.spec.repeatField ? "Yes" : "No"}</span>
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article id="tplb-export-test" className="panel tplb-full-width-section">
+        <h4 style={{ marginTop: 0 }}>Export &amp; Output</h4>
+        <p className="hint" style={{ margin: "5px 0 12px" }}>Choose which formats this template can export.</p>
+        <div className="tplb-export-format-row">
+          {(draft.renderVariants || []).map((variant) => (
+            <label key={variant.id} className="tplb-export-format-chip">
+              <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
+              {variant.label}
+            </label>
+          ))}
+          <button className="table-btn" type="button" onClick={addFormatPage}>+ Add format</button>
+        </div>
+        <div className="tplb-mapping-row">
+          <span>HTML (Continuous)</span>
+          <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Preview</button>
+        </div>
+        <div className="tplb-mapping-row">
+          <span>PDF ({draft.pageFormat})</span>
+          <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
+        </div>
+        <div className="tplb-mapping-row">
+          <span>Word</span>
+          <button className="table-btn" type="button" onClick={() => handleExport("docx")} disabled={isBusyFormat === "docx"}>Download</button>
+        </div>
+        <div className="tplb-mapping-row">
+          <span>PowerPoint</span>
+          <button className="table-btn" type="button" disabled title="Coming soon: requires adding a pptx export dependency (e.g. pptxgenjs).">Coming soon</button>
+        </div>
+        <button className="table-btn primary" type="button" style={{ width: "100%", marginTop: 8 }} onClick={handleGenerateAllFormats}>
+          Generate all formats
+        </button>
+        <p className="hint" style={{ marginTop: 8 }}>
+          PowerPoint export is not implemented yet &mdash; no pptx generation library is installed in this project. All other formats render from the same underlying template model.
+        </p>
+      </article>
     </div>
   );
 }

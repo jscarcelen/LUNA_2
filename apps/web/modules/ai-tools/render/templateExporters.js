@@ -58,6 +58,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
   const collection = template.repeatCollectionField ? getPath(sampleData, template.repeatCollectionField) : null;
   const outputRecords = Array.isArray(collection) && collection.length ? collection : [sampleData];
   const hasOutputCollection = Array.isArray(collection);
+  const normalizeRepeatScope = (scope = "once") => scope === "per-item" ? "per-output" : scope;
 
   function expandEntry(entry) {
     if (entry.componentRefId) {
@@ -96,14 +97,15 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
     const entryStackGap = 6;
     const entrySpan = Math.max(14, maxBottom - baseY) + entryStackGap;
     for (const spec of expandedSpecs) {
-      const repeatScope = spec.repeatScope || entry.repeatScope || "once";
-      const records = repeatScope === "per-item" && hasOutputCollection ? outputRecords : [sampleData];
+      const repeatScope = normalizeRepeatScope(spec.repeatScope || entry.repeatScope || "once");
+      const records = repeatScope === "per-output" && hasOutputCollection ? outputRecords : [sampleData];
       for (const [recordIndex, record] of records.entries()) {
       const type = String(spec.type || "paragraph");
       const formatName = String(spec.formatName || "");
       const format = resolveFormat(type, formatName);
       const className = format?.className || blockClasses[type] || "";
       const style = format?.style && typeof format.style === "object" ? format.style : {};
+      const isAbsolute = String(style.layoutMode || "").toLowerCase() === "absolute";
       const htmlTemplate = String(format?.htmlTemplate || "");
       const specPosition = spec.position || entry.position || null;
       const blockMetrics = positionMetrics(specPosition || {});
@@ -112,7 +114,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         ? shiftPosition(specPosition, recordIndex * entrySpan)
         : null;
 
-      if (spec.repeatField) {
+      if (repeatScope === "per-field" || spec.repeatField) {
         const values = getPath(record, spec.repeatField);
         const items = Array.isArray(values) ? values : [];
         items.forEach((value, index) => {
@@ -122,7 +124,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
             className,
             style,
             htmlTemplate,
-            position: repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
+            position: isAbsolute && repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
             pageId: activePage?.id || "page-1",
             hidden: Boolean(spec.hidden || entry.hidden),
             text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
@@ -141,7 +143,7 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
         className,
         style,
         htmlTemplate,
-        position: repeatedPosition,
+        position: isAbsolute ? repeatedPosition : null,
         pageId: activePage?.id || "page-1",
         hidden: Boolean(spec.hidden || entry.hidden),
         text: value === undefined || value === null || value === ""

@@ -45,7 +45,9 @@ const OVERFLOW_OPTIONS = ["Expand height", "Reduce font size", "Clip", "Continue
 const DATA_TYPE_OPTIONS = ["string", "number", "boolean", "array", "object"];
 const REPEAT_SCOPE_OPTIONS = [
   { value: "once", label: "Once per document" },
-  { value: "per-item", label: "Repeat for each output item" }
+  { value: "per-page", label: "Once per page" },
+  { value: "per-output", label: "Repeat for each AI output item" },
+  { value: "per-field", label: "Repeat for each item in variable" }
 ];
 
 const DEFAULT_SAMPLE_DATA = {
@@ -90,10 +92,10 @@ function starterComponents() {
       name: "Question Card",
       description: "Question, answer choices, and explanation.",
       blocks: [
-        { id: createId("blk"), type: "question_number", formatName: "Default", bindField: "question_number", illustrativeText: "Q1" },
-        { id: createId("blk"), type: "heading3", formatName: "Default", bindField: "question", illustrativeText: "What is the question?" },
-        { id: createId("blk"), type: "answer_choice", formatName: "Default", repeatField: "answers", illustrativeText: "Answer choice" },
-        { id: createId("blk"), type: "explanation", formatName: "Default", bindField: "explanation", illustrativeText: "Explanation text" }
+        { id: createId("blk"), type: "question_number", formatName: "Default", bindField: "", illustrativeText: "Q1" },
+        { id: createId("blk"), type: "heading3", formatName: "Default", bindField: "", illustrativeText: "What is the question?" },
+        { id: createId("blk"), type: "answer_choice", formatName: "Default", repeatField: "", illustrativeText: "Answer choice" },
+        { id: createId("blk"), type: "explanation", formatName: "Default", bindField: "", illustrativeText: "Explanation text" }
       ]
     },
     {
@@ -101,15 +103,11 @@ function starterComponents() {
       name: "Section Header",
       description: "Divider with a heading.",
       blocks: [
-        { id: createId("blk"), type: "heading2", formatName: "Default", bindField: "question", illustrativeText: "Section heading" },
+        { id: createId("blk"), type: "heading2", formatName: "Default", bindField: "", illustrativeText: "Section heading" },
         { id: createId("blk"), type: "divider", formatName: "Default", illustrativeText: "Section divider" }
       ]
     }
   ];
-}
-
-function starterCanvasBlocks(components) {
-  return [{ id: createId("canvas"), componentRefId: components[0]?.id || "" }];
 }
 
 function defaultFormatSets() {
@@ -121,12 +119,7 @@ function defaultPageLayouts(canvasBlocks = []) {
 }
 
 function defaultDataFields() {
-  return [
-    { id: "field-question-number", name: "question_number", label: "Question number", dataType: "number", required: false },
-    { id: "field-question", name: "question", label: "Question", dataType: "string", required: true },
-    { id: "field-answers", name: "answers", label: "Answer choices", dataType: "array", required: false },
-    { id: "field-explanation", name: "explanation", label: "Explanation", dataType: "string", required: false }
-  ];
+  return [];
 }
 
 function defaultRenderVariants() {
@@ -177,12 +170,6 @@ function cloneDraft(draft) {
 
 function labelForType(type) {
   return BLOCK_TYPE_LIBRARY.find((item) => item.type === type)?.label || type;
-}
-
-function summarizeBinding(spec) {
-  if (spec.repeatField) return `Repeats over "${spec.repeatField}"`;
-  if (spec.bindField) return `Bound to "${spec.bindField}"`;
-  return "Not mapped";
 }
 
 function blockEmoji(type) {
@@ -239,6 +226,18 @@ function pageRatio(pageFormat) {
   return ratios[pageFormat] || 297 / 210;
 }
 
+function normalizeRepeatScope(scope = "once") {
+  return scope === "per-item" ? "per-output" : scope;
+}
+
+function repeatBadgeLabel(scope = "once") {
+  const normalized = normalizeRepeatScope(scope);
+  if (normalized === "per-page") return "PAGE";
+  if (normalized === "per-output") return "EACH ITEM";
+  if (normalized === "per-field") return "EACH IN VARIABLE";
+  return "DOCUMENT";
+}
+
 function positionToCanvasStyle(position = {}, pageFormat = "a4-portrait") {
   const pageWidth = pageFormat === "a4-landscape" || pageFormat === "letter-landscape" || pageFormat.startsWith("ppt-") ? 297 : 210;
   const pageHeight = pageWidth * pageRatio(pageFormat);
@@ -287,10 +286,16 @@ export function TemplateBuilderPage({ toolContext }) {
   const [newFormatType, setNewFormatType] = useState("pdf");
   const [activeBuilderView, setActiveBuilderView] = useState("design");
   const [selectedStructureEntryId, setSelectedStructureEntryId] = useState("");
+  const [insertMenuIndex, setInsertMenuIndex] = useState(-1);
   const [zoomLevel, setZoomLevel] = useState(100);
-  const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const [previewFormat, setPreviewFormat] = useState("html");
   const [previewPdfUrl, setPreviewPdfUrl] = useState("");
+  const [showQuickVariableCreator, setShowQuickVariableCreator] = useState(false);
+  const [quickVariableName, setQuickVariableName] = useState("");
+  const [quickVariableLabel, setQuickVariableLabel] = useState("");
+  const [quickVariableType, setQuickVariableType] = useState("string");
+  const [quickVariableRequired, setQuickVariableRequired] = useState(true);
+  const [quickVariableDescription, setQuickVariableDescription] = useState("");
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -408,12 +413,11 @@ export function TemplateBuilderPage({ toolContext }) {
     setMultiSelectedIds([]);
     setPreviewHtml("");
     setPreviewPdfUrl("");
-    setShowPreviewPanel(false);
   }
 
   function handleNewTemplate() {
     const nextDraft = createBlankTemplateDraft();
-    nextDraft.canvasBlocks = starterCanvasBlocks(nextDraft.components);
+    nextDraft.canvasBlocks = [];
     setDraft(nextDraft);
     setActiveTemplateId("");
     setHistory([cloneDraft(nextDraft)]);
@@ -423,38 +427,60 @@ export function TemplateBuilderPage({ toolContext }) {
     setMultiSelectedIds([]);
     setPreviewHtml("");
     setPreviewPdfUrl("");
-    setShowPreviewPanel(false);
   }
 
-  function addCanvasBlock(type) {
+  function createCanvasEntry(type, index = 0) {
+    const fallbackY = 18 + index * 20;
+    return {
+      id: createId("canvas"),
+      type,
+      formatName: "Default",
+      bindField: "",
+      repeatField: "",
+      repeatScope: "once",
+      layoutMode: "Flow",
+      illustrativeText: illustrativeText(type),
+      position: { x: 12, y: fallbackY, width: 180, height: 14, unit: "mm" }
+    };
+  }
+
+  function insertCanvasBlockAt(type, insertAt = -1) {
     updateDraft((next) => {
-      const formatName = next.blockFormats[type]?.[0]?.name || "Default";
       if (!next.blockFormats[type]) {
         next.blockFormats[type] = [{ name: "Default", className: `tplb-${type}`, htmlTemplate: "", style: {} }];
       }
-      const entry = {
-        id: createId("canvas"),
-        type,
-        formatName,
-        bindField: "",
-        illustrativeText: illustrativeText(type),
-        position: { x: 12, y: 18 + next.canvasBlocks.length * 20, width: 180, height: 14, unit: "mm" }
-      };
-      next.canvasBlocks = [...next.canvasBlocks, entry];
+      const index = insertAt < 0 ? next.canvasBlocks.length : Math.max(0, Math.min(insertAt, next.canvasBlocks.length));
+      const formatName = next.blockFormats[type]?.[0]?.name || "Default";
+      const entry = { ...createCanvasEntry(type, index), formatName };
+      next.canvasBlocks.splice(index, 0, entry);
       return next;
     });
+    setSelectedEntryId("");
+    setInsertMenuIndex(-1);
+  }
+
+  function addCanvasBlock(type) {
+    const currentIndex = selectedEntryId ? draft.canvasBlocks.findIndex((entry) => entry.id === selectedEntryId) : -1;
+    const insertAt = currentIndex >= 0 ? currentIndex + 1 : -1;
+    insertCanvasBlockAt(type, insertAt);
   }
 
   function addComponentToCanvas(componentId) {
     updateDraft((next) => {
-      next.canvasBlocks = [...next.canvasBlocks, {
+      const currentIndex = selectedEntryId ? next.canvasBlocks.findIndex((entry) => entry.id === selectedEntryId) : -1;
+      const insertAt = currentIndex >= 0 ? currentIndex + 1 : next.canvasBlocks.length;
+      next.canvasBlocks.splice(insertAt, 0, {
         id: createId("canvas"),
         componentRefId: componentId,
+        repeatScope: "once",
+        repeatField: "",
+        layoutMode: "Flow",
         illustrativeText: "Reusable component",
-        position: { x: 12, y: 18 + next.canvasBlocks.length * 42, width: 180, height: 38, unit: "mm" }
-      }];
+        position: { x: 12, y: 18 + insertAt * 42, width: 180, height: 38, unit: "mm" }
+      });
       return next;
     });
+    setInsertMenuIndex(-1);
   }
 
   function updateComponent(componentId, patch) {
@@ -504,12 +530,61 @@ export function TemplateBuilderPage({ toolContext }) {
     setFieldRequiredDraft(false);
   }
 
+  function createDataFieldDirect({
+    name,
+    label,
+    dataType = "string",
+    required = true,
+    description = ""
+  }) {
+    const normalized = String(name || "").trim().replace(/\s+/g, "_");
+    if (!normalized) return "";
+    const existing = (draft.dataFields || []).find((field) => field.name === normalized);
+    if (existing) return existing.name;
+    updateDraft((next) => ({
+      ...next,
+      dataFields: [...(next.dataFields || []), {
+        id: createId("field"),
+        name: normalized,
+        label: String(label || normalized).trim() || normalized,
+        dataType,
+        required: Boolean(required),
+        description: String(description || "").trim()
+      }]
+    }));
+    return normalized;
+  }
+
+  function openQuickVariableCreator(defaults = {}) {
+    setQuickVariableName(defaults.name || "");
+    setQuickVariableLabel(defaults.label || defaults.name || "");
+    setQuickVariableType(defaults.dataType || "string");
+    setQuickVariableRequired(defaults.required ?? true);
+    setQuickVariableDescription(defaults.description || "");
+    setShowQuickVariableCreator(true);
+  }
+
   function updateDataField(fieldId, patch) {
     updateDraft((next) => ({ ...next, dataFields: (next.dataFields || []).map((field) => field.id === fieldId ? { ...field, ...patch } : field) }));
   }
 
   function deleteDataField(fieldId) {
     updateDraft((next) => ({ ...next, dataFields: (next.dataFields || []).filter((field) => field.id !== fieldId) }));
+  }
+
+  function createVariableForSelectedBlock() {
+    const createdName = createDataFieldDirect({
+      name: quickVariableName,
+      label: quickVariableLabel,
+      dataType: quickVariableType,
+      required: quickVariableRequired,
+      description: quickVariableDescription
+    });
+    if (!createdName || !selectedEntryId) return;
+    const selectedScope = normalizeRepeatScope(selectedEntry?.repeatScope || "once");
+    if (selectedScope === "per-field") patchSelectedEntry({ repeatField: createdName, bindField: "" });
+    else patchSelectedEntry({ bindField: createdName, repeatField: selectedScope === "per-output" ? selectedEntry?.repeatField || "" : "" });
+    setShowQuickVariableCreator(false);
   }
 
   function updatePositionFromPointer(event, mode = "move") {
@@ -810,19 +885,19 @@ export function TemplateBuilderPage({ toolContext }) {
         const component = (draft.components || []).find((item) => item.id === entry.componentRefId);
         for (const block of component?.blocks || []) {
           specs.push({
-            repeatScope: block.repeatScope || entry.repeatScope || "once",
+            repeatScope: normalizeRepeatScope(block.repeatScope || entry.repeatScope || "once"),
             illustrativeRepeatCount: Number(block.illustrativeRepeatCount || entry.illustrativeRepeatCount || 0)
           });
         }
       } else {
         specs.push({
-          repeatScope: entry.repeatScope || "once",
+          repeatScope: normalizeRepeatScope(entry.repeatScope || "once"),
           illustrativeRepeatCount: Number(entry.illustrativeRepeatCount || 0)
         });
       }
     }
     const counts = specs
-      .filter((item) => item.repeatScope === "per-item")
+      .filter((item) => item.repeatScope === "per-output" || item.repeatScope === "per-field")
       .map((item) => Math.max(0, item.illustrativeRepeatCount || 0))
       .filter(Boolean);
     return counts.length ? Math.max(...counts) : 0;
@@ -855,7 +930,7 @@ export function TemplateBuilderPage({ toolContext }) {
         formatName: block.formatName,
         bindField: block.bindField,
         repeatField: block.repeatField,
-        repeatScope: entry.repeatScope || block.repeatScope || "once",
+        repeatScope: normalizeRepeatScope(entry.repeatScope || block.repeatScope || "once"),
         position: {
           ...groupPosition,
           y: Number(groupPosition.y || 0) + childIndex * childHeight,
@@ -880,24 +955,19 @@ export function TemplateBuilderPage({ toolContext }) {
 
   function addStructureBlock(kind = "content") {
     const type = kind === "page_break" ? "page_break" : kind === "section" ? "heading1" : "paragraph";
+    const currentIndex = selectedStructureEntryId ? draft.canvasBlocks.findIndex((entry) => entry.id === selectedStructureEntryId) : -1;
+    const insertAt = currentIndex >= 0 ? currentIndex + 1 : -1;
     updateDraft((next) => {
-      const formatName = next.blockFormats[type]?.[0]?.name || "Default";
       if (!next.blockFormats[type]) {
         next.blockFormats[type] = [{ name: "Default", className: `tplb-${type}`, htmlTemplate: "", style: {} }];
       }
-      const entry = {
-        id: createId("canvas"),
-        type,
-        formatName,
-        bindField: "",
-        repeatField: "",
-        repeatScope: kind === "repeating" ? "per-item" : "once",
-        illustrativeText: illustrativeText(type),
-        position: { x: 12, y: 18 + next.canvasBlocks.length * 20, width: 180, height: 14, unit: "mm" }
-      };
-      next.canvasBlocks = [...next.canvasBlocks, entry];
+      const index = insertAt < 0 ? next.canvasBlocks.length : Math.max(0, Math.min(insertAt, next.canvasBlocks.length));
+      const formatName = next.blockFormats[type]?.[0]?.name || "Default";
+      const entry = { ...createCanvasEntry(type, index), formatName, repeatScope: kind === "repeating" ? "per-output" : "once" };
+      next.canvasBlocks.splice(index, 0, entry);
       return next;
     });
+    setInsertMenuIndex(-1);
   }
 
   async function requestRender(format) {
@@ -923,7 +993,6 @@ export function TemplateBuilderPage({ toolContext }) {
 
   async function openPreview(format = "html") {
     setErrorMessage("");
-    setShowPreviewPanel(true);
     setPreviewFormat(format);
     setIsBusyFormat(`preview-${format}`);
     try {
@@ -1071,22 +1140,11 @@ export function TemplateBuilderPage({ toolContext }) {
     ? (draft.blockFormats[selectedEntry.type] || []).find((item) => item.name === selectedEntry.formatName)
     : null;
 
-  const mappingRows = [];
-  draft.canvasBlocks.forEach((entry) => {
-    if (entry.componentRefId) {
-      const component = draft.components.find((item) => item.id === entry.componentRefId);
-      (component?.blocks || []).forEach((block) => {
-        mappingRows.push({ key: block.id, label: `${component.name} \u2192 ${labelForType(block.type)}`, componentId: component.id, childId: block.id, spec: block });
-      });
-    } else {
-      mappingRows.push({ key: entry.id, label: labelForType(entry.type), entryId: entry.id, spec: entry });
-    }
-  });
   const structureItems = draft.canvasBlocks.map((entry, index) => {
     const isComponent = Boolean(entry.componentRefId);
     const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
     const label = isComponent ? (component?.name || "Component") : labelForType(entry.type);
-    const repeatScope = entry.repeatScope || "once";
+    const repeatScope = normalizeRepeatScope(entry.repeatScope || "once");
     return {
       id: entry.id,
       index,
@@ -1100,18 +1158,41 @@ export function TemplateBuilderPage({ toolContext }) {
   });
   const selectedStructureItem = structureItems.find((item) => item.id === selectedStructureEntryId) || null;
   const allTemplateFields = Array.isArray(draft.dataFields) ? draft.dataFields : [];
-  const usedFieldNames = new Set();
-  if (draft.repeatCollectionField) usedFieldNames.add(String(draft.repeatCollectionField));
-  mappingRows.forEach((row) => {
-    if (row.spec.bindField) usedFieldNames.add(String(row.spec.bindField));
-    if (row.spec.repeatField) usedFieldNames.add(String(row.spec.repeatField));
-  });
-  const templateFields = usedFieldNames.size
-    ? allTemplateFields.filter((field) => usedFieldNames.has(field.name))
-    : allTemplateFields;
+  const templateFields = allTemplateFields;
   const scalarFields = allTemplateFields.filter((field) => field.dataType !== "array" && field.dataType !== "object");
   const arrayFields = allTemplateFields.filter((field) => field.dataType === "array");
   const activeComponentEditor = (draft.components || []).find((component) => component.id === componentEditorId) || null;
+
+  function isAbsoluteEntry(entry) {
+    if (!entry) return false;
+    if (entry.layoutMode === "Absolute") return true;
+    if (entry.componentRefId) return false;
+    const format = (draft.blockFormats[entry.type] || []).find((item) => item.name === entry.formatName);
+    return (format?.style?.layoutMode || "Flow") === "Absolute";
+  }
+
+  const canvasGroups = useMemo(() => {
+    const groups = [];
+    for (const entry of draft.canvasBlocks || []) {
+      const scope = normalizeRepeatScope(entry.repeatScope || "once");
+      const repeatKey = (scope === "per-output" || scope === "per-field") ? `${scope}:${entry.repeatField || ""}` : "";
+      const isRepeatGroup = Boolean(repeatKey);
+      const last = groups[groups.length - 1];
+      if (isRepeatGroup && last?.kind === "repeat-group" && last.repeatKey === repeatKey) {
+        last.entries.push(entry);
+      } else if (isRepeatGroup) {
+        groups.push({ kind: "repeat-group", repeatKey, scope, repeatField: entry.repeatField || "", entries: [entry] });
+      } else {
+        groups.push({ kind: "single", entries: [entry] });
+      }
+    }
+    return groups;
+  }, [draft.canvasBlocks]);
+  const canvasEntryIndexMap = useMemo(() => {
+    const map = new Map();
+    (draft.canvasBlocks || []).forEach((entry, index) => map.set(entry.id, index));
+    return map;
+  }, [draft.canvasBlocks]);
 
   const selectedVariant = (draft.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
   const canvasDisplayPageFormat = selectedVariant?.pageFormat || draft.pageFormat;
@@ -1121,7 +1202,7 @@ export function TemplateBuilderPage({ toolContext }) {
     margin: "0 auto",
     aspectRatio: `1 / ${pageRatio(canvasDisplayPageFormat)}`,
     minHeight: 520,
-    overflow: "hidden",
+    overflow: "visible",
     padding: 0,
     background: "#fff",
     backgroundImage: draft.canvasSettings?.showGrid
@@ -1203,7 +1284,7 @@ export function TemplateBuilderPage({ toolContext }) {
         <button className={`table-btn ${activeBuilderView === "preview" ? "primary" : ""}`} type="button" onClick={() => { setActiveBuilderView("preview"); if (!previewHtml && !previewPdfUrl) openPreview("html"); }}>Preview</button>
       </nav>
 
-      {(activeBuilderView === "preview" || showPreviewPanel) ? (
+      {activeBuilderView === "preview" ? (
         <section className="panel tplb-preview-panel">
           <div className="tplb-preview-header">
             <div>
@@ -1215,7 +1296,7 @@ export function TemplateBuilderPage({ toolContext }) {
               <button className={`table-btn ${previewFormat === "pdf" ? "primary" : ""}`} type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>PDF Preview</button>
               <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download HTML</button>
               <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download PDF</button>
-              <button className="table-btn" type="button" onClick={() => { setShowPreviewPanel(false); setActiveBuilderView("design"); }}>Close</button>
+              <button className="table-btn" type="button" onClick={() => setActiveBuilderView("design")}>Close</button>
             </div>
           </div>
           <div className="tplb-preview-surface">
@@ -1358,7 +1439,7 @@ export function TemplateBuilderPage({ toolContext }) {
             </div>
           ) : null}
 
-          <p className="hint tplb-left-hint">Drag blocks onto the canvas or click + to create a new component.</p>
+          <p className="hint tplb-left-hint">Select a block in the flow and click + Add block to insert after it. Dragging is optional.</p>
         </article>
 
         <article className="panel tplb-canvas-panel">
@@ -1400,49 +1481,85 @@ export function TemplateBuilderPage({ toolContext }) {
               }}
             >
               {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
-              {draft.canvasBlocks.length === 0 ? <p className="hint tplb-empty-canvas">Canvas is empty. Add a block or component from the left sidebar.</p> : null}
-              {draft.canvasBlocks.map((entry, index) => {
-                const isComponent = Boolean(entry.componentRefId);
-                const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
-                return (
-                  <div
-                    key={entry.id}
-                    className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""}`}
-                    style={positionToCanvasStyle(entry.position, canvasDisplayPageFormat)}
-                    onPointerDown={(event) => startPointerInteraction(event, entry)}
-                    onClick={() => setSelectedEntryId(entry.id)}
-                  >
-                    <div className="tplb-canvas-entry-head">
-                      <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={multiSelectedIds.includes(entry.id)}
-                          onChange={() => toggleMultiSelect(entry.id)}
-                        />
-                      </label>
-                      <div style={{ flex: 1 }}>
-                        <strong>{isComponent ? "\ud83e\udde9" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                        <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} &middot; {entry.repeatScope === "per-item" ? "per output item" : "once"} &middot; {Math.round(entry.position?.width || entry.position?.w || 0)} x {Math.round(entry.position?.height || entry.position?.h || 0)} mm</div>
-                      </div>
-                      <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                        <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>&uarr;</button>
-                        <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>&darr;</button>
-                        <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
-                        {openBlockMenuId === entry.id ? (
-                          <div className="tplb-block-menu">
-                            <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
-                            <button type="button" onClick={() => { copyCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Copy</button>
-                            <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
+              {draft.canvasBlocks.length === 0 ? (
+                <div className="tplb-empty-canvas">
+                  <p className="hint" style={{ marginTop: 0 }}>Start designing your template.</p>
+                  <button className="table-btn primary" type="button" onClick={() => setInsertMenuIndex(0)}>+ Add block</button>
+                </div>
+              ) : null}
+              {insertMenuIndex === 0 ? (
+                <div className="tplb-inline-insert-menu">
+                  {BLOCK_TYPE_LIBRARY.map((item) => (
+                    <button key={`insert-start-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, 0)}>{item.label}</button>
+                  ))}
+                </div>
+              ) : null}
+              {canvasGroups.map((group, groupIndex) => (
+                <div key={`group-${groupIndex}`} className={group.kind === "repeat-group" ? "tplb-repeat-group" : ""}>
+                  {group.kind === "repeat-group" ? <div className="tplb-repeat-group-head">↻ {repeatBadgeLabel(group.scope)}{group.repeatField ? ` · ${group.repeatField}[]` : ""}</div> : null}
+                  {group.entries.map((entry) => {
+                    const index = canvasEntryIndexMap.get(entry.id) ?? 0;
+                    const isComponent = Boolean(entry.componentRefId);
+                    const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
+                    const normalizedRepeatScope = normalizeRepeatScope(entry.repeatScope || "once");
+                    const isAbsolute = isAbsoluteEntry(entry);
+                    return (
+                      <div key={entry.id}>
+                        <button className="tplb-inline-insert" type="button" onClick={() => setInsertMenuIndex((previous) => previous === index ? -1 : index)}>+ Add block</button>
+                        {insertMenuIndex === index ? (
+                          <div className="tplb-inline-insert-menu">
+                            {BLOCK_TYPE_LIBRARY.map((item) => (
+                              <button key={`insert-${entry.id}-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, index)}>{item.label}</button>
+                            ))}
                           </div>
                         ) : null}
-                        {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
-                        {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
+                        <div
+                          className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""} ${isAbsolute ? "absolute-entry" : "flow-entry"}`}
+                          style={isAbsolute ? positionToCanvasStyle(entry.position, canvasDisplayPageFormat) : undefined}
+                          onPointerDown={isAbsolute ? (event) => startPointerInteraction(event, entry) : undefined}
+                          onClick={() => setSelectedEntryId(entry.id)}
+                        >
+                          <div className="tplb-canvas-entry-head">
+                            <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                              <input type="checkbox" checked={multiSelectedIds.includes(entry.id)} onChange={() => toggleMultiSelect(entry.id)} />
+                            </label>
+                            <div style={{ flex: 1 }}>
+                              <strong>{isComponent ? "\ud83e\udde9" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
+                              <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} · <span className="tplb-repeat-badge">{repeatBadgeLabel(normalizedRepeatScope)}</span>{isAbsolute ? ` · ${Math.round(entry.position?.width || entry.position?.w || 0)} x ${Math.round(entry.position?.height || entry.position?.h || 0)} mm` : ""}</div>
+                            </div>
+                            <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                              <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>&uarr;</button>
+                              <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>&darr;</button>
+                              <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
+                              {openBlockMenuId === entry.id ? (
+                                <div className="tplb-block-menu">
+                                  <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
+                                  <button type="button" onClick={() => { copyCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Copy</button>
+                                  <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
+                                </div>
+                              ) : null}
+                              {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
+                              {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
+                            </div>
+                          </div>
+                          {isAbsolute ? <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} /> : null}
+                        </div>
+                        <div className="tplb-flow-arrow">↓</div>
                       </div>
-                    </div>
-                    <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ))}
+              {draft.canvasBlocks.length > 0 ? (
+                <button className="tplb-inline-insert" type="button" onClick={() => setInsertMenuIndex((previous) => previous === draft.canvasBlocks.length ? -1 : draft.canvasBlocks.length)}>+ Add block</button>
+              ) : null}
+              {insertMenuIndex === draft.canvasBlocks.length ? (
+                <div className="tplb-inline-insert-menu">
+                  {BLOCK_TYPE_LIBRARY.map((item) => (
+                    <button key={`insert-end-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, draft.canvasBlocks.length)}>{item.label}</button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         </article>
@@ -1461,11 +1578,11 @@ export function TemplateBuilderPage({ toolContext }) {
                 <div>
                   <h4>{selectedComponent.name}</h4>
                   <label className="hint">Component repeat scope
-                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.repeatScope || "once"} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
+                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={normalizeRepeatScope(selectedEntry.repeatScope || "once")} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
-                  {(selectedEntry.repeatScope || "once") === "per-item" ? (
+                  {(normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-output" || normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-field") ? (
                     <div className="tplb-repeat-count-editor">
                       <span className="hint">Illustrative repetitions</span>
                       {[5, 10].map((count) => (
@@ -1509,11 +1626,11 @@ export function TemplateBuilderPage({ toolContext }) {
                 <div>
                   <h4>{labelForType(selectedEntry.type)}</h4>
                   <label className="hint">Repeat scope
-                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.repeatScope || "once"} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
+                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={normalizeRepeatScope(selectedEntry.repeatScope || "once")} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
-                  {(selectedEntry.repeatScope || "once") === "per-item" ? (
+                  {(normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-output" || normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-field") ? (
                     <div className="tplb-repeat-count-editor">
                       <span className="hint">Illustrative repetitions</span>
                       {[5, 10].map((count) => (
@@ -1527,23 +1644,46 @@ export function TemplateBuilderPage({ toolContext }) {
                       />
                     </div>
                   ) : null}
-                  <label className="hint">Data binding
-                    <select
-                      className="table-btn"
-                      style={{ display: "block", marginTop: 4 }}
-                      value={selectedEntry.repeatField ? `repeat:${selectedEntry.repeatField}` : (selectedEntry.bindField ? `field:${selectedEntry.bindField}` : "")}
-                      onChange={(event) => {
-                        const value = event.target.value;
-                        if (value.startsWith("repeat:")) patchSelectedEntry({ repeatField: value.slice(7), bindField: "" });
-                        else if (value.startsWith("field:")) patchSelectedEntry({ bindField: value.slice(6), repeatField: "" });
-                        else patchSelectedEntry({ bindField: "", repeatField: "" });
-                      }}
-                    >
-                      <option value="">Not mapped</option>
-                      {scalarFields.map((field) => <option key={`field:${field.name}`} value={`field:${field.name}`}>Field: {field.name} ({field.dataType})</option>)}
-                      {arrayFields.map((field) => <option key={`repeat:${field.name}`} value={`repeat:${field.name}`}>Repeat: {field.name} (array)</option>)}
-                    </select>
-                  </label>
+                  {normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-output" ? (
+                    <label className="hint">AI output collection
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} value={draft.repeatCollectionField || ""} placeholder="questions" onChange={(event) => updateDraft((next) => ({ ...next, repeatCollectionField: event.target.value.trim() }))} />
+                    </label>
+                  ) : null}
+                  {normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-field" ? (
+                    <label className="hint">Repeat for each item in variable
+                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.repeatField || ""} onChange={(event) => patchSelectedEntry({ repeatField: event.target.value, bindField: "" })}>
+                        <option value="">Select array variable</option>
+                        {arrayFields.map((field) => <option key={field.name} value={field.name}>{field.name}</option>)}
+                      </select>
+                    </label>
+                  ) : (
+                    <label className="hint">Data variable
+                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.bindField || ""} onChange={(event) => patchSelectedEntry({ bindField: event.target.value, repeatField: "" })}>
+                        <option value="">Not mapped</option>
+                        {scalarFields.map((field) => <option key={field.name} value={field.name}>{field.name} ({field.dataType})</option>)}
+                      </select>
+                    </label>
+                  )}
+                  <button className="table-btn" type="button" style={{ marginTop: 6 }} onClick={() => openQuickVariableCreator({
+                    name: selectedEntry.bindField || labelForType(selectedEntry.type).toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+                    label: labelForType(selectedEntry.type),
+                    dataType: normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-field" ? "array" : "string",
+                    required: true
+                  })}>+ Create variable</button>
+                  {showQuickVariableCreator ? (
+                    <div className="tplb-component-popover" style={{ marginTop: 8 }}>
+                      <strong>Create variable</strong>
+                      <label className="hint">Variable name<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableName} onChange={(event) => setQuickVariableName(event.target.value)} /></label>
+                      <label className="hint">Label<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableLabel} onChange={(event) => setQuickVariableLabel(event.target.value)} /></label>
+                      <label className="hint">Type<select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableType} onChange={(event) => setQuickVariableType(event.target.value)}>{DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                      <label className="hint">Description<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableDescription} onChange={(event) => setQuickVariableDescription(event.target.value)} /></label>
+                      <label className="hint"><input type="checkbox" checked={quickVariableRequired} onChange={(event) => setQuickVariableRequired(event.target.checked)} /> Required</label>
+                      <div className="inline-actions" style={{ justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                        <button className="table-btn" type="button" onClick={() => setShowQuickVariableCreator(false)}>Cancel</button>
+                        <button className="table-btn primary" type="button" onClick={createVariableForSelectedBlock} disabled={!quickVariableName.trim()}>Create</button>
+                      </div>
+                    </div>
+                  ) : null}
 
                   <div className="tplb-property-section">
                     <strong>Position (metadata)</strong>
@@ -1696,7 +1836,7 @@ export function TemplateBuilderPage({ toolContext }) {
               {structureItems.map((item) => (
                 <button key={item.id} className={`tplb-structure-node ${selectedStructureEntryId === item.id ? "active" : ""}`} type="button" onClick={() => setSelectedStructureEntryId(item.id)}>
                   <strong>{item.label}</strong>
-                  <span>{item.repeatScope === "per-item" ? `For each item${item.repeatField ? ` in ${item.repeatField}[]` : ""}` : "Once"}</span>
+                  <span>{item.repeatScope === "per-output" ? "For each AI output item" : item.repeatScope === "per-field" ? `For each item in ${item.repeatField || "variable"}[]` : item.repeatScope === "per-page" ? "Once per page" : "Once per document"}</span>
                 </button>
               ))}
             </div>
@@ -1714,8 +1854,13 @@ export function TemplateBuilderPage({ toolContext }) {
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </select>
                   </label>
-                  {(selectedStructureItem.repeatScope || "once") === "per-item" ? (
-                    <label className="hint">Collection
+                  {(selectedStructureItem.repeatScope || "once") === "per-output" ? (
+                    <label className="hint">AI output collection
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="questions" value={draft.repeatCollectionField || ""} onChange={(event) => updateDraft((next) => ({ ...next, repeatCollectionField: event.target.value.trim() }))} />
+                    </label>
+                  ) : null}
+                  {(selectedStructureItem.repeatScope || "once") === "per-field" ? (
+                    <label className="hint">Repeat variable
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="questions" value={selectedStructureItem.repeatField || ""} onChange={(event) => {
                         updateDraft((next) => {
                           next.canvasBlocks = next.canvasBlocks.map((entry) => entry.id === selectedStructureItem.id ? { ...entry, repeatField: event.target.value, bindField: "" } : entry);
@@ -1723,7 +1868,8 @@ export function TemplateBuilderPage({ toolContext }) {
                         });
                       }} />
                     </label>
-                  ) : (
+                  ) : null}
+                  {(selectedStructureItem.repeatScope || "once") !== "per-output" && (selectedStructureItem.repeatScope || "once") !== "per-field" ? (
                     <label className="hint">Field mapping
                       <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="question.text" value={selectedStructureItem.bindField || ""} onChange={(event) => {
                         updateDraft((next) => {
@@ -1732,7 +1878,7 @@ export function TemplateBuilderPage({ toolContext }) {
                         });
                       }} />
                     </label>
-                  )}
+                  ) : null}
                   {selectedStructureItem.isComponent && selectedStructureItem.component ? (
                     <>
                       <h6 style={{ marginBottom: 6 }}>Component field mappings</h6>
@@ -1777,6 +1923,9 @@ export function TemplateBuilderPage({ toolContext }) {
                 <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
               </div>
             ))}
+            {!templateFields.length ? (
+              <p className="hint" style={{ marginTop: 10 }}>No variables yet. Variables created for this template will appear here.</p>
+            ) : null}
             <div className="tplb-field-create-row">
               <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
               <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
@@ -1784,7 +1933,7 @@ export function TemplateBuilderPage({ toolContext }) {
                 {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
               </select>
               <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
-              <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
+              <button className="table-btn primary" type="button" onClick={addDataField}>+ Add variable</button>
             </div>
           </div>
         </article>

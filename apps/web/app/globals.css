@@ -2907,6 +2907,65 @@ body {
   padding-bottom: 12px;
 }
 
+.tplb-builder-nav {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.tplb-structure-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tplb-structure-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.tplb-structure-flow {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.tplb-structure-node {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  border: 1px solid var(--tplb-line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.tplb-structure-node strong {
+  font-size: 13px;
+}
+
+.tplb-structure-node span {
+  color: var(--tplb-muted);
+  font-size: 12px;
+}
+
+.tplb-structure-node:hover,
+.tplb-structure-node.active {
+  border-color: var(--tplb-accent);
+  background: var(--tplb-lavender);
+}
+
+.tplb-structure-editor {
+  border: 1px solid var(--tplb-line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
 .tplb-template-card-row {
   display: grid;
   grid-auto-flow: column;
@@ -3489,6 +3548,10 @@ body {
 
 @media (max-width: 1100px) {
   .tplb-main-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tplb-structure-grid {
     grid-template-columns: 1fr;
   }
 

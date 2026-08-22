@@ -285,6 +285,8 @@ export function TemplateBuilderPage({ toolContext }) {
   const [newComponentName, setNewComponentName] = useState("");
   const [newComponentBase, setNewComponentBase] = useState("table");
   const [newFormatType, setNewFormatType] = useState("pdf");
+  const [activeBuilderView, setActiveBuilderView] = useState("design");
+  const [selectedStructureEntryId, setSelectedStructureEntryId] = useState("");
   const [zoomLevel, setZoomLevel] = useState(100);
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const [previewFormat, setPreviewFormat] = useState("html");
@@ -311,6 +313,16 @@ export function TemplateBuilderPage({ toolContext }) {
     loadTemplates();
     return () => { cancelled = true; };
   }, [onListDocumentBlockTemplates]);
+
+  useEffect(() => {
+    if (!draft.canvasBlocks.length) {
+      if (selectedStructureEntryId) setSelectedStructureEntryId("");
+      return;
+    }
+    if (!selectedStructureEntryId || !draft.canvasBlocks.some((entry) => entry.id === selectedStructureEntryId)) {
+      setSelectedStructureEntryId(draft.canvasBlocks[0].id);
+    }
+  }, [draft.canvasBlocks, selectedStructureEntryId]);
 
   const sampleData = useMemo(() => {
     try {
@@ -866,6 +878,28 @@ export function TemplateBuilderPage({ toolContext }) {
     });
   }
 
+  function addStructureBlock(kind = "content") {
+    const type = kind === "page_break" ? "page_break" : kind === "section" ? "heading1" : "paragraph";
+    updateDraft((next) => {
+      const formatName = next.blockFormats[type]?.[0]?.name || "Default";
+      if (!next.blockFormats[type]) {
+        next.blockFormats[type] = [{ name: "Default", className: `tplb-${type}`, htmlTemplate: "", style: {} }];
+      }
+      const entry = {
+        id: createId("canvas"),
+        type,
+        formatName,
+        bindField: "",
+        repeatField: "",
+        repeatScope: kind === "repeating" ? "per-item" : "once",
+        illustrativeText: illustrativeText(type),
+        position: { x: 12, y: 18 + next.canvasBlocks.length * 20, width: 180, height: 14, unit: "mm" }
+      };
+      next.canvasBlocks = [...next.canvasBlocks, entry];
+      return next;
+    });
+  }
+
   async function requestRender(format) {
     const response = await fetch("/api/templates/render-preview", {
       method: "POST",
@@ -1048,6 +1082,23 @@ export function TemplateBuilderPage({ toolContext }) {
       mappingRows.push({ key: entry.id, label: labelForType(entry.type), entryId: entry.id, spec: entry });
     }
   });
+  const structureItems = draft.canvasBlocks.map((entry, index) => {
+    const isComponent = Boolean(entry.componentRefId);
+    const component = isComponent ? draft.components.find((item) => item.id === entry.componentRefId) : null;
+    const label = isComponent ? (component?.name || "Component") : labelForType(entry.type);
+    const repeatScope = entry.repeatScope || "once";
+    return {
+      id: entry.id,
+      index,
+      label,
+      repeatScope,
+      repeatField: entry.repeatField || "",
+      bindField: entry.bindField || "",
+      isComponent,
+      component
+    };
+  });
+  const selectedStructureItem = structureItems.find((item) => item.id === selectedStructureEntryId) || null;
   const allTemplateFields = Array.isArray(draft.dataFields) ? draft.dataFields : [];
   const usedFieldNames = new Set();
   if (draft.repeatCollectionField) usedFieldNames.add(String(draft.repeatCollectionField));
@@ -1103,7 +1154,7 @@ export function TemplateBuilderPage({ toolContext }) {
         <div className="tplb-header-right">
           <button className="table-btn" type="button" onClick={handleUndo} disabled={historyIndex <= 0}>Undo</button>
           <button className="table-btn" type="button" onClick={handleRedo} disabled={historyIndex >= history.length - 1}>Redo</button>
-          <button className="table-btn" type="button" onClick={() => openPreview("html")}>Preview</button>
+          <button className="table-btn" type="button" onClick={() => { setActiveBuilderView("preview"); openPreview("html"); }}>Preview</button>
           <button className="table-btn primary" type="button" onClick={handleSaveTemplate} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save Template"}
           </button>
@@ -1146,7 +1197,13 @@ export function TemplateBuilderPage({ toolContext }) {
         </div>
       </section>
 
-      {showPreviewPanel ? (
+      <nav className="panel tplb-builder-nav" aria-label="Builder sections">
+        <button className={`table-btn ${activeBuilderView === "design" ? "primary" : ""}`} type="button" onClick={() => setActiveBuilderView("design")}>Design</button>
+        <button className={`table-btn ${activeBuilderView === "structure" ? "primary" : ""}`} type="button" onClick={() => setActiveBuilderView("structure")}>Structure</button>
+        <button className={`table-btn ${activeBuilderView === "preview" ? "primary" : ""}`} type="button" onClick={() => { setActiveBuilderView("preview"); if (!previewHtml && !previewPdfUrl) openPreview("html"); }}>Preview</button>
+      </nav>
+
+      {(activeBuilderView === "preview" || showPreviewPanel) ? (
         <section className="panel tplb-preview-panel">
           <div className="tplb-preview-header">
             <div>
@@ -1158,7 +1215,7 @@ export function TemplateBuilderPage({ toolContext }) {
               <button className={`table-btn ${previewFormat === "pdf" ? "primary" : ""}`} type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>PDF Preview</button>
               <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download HTML</button>
               <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download PDF</button>
-              <button className="table-btn" type="button" onClick={() => setShowPreviewPanel(false)}>Close</button>
+              <button className="table-btn" type="button" onClick={() => { setShowPreviewPanel(false); setActiveBuilderView("design"); }}>Close</button>
             </div>
           </div>
           <div className="tplb-preview-surface">
@@ -1171,6 +1228,8 @@ export function TemplateBuilderPage({ toolContext }) {
         </section>
       ) : null}
 
+      {activeBuilderView === "design" ? (
+        <>
       <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
         {(draft.renderVariants || []).map((variant) => (
           <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
@@ -1615,107 +1674,175 @@ export function TemplateBuilderPage({ toolContext }) {
           )}
         </article>
       </div>
+      </>
+      ) : null}
 
-      <article id="tplb-data-mapping" className="panel tplb-full-width-section">
-        <div className="inline-actions" style={{ justifyContent: "space-between" }}>
-          <div>
-            <h4 style={{ margin: 0 }}>Data &amp; Mapping</h4>
-            <p className="hint" style={{ margin: "5px 0 0" }}>Connect template blocks to your AI output and data fields.</p>
-          </div>
-          <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
-        </div>
-        <h5>Data fields</h5>
-        {templateFields.map((field) => (
-          <div className="tplb-field-editor-row" key={field.id}>
-            <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
-            <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />
-            <select className="table-btn" value={field.dataType} onChange={(event) => updateDataField(field.id, { dataType: event.target.value })}>
-              {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
-            </select>
-            <label className="hint"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => updateDataField(field.id, { required: event.target.checked })} /> Required</label>
-            <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
-          </div>
-        ))}
-        <div className="tplb-field-create-row">
-          <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
-          <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
-          <select className="table-btn" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
-            {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
-          </select>
-          <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
-          <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
-        </div>
-
-        <h5>Block &rarr; Data &rarr; Output</h5>
-        <div className="tplb-mapping-table">
-          <div className="tplb-mapping-table-head">
-            <span>Block</span>
-            <span>Data field</span>
-            <span>Type</span>
-            <span>Repeat</span>
-          </div>
-          {mappingRows.map((row) => (
-            <div key={row.key} className="tplb-mapping-table-row">
-              <span>{row.label}</span>
-              <span>{summarizeBinding(row.spec)}</span>
-              <span>{row.spec.repeatField ? (templateFields.find((field) => field.name === row.spec.repeatField)?.dataType || "array") : (templateFields.find((field) => field.name === row.spec.bindField)?.dataType || "\u2014")}</span>
-              <span>{row.spec.repeatField ? "Yes" : "No"}</span>
+      {activeBuilderView === "structure" ? (
+        <article className="panel tplb-structure-view">
+          <div className="tplb-panel-header" style={{ marginBottom: 8 }}>
+            <div>
+              <h4 style={{ margin: 0 }}>Structure</h4>
+              <p className="hint" style={{ margin: "4px 0 0" }}>Define what the document contains and how AI data flows into it.</p>
             </div>
-          ))}
-        </div>
-      </article>
+            <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("section")}>+ Section</button>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("content")}>+ Content Block</button>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("repeating")}>+ Repeating Block</button>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("page_break")}>+ Page Break</button>
+            </div>
+          </div>
+          <div className="tplb-structure-grid">
+            <div className="tplb-structure-flow">
+              {structureItems.map((item) => (
+                <button key={item.id} className={`tplb-structure-node ${selectedStructureEntryId === item.id ? "active" : ""}`} type="button" onClick={() => setSelectedStructureEntryId(item.id)}>
+                  <strong>{item.label}</strong>
+                  <span>{item.repeatScope === "per-item" ? `For each item${item.repeatField ? ` in ${item.repeatField}[]` : ""}` : "Once"}</span>
+                </button>
+              ))}
+            </div>
+            <div className="tplb-structure-editor">
+              {!selectedStructureItem ? <p className="hint">Select a structure block to configure repetition and mappings.</p> : (
+                <>
+                  <h5 style={{ marginTop: 0 }}>{selectedStructureItem.label}</h5>
+                  <label className="hint">Repeat
+                    <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedStructureItem.repeatScope || "once"} onChange={(event) => {
+                      updateDraft((next) => {
+                        next.canvasBlocks = next.canvasBlocks.map((entry) => entry.id === selectedStructureItem.id ? { ...entry, repeatScope: event.target.value } : entry);
+                        return next;
+                      });
+                    }}>
+                      {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
+                  {(selectedStructureItem.repeatScope || "once") === "per-item" ? (
+                    <label className="hint">Collection
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="questions" value={selectedStructureItem.repeatField || ""} onChange={(event) => {
+                        updateDraft((next) => {
+                          next.canvasBlocks = next.canvasBlocks.map((entry) => entry.id === selectedStructureItem.id ? { ...entry, repeatField: event.target.value, bindField: "" } : entry);
+                          return next;
+                        });
+                      }} />
+                    </label>
+                  ) : (
+                    <label className="hint">Field mapping
+                      <input className="table-btn" style={{ display: "block", marginTop: 4 }} placeholder="question.text" value={selectedStructureItem.bindField || ""} onChange={(event) => {
+                        updateDraft((next) => {
+                          next.canvasBlocks = next.canvasBlocks.map((entry) => entry.id === selectedStructureItem.id ? { ...entry, bindField: event.target.value, repeatField: "" } : entry);
+                          return next;
+                        });
+                      }} />
+                    </label>
+                  )}
+                  {selectedStructureItem.isComponent && selectedStructureItem.component ? (
+                    <>
+                      <h6 style={{ marginBottom: 6 }}>Component field mappings</h6>
+                      {(selectedStructureItem.component.blocks || []).map((block) => (
+                        <div key={block.id} className="tplb-mapping-row">
+                          <span className="hint">{labelForType(block.type)}</span>
+                          <select
+                            className="table-btn"
+                            value={block.repeatField ? `repeat:${block.repeatField}` : (block.bindField ? `field:${block.bindField}` : "")}
+                            onChange={(event) => {
+                              const value = event.target.value;
+                              if (value.startsWith("repeat:")) updateComponentChildBinding(selectedStructureItem.component.id, block.id, { repeatField: value.slice(7), bindField: "" });
+                              else if (value.startsWith("field:")) updateComponentChildBinding(selectedStructureItem.component.id, block.id, { bindField: value.slice(6), repeatField: "" });
+                              else updateComponentChildBinding(selectedStructureItem.component.id, block.id, { bindField: "", repeatField: "" });
+                            }}
+                          >
+                            <option value="">Not mapped</option>
+                            {scalarFields.map((field) => <option key={`field:${field.name}`} value={`field:${field.name}`}>{field.name}</option>)}
+                            {arrayFields.map((field) => <option key={`repeat:${field.name}`} value={`repeat:${field.name}`}>Repeat: {field.name}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </div>
+          <div className="tplb-property-section">
+            <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+              <h5 style={{ margin: 0 }}>Template data fields</h5>
+              <button className="table-btn" type="button" onClick={() => setMappingExpanded((previous) => !previous)}>{mappingExpanded ? "Collapse" : "Expand"}</button>
+            </div>
+            {templateFields.map((field) => (
+              <div className="tplb-field-editor-row" key={field.id}>
+                <input className="table-btn" value={field.name} onChange={(event) => updateDataField(field.id, { name: event.target.value.replace(/\s+/g, "_") })} />
+                <input className="table-btn" value={field.label || ""} placeholder="Label" onChange={(event) => updateDataField(field.id, { label: event.target.value })} />
+                <select className="table-btn" value={field.dataType} onChange={(event) => updateDataField(field.id, { dataType: event.target.value })}>
+                  {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+                <label className="hint"><input type="checkbox" checked={Boolean(field.required)} onChange={(event) => updateDataField(field.id, { required: event.target.checked })} /> Required</label>
+                <button className="table-btn" type="button" onClick={() => deleteDataField(field.id)}>Delete</button>
+              </div>
+            ))}
+            <div className="tplb-field-create-row">
+              <input className="table-btn" placeholder="field_name" value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} />
+              <input className="table-btn" placeholder="Label" value={fieldLabelDraft} onChange={(event) => setFieldLabelDraft(event.target.value)} />
+              <select className="table-btn" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
+                {DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+              <label className="hint"><input type="checkbox" checked={fieldRequiredDraft} onChange={(event) => setFieldRequiredDraft(event.target.checked)} /> Required</label>
+              <button className="table-btn primary" type="button" onClick={addDataField}>Add Field</button>
+            </div>
+          </div>
+        </article>
+      ) : null}
 
-      <article id="tplb-export-test" className="panel tplb-full-width-section">
-        <h4 style={{ marginTop: 0 }}>Export &amp; Output</h4>
-        <p className="hint" style={{ margin: "5px 0 12px" }}>Choose which formats this template can export.</p>
-        <div className="tplb-export-format-row">
-          {(draft.renderVariants || []).map((variant) => (
-            <label key={variant.id} className="tplb-export-format-chip">
-              <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
-              {variant.label}
-            </label>
-          ))}
-          <button className="table-btn" type="button" onClick={() => setShowFormatPopover(true)}>+ Add format</button>
-        </div>
-        {showFormatPopover ? (
-          <div className="tplb-repeat-count-editor" style={{ marginTop: 0, marginBottom: 12 }}>
-            <span className="hint">Add output format</span>
-            <select className="table-btn" value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
-              {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-            <button className="table-btn primary" type="button" onClick={() => addFormatPage(newFormatType)}>Add</button>
-            <button className="table-btn" type="button" onClick={() => setShowFormatPopover(false)}>Cancel</button>
+      {activeBuilderView === "preview" ? (
+        <article id="tplb-export-test" className="panel tplb-full-width-section">
+          <h4 style={{ marginTop: 0 }}>Export &amp; Output</h4>
+          <p className="hint" style={{ margin: "5px 0 12px" }}>Choose which formats this template can export.</p>
+          <div className="tplb-export-format-row">
+            {(draft.renderVariants || []).map((variant) => (
+              <label key={variant.id} className="tplb-export-format-chip">
+                <input type="checkbox" checked={variant.enabled !== false} onChange={(event) => updateRenderVariant(variant.id, { enabled: event.target.checked })} />
+                {variant.label}
+              </label>
+            ))}
+            <button className="table-btn" type="button" onClick={() => setShowFormatPopover(true)}>+ Add format</button>
           </div>
-        ) : null}
-        <div className="tplb-export-action-row">
-          <span>HTML (Continuous)</span>
-          <div className="inline-actions" style={{ gap: 8 }}>
-            <button className="table-btn" type="button" onClick={() => openPreview("html")} disabled={isBusyFormat === "preview-html"}>Preview</button>
-            <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download</button>
+          {showFormatPopover ? (
+            <div className="tplb-repeat-count-editor" style={{ marginTop: 0, marginBottom: 12 }}>
+              <span className="hint">Add output format</span>
+              <select className="table-btn" value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
+                {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+              </select>
+              <button className="table-btn primary" type="button" onClick={() => addFormatPage(newFormatType)}>Add</button>
+              <button className="table-btn" type="button" onClick={() => setShowFormatPopover(false)}>Cancel</button>
+            </div>
+          ) : null}
+          <div className="tplb-export-action-row">
+            <span>HTML (Continuous)</span>
+            <div className="inline-actions" style={{ gap: 8 }}>
+              <button className="table-btn" type="button" onClick={() => openPreview("html")} disabled={isBusyFormat === "preview-html"}>Preview</button>
+              <button className="table-btn" type="button" onClick={() => handleExport("html")} disabled={isBusyFormat === "html"}>Download</button>
+            </div>
           </div>
-        </div>
-        <div className="tplb-export-action-row">
-          <span>PDF ({draft.pageFormat})</span>
-          <div className="inline-actions" style={{ gap: 8 }}>
-            <button className="table-btn" type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>Preview</button>
-            <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
+          <div className="tplb-export-action-row">
+            <span>PDF ({draft.pageFormat})</span>
+            <div className="inline-actions" style={{ gap: 8 }}>
+              <button className="table-btn" type="button" onClick={() => openPreview("pdf")} disabled={isBusyFormat === "preview-pdf"}>Preview</button>
+              <button className="table-btn" type="button" onClick={() => handleExport("pdf")} disabled={isBusyFormat === "pdf"}>Download</button>
+            </div>
           </div>
-        </div>
-        <div className="tplb-export-action-row">
-          <span>Word</span>
-          <button className="table-btn" type="button" onClick={() => handleExport("docx")} disabled={isBusyFormat === "docx"}>Download</button>
-        </div>
-        <div className="tplb-export-action-row">
-          <span>PowerPoint</span>
-          <button className="table-btn" type="button" disabled title="Coming soon: requires adding a pptx export dependency (e.g. pptxgenjs).">Coming soon</button>
-        </div>
-        <button className="table-btn primary" type="button" style={{ width: "100%", marginTop: 8 }} onClick={handleGenerateAllFormats}>
-          Generate all formats
-        </button>
-        <p className="hint" style={{ marginTop: 8 }}>
-          PowerPoint export is not implemented yet &mdash; no pptx generation library is installed in this project. All other formats render from the same underlying template model.
-        </p>
-      </article>
+          <div className="tplb-export-action-row">
+            <span>Word</span>
+            <button className="table-btn" type="button" onClick={() => handleExport("docx")} disabled={isBusyFormat === "docx"}>Download</button>
+          </div>
+          <div className="tplb-export-action-row">
+            <span>PowerPoint</span>
+            <button className="table-btn" type="button" disabled title="Coming soon: requires adding a pptx export dependency (e.g. pptxgenjs).">Coming soon</button>
+          </div>
+          <button className="table-btn primary" type="button" style={{ width: "100%", marginTop: 8 }} onClick={handleGenerateAllFormats}>
+            Generate all formats
+          </button>
+          <p className="hint" style={{ marginTop: 8 }}>
+            PowerPoint export is not implemented yet &mdash; no pptx generation library is installed in this project. All other formats render from the same underlying template model.
+          </p>
+        </article>
+      ) : null}
     </div>
   );
 }

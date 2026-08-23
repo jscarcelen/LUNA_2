@@ -60,6 +60,14 @@ const LAYOUT_MODE_OPTIONS = ["Flow", "Fixed", "Absolute", "Relative"];
 const VERTICAL_POSITION_OPTIONS = ["After previous", "Top of page", "Bottom of page", "Centered"];
 const ANCHOR_OPTIONS = ["Page", "Previous block", "Parent component", "Header", "Footer"];
 const OVERFLOW_OPTIONS = ["Expand height", "Reduce font size", "Clip", "Continue on next page"];
+
+const MARGIN_PRESETS = [
+  { label: "Normal (25mm)", value: 25 },
+  { label: "Narrow (12mm)", value: 12 },
+  { label: "Wide (38mm)", value: 38 },
+  { label: "Mirrored (25/12mm)", value: 18 },
+  { label: "Custom", value: null }
+];
 const DATA_TYPE_OPTIONS = ["string", "number", "boolean", "array", "object"];
 const REPEAT_SCOPE_OPTIONS = [
   { value: "once", label: "Once per document" },
@@ -456,6 +464,9 @@ export function TemplateBuilderPage({ toolContext }) {
   const [collapsedStructureIds, setCollapsedStructureIds] = useState(new Set());
   const [collapsedBlockGroups, setCollapsedBlockGroups] = useState(new Set());
   const [selectedPageId, setSelectedPageId] = useState("page-1");
+  const [clipboardBlocks, setClipboardBlocks] = useState([]);
+  const [editingPageId, setEditingPageId] = useState("");
+  const [editingPageName, setEditingPageName] = useState("");
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -478,6 +489,33 @@ export function TemplateBuilderPage({ toolContext }) {
     loadTemplates();
     return () => { cancelled = true; };
   }, [onListDocumentBlockTemplates]);
+
+  // Copy/paste canvas blocks via Ctrl+C / Ctrl+V
+  useEffect(() => {
+    function handleKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "c") {
+        const ids = multiSelectedIds.length ? multiSelectedIds : (selectedEntryId ? [selectedEntryId] : []);
+        if (!ids.length) return;
+        const entries = draft.canvasBlocks.filter((b) => ids.includes(b.id));
+        if (entries.length) setClipboardBlocks(cloneDraft(entries));
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "v") {
+        if (!clipboardBlocks.length) return;
+        updateDraft((next) => {
+          const insertAt = selectedEntryId ? next.canvasBlocks.findIndex((b) => b.id === selectedEntryId) + 1 : next.canvasBlocks.length;
+          const clones = clipboardBlocks.map((b) => ({
+            ...cloneDraft(b),
+            id: createId("canvas"),
+            position: b.position ? { ...b.position, x: (b.position.x || 0) + 5, y: (b.position.y || 0) + 5 } : undefined
+          }));
+          next.canvasBlocks.splice(insertAt, 0, ...clones);
+          return next;
+        });
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [clipboardBlocks, multiSelectedIds, selectedEntryId, draft.canvasBlocks]);
 
   useEffect(() => {
     if (!draft.canvasBlocks.length) {
@@ -1055,8 +1093,13 @@ export function TemplateBuilderPage({ toolContext }) {
       const newComponent = { id: createId("comp"), name: componentName, description: "Created from selection.", blocks };
       next.components = [...next.components, newComponent];
       const firstIndex = next.canvasBlocks.findIndex((item) => item.id === multiSelectedIds[0]);
+      const firstEntry = next.canvasBlocks[firstIndex];
       const remaining = next.canvasBlocks.filter((item) => !multiSelectedIds.includes(item.id));
-      remaining.splice(firstIndex, 0, { id: createId("canvas"), componentRefId: newComponent.id });
+      const componentCanvasEntry = { id: createId("canvas"), componentRefId: newComponent.id, repeatScope: "once", repeatField: "", layoutMode: "Flow" };
+      // Preserve position of the first selected block so the component stays in place
+      if (firstEntry?.position) componentCanvasEntry.position = { ...firstEntry.position };
+      if (firstEntry?.blockSize) componentCanvasEntry.blockSize = { ...firstEntry.blockSize };
+      remaining.splice(firstIndex, 0, componentCanvasEntry);
       next.canvasBlocks = remaining;
       return next;
     });
@@ -1428,6 +1471,7 @@ export function TemplateBuilderPage({ toolContext }) {
   const mmToPx = CANVAS_PX_W / pageDim.w;
   const canvasPxH = pageDim.h ? pageDim.h * mmToPx : undefined;
   const gridSizePx = Math.max(2, Number(draft.canvasSettings?.gridSize || 5)) * mmToPx;
+  const canvasMarginPx = (Number(draft.canvasSettings?.margin || 16)) * mmToPx;
   const canvasPageStyle = {
     position: "relative",
     width: CANVAS_PX_W,
@@ -1435,7 +1479,7 @@ export function TemplateBuilderPage({ toolContext }) {
     minHeight: canvasPxH ? undefined : 520,
     margin: "0 auto",
     overflow: "visible",
-    padding: 0,
+    padding: draft.canvasSettings?.showMargins ? `${canvasMarginPx}px` : "8px",
     background: "#fff",
     backgroundImage: draft.canvasSettings?.showGrid
       ? "linear-gradient(rgba(112, 99, 183, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(112, 99, 183, 0.1) 1px, transparent 1px)"
@@ -1628,17 +1672,37 @@ export function TemplateBuilderPage({ toolContext }) {
           <div className="tplb-page-tabs">
             <span className="tplb-page-tabs-label">Pages:</span>
             {variantPages.map((page) => (
-              <button
-                key={page.id}
-                className={`tplb-page-tab${selectedPageId === page.id ? " on" : ""}`}
-                type="button"
-                onClick={() => setSelectedPageId(page.id)}
-              >
-                {page.name}
-                <span className={`tplb-page-tab-mode ${page.repeatMode === "per-ai-output" ? "orange" : ""}`}>
-                  {page.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
-                </span>
-              </button>
+              <div key={page.id} className={`tplb-page-tab${selectedPageId === page.id ? " on" : ""}`}>
+                {editingPageId === page.id ? (
+                  <input
+                    className="tplb-page-tab-input"
+                    autoFocus
+                    value={editingPageName}
+                    onChange={(e) => setEditingPageName(e.target.value)}
+                    onBlur={() => {
+                      const nextName = editingPageName.trim() || page.name;
+                      updateRenderVariant(selectedVariantId, {
+                        pages: selectedVariant.pages.map((p) => p.id === page.id ? { ...p, name: nextName } : p)
+                      });
+                      setEditingPageId("");
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setEditingPageId(""); } }}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="tplb-page-tab-btn"
+                    onClick={() => setSelectedPageId(page.id)}
+                    onDoubleClick={() => { setEditingPageId(page.id); setEditingPageName(page.name); }}
+                  >
+                    {page.name}
+                    <span className={`tplb-page-tab-mode ${page.repeatMode === "per-ai-output" ? "orange" : ""}`}>
+                      {page.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
+                    </span>
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         );
@@ -1806,6 +1870,16 @@ export function TemplateBuilderPage({ toolContext }) {
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
+            <select className="table-btn" style={{ fontSize: 11 }} title="Margin preset"
+              value={MARGIN_PRESETS.find((p) => p.value === (draft.canvasSettings?.margin || 16))?.value ?? "custom"}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                if (!isNaN(val) && val > 0) updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, margin: val } }));
+              }}
+            >
+              {MARGIN_PRESETS.filter((p) => p.value !== null).map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+              {!MARGIN_PRESETS.some((p) => p.value === (draft.canvasSettings?.margin || 16)) ? <option value={draft.canvasSettings?.margin || 16}>Custom ({draft.canvasSettings?.margin || 16}mm)</option> : null}
+            </select>
             <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} · {canvasDisplayPageFormat}</span>
             {/* Page name and repeat mode inline controls */}
             {selectedVariant ? (
@@ -1856,7 +1930,7 @@ export function TemplateBuilderPage({ toolContext }) {
                 if (type) addCanvasBlock(type);
               }}
             >
-              {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
+              {/* margin guides now implemented via page padding */}
               {draft.canvasBlocks.length === 0 ? (
                 <div className="tplb-empty-canvas">
                   <p className="hint" style={{ marginTop: 0 }}>Start designing your template. Use the left panel to add blocks.</p>
@@ -1878,6 +1952,7 @@ export function TemplateBuilderPage({ toolContext }) {
                           style={isAbsolute ? positionToCanvasStyle(entry.position, canvasDisplayPageFormat) : undefined}
                           onPointerDown={(event) => startPointerInteraction(event, entry)}
                           onClick={() => setSelectedEntryId(entry.id)}
+                          onDoubleClick={() => toggleMultiSelect(entry.id)}
                         >
                           {/* WYSIWYG block preview */}
                           <div className="tplb-canvas-entry-controls" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>

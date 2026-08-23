@@ -18,6 +18,7 @@ export function SideNav({
   const [menuWorkspaceId, setMenuWorkspaceId] = useState("");
   const [editWorkspaceId, setEditWorkspaceId] = useState("");
   const [editWorkspaceName, setEditWorkspaceName] = useState("");
+  const [collapsed, setCollapsed] = useState(false);
 
   function handleCreateWorkspace() {
     const nextName = workspaceName.trim();
@@ -27,11 +28,23 @@ export function SideNav({
     setShowAddWorkspace(false);
   }
 
+  if (collapsed) {
+    return (
+      <aside className="side-nav workspace-rail side-nav-collapsed">
+        <button className="side-nav-collapse-btn" type="button" onClick={() => setCollapsed(false)} title="Expand sidebar">
+          <div className="brand-dot" style={{ margin: "0 auto 8px" }} />
+          <span style={{ fontSize: 16 }}>›</span>
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="side-nav workspace-rail">
       <div className="brand-wrap">
         <div className="brand-dot" />
         <h1>{appName}</h1>
+        <button className="side-nav-collapse-btn" type="button" onClick={() => setCollapsed(true)} title="Collapse sidebar" style={{ marginLeft: "auto" }}>‹</button>
       </div>
 
       <div className="role-switch" role="tablist" aria-label="Role selector">

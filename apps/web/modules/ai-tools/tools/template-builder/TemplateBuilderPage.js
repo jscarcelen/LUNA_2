@@ -465,6 +465,9 @@ export function TemplateBuilderPage({ toolContext }) {
   const [collapsedBlockGroups, setCollapsedBlockGroups] = useState(new Set());
   const [selectedPageId, setSelectedPageId] = useState("page-1");
   const [clipboardBlocks, setClipboardBlocks] = useState([]);
+  const [pendingInsertScope, setPendingInsertScope] = useState(null);
+  const [showInsertScopePopover, setShowInsertScopePopover] = useState(false);
+  const [insertScopeAt, setInsertScopeAt] = useState(-1);
   const [editingPageId, setEditingPageId] = useState("");
   const [editingPageName, setEditingPageName] = useState("");
   const pointerDragRef = useRef(null);
@@ -493,6 +496,10 @@ export function TemplateBuilderPage({ toolContext }) {
   // Copy/paste canvas blocks via Ctrl+C / Ctrl+V
   useEffect(() => {
     function handleKeyDown(e) {
+      const tag = (e.target && e.target.tagName ? e.target.tagName.toLowerCase() : "");
+      const isEditableField = tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
+      if (isEditableField) return;
+
       if ((e.ctrlKey || e.metaKey) && e.key === "c") {
         const ids = multiSelectedIds.length ? multiSelectedIds : (selectedEntryId ? [selectedEntryId] : []);
         if (!ids.length) return;
@@ -511,6 +518,17 @@ export function TemplateBuilderPage({ toolContext }) {
           next.canvasBlocks.splice(insertAt, 0, ...clones);
           return next;
         });
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        const deletionIds = multiSelectedIds.length ? multiSelectedIds : (selectedEntryId ? [selectedEntryId] : []);
+        if (!deletionIds.length) return;
+        e.preventDefault();
+        updateDraft((next) => ({
+          ...next,
+          canvasBlocks: next.canvasBlocks.filter((entry) => !deletionIds.includes(entry.id))
+        }));
+        setMultiSelectedIds([]);
+        setSelectedEntryId("");
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -640,7 +658,7 @@ export function TemplateBuilderPage({ toolContext }) {
     };
   }
 
-  function insertCanvasBlockAt(type, insertAt = -1) {
+  function insertCanvasBlockAt(type, insertAt = -1, scope = "current") {
     let newEntryId = "";
     updateDraft((next) => {
       if (!next.blockFormats[type]) {
@@ -648,7 +666,7 @@ export function TemplateBuilderPage({ toolContext }) {
       }
       const index = insertAt < 0 ? next.canvasBlocks.length : Math.max(0, Math.min(insertAt, next.canvasBlocks.length));
       const formatName = next.blockFormats[type]?.[0]?.name || "Default";
-      const entry = { ...createCanvasEntry(type), formatName };
+      const entry = { ...createCanvasEntry(type), formatName, formatScope: scope };
       if (AI_LINKABLE_TYPES.has(type)) entry.contentSource = "ai";
       newEntryId = entry.id;
       next.canvasBlocks.splice(index, 0, entry);
@@ -660,7 +678,21 @@ export function TemplateBuilderPage({ toolContext }) {
   function addCanvasBlock(type) {
     const currentIndex = selectedEntryId ? draft.canvasBlocks.findIndex((entry) => entry.id === selectedEntryId) : -1;
     const insertAt = currentIndex >= 0 ? currentIndex + 1 : -1;
-    insertCanvasBlockAt(type, insertAt);
+    if ((draft.renderVariants || []).length > 1) {
+      setPendingInsertScope(type);
+      setInsertScopeAt(insertAt);
+      setShowInsertScopePopover(true);
+      return;
+    }
+    insertCanvasBlockAt(type, insertAt, "current");
+  }
+
+  function confirmInsertScope(scope) {
+    if (!pendingInsertScope) return;
+    insertCanvasBlockAt(pendingInsertScope, insertScopeAt, scope);
+    setShowInsertScopePopover(false);
+    setPendingInsertScope(null);
+    setInsertScopeAt(-1);
   }
 
   function addComponentToCanvas(componentId) {
@@ -822,7 +854,6 @@ export function TemplateBuilderPage({ toolContext }) {
     if (entry.position?.x !== undefined) {
       startPosition = { x: Number(entry.position.x || 0), y: Number(entry.position.y || 0), width: Number(entry.position.width || entry.position.w || 60), height: Number(entry.position.height || entry.position.h || 14), unit: "mm" };
     } else {
-      // Flow block: compute its position from DOM
       const blockEl = event.currentTarget.closest(".tplb-canvas-entry");
       const blockRect = blockEl ? blockEl.getBoundingClientRect() : null;
       if (blockRect) {
@@ -834,11 +865,6 @@ export function TemplateBuilderPage({ toolContext }) {
       } else {
         startPosition = { x: 0, y: 0, width: 60, height: 14, unit: "mm" };
       }
-      // Immediately convert to absolute entry
-      setDraft((previous) => ({
-        ...previous,
-        canvasBlocks: previous.canvasBlocks.map((e) => e.id === entry.id ? { ...e, position: startPosition } : e)
-      }));
     }
     pointerDragRef.current = {
       entryId: entry.id,
@@ -1031,11 +1057,11 @@ export function TemplateBuilderPage({ toolContext }) {
     const pageName = `Page ${((selectedVariant?.pages || []).length + 1) || 2}`;
     updateDraft((next) => ({
       ...next,
-      renderVariants: (next.renderVariants || []).map((v) =>
-        v.id === selectedVariantId
-          ? { ...v, pages: [...(v.pages || [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: v.blocks || [] }]), { id: pageId, name: pageName, repeatMode: "once", blocks: [] }] }
-          : v
-      )
+      renderVariants: (next.renderVariants || []).map((v) => {
+        if (v.id !== selectedVariantId) return v;
+        const pages = Array.isArray(v.pages) && v.pages.length ? [...v.pages] : [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }];
+        return { ...v, pages: [...pages, { id: pageId, name: pageName, repeatMode: "once", blocks: [] }] };
+      })
     }));
     setSelectedPageId(pageId);
   }
@@ -1768,6 +1794,16 @@ export function TemplateBuilderPage({ toolContext }) {
                     <span className="tplb-block-group-chevron">{collapsed ? "›" : "⌄"}</span>
                     <span>{group.label}</span>
                   </button>
+                  {showInsertScopePopover ? (
+                    <div className="tplb-component-popover" style={{ marginBottom: 8 }}>
+                      <strong>Add block to:</strong>
+                      <div className="inline-actions" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+                        <button className="table-btn" type="button" onClick={() => confirmInsertScope("current")}>This format</button>
+                        <button className="table-btn" type="button" onClick={() => confirmInsertScope("all")}>All formats</button>
+                        <button className="table-btn" type="button" onClick={() => { setShowInsertScopePopover(false); setPendingInsertScope(null); setInsertScopeAt(-1); }}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : null}
                   {!collapsed && items.map((item) => (
                     <button
                       key={item.type}
@@ -1775,7 +1811,15 @@ export function TemplateBuilderPage({ toolContext }) {
                       className="tplb-block-row"
                       draggable
                       onDragStart={(event) => event.dataTransfer.setData("text/tplb-block-type", item.type)}
-                      onClick={() => addCanvasBlock(item.type)}
+                      onClick={() => {
+                        if ((draft.renderVariants || []).length > 1) {
+                          setPendingInsertScope(item.type);
+                          setInsertScopeAt(selectedEntryId ? draft.canvasBlocks.findIndex((entry) => entry.id === selectedEntryId) + 1 : -1);
+                          setShowInsertScopePopover(true);
+                          return;
+                        }
+                        addCanvasBlock(item.type);
+                      }}
                     >
                       <span className="tplb-block-emoji">{item.emoji}</span>
                       <span>{item.label}</span>
@@ -1951,7 +1995,7 @@ export function TemplateBuilderPage({ toolContext }) {
                 if (type) addCanvasBlock(type);
               }}
             >
-              {/* margin guides now implemented via page padding */}
+              {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ left: `${canvasMarginPx}px`, top: `${canvasMarginPx}px`, right: `${canvasMarginPx}px`, bottom: `${canvasMarginPx}px` }} /> : null}
               {draft.canvasBlocks.length === 0 ? (
                 <div className="tplb-empty-canvas">
                   <p className="hint" style={{ marginTop: 0 }}>Start designing your template. Use the left panel to add blocks.</p>
@@ -2034,10 +2078,12 @@ export function TemplateBuilderPage({ toolContext }) {
 
           {rightTab === "properties" ? (
             <div style={{ marginTop: 10 }}>
-              {!selectedEntry ? <p className="hint">Select a block to edit its properties.</p> : null}
+              <details className="tplb-property-panel" open>
+                <summary>Properties</summary>
+                {!selectedEntry ? <p className="hint">Select a block to edit its properties.</p> : null}
 
-              {selectedEntry && selectedComponent ? (
-                <div>
+                {selectedEntry && selectedComponent ? (
+                  <div>
                   <h4>{selectedComponent.name}</h4>
                   <label className="hint">Component repeat scope
                     <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={normalizeRepeatScope(selectedEntry.repeatScope || "once")} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
@@ -2084,8 +2130,8 @@ export function TemplateBuilderPage({ toolContext }) {
                 </div>
               ) : null}
 
-              {selectedEntry && !selectedComponent ? (
-                <div>
+                {selectedEntry && !selectedComponent ? (
+                  <div>
                   <h4>{labelForType(selectedEntry.type)}</h4>
                   {AI_LINKABLE_TYPES.has(selectedEntry.type) ? (
                     <div className="tplb-content-source">
@@ -2319,7 +2365,8 @@ export function TemplateBuilderPage({ toolContext }) {
                     <p className="hint">Show or hide this block using layer visibility controls.</p>
                   </details>
                 </div>
-              ) : null}
+                ) : null}
+              </details>
             </div>
           ) : (
             <div style={{ marginTop: 10 }}>

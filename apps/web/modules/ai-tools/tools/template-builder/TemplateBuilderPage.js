@@ -150,10 +150,10 @@ function defaultDataFields() {
 
 function defaultRenderVariants() {
   return [
-    { id: "variant-html", format: "html", label: "HTML", pageFormat: "html-continuous", pageLayoutId: "page-1", blocks: [], enabled: true },
-    { id: "variant-pdf", format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], enabled: true },
-    { id: "variant-docx", format: "docx", label: "Word", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], enabled: true },
-    { id: "variant-pptx", format: "pptx", label: "PowerPoint", pageFormat: "ppt-16-9", pageLayoutId: "page-1", blocks: [], enabled: true }
+    { id: "variant-html", format: "html", label: "HTML", pageFormat: "html-continuous", pageLayoutId: "page-1", blocks: [], pages: [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }], enabled: true },
+    { id: "variant-pdf", format: "pdf", label: "PDF", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], pages: [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }], enabled: true },
+    { id: "variant-docx", format: "docx", label: "Word", pageFormat: "a4-portrait", pageLayoutId: "page-1", blocks: [], pages: [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }], enabled: true },
+    { id: "variant-pptx", format: "pptx", label: "PowerPoint", pageFormat: "ppt-16-9", pageLayoutId: "page-1", blocks: [], pages: [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }], enabled: true }
   ];
 }
 
@@ -566,9 +566,19 @@ export function TemplateBuilderPage({ toolContext }) {
   function updateDraft(mutator) {
     setDraft((previous) => {
       const next = typeof mutator === "function" ? mutator(cloneDraft(previous)) : mutator;
+      const selectedVariant = (next.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
+      const pageIdToUse = selectedPageId || (selectedVariant?.pages?.[0]?.id ?? next.activePageId ?? "page-1");
+      const pages = Array.isArray(selectedVariant?.pages) && selectedVariant.pages.length
+        ? selectedVariant.pages
+        : [{ id: selectedVariant?.pageLayoutId || pageIdToUse || "page-1", name: selectedVariant?.label || "Page 1", repeatMode: "once", blocks: Array.isArray(next.canvasBlocks) ? cloneDraft(next.canvasBlocks) : [] }];
+      next.renderVariants = (next.renderVariants || []).map((variant) => {
+        if (variant.id !== selectedVariantId) return variant;
+        const variantPages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [{ id: variant.pageLayoutId || pageIdToUse || "page-1", name: variant.label || "Page 1", repeatMode: "once", blocks: Array.isArray(next.canvasBlocks) ? cloneDraft(next.canvasBlocks) : [] }];
+        return { ...variant, blocks: cloneDraft(next.canvasBlocks), pages: variantPages.map((page) => page.id === pageIdToUse ? { ...page, blocks: cloneDraft(next.canvasBlocks) } : page) };
+      });
+      next.activePageId = pageIdToUse;
       const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? next.pageLayouts : defaultPageLayouts();
-      next.pageLayouts = pageLayouts.map((page) => page.id === next.activePageId ? { ...page, pageFormat: next.pageFormat, blocks: next.canvasBlocks } : page);
-      next.renderVariants = (next.renderVariants || []).map((variant) => variant.id === selectedVariantId ? { ...variant, blocks: next.canvasBlocks } : variant);
+      next.pageLayouts = pageLayouts.map((page) => page.id === pageIdToUse ? { ...page, pageFormat: next.pageFormat, blocks: cloneDraft(next.canvasBlocks) } : page);
       pushHistory(next);
       return next;
     });
@@ -596,6 +606,10 @@ export function TemplateBuilderPage({ toolContext }) {
     const savedPages = Array.isArray(template.pageLayouts) && template.pageLayouts.length ? template.pageLayouts : defaultPageLayouts(template.canvasBlocks || []);
     const savedActivePageId = template.activePageId || savedPages[0]?.id || "page-1";
     const savedActivePage = savedPages.find((page) => page.id === savedActivePageId) || savedPages[0];
+    const baseVariants = (Array.isArray(template.renderVariants) && template.renderVariants.length ? template.renderVariants : defaultRenderVariants()).map((variant) => {
+      const pages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [{ id: variant.pageLayoutId || "page-1", name: variant.label || "Page 1", repeatMode: "once", blocks: Array.isArray(variant.blocks) ? cloneDraft(variant.blocks) : [] }];
+      return { ...variant, pages, blocks: Array.isArray(variant.blocks) ? cloneDraft(variant.blocks) : (pages[0]?.blocks || []) };
+    });
     const nextDraft = {
       id: template.id,
       name: template.name || "Untitled Template",
@@ -607,19 +621,21 @@ export function TemplateBuilderPage({ toolContext }) {
       folderId: template.folderId || "tpl-folder-root",
       blockClasses: template.blockClasses || {},
       dataFields: Array.isArray(template.dataFields) ? template.dataFields : defaultDataFields(),
-      renderVariants: Array.isArray(template.renderVariants) && template.renderVariants.length ? template.renderVariants : defaultRenderVariants(),
+      renderVariants: baseVariants,
       repeatCollectionField: String(template.repeatCollectionField || ""),
       canvasSettings: template.canvasSettings || { showGrid: true, showMargins: true, snapToGrid: true, gridSize: 5, margin: 16 },
       blockFormats: Object.keys(template.blockFormats || {}).length ? template.blockFormats : defaultBlockFormats(),
-        formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
-        activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
-        activePageId: savedActivePageId,
-        pageLayouts: savedPages,
+      formatSets: Array.isArray(template.formatSets) && template.formatSets.length ? template.formatSets : defaultFormatSets(),
+      activeFormatSetId: template.activeFormatSetId || template.formatSets?.[0]?.id || "format-set-default",
+      activePageId: savedActivePageId,
+      pageLayouts: savedPages,
       components: Array.isArray(template.components) && template.components.length ? template.components : starterComponents(),
-        canvasBlocks: Array.isArray(savedActivePage?.blocks) ? savedActivePage.blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
+      canvasBlocks: Array.isArray(savedActivePage?.blocks) ? savedActivePage.blocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [])
     };
-      const firstVariant = nextDraft.renderVariants.find((variant) => variant.id === selectedVariantId);
-      if (firstVariant?.blocks?.length) nextDraft.canvasBlocks = firstVariant.blocks;
+    const activeVariant = nextDraft.renderVariants.find((variant) => variant.id === selectedVariantId) || nextDraft.renderVariants[0];
+    const activePage = activeVariant?.pages?.find((page) => page.id === savedActivePageId) || activeVariant?.pages?.[0] || null;
+    if (activePage?.blocks) nextDraft.canvasBlocks = cloneDraft(activePage.blocks);
+    if (!nextDraft.canvasBlocks.length && Array.isArray(template.canvasBlocks) && template.canvasBlocks.length) nextDraft.canvasBlocks = cloneDraft(template.canvasBlocks);
     setDraft(nextDraft);
     setActiveTemplateId(template.id);
     setHistory([cloneDraft(nextDraft)]);
@@ -960,37 +976,39 @@ export function TemplateBuilderPage({ toolContext }) {
   function alignSelected(alignment) {
     if (multiSelectedIds.length < 1) return;
     updateDraft((next) => {
+      const entries = next.canvasBlocks.filter((entry) => multiSelectedIds.includes(entry.id));
+      if (!entries.length) return next;
+      const pageWidth = Number(pageDim?.w || 210);
+      const margin = Number(draft.canvasSettings?.margin || 16);
+      const leftBound = margin;
+      const rightBound = Math.max(leftBound, pageWidth - margin);
+      const centerX = pageWidth / 2;
+      const leftMost = Math.min(...entries.map((entry) => Number(entry.position?.x || 0)));
+      const topMost = Math.min(...entries.map((entry) => Number(entry.position?.y || 0)));
+      const rightMost = Math.max(...entries.map((entry) => Number(entry.position?.x || 0) + Number(entry.position?.width || entry.position?.w || 0)));
+      const bottomMost = Math.max(...entries.map((entry) => Number(entry.position?.y || 0) + Number(entry.position?.height || entry.position?.h || 0)));
+      const centerY = (topMost + bottomMost) / 2;
       next.canvasBlocks = next.canvasBlocks.map((entry) => {
         if (!multiSelectedIds.includes(entry.id)) return entry;
         const hasPosition = entry.position?.x !== undefined;
         if (hasPosition) {
-          // Absolute block — move position
-          const entries = next.canvasBlocks.filter((e) => multiSelectedIds.includes(e.id));
-          const left = Math.min(...entries.map((e) => Number(e.position?.x || 0)));
-          const top = Math.min(...entries.map((e) => Number(e.position?.y || 0)));
-          const right = Math.max(...entries.map((e) => Number(e.position?.x || 0) + Number(e.position?.width || e.position?.w || 0)));
-          const bottom = Math.max(...entries.map((e) => Number(e.position?.y || 0) + Number(e.position?.height || e.position?.h || 0)));
-          const centerX = (left + right) / 2;
-          const centerY = (top + bottom) / 2;
           const position = entry.position || {};
           const width = Number(position.width || position.w || 0);
           const height = Number(position.height || position.h || 0);
-          const xPatch = alignment === "left" ? { x: left } : alignment === "right" ? { x: right - width } : alignment === "center" ? { x: centerX - width / 2 } : {};
-          const yPatch = alignment === "top" ? { y: top } : alignment === "bottom" ? { y: bottom - height } : alignment === "middle" ? { y: centerY - height / 2 } : {};
+          const xPatch = alignment === "left" ? { x: leftMost } : alignment === "right" ? { x: rightMost - width } : alignment === "center" ? { x: centerX - width / 2 } : alignment === "page-left" ? { x: leftBound } : alignment === "page-right" ? { x: rightBound - width } : alignment === "page-center" ? { x: centerX - width / 2 } : {};
+          const yPatch = alignment === "top" ? { y: topMost } : alignment === "bottom" ? { y: bottomMost - height } : alignment === "middle" ? { y: centerY - height / 2 } : {};
           return { ...entry, position: { ...position, ...xPatch, ...yPatch } };
-        } else {
-          // Flow block — apply text-align style via blockFormats
-          const textAlignMap = { left: "left", center: "center", right: "right" };
-          const ta = textAlignMap[alignment];
-          if (!ta) return entry;
-          const formatList = next.blockFormats[entry.type] || [];
-          const formatName = entry.formatName || "Default";
-          const exists = formatList.some((f) => f.name === formatName);
-          next.blockFormats[entry.type] = exists
-            ? formatList.map((f) => f.name === formatName ? { ...f, style: { ...f.style, textAlign: ta } } : f)
-            : [...formatList, { name: formatName, className: `tplb-${entry.type}`, htmlTemplate: "", style: { textAlign: ta } }];
-          return entry;
         }
+        const textAlignMap = { left: "left", center: "center", right: "right" };
+        const ta = textAlignMap[alignment];
+        if (!ta) return entry;
+        const formatList = next.blockFormats[entry.type] || [];
+        const formatName = entry.formatName || "Default";
+        const exists = formatList.some((f) => f.name === formatName);
+        next.blockFormats[entry.type] = exists
+          ? formatList.map((f) => f.name === formatName ? { ...f, style: { ...f.style, textAlign: ta } } : f)
+          : [...formatList, { name: formatName, className: `tplb-${entry.type}`, htmlTemplate: "", style: { textAlign: ta } }];
+        return entry;
       });
       return next;
     });
@@ -1028,7 +1046,7 @@ export function TemplateBuilderPage({ toolContext }) {
       id: pageId,
       name: `${meta.label}${suffix}`,
       pageFormat: meta.pageFormat,
-      blocks: cloneDraft(draft.canvasBlocks || [])
+      blocks: []
     };
     const nextVariant = {
       id: variantId,
@@ -1036,7 +1054,8 @@ export function TemplateBuilderPage({ toolContext }) {
       label: `${meta.label}${suffix}`,
       pageFormat: meta.pageFormat,
       pageLayoutId: pageId,
-      blocks: cloneDraft(draft.canvasBlocks || []),
+      blocks: [],
+      pages: [nextPage],
       enabled: true
     };
     updateDraft((next) => ({
@@ -1045,9 +1064,10 @@ export function TemplateBuilderPage({ toolContext }) {
       renderVariants: [...(next.renderVariants || []), nextVariant],
       activePageId: pageId,
       pageFormat: nextPage.pageFormat,
-      canvasBlocks: cloneDraft(nextPage.blocks)
+      canvasBlocks: []
     }));
     setSelectedVariantId(variantId);
+    setSelectedPageId(pageId);
     setSelectedEntryId("");
     setShowFormatPopover(false);
   }
@@ -1055,14 +1075,20 @@ export function TemplateBuilderPage({ toolContext }) {
   function addPageToCurrentFormat() {
     const pageId = createId("page");
     const pageName = `Page ${((selectedVariant?.pages || []).length + 1) || 2}`;
-    updateDraft((next) => ({
-      ...next,
-      renderVariants: (next.renderVariants || []).map((v) => {
+    updateDraft((next) => {
+      const updatedVariants = (next.renderVariants || []).map((v) => {
         if (v.id !== selectedVariantId) return v;
-        const pages = Array.isArray(v.pages) && v.pages.length ? [...v.pages] : [{ id: "page-1", name: "Page 1", repeatMode: "once", blocks: [] }];
-        return { ...v, pages: [...pages, { id: pageId, name: pageName, repeatMode: "once", blocks: [] }] };
-      })
-    }));
+        const basePages = Array.isArray(v.pages) && v.pages.length ? [...v.pages] : [{ id: v.pageLayoutId || "page-1", name: v.label || "Page 1", repeatMode: "once", blocks: Array.isArray(v.blocks) ? cloneDraft(v.blocks) : [] }];
+        const pages = [...basePages, { id: pageId, name: pageName, repeatMode: "once", blocks: [] }];
+        return { ...v, pages, pageLayoutId: pageId, blocks: Array.isArray(v.blocks) ? cloneDraft(v.blocks) : [] };
+      });
+      next.renderVariants = updatedVariants;
+      const activePage = (updatedVariants || []).find((v) => v.id === selectedVariantId)?.pages?.find((page) => page.id === pageId) || null;
+      if (activePage) {
+        next.canvasBlocks = cloneDraft(activePage.blocks);
+      }
+      return next;
+    });
     setSelectedPageId(pageId);
   }
 
@@ -1097,20 +1123,31 @@ export function TemplateBuilderPage({ toolContext }) {
   function inspectRenderVariant(variant) {
     const currentVariantId = selectedVariantId;
     const currentBlocks = cloneDraft(draft.canvasBlocks || []);
-    const targetBlocks = variant.blocks?.length
-      ? cloneDraft(variant.blocks)
-      : cloneDraft((draft.pageLayouts || []).find((page) => page.id === variant.pageLayoutId)?.blocks || draft.canvasBlocks || []);
-    setDraft((previous) => ({
-      ...previous,
-      canvasBlocks: targetBlocks,
-      renderVariants: (previous.renderVariants || []).map((item) => item.id === currentVariantId
-        ? { ...item, blocks: currentBlocks }
-        : item.id === variant.id ? { ...item, blocks: targetBlocks } : item),
-      pageFormat: variant.pageFormat || previous.pageFormat
-    }));
-    setSelectedVariantId(variant.id);
-    setSelectedEntryId("");
-    setIsDirty(true);
+  const nextPageId = variant.pages?.[0]?.id || variant.pageLayoutId || "page-1";
+  const currentPageBlocks = Array.isArray(variant.pages) && variant.pages.length ? cloneDraft(variant.pages[0].blocks || []) : cloneDraft(variant.blocks || []);
+  const targetBlocks = currentPageBlocks.length
+    ? currentPageBlocks
+    : cloneDraft((draft.pageLayouts || []).find((page) => page.id === variant.pageLayoutId)?.blocks || draft.canvasBlocks || []);
+  setDraft((previous) => ({
+    ...previous,
+    canvasBlocks: targetBlocks,
+    activePageId: nextPageId,
+    renderVariants: (previous.renderVariants || []).map((item) => {
+      if (item.id === currentVariantId) {
+        return { ...item, blocks: currentBlocks, pages: Array.isArray(item.pages) && item.pages.length ? item.pages.map((page) => page.id === selectedPageId ? { ...page, blocks: cloneDraft(currentBlocks) } : page) : item.pages };
+      }
+      if (item.id === variant.id) {
+        const pages = Array.isArray(item.pages) && item.pages.length ? item.pages : [{ id: nextPageId, name: item.label || "Page 1", repeatMode: "once", blocks: cloneDraft(targetBlocks) }];
+        return { ...item, blocks: cloneDraft(targetBlocks), pages: pages.map((page) => page.id === nextPageId ? { ...page, blocks: cloneDraft(targetBlocks) } : page) };
+      }
+      return item;
+    }),
+    pageFormat: variant.pageFormat || previous.pageFormat
+  }));
+  setSelectedVariantId(variant.id);
+  setSelectedPageId(nextPageId);
+  setSelectedEntryId("");
+  setIsDirty(true);
   }
 
   function toggleMultiSelect(entryId) {
@@ -1972,7 +2009,7 @@ export function TemplateBuilderPage({ toolContext }) {
           {(multiSelectedIds.length >= 1 || selectedEntryId) ? (
             <div className="tplb-align-toolbar">
               <span className="hint" style={{ fontSize: 11 }}>Align:</span>
-              {[["left", "⬅"], ["center", "↔"], ["right", "➡"]].map(([value, label]) => <button className="table-btn" type="button" key={value} title={`Align ${value}`} onClick={() => {
+              {[["page-left", "⟸"], ["left", "⬅"], ["center", "↔"], ["right", "➡"], ["page-right", "⟹"]].map(([value, label]) => <button className="table-btn" type="button" key={value} title={`Align ${value}`} onClick={() => {
                 if (multiSelectedIds.length >= 1) alignSelected(value);
                 else if (selectedEntryId) { setMultiSelectedIds([selectedEntryId]); setTimeout(() => alignSelected(value), 0); }
               }}>{label}</button>)}

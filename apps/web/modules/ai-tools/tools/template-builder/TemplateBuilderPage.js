@@ -567,14 +567,12 @@ export function TemplateBuilderPage({ toolContext }) {
     setDraft((previous) => {
       const next = typeof mutator === "function" ? mutator(cloneDraft(previous)) : mutator;
       const selectedVariant = (next.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
-      const pageIdToUse = selectedPageId || (selectedVariant?.pages?.[0]?.id ?? next.activePageId ?? "page-1");
-      const pages = Array.isArray(selectedVariant?.pages) && selectedVariant.pages.length
-        ? selectedVariant.pages
-        : [{ id: selectedVariant?.pageLayoutId || pageIdToUse || "page-1", name: selectedVariant?.label || "Page 1", repeatMode: "once", blocks: Array.isArray(next.canvasBlocks) ? cloneDraft(next.canvasBlocks) : [] }];
+      const pageIdToUse = selectedPageId || next.activePageId || (selectedVariant?.pages?.[0]?.id ?? selectedVariant?.pageLayoutId ?? "page-1");
       next.renderVariants = (next.renderVariants || []).map((variant) => {
         if (variant.id !== selectedVariantId) return variant;
-        const variantPages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [{ id: variant.pageLayoutId || pageIdToUse || "page-1", name: variant.label || "Page 1", repeatMode: "once", blocks: Array.isArray(next.canvasBlocks) ? cloneDraft(next.canvasBlocks) : [] }];
-        return { ...variant, blocks: cloneDraft(next.canvasBlocks), pages: variantPages.map((page) => page.id === pageIdToUse ? { ...page, blocks: cloneDraft(next.canvasBlocks) } : page) };
+        const variantPages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [{ id: variant.pageLayoutId || "page-1", name: variant.label || "Page 1", repeatMode: "once", blocks: Array.isArray(next.canvasBlocks) ? cloneDraft(next.canvasBlocks) : [] }];
+        const syncedPages = variantPages.map((page) => page.id === pageIdToUse ? { ...page, blocks: cloneDraft(next.canvasBlocks) } : page);
+        return { ...variant, blocks: cloneDraft(next.canvasBlocks), pages: syncedPages };
       });
       next.activePageId = pageIdToUse;
       const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? next.pageLayouts : defaultPageLayouts();
@@ -584,6 +582,34 @@ export function TemplateBuilderPage({ toolContext }) {
     });
     setIsDirty(true);
     setStatusMessage("");
+  }
+
+  function switchActivePage(pageId) {
+    if (!pageId) return;
+    setDraft((previous) => {
+      const next = cloneDraft(previous);
+      const currentVariant = (next.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
+      const currentPageId = selectedPageId || next.activePageId || currentVariant?.pages?.[0]?.id || "page-1";
+      const currentPageBlocks = cloneDraft(next.canvasBlocks || []);
+      next.renderVariants = (next.renderVariants || []).map((variant) => {
+        if (variant.id !== selectedVariantId) return variant;
+        const variantPages = Array.isArray(variant.pages) && variant.pages.length
+          ? variant.pages
+          : [{ id: variant.pageLayoutId || "page-1", name: variant.label || "Page 1", repeatMode: "once", blocks: cloneDraft(next.canvasBlocks || []) }];
+        const syncedPages = variantPages.map((page) => page.id === currentPageId ? { ...page, blocks: cloneDraft(currentPageBlocks) } : page);
+        const targetPage = syncedPages.find((page) => page.id === pageId) || { id: pageId, name: `Page ${syncedPages.length + 1}`, repeatMode: "once", blocks: [] };
+        const finalPages = syncedPages.some((page) => page.id === pageId) ? syncedPages : [...syncedPages, { ...targetPage, blocks: cloneDraft(targetPage.blocks || []) }];
+        const finalTarget = finalPages.find((page) => page.id === pageId) || finalPages[0];
+        return { ...variant, pages: finalPages, blocks: cloneDraft(finalTarget.blocks || []) };
+      });
+      const finalVariant = (next.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
+      const finalTarget = finalVariant?.pages?.find((page) => page.id === pageId) || { id: pageId, name: "Page 1", repeatMode: "once", blocks: [] };
+      next.activePageId = pageId;
+      next.canvasBlocks = cloneDraft(finalTarget.blocks || []);
+      next.pageLayouts = (next.pageLayouts || []).map((page) => page.id === pageId ? { ...page, blocks: cloneDraft(finalTarget.blocks || []) } : page.id === currentPageId ? { ...page, blocks: cloneDraft(currentPageBlocks) } : page);
+      return next;
+    });
+    setSelectedPageId(pageId);
   }
 
   function handleUndo() {
@@ -1772,7 +1798,7 @@ export function TemplateBuilderPage({ toolContext }) {
                     <button
                       type="button"
                       className="tplb-page-tab-btn"
-                      onClick={() => setSelectedPageId(page.id)}
+                      onClick={() => switchActivePage(page.id)}
                       onDoubleClick={() => { setEditingPageId(page.id); setEditingPageName(page.name); }}
                     >
                       {page.name}

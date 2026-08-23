@@ -8,14 +8,24 @@ function resolveRenderVariant(template, format) {
   const variants = Array.isArray(template?.renderVariants) ? template.renderVariants : [];
   const variant = variants.find((item) => item.format === format && item.enabled !== false);
   if (!variant) return template;
-  const page = (template.pageLayouts || []).find((item) => item.id === variant.pageLayoutId);
-  const blocks = variant.blocks?.length ? variant.blocks : (page?.blocks || template.canvasBlocks);
+  const pages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [];
+  const pageIds = new Set(pages.map((page) => page.id).filter(Boolean));
+  const nextPageLayouts = Array.isArray(template.pageLayouts) ? template.pageLayouts.map((page) => {
+    const mapped = pages.find((item) => item.id === page.id);
+    if (mapped) return { ...page, blocks: Array.isArray(mapped.blocks) ? mapped.blocks : page.blocks || [] };
+    return page;
+  }) : [];
+  const resolvedLayouts = nextPageLayouts.length ? nextPageLayouts : (pages.length ? pages.map((page) => ({ ...page, blocks: Array.isArray(page.blocks) ? page.blocks : [] })) : template.pageLayouts || []);
+  const activePage = resolvedLayouts.find((page) => page.id === template.activePageId) || resolvedLayouts[0] || null;
+  const blocks = pages.length
+    ? resolvedLayouts.flatMap((page) => Array.isArray(page.blocks) ? page.blocks : [])
+    : (variant.blocks?.length ? variant.blocks : (activePage?.blocks || template.canvasBlocks || []));
   return {
     ...template,
     pageFormat: variant.pageFormat || template.pageFormat,
-    activePageId: page?.id || template.activePageId,
+    activePageId: activePage?.id || template.activePageId,
     canvasBlocks: blocks,
-    pageLayouts: page ? template.pageLayouts.map((item) => item.id === page.id ? { ...item, blocks } : item) : template.pageLayouts
+    pageLayouts: resolvedLayouts
   };
 }
 

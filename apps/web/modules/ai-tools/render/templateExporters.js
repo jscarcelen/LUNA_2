@@ -45,11 +45,9 @@ function shiftPosition(position, offsetY = 0) {
 
 // Expands components and repeated (array-bound) blocks into a flat, ordered render list.
 export function buildCanvasRenderList(template = {}, sampleData = {}) {
-  const pageLayouts = Array.isArray(template.pageLayouts) ? template.pageLayouts : [];
-  const activePage = pageLayouts.find((page) => page.id === template.activePageId) || pageLayouts[0] || null;
-  const canvasBlocks = Array.isArray(activePage?.blocks) && activePage.blocks.length
-    ? activePage.blocks
-    : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []);
+  const pageLayouts = Array.isArray(template.pageLayouts) && template.pageLayouts.length
+    ? template.pageLayouts
+    : [{ id: template.activePageId || "page-1", pageFormat: template.pageFormat, blocks: Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [] }];
   const components = Array.isArray(template.components) ? template.components : [];
   const blockFormats = template.blockFormats && typeof template.blockFormats === "object" ? template.blockFormats : {};
   const blockClasses = template.blockClasses && typeof template.blockClasses === "object" ? template.blockClasses : {};
@@ -89,67 +87,74 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
 
   const rendered = [];
 
-  for (const entry of canvasBlocks) {
-    const expandedSpecs = expandEntry(entry);
-    const positionedSpecs = expandedSpecs.filter((spec) => spec.position && typeof spec.position === "object");
-    const baseY = positionedSpecs.length ? Math.min(...positionedSpecs.map((spec) => positionMetrics(spec.position).y)) : 0;
-    const maxBottom = positionedSpecs.length ? Math.max(...positionedSpecs.map((spec) => positionMetrics(spec.position).bottom)) : 0;
-    const entryStackGap = 6;
-    const entrySpan = Math.max(14, maxBottom - baseY) + entryStackGap;
-    for (const spec of expandedSpecs) {
-      const repeatScope = normalizeRepeatScope(spec.repeatScope || entry.repeatScope || "once");
-      const records = repeatScope === "per-output" && hasOutputCollection ? outputRecords : [sampleData];
-      for (const [recordIndex, record] of records.entries()) {
-      const type = String(spec.type || "paragraph");
-      const formatName = String(spec.formatName || "");
-      const format = resolveFormat(type, formatName);
-      const className = format?.className || blockClasses[type] || "";
-      const style = format?.style && typeof format.style === "object" ? format.style : {};
-      const isAbsolute = String(style.layoutMode || "").toLowerCase() === "absolute";
-      const htmlTemplate = String(format?.htmlTemplate || "");
-      const specPosition = spec.position || entry.position || null;
-      const blockMetrics = positionMetrics(specPosition || {});
-      const blockStackGap = 4;
-      const repeatedPosition = specPosition
-        ? shiftPosition(specPosition, recordIndex * entrySpan)
-        : null;
+  for (const page of pageLayouts) {
+    const canvasBlocks = Array.isArray(page?.blocks) && page.blocks.length
+      ? page.blocks
+      : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []);
+    const pageId = page?.id || template.activePageId || "page-1";
 
-      if (repeatScope === "per-field" || spec.repeatField) {
-        const values = getPath(record, spec.repeatField);
-        const items = Array.isArray(values) ? values : [];
-        items.forEach((value, index) => {
+    for (const entry of canvasBlocks) {
+      const expandedSpecs = expandEntry(entry);
+      const positionedSpecs = expandedSpecs.filter((spec) => spec.position && typeof spec.position === "object");
+      const baseY = positionedSpecs.length ? Math.min(...positionedSpecs.map((spec) => positionMetrics(spec.position).y)) : 0;
+      const maxBottom = positionedSpecs.length ? Math.max(...positionedSpecs.map((spec) => positionMetrics(spec.position).bottom)) : 0;
+      const entryStackGap = 6;
+      const entrySpan = Math.max(14, maxBottom - baseY) + entryStackGap;
+      for (const spec of expandedSpecs) {
+        const repeatScope = normalizeRepeatScope(spec.repeatScope || entry.repeatScope || "once");
+        const records = repeatScope === "per-output" && hasOutputCollection ? outputRecords : [sampleData];
+        for (const [recordIndex, record] of records.entries()) {
+          const type = String(spec.type || "paragraph");
+          const formatName = String(spec.formatName || "");
+          const format = resolveFormat(type, formatName);
+          const className = format?.className || blockClasses[type] || "";
+          const style = format?.style && typeof format.style === "object" ? format.style : {};
+          const isAbsolute = String(style.layoutMode || "").toLowerCase() === "absolute";
+          const htmlTemplate = String(format?.htmlTemplate || "");
+          const specPosition = spec.position || entry.position || null;
+          const blockMetrics = positionMetrics(specPosition || {});
+          const blockStackGap = 4;
+          const repeatedPosition = specPosition
+            ? shiftPosition(specPosition, recordIndex * entrySpan)
+            : null;
+
+          if (repeatScope === "per-field" || spec.repeatField) {
+            const values = getPath(record, spec.repeatField);
+            const items = Array.isArray(values) ? values : [];
+            items.forEach((value, index) => {
+              rendered.push({
+                type,
+                formatName,
+                className,
+                style,
+                htmlTemplate,
+                position: isAbsolute && repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
+                pageId,
+                hidden: Boolean(spec.hidden || entry.hidden),
+                text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
+                index: index + 1,
+                letter: letterForIndex(index)
+              });
+            });
+            continue;
+          }
+
+          const value = spec.bindField ? getPath(record, spec.bindField) : "";
+          const fallbackText = String(spec.illustrativeText || entry.illustrativeText || "Content placeholder");
           rendered.push({
             type,
             formatName,
             className,
             style,
             htmlTemplate,
-            position: isAbsolute && repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
-            pageId: activePage?.id || "page-1",
+            position: isAbsolute ? repeatedPosition : null,
+            pageId,
             hidden: Boolean(spec.hidden || entry.hidden),
-            text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
-            index: index + 1,
-            letter: letterForIndex(index)
+            text: value === undefined || value === null || value === ""
+              ? fallbackText
+              : (Array.isArray(value) ? value.join(", ") : String(value))
           });
-        });
-        continue;
-      }
-
-      const value = spec.bindField ? getPath(record, spec.bindField) : "";
-      const fallbackText = String(spec.illustrativeText || entry.illustrativeText || "Content placeholder");
-      rendered.push({
-        type,
-        formatName,
-        className,
-        style,
-        htmlTemplate,
-        position: isAbsolute ? repeatedPosition : null,
-        pageId: activePage?.id || "page-1",
-        hidden: Boolean(spec.hidden || entry.hidden),
-        text: value === undefined || value === null || value === ""
-          ? fallbackText
-          : (Array.isArray(value) ? value.join(", ") : String(value))
-      });
+        }
       }
     }
   }
@@ -246,13 +251,16 @@ export function renderTemplateHtml(template = {}, sampleData = {}) {
   const blocks = buildCanvasRenderList(template, sampleData);
   const css = String(template.css || "");
   const containerClass = String(template.containerClass || "luna-template-default");
-  const isContinuous = String(template.pageFormat || "") === "html-continuous";
-  const dimensions = isContinuous ? null : getPageFormatDimensionsMm(template.pageFormat, template.customPageSize);
-  const hasPositionedLayout = blocks.some((block) => block.position && (block.position.x !== undefined || block.position.y !== undefined));
-  const pageCss = dimensions
-    ? `.${containerClass}{position:relative;width:${dimensions.width}mm;min-height:${dimensions.height}mm;box-sizing:border-box;padding:16mm;margin:0 auto;background:#fff;}${hasPositionedLayout ? `.${containerClass}>*{box-sizing:border-box;}` : ""}`
-    : "";
-  const body = blocks.map(renderBlockHtml).join("\n");
+  const pageLayouts = Array.isArray(template.pageLayouts) && template.pageLayouts.length
+    ? template.pageLayouts
+    : [{ id: template.activePageId || "page-1", pageFormat: template.pageFormat, blocks: Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [] }];
+  const pageCss = `.${containerClass}{display:flex;flex-direction:column;gap:18px;}`;
+  const body = pageLayouts.map((page, pageIndex) => {
+    const pageBlocks = blocks.filter((block) => (block.pageId || "page-1") === (page.id || "page-1") || (pageIndex === 0 && !block.pageId));
+    const activeDimensions = getPageFormatDimensionsMm(page.pageFormat || template.pageFormat, page.customPageSize || template.customPageSize);
+    const pageStyle = `position:relative;width:${activeDimensions.width}mm;min-height:${activeDimensions.height}mm;box-sizing:border-box;padding:16mm;margin:0 auto;background:#fff;border:1px solid #e5e1f7;box-shadow:0 3px 10px rgba(43, 49, 84, 0.06);page-break-inside:avoid;`
+    return `<div class="${escapeHtml(containerClass)}-page" style="${pageStyle}">${pageBlocks.map(renderBlockHtml).join("\n")}</div>`;
+  }).join("\n");
   const styleTag = css || pageCss ? `<style>${pageCss}${css}</style>` : "";
   return `${styleTag}<div class="${escapeHtml(containerClass)}">${body}</div>`;
 }
@@ -276,52 +284,53 @@ function wrapPlainText(text, size, maxWidth, useFont) {
 
 export async function renderTemplatePdfBuffer(template = {}, sampleData = {}) {
   const blocks = buildCanvasRenderList(template, sampleData);
-  const activePage = (Array.isArray(template.pageLayouts) ? template.pageLayouts : []).find((page) => page.id === template.activePageId)
-    || (Array.isArray(template.pageLayouts) ? template.pageLayouts[0] : null);
-  const dimensions = getPageFormatDimensionsMm(activePage?.pageFormat || template.pageFormat, activePage?.customPageSize || template.customPageSize);
-  const pageWidth = (dimensions.width / 25.4) * 72;
-  const pageHeight = (dimensions.height / 25.4) * 72;
-  const marginX = 48;
-  const maxWidth = pageWidth - marginX * 2;
+  const pageLayouts = Array.isArray(template.pageLayouts) && template.pageLayouts.length
+    ? template.pageLayouts
+    : [{ id: template.activePageId || "page-1", pageFormat: template.pageFormat, blocks: Array.isArray(template.canvasBlocks) ? template.canvasBlocks : [] }];
 
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const boldFont = await pdf.embedFont(StandardFonts.HelveticaBold);
-  let page = pdf.addPage([pageWidth, pageHeight]);
-  let y = pageHeight - 48;
 
-  for (const block of blocks) {
-    if (block.hidden) continue;
-    const baseSize = Number(String(block.style?.fontSize || "").replace("px", "")) || (block.type.startsWith("heading") ? 18 : 11);
-    const minSize = Number(block.style?.minFontSize) || Math.min(9, baseSize);
-    const isBold = block.style?.fontWeight === "700" || block.type.startsWith("heading");
-    const useFont = isBold ? boldFont : font;
-    const color = block.style?.color ? hexToRgb(block.style.color) : rgb(0.12, 0.14, 0.22);
-    const label = block.type === "answer_choice" ? `${block.letter}  ${block.text}` : (block.type === "question_number" ? `Q${block.text}` : block.text);
+  for (const [pageIndex, page] of pageLayouts.entries()) {
+    const dimensions = getPageFormatDimensionsMm(page.pageFormat || template.pageFormat, page.customPageSize || template.customPageSize);
+    const pageWidth = (dimensions.width / 25.4) * 72;
+    const pageHeight = (dimensions.height / 25.4) * 72;
+    const marginX = 48;
+    const maxWidth = pageWidth - marginX * 2;
+    const pdfPage = pdf.addPage([pageWidth, pageHeight]);
+    let y = pageHeight - 48;
+    const pageBlocks = blocks.filter((block) => (block.pageId || "page-1") === (page.id || "page-1") || (pageIndex === 0 && !block.pageId));
 
-    let size = baseSize;
-    let lines = wrapPlainText(label, size, maxWidth, useFont);
-    while (lines.length * (size + 4) > pageHeight - 96 && size > minSize) {
-      size -= 1;
-      lines = wrapPlainText(label, size, maxWidth, useFont);
-    }
+    for (const block of pageBlocks) {
+      if (block.hidden) continue;
+      const baseSize = Number(String(block.style?.fontSize || "").replace("px", "")) || (block.type.startsWith("heading") ? 18 : 11);
+      const minSize = Number(block.style?.minFontSize) || Math.min(9, baseSize);
+      const isBold = block.style?.fontWeight === "700" || block.type.startsWith("heading");
+      const useFont = isBold ? boldFont : font;
+      const color = block.style?.color ? hexToRgb(block.style.color) : rgb(0.12, 0.14, 0.22);
+      const label = block.type === "answer_choice" ? `${block.letter}  ${block.text}` : (block.type === "question_number" ? `Q${block.text}` : block.text);
 
-    const positioned = block.position && (block.position.x !== undefined || block.position.y !== undefined);
-    const positionUnit = String(block.position?.unit || "mm");
-    const positionScale = positionUnit === "pt" ? 1 : 72 / 25.4;
-    const blockX = positioned ? marginX + Number(block.position?.x || 0) * positionScale : marginX;
-    const blockY = positioned ? pageHeight - 48 - Number(block.position?.y || 0) * positionScale : y;
-    let lineY = blockY;
-    for (const line of lines) {
-      if (y < 60) {
-        page = pdf.addPage([pageWidth, pageHeight]);
-        y = pageHeight - 48;
+      let size = baseSize;
+      let lines = wrapPlainText(label, size, maxWidth, useFont);
+      while (lines.length * (size + 4) > pageHeight - 96 && size > minSize) {
+        size -= 1;
+        lines = wrapPlainText(label, size, maxWidth, useFont);
       }
-      page.drawText(line, { x: blockX, y: positioned ? lineY : y, size, font: useFont, color });
-      lineY -= size + 6;
-      if (!positioned) y -= size + 6;
+
+      const positioned = block.position && (block.position.x !== undefined || block.position.y !== undefined);
+      const positionUnit = String(block.position?.unit || "mm");
+      const positionScale = positionUnit === "pt" ? 1 : 72 / 25.4;
+      const blockX = positioned ? marginX + Number(block.position?.x || 0) * positionScale : marginX;
+      const blockY = positioned ? pageHeight - 48 - Number(block.position?.y || 0) * positionScale : y;
+      let lineY = blockY;
+      for (const line of lines) {
+        pdfPage.drawText(line, { x: blockX, y: positioned ? lineY : y, size, font: useFont, color });
+        lineY -= size + 6;
+        if (!positioned) y -= size + 6;
+      }
+      if (!positioned) y -= 6;
     }
-    if (!positioned) y -= 6;
   }
 
   return Buffer.from(await pdf.save());

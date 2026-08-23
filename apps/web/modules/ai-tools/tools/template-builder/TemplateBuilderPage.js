@@ -3,21 +3,32 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const BLOCK_TYPE_LIBRARY = [
-  { type: "heading1", label: "Heading", emoji: "📝" },
-  { type: "paragraph", label: "Paragraph", emoji: "¶️" },
-  { type: "standalone_text", label: "Text", emoji: "🔤" },
-  { type: "bullet_list", label: "Bullet List", emoji: "•" },
-  { type: "numbered_list", label: "Numbered List", emoji: "🔢" },
-  { type: "image", label: "Image", emoji: "🖼️" },
-  { type: "table", label: "Table", emoji: "▦" },
-  { type: "standalone_formula", label: "Formula", emoji: "ƒ" },
-  { type: "divider", label: "Divider", emoji: "━" },
-  { type: "badge", label: "Badge", emoji: "🏷️" },
-  { type: "spacer", label: "Spacer", emoji: "↕️" },
-  { type: "page_break", label: "Page Break", emoji: "📄" },
-  { type: "question_number", label: "Question #", emoji: "❓" },
-  { type: "answer_choice", label: "Answer Choice", emoji: "🔘" },
-  { type: "explanation", label: "Explanation", emoji: "💡" }
+  { type: "heading1", label: "Heading", emoji: "T↑", group: "text" },
+  { type: "paragraph", label: "Paragraph", emoji: "¶", group: "text" },
+  { type: "standalone_text", label: "Text", emoji: "Aa", group: "text" },
+  { type: "bullet_list", label: "Bullet List", emoji: "☰", group: "text" },
+  { type: "numbered_list", label: "Numbered List", emoji: "①", group: "text" },
+  { type: "image", label: "Image", emoji: "🖼", group: "content" },
+  { type: "table", label: "Table", emoji: "⊞", group: "content" },
+  { type: "standalone_formula", label: "Formula", emoji: "f(x)", group: "content" },
+  { type: "divider", label: "Divider", emoji: "—", group: "content" },
+  { type: "callout", label: "Callout", emoji: "💡", group: "content" },
+  { type: "page_break", label: "Page Break", emoji: "⤓", group: "page" },
+  { type: "header", label: "Header", emoji: "▭", group: "page" },
+  { type: "footer", label: "Footer", emoji: "▬", group: "page" },
+  { type: "page_number", label: "Page Number", emoji: "#", group: "page" },
+  { type: "logo", label: "Logo", emoji: "⬡", group: "page" },
+  { type: "spacer", label: "Spacer", emoji: "↕", group: "page" },
+  { type: "badge", label: "Badge", emoji: "◈", group: "content" },
+  { type: "question_number", label: "Question #", emoji: "Q.", group: "content" },
+  { type: "answer_choice", label: "Answer Choice", emoji: "◎", group: "content" },
+  { type: "explanation", label: "Explanation", emoji: "◆", group: "content" }
+];
+
+const BLOCK_GROUPS = [
+  { key: "text", label: "Text" },
+  { key: "content", label: "Content" },
+  { key: "page", label: "Page Elements" }
 ];
 
 const PAGE_FORMAT_OPTIONS = [
@@ -173,7 +184,64 @@ function labelForType(type) {
 }
 
 function blockEmoji(type) {
-  return BLOCK_TYPE_LIBRARY.find((item) => item.type === type)?.emoji || "▪️";
+  return BLOCK_TYPE_LIBRARY.find((item) => item.type === type)?.emoji || "▪";
+}
+
+// Returns a WYSIWYG-style React style object for rendering a block realistically on canvas
+function blockCanvasStyle(type, formatStyle = {}) {
+  const base = {
+    fontFamily: formatStyle.fontFamily || "Inter, system-ui, sans-serif",
+    color: formatStyle.color || "#1f2440",
+    backgroundColor: formatStyle.backgroundColor || "transparent",
+    textAlign: formatStyle.textAlign || "left",
+    lineHeight: formatStyle.lineHeight || "1.4",
+    padding: formatStyle.padding || "0",
+    fontWeight: formatStyle.fontWeight || "400",
+    letterSpacing: formatStyle.letterSpacing || "0",
+    borderRadius: formatStyle.radius || "0",
+    boxSizing: "border-box",
+    width: "100%"
+  };
+  if (formatStyle.borderColor && formatStyle.borderWidth) {
+    base.border = `${formatStyle.borderWidth} solid ${formatStyle.borderColor}`;
+  }
+  if (type.startsWith("heading")) {
+    const sizeMap = { heading1: "26px", heading2: "20px", heading3: "16px", heading4: "14px" };
+    base.fontSize = formatStyle.fontSize || sizeMap[type] || "20px";
+    base.fontWeight = formatStyle.fontWeight || "700";
+    base.margin = "0 0 6px";
+  } else if (type === "paragraph") {
+    base.fontSize = formatStyle.fontSize || "13px";
+    base.margin = "0 0 4px";
+  } else if (type === "standalone_text") {
+    base.fontSize = formatStyle.fontSize || "13px";
+  } else if (type === "question_number") {
+    base.fontSize = formatStyle.fontSize || "13px";
+    base.fontWeight = "700";
+    base.color = formatStyle.color || "#5b3fd6";
+  } else if (type === "explanation") {
+    base.fontSize = formatStyle.fontSize || "12px";
+    base.color = formatStyle.color || "#5f6788";
+  } else if (type === "answer_choice") {
+    base.fontSize = formatStyle.fontSize || "12px";
+  } else if (type === "callout") {
+    base.backgroundColor = formatStyle.backgroundColor || "#f2edff";
+    base.border = formatStyle.borderColor ? `1.5px solid ${formatStyle.borderColor}` : "1.5px solid rgba(124,92,240,0.25)";
+    base.borderRadius = "8px";
+    base.padding = "10px 14px";
+    base.fontSize = "13px";
+  } else if (type === "header" || type === "footer") {
+    base.fontSize = formatStyle.fontSize || "11px";
+    base.color = formatStyle.color || "#5f6788";
+    base.borderBottom = type === "header" ? "1px solid #e4e0f5" : undefined;
+    base.borderTop = type === "footer" ? "1px solid #e4e0f5" : undefined;
+    base.padding = "6px 0";
+    base.display = "flex";
+    base.justifyContent = "space-between";
+  } else {
+    base.fontSize = formatStyle.fontSize || "13px";
+  }
+  return base;
 }
 
 function illustrativeText(type) {
@@ -199,6 +267,86 @@ function illustrativeText(type) {
 
 function outputFormatMeta(format) {
   return OUTPUT_FORMAT_OPTIONS.find((item) => item.value === format) || OUTPUT_FORMAT_OPTIONS[0];
+}
+
+function WysiwygBlock({ type, text, style }) {
+  if (type === "divider") {
+    return <hr style={{ border: "none", borderTop: "1.5px solid #ddd9f5", margin: "8px 0" }} />;
+  }
+  if (type === "page_break") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0", color: "#a39dc7", fontSize: 11, fontWeight: 600, letterSpacing: "0.06em" }}>
+        <div style={{ flex: 1, height: 1, background: "#e0dcf6" }} />
+        PAGE BREAK
+        <div style={{ flex: 1, height: 1, background: "#e0dcf6" }} />
+      </div>
+    );
+  }
+  if (type === "spacer") {
+    return <div style={{ height: 24 }} />;
+  }
+  if (type === "image") {
+    return (
+      <div style={{ ...style, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 80, background: "#f5f3ff", border: "1.5px dashed #c0b8e8", borderRadius: 8, color: "#9b93d6", fontSize: 28 }}>
+        🖼
+      </div>
+    );
+  }
+  if (type === "table") {
+    return (
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: style.fontSize || "12px" }}>
+        <thead>
+          <tr>{["Column 1", "Column 2", "Column 3"].map((col) => (
+            <th key={col} style={{ border: "1px solid #ddd9f5", background: "#f5f3ff", padding: "4px 8px", textAlign: "left", fontSize: "inherit" }}>{col}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {[1, 2].map((row) => (
+            <tr key={row}>{["Cell", "Cell", "Cell"].map((cell, ci) => (
+              <td key={ci} style={{ border: "1px solid #ebe8f8", padding: "4px 8px", fontSize: "inherit", color: "#666" }}>{cell}</td>
+            ))}</tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
+  if (type === "standalone_formula") {
+    return <div style={{ ...style, fontFamily: "monospace", background: "#f7f6ff", border: "1px solid #ddd9f5", borderRadius: 6, padding: "6px 12px", display: "inline-block" }}>{text}</div>;
+  }
+  if (type === "bullet_list") {
+    return (
+      <ul style={{ margin: 0, paddingLeft: 20, ...style }}>
+        {[text, "Second item", "Third item"].map((item, i) => <li key={i} style={{ fontSize: style.fontSize || "13px", color: style.color || "#1f2440" }}>{item}</li>)}
+      </ul>
+    );
+  }
+  if (type === "numbered_list") {
+    return (
+      <ol style={{ margin: 0, paddingLeft: 20, ...style }}>
+        {[text, "Second item", "Third item"].map((item, i) => <li key={i} style={{ fontSize: style.fontSize || "13px", color: style.color || "#1f2440" }}>{item}</li>)}
+      </ol>
+    );
+  }
+  if (type === "header" || type === "footer") {
+    return (
+      <div style={style}>
+        <span>{text}</span>
+        <span>Page 1</span>
+      </div>
+    );
+  }
+  if (type === "page_number") {
+    return <div style={{ ...style, textAlign: style.textAlign || "center" }}>1 / 5</div>;
+  }
+  if (type === "logo") {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 6, ...style }}>
+        <div style={{ width: 28, height: 28, background: "#7c5cf0", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 14, fontWeight: 700 }}>L</div>
+        <span style={{ fontWeight: 600 }}>LUNA</span>
+      </div>
+    );
+  }
+  return <div style={style}>{text}</div>;
 }
 
 function setPathValue(target, path, value) {
@@ -296,6 +444,9 @@ export function TemplateBuilderPage({ toolContext }) {
   const [quickVariableType, setQuickVariableType] = useState("string");
   const [quickVariableRequired, setQuickVariableRequired] = useState(true);
   const [quickVariableDescription, setQuickVariableDescription] = useState("");
+  const [showOverviewPanel, setShowOverviewPanel] = useState(true);
+  const [collapsedStructureIds, setCollapsedStructureIds] = useState(new Set());
+  const [collapsedBlockGroups, setCollapsedBlockGroups] = useState(new Set());
   const pointerDragRef = useRef(null);
 
   useEffect(() => {
@@ -1284,6 +1435,46 @@ export function TemplateBuilderPage({ toolContext }) {
         <button className={`table-btn ${activeBuilderView === "preview" ? "primary" : ""}`} type="button" onClick={() => { setActiveBuilderView("preview"); if (!previewHtml && !previewPdfUrl) openPreview("html"); }}>Preview</button>
       </nav>
 
+      {/* Overview panel */}
+      <div className="tplb-overview-panel">
+        <button className="tplb-overview-toggle" type="button" onClick={() => setShowOverviewPanel((previous) => !previous)}>
+          <span className="tplb-overview-chevron">{showOverviewPanel ? "▾" : "▸"}</span>
+          <span className="tplb-overview-label">1. OVERVIEW — How this tool works</span>
+        </button>
+        {showOverviewPanel ? (
+          <div className="tplb-overview-body">
+            <p className="tplb-overview-tagline">Define your document once. Map AI data. Export to any format.</p>
+            <div className="tplb-overview-columns">
+              <div className="tplb-overview-section">
+                <p className="tplb-overview-section-title">📚 Use cases</p>
+                <div className="tplb-overview-chips">
+                  {[["📝","Quiz Generation"],["📋","Summary Generation"],["🃏","Flashcards"],["📖","Vocabulary Lists"],["📊","Reports"],["📄","Study Notes"]].map(([icon, label]) => (
+                    <span key={label} className="tplb-overview-chip">{icon} {label}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="tplb-overview-section">
+                <p className="tplb-overview-section-title">🔁 Repetition rules</p>
+                <div className="tplb-overview-rules">
+                  <div className="tplb-overview-rule blue"><span className="tplb-overview-rule-dot" />Once — appears once in the document</div>
+                  <div className="tplb-overview-rule green"><span className="tplb-overview-rule-dot" />Every Page — header, footer, page numbers</div>
+                  <div className="tplb-overview-rule orange"><span className="tplb-overview-rule-dot" />For Each Item — repeats for every AI output (question, flashcard, etc.)</div>
+                </div>
+              </div>
+              <div className="tplb-overview-section">
+                <p className="tplb-overview-section-title">🗂 Workflow</p>
+                <ol className="tplb-overview-steps">
+                  <li>Add blocks or components in <strong>Design</strong></li>
+                  <li>Define structure &amp; data in <strong>Structure</strong></li>
+                  <li>Preview output in <strong>Preview</strong></li>
+                  <li>Switch format tabs to configure HTML / PDF / Word / PowerPoint</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       {activeBuilderView === "preview" ? (
         <section className="panel tplb-preview-panel">
           <div className="tplb-preview-header">
@@ -1312,23 +1503,39 @@ export function TemplateBuilderPage({ toolContext }) {
       {activeBuilderView === "design" ? (
         <>
       <div className="tplb-format-tabs" role="tablist" aria-label="Output format canvases">
-        {(draft.renderVariants || []).map((variant) => (
-          <button key={variant.id} className={selectedVariantId === variant.id ? "tplb-format-tab on" : "tplb-format-tab"} type="button" onClick={() => inspectRenderVariant(variant)}>
-            {variant.format === "pdf" ? "\ud83d\udcc4" : variant.format === "docx" ? "\ud83d\udcdd" : variant.format === "pptx" ? "\ud83d\udcca" : "\ud83c\udf10"} {variant.label}
-          </button>
-        ))}
-        <div className="tplb-format-popover-wrap">
-          <button className="tplb-format-tab add" type="button" onClick={() => setShowFormatPopover((previous) => !previous)} aria-label="Add document format and page">+</button>
-          {showFormatPopover ? (
-            <div className="tplb-block-menu tplb-format-menu">
-              <label className="hint">Output format
-                <select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
-                  {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                </select>
-              </label>
-              <button type="button" onClick={() => addFormatPage(newFormatType)}>Add format</button>
-            </div>
-          ) : null}
+        <div className="tplb-format-tabs-left">
+          {(draft.renderVariants || []).map((variant) => {
+            const icons = { pdf: "📄", docx: "📝", pptx: "📊", html: "🌐" };
+            return (
+              <button key={variant.id} className={`tplb-format-tab${selectedVariantId === variant.id ? " on" : ""}`} type="button" role="tab" aria-selected={selectedVariantId === variant.id} onClick={() => inspectRenderVariant(variant)}>
+                <span className="tplb-format-tab-icon">{icons[variant.format] || "📄"}</span>
+                {variant.label}
+              </button>
+            );
+          })}
+          <div className="tplb-format-popover-wrap">
+            <button className="tplb-format-tab tplb-format-tab-add" type="button" onClick={() => setShowFormatPopover((previous) => !previous)} aria-label="Add output format">+</button>
+            {showFormatPopover ? (
+              <div className="tplb-block-menu tplb-format-menu">
+                <label className="hint">Output format
+                  <select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={newFormatType} onChange={(event) => setNewFormatType(event.target.value)}>
+                    {OUTPUT_FORMAT_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+                  </select>
+                </label>
+                <button type="button" onClick={() => addFormatPage(newFormatType)}>Add format</button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <div className="tplb-format-tabs-right">
+          <select className="tplb-format-page-select" value={draft.pageLayouts?.find((page) => page.id === draft.activePageId)?.pageFormat || draft.pageFormat} onChange={(event) => updateActivePageFormat(event.target.value)}>
+            {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <span className="tplb-zoom-control">
+            <button className="tplb-zoom-btn" type="button" onClick={() => setZoomLevel((previous) => Math.max(25, previous - 25))}>−</button>
+            <span className="tplb-zoom-label">{zoomLevel}%</span>
+            <button className="tplb-zoom-btn" type="button" onClick={() => setZoomLevel((previous) => Math.min(200, previous + 25))}>+</button>
+          </span>
         </div>
       </div>
 
@@ -1358,19 +1565,35 @@ export function TemplateBuilderPage({ toolContext }) {
           ) : null}
 
           <div className="tplb-block-list">
-            {BLOCK_TYPE_LIBRARY.map((item) => (
-              <button
-                key={item.type}
-                type="button"
-                className="tplb-block-row"
-                draggable
-                onDragStart={(event) => event.dataTransfer.setData("text/tplb-block-type", item.type)}
-                onClick={() => addCanvasBlock(item.type)}
-              >
-                <span className="tplb-block-emoji">{item.emoji}</span>
-                <span>{item.label}</span>
-              </button>
-            ))}
+            {BLOCK_GROUPS.map((group) => {
+              const items = BLOCK_TYPE_LIBRARY.filter((item) => item.group === group.key);
+              const collapsed = collapsedBlockGroups.has(group.key);
+              return (
+                <div key={group.key} className="tplb-block-group">
+                  <button className="tplb-block-group-header" type="button" onClick={() => setCollapsedBlockGroups((previous) => {
+                    const next = new Set(previous);
+                    if (next.has(group.key)) next.delete(group.key); else next.add(group.key);
+                    return next;
+                  })}>
+                    <span className="tplb-block-group-chevron">{collapsed ? "›" : "⌄"}</span>
+                    <span>{group.label}</span>
+                  </button>
+                  {!collapsed && items.map((item) => (
+                    <button
+                      key={item.type}
+                      type="button"
+                      className="tplb-block-row"
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData("text/tplb-block-type", item.type)}
+                      onClick={() => addCanvasBlock(item.type)}
+                    >
+                      <span className="tplb-block-emoji">{item.emoji}</span>
+                      <span>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
           </div>
 
           {(draft.components || []).length ? (
@@ -1444,20 +1667,10 @@ export function TemplateBuilderPage({ toolContext }) {
 
         <article className="panel tplb-canvas-panel">
           <div className="tplb-canvas-toolbar">
-            <select className="table-btn" value={draft.pageLayouts.find((page) => page.id === draft.activePageId)?.pageFormat || draft.pageFormat} onChange={(event) => updateActivePageFormat(event.target.value)}>
-              {PAGE_FORMAT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-            <div className="tplb-zoom-control">
-              <button className="table-btn" type="button" onClick={() => setZoomLevel((value) => Math.max(50, value - 10))}>-</button>
-              <span className="hint">{zoomLevel}%</span>
-              <button className="table-btn" type="button" onClick={() => setZoomLevel((value) => Math.min(200, value + 10))}>+</button>
-            </div>
-            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
-            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
-            <label className="hint"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
-            <label className="hint">Grid mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.gridSize || 5} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, gridSize: event.target.value } }))} /></label>
-            <label className="hint">Margin mm <input className="table-btn tplb-small-input" value={draft.canvasSettings?.margin || 16} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, margin: event.target.value } }))} /></label>
-            <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} &middot; {canvasDisplayPageFormat}</span>
+            <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
+            <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
+            <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
+            <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} · {canvasDisplayPageFormat}</span>
           </div>
 
           {multiSelectedIds.length >= 2 ? (
@@ -1519,18 +1732,15 @@ export function TemplateBuilderPage({ toolContext }) {
                           onPointerDown={isAbsolute ? (event) => startPointerInteraction(event, entry) : undefined}
                           onClick={() => setSelectedEntryId(entry.id)}
                         >
-                          <div className="tplb-canvas-entry-head">
-                            <label onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                          {/* WYSIWYG block preview */}
+                          <div className="tplb-canvas-entry-controls" onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
+                            <label>
                               <input type="checkbox" checked={multiSelectedIds.includes(entry.id)} onChange={() => toggleMultiSelect(entry.id)} />
                             </label>
-                            <div style={{ flex: 1 }}>
-                              <strong>{isComponent ? "\ud83e\udde9" : blockEmoji(entry.type)} {isComponent ? component?.name || "Component" : labelForType(entry.type)}</strong>
-                              <div className="hint">{isComponent ? `${component?.blocks?.length || 0} nested blocks` : (entry.illustrativeText || illustrativeText(entry.type))} · <span className="tplb-repeat-badge">{repeatBadgeLabel(normalizedRepeatScope)}</span>{isAbsolute ? ` · ${Math.round(entry.position?.width || entry.position?.w || 0)} x ${Math.round(entry.position?.height || entry.position?.h || 0)} mm` : ""}</div>
-                            </div>
-                            <div className="inline-actions" style={{ gap: 4 }} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()}>
-                              <button className="table-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)}>&uarr;</button>
-                              <button className="table-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)}>&darr;</button>
-                              <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)}>...</button>
+                            <div className="tplb-entry-actions">
+                              <button className="tplb-micro-btn" type="button" disabled={index === 0} onClick={() => moveCanvasEntry(index, index - 1)} title="Move up">↑</button>
+                              <button className="tplb-micro-btn" type="button" disabled={index === draft.canvasBlocks.length - 1} onClick={() => moveCanvasEntry(index, index + 1)} title="Move down">↓</button>
+                              <button className="tplb-micro-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === entry.id ? "" : entry.id)} title="More">⋯</button>
                               {openBlockMenuId === entry.id ? (
                                 <div className="tplb-block-menu">
                                   <button type="button" onClick={() => { duplicateCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Duplicate</button>
@@ -1538,10 +1748,29 @@ export function TemplateBuilderPage({ toolContext }) {
                                   <button type="button" onClick={() => { removeCanvasEntry(entry.id); setOpenBlockMenuId(""); }}>Delete</button>
                                 </div>
                               ) : null}
-                              {isComponent ? <button className="table-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)}>Enter</button> : null}
-                              {isComponent ? <button className="table-btn" type="button" onClick={() => ungroupComponentEntry(entry.id)}>Split</button> : null}
+                              {isComponent ? <button className="tplb-micro-btn" type="button" onClick={() => setComponentEditorId(entry.componentRefId)} title="Enter component">⤵</button> : null}
                             </div>
                           </div>
+                          {/* Actual WYSIWYG content */}
+                          {isComponent ? (
+                            <div className="tplb-canvas-component-preview">
+                              <div className="tplb-canvas-comp-label">{component?.name || "Component"} <span className="tplb-repeat-badge">{repeatBadgeLabel(normalizedRepeatScope)}</span></div>
+                              {(component?.blocks || []).map((block) => {
+                                const blockFmt = (draft.blockFormats[block.type] || []).find((f) => f.name === (block.formatName || "Default"));
+                                const bs = blockCanvasStyle(block.type, blockFmt?.style || {});
+                                return <WysiwygBlock key={block.id} type={block.type} text={block.bindField ? `{${block.bindField}}` : (block.illustrativeText || illustrativeText(block.type))} style={bs} />;
+                              })}
+                            </div>
+                          ) : (
+                            <div className="tplb-canvas-block-preview">
+                              {normalizedRepeatScope !== "once" ? <span className="tplb-repeat-badge tplb-repeat-badge-inline">{repeatBadgeLabel(normalizedRepeatScope)}</span> : null}
+                              <WysiwygBlock
+                                type={entry.type}
+                                text={entry.bindField ? `{${entry.bindField}}` : (entry.illustrativeText || illustrativeText(entry.type))}
+                                style={blockCanvasStyle(entry.type, ((draft.blockFormats[entry.type] || []).find((f) => f.name === (entry.formatName || "Default"))?.style || {}))}
+                              />
+                            </div>
+                          )}
                           {isAbsolute ? <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} /> : null}
                         </div>
                         <div className="tplb-flow-arrow">↓</div>
@@ -1826,19 +2055,58 @@ export function TemplateBuilderPage({ toolContext }) {
             </div>
             <div className="inline-actions" style={{ gap: 8, flexWrap: "wrap" }}>
               <button className="table-btn" type="button" onClick={() => addStructureBlock("section")}>+ Section</button>
-              <button className="table-btn" type="button" onClick={() => addStructureBlock("content")}>+ Content Block</button>
-              <button className="table-btn" type="button" onClick={() => addStructureBlock("repeating")}>+ Repeating Block</button>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("content")}>+ Block</button>
+              <button className="table-btn" type="button" onClick={() => addStructureBlock("repeating")}>+ Repeating</button>
               <button className="table-btn" type="button" onClick={() => addStructureBlock("page_break")}>+ Page Break</button>
             </div>
           </div>
           <div className="tplb-structure-grid">
             <div className="tplb-structure-flow">
-              {structureItems.map((item) => (
-                <button key={item.id} className={`tplb-structure-node ${selectedStructureEntryId === item.id ? "active" : ""}`} type="button" onClick={() => setSelectedStructureEntryId(item.id)}>
-                  <strong>{item.label}</strong>
-                  <span>{item.repeatScope === "per-output" ? "For each AI output item" : item.repeatScope === "per-field" ? `For each item in ${item.repeatField || "variable"}[]` : item.repeatScope === "per-page" ? "Once per page" : "Once per document"}</span>
-                </button>
-              ))}
+              {structureItems.map((item) => {
+                const scope = normalizeRepeatScope(item.repeatScope || "once");
+                const isPageBreak = item.type === "page_break";
+                const isCollapsed = collapsedStructureIds.has(item.id);
+                const hasChildren = item.isComponent && item.component?.blocks?.length > 0;
+                const badgeColor = scope === "per-output" || scope === "per-field" ? "orange" : scope === "per-page" ? "green" : "grey";
+                const badgeText = scope === "per-output" ? `For each item in ${draft.repeatCollectionField || "output"}[]` :
+                  scope === "per-field" ? `For each item in ${item.repeatField || "variable"}[]` :
+                  scope === "per-page" ? "Every page" : "Once";
+                const badgeIcon = scope === "per-output" || scope === "per-field" ? "🔁" : scope === "per-page" ? "📄" : "1×";
+                if (isPageBreak) {
+                  return (
+                    <div key={item.id} className="tplb-struc-pagebreak" onClick={() => setSelectedStructureEntryId(item.id)}>
+                      <span className="tplb-struc-drag">⠿</span>
+                      <span className="tplb-struc-pb-line">— PAGE BREAK —</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={item.id} className={`tplb-struc-node ${selectedStructureEntryId === item.id ? "active" : ""}`}>
+                    <div className="tplb-struc-row" onClick={() => setSelectedStructureEntryId(item.id)}>
+                      <span className="tplb-struc-drag">⠿</span>
+                      {hasChildren ? (
+                        <button className="tplb-struc-chevron" type="button" onClick={(event) => { event.stopPropagation(); setCollapsedStructureIds((previous) => { const next = new Set(previous); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; }); }}>
+                          {isCollapsed ? "▸" : "▾"}
+                        </button>
+                      ) : <span style={{ width: 16 }} />}
+                      <span className="tplb-struc-label">{item.isComponent ? "🧩" : blockEmoji(item.type)} {item.label}</span>
+                      <span className={`tplb-struc-badge tplb-struc-badge-${badgeColor}`} title={badgeText}>{badgeIcon} {badgeText}</span>
+                    </div>
+                    {hasChildren && !isCollapsed ? (
+                      <div className="tplb-struc-children">
+                        {(item.component?.blocks || []).map((block) => (
+                          <div key={block.id} className="tplb-struc-child">
+                            <span className="tplb-struc-child-icon">{blockEmoji(block.type)}</span>
+                            <span className="tplb-struc-child-label">{labelForType(block.type)}</span>
+                            {block.bindField ? <span className="tplb-struc-field-chip">{`{${block.bindField}}`}</span> : null}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {!structureItems.length ? <p className="hint" style={{ padding: "24px 0" }}>No blocks yet. Add blocks in the Design view or use the buttons above.</p> : null}
             </div>
             <div className="tplb-structure-editor">
               {!selectedStructureItem ? <p className="hint">Select a structure block to configure repetition and mappings.</p> : (

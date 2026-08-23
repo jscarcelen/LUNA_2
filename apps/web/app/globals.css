@@ -4371,3 +4371,86 @@ body {
   padding-top: 6px;
 }
 
+
+
+/* Content source toggle */
+.tplb-content-source {
+  margin-bottom: 12px;
+}
+
+.tplb-content-toggle {
+  display: flex;
+  gap: 4px;
+  margin: 6px 0 8px;
+  border: 1.5px solid var(--tplb-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.tplb-toggle-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 6px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--tplb-muted);
+  font-weight: 500;
+}
+
+.tplb-toggle-btn.on {
+  background: var(--tplb-accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tplb-toggle-btn:hover:not(.on) {
+  background: var(--tplb-lavender);
+  color: var(--tplb-ink);
+}
+
+.tplb-content-textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+/* Group component creation prompt */
+.tplb-group-selection-box {
+  border: 1.5px solid rgba(124,92,240,0.35);
+  border-radius: 10px;
+  background: rgba(242,237,255,0.5);
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  margin-top: 8px;
+}
+
+.tplb-group-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tplb-ink);
+  margin-bottom: 8px;
+}
+
+/* Flow entry resize handle — bottom right */
+.tplb-canvas-entry.flow-entry.selected .tplb-resize-handle {
+  display: block;
+}
+
+/* Block size inputs in properties */
+.tplb-size-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.tplb-size-row label {
+  font-size: 11px;
+  color: var(--tplb-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}

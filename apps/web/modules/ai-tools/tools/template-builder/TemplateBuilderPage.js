@@ -31,6 +31,13 @@ const BLOCK_GROUPS = [
   { key: "page", label: "Page Elements" }
 ];
 
+const AI_LINKABLE_TYPES = new Set([
+  "heading1", "heading2", "heading3", "heading4",
+  "paragraph", "standalone_text", "bullet_list", "numbered_list",
+  "image", "table", "standalone_formula", "callout",
+  "question_number", "answer_choice", "explanation", "badge"
+]);
+
 const PAGE_FORMAT_OPTIONS = [
   { value: "html-continuous", label: "HTML \u2014 Continuous" },
   { value: "a4-portrait", label: "A4 Portrait" },
@@ -269,7 +276,7 @@ function outputFormatMeta(format) {
   return OUTPUT_FORMAT_OPTIONS.find((item) => item.value === format) || OUTPUT_FORMAT_OPTIONS[0];
 }
 
-function WysiwygBlock({ type, text, style }) {
+function WysiwygBlock({ type, text, style, isAiLinked }) {
   if (type === "divider") {
     return <hr style={{ border: "none", borderTop: "1.5px solid #ddd9f5", margin: "8px 0" }} />;
   }
@@ -346,7 +353,7 @@ function WysiwygBlock({ type, text, style }) {
       </div>
     );
   }
-  return <div style={style}>{text}</div>;
+  return <div style={style}>{isAiLinked ? <span style={{ background: "rgba(124,92,240,0.08)", border: "1px dashed rgba(124,92,240,0.3)", borderRadius: 4, padding: "0 6px", color: "#7c5cf0", fontStyle: "italic" }}>{text}</span> : text}</div>;
 }
 
 function setPathValue(target, path, value) {
@@ -434,7 +441,8 @@ export function TemplateBuilderPage({ toolContext }) {
   const [newFormatType, setNewFormatType] = useState("pdf");
   const [activeBuilderView, setActiveBuilderView] = useState("design");
   const [selectedStructureEntryId, setSelectedStructureEntryId] = useState("");
-  const [insertMenuIndex, setInsertMenuIndex] = useState(-1);
+  const [showGroupComponentModal, setShowGroupComponentModal] = useState(false);
+  const [groupComponentNameDraft, setGroupComponentNameDraft] = useState("");
   const [zoomLevel, setZoomLevel] = useState(100);
   const [previewFormat, setPreviewFormat] = useState("html");
   const [previewPdfUrl, setPreviewPdfUrl] = useState("");
@@ -607,7 +615,6 @@ export function TemplateBuilderPage({ toolContext }) {
       return next;
     });
     setSelectedEntryId("");
-    setInsertMenuIndex(-1);
   }
 
   function addCanvasBlock(type) {
@@ -631,7 +638,6 @@ export function TemplateBuilderPage({ toolContext }) {
       });
       return next;
     });
-    setInsertMenuIndex(-1);
   }
 
   function updateComponent(componentId, patch) {
@@ -976,8 +982,9 @@ export function TemplateBuilderPage({ toolContext }) {
     setMultiSelectedIds((previous) => (previous.includes(entryId) ? previous.filter((id) => id !== entryId) : [...previous, entryId]));
   }
 
-  function createComponentFromSelection() {
+  function createComponentFromSelection(name) {
     if (multiSelectedIds.length < 2) return;
+    const componentName = (name || groupComponentNameDraft || "").trim() || `Component ${draft.components.length + 1}`;
     updateDraft((next) => {
       const selectedEntries = next.canvasBlocks.filter((item) => multiSelectedIds.includes(item.id));
       const blocks = [];
@@ -986,10 +993,10 @@ export function TemplateBuilderPage({ toolContext }) {
           const component = next.components.find((item) => item.id === entry.componentRefId);
           if (component) blocks.push(...component.blocks.map((block) => ({ ...block, id: createId("blk") })));
         } else {
-          blocks.push({ id: createId("blk"), type: entry.type, formatName: entry.formatName, bindField: entry.bindField, repeatField: entry.repeatField });
+          blocks.push({ id: createId("blk"), type: entry.type, formatName: entry.formatName, bindField: entry.bindField, repeatField: entry.repeatField, illustrativeText: entry.illustrativeText });
         }
       }
-      const newComponent = { id: createId("comp"), name: `Component ${next.components.length + 1}`, description: "Created from selection.", blocks };
+      const newComponent = { id: createId("comp"), name: componentName, description: "Created from selection.", blocks };
       next.components = [...next.components, newComponent];
       const firstIndex = next.canvasBlocks.findIndex((item) => item.id === multiSelectedIds[0]);
       const remaining = next.canvasBlocks.filter((item) => !multiSelectedIds.includes(item.id));
@@ -998,6 +1005,8 @@ export function TemplateBuilderPage({ toolContext }) {
       return next;
     });
     setMultiSelectedIds([]);
+    setShowGroupComponentModal(false);
+    setGroupComponentNameDraft("");
   }
 
   function createNamedComponent() {
@@ -1118,7 +1127,6 @@ export function TemplateBuilderPage({ toolContext }) {
       next.canvasBlocks.splice(index, 0, entry);
       return next;
     });
-    setInsertMenuIndex(-1);
   }
 
   async function requestRender(format) {
@@ -1622,9 +1630,29 @@ export function TemplateBuilderPage({ toolContext }) {
           ) : null}
 
           {multiSelectedIds.length >= 2 ? (
-            <button className="table-btn" type="button" onClick={createComponentFromSelection} style={{ width: "100%", marginTop: 8 }}>
-              Create Component From Selection ({multiSelectedIds.length})
-            </button>
+            <div className="tplb-group-selection-box">
+              <div className="tplb-group-count">🧩 {multiSelectedIds.length} blocks selected</div>
+              <button className="table-btn primary" type="button" style={{ width: "100%" }} onClick={() => { setGroupComponentNameDraft(""); setShowGroupComponentModal(true); }}>
+                Create Component
+              </button>
+              {showGroupComponentModal ? (
+                <div className="tplb-component-popover" style={{ marginTop: 8 }}>
+                  <strong>Name this component</strong>
+                  <input
+                    className="table-btn"
+                    style={{ display: "block", marginTop: 6, width: "100%" }}
+                    value={groupComponentNameDraft}
+                    placeholder={`Component ${draft.components.length + 1}`}
+                    onChange={(event) => setGroupComponentNameDraft(event.target.value)}
+                    autoFocus
+                  />
+                  <div className="inline-actions" style={{ justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                    <button className="table-btn" type="button" onClick={() => setShowGroupComponentModal(false)}>Cancel</button>
+                    <button className="table-btn primary" type="button" onClick={() => createComponentFromSelection()}>Create</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
           ) : null}
 
           {activeComponentEditor ? (
@@ -1655,14 +1683,25 @@ export function TemplateBuilderPage({ toolContext }) {
                   </div>
                 ))}
               </div>
-              <div className="inline-actions" style={{ gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-                {BLOCK_TYPE_LIBRARY.slice(0, 8).map((item) => <button className="table-btn" type="button" key={item.type} onClick={() => addComponentBlock(activeComponentEditor.id, item.type)}>+ {item.label}</button>)}
-                <button className="table-btn danger" type="button" onClick={() => deleteComponent(activeComponentEditor.id)}>Delete Component</button>
+              <div className="tplb-comp-add-blocks" style={{ marginTop: 8 }}>
+                {BLOCK_GROUPS.map((group) => (
+                  <div key={group.key}>
+                    <p className="hint" style={{ fontSize: 11, fontWeight: 700, margin: "8px 0 4px", textTransform: "uppercase" }}>{group.label}</p>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {BLOCK_TYPE_LIBRARY.filter((item) => item.group === group.key).map((item) => (
+                        <button className="table-btn" type="button" key={item.type} onClick={() => addComponentBlock(activeComponentEditor.id, item.type)}>
+                          {item.emoji} {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
+              <button className="table-btn danger" type="button" style={{ marginTop: 8, width: "100%" }} onClick={() => deleteComponent(activeComponentEditor.id)}>Delete Component</button>
             </div>
           ) : null}
 
-          <p className="hint tplb-left-hint">Select a block in the flow and click + Add block to insert after it. Dragging is optional.</p>
+          <p className="hint tplb-left-hint">Select a block in the flow to edit it, or use the left panel to add more blocks. Dragging is optional.</p>
         </article>
 
         <article className="panel tplb-canvas-panel">
@@ -1696,15 +1735,7 @@ export function TemplateBuilderPage({ toolContext }) {
               {draft.canvasSettings?.showMargins ? <div className="tplb-margin-guides" style={{ inset: `${(Number(draft.canvasSettings?.margin || 16) / (canvasDisplayPageFormat.startsWith("ppt-") ? 297 : 210)) * 100}%` }} /> : null}
               {draft.canvasBlocks.length === 0 ? (
                 <div className="tplb-empty-canvas">
-                  <p className="hint" style={{ marginTop: 0 }}>Start designing your template.</p>
-                  <button className="table-btn primary" type="button" onClick={() => setInsertMenuIndex(0)}>+ Add block</button>
-                </div>
-              ) : null}
-              {insertMenuIndex === 0 ? (
-                <div className="tplb-inline-insert-menu">
-                  {BLOCK_TYPE_LIBRARY.map((item) => (
-                    <button key={`insert-start-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, 0)}>{item.label}</button>
-                  ))}
+                  <p className="hint" style={{ marginTop: 0 }}>Start designing your template. Use the left panel to add blocks.</p>
                 </div>
               ) : null}
               {canvasGroups.map((group, groupIndex) => (
@@ -1717,16 +1748,8 @@ export function TemplateBuilderPage({ toolContext }) {
                     const normalizedRepeatScope = normalizeRepeatScope(entry.repeatScope || "once");
                     const isAbsolute = isAbsoluteEntry(entry);
                     return (
-                      <div key={entry.id}>
-                        <button className="tplb-inline-insert" type="button" onClick={() => setInsertMenuIndex((previous) => previous === index ? -1 : index)}>+ Add block</button>
-                        {insertMenuIndex === index ? (
-                          <div className="tplb-inline-insert-menu">
-                            {BLOCK_TYPE_LIBRARY.map((item) => (
-                              <button key={`insert-${entry.id}-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, index)}>{item.label}</button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <div
+                      <div
+                        key={entry.id}
                           className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""} ${isAbsolute ? "absolute-entry" : "flow-entry"}`}
                           style={isAbsolute ? positionToCanvasStyle(entry.position, canvasDisplayPageFormat) : undefined}
                           onPointerDown={isAbsolute ? (event) => startPointerInteraction(event, entry) : undefined}
@@ -1762,33 +1785,22 @@ export function TemplateBuilderPage({ toolContext }) {
                               })}
                             </div>
                           ) : (
-                            <div className="tplb-canvas-block-preview">
+                            <div className="tplb-canvas-block-preview" style={{ minHeight: entry.blockSize?.h ? `${entry.blockSize.h}mm` : undefined, width: entry.blockSize?.w ? `${entry.blockSize.w}%` : undefined }}>
                               {normalizedRepeatScope !== "once" ? <span className="tplb-repeat-badge tplb-repeat-badge-inline">{repeatBadgeLabel(normalizedRepeatScope)}</span> : null}
                               <WysiwygBlock
                                 type={entry.type}
-                                text={entry.bindField ? `{${entry.bindField}}` : (entry.illustrativeText || illustrativeText(entry.type))}
+                                text={entry.contentSource === "ai" && entry.bindField ? `{${entry.bindField}}` : (entry.illustrativeText || illustrativeText(entry.type))}
+                                isAiLinked={entry.contentSource === "ai" && Boolean(entry.bindField)}
                                 style={blockCanvasStyle(entry.type, ((draft.blockFormats[entry.type] || []).find((f) => f.name === (entry.formatName || "Default"))?.style || {}))}
                               />
                             </div>
                           )}
-                          {isAbsolute ? <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} /> : null}
+                          <span className="tplb-resize-handle" role="button" aria-label="Resize block" onPointerDown={(event) => startPointerInteraction(event, entry, "resize")} />
                         </div>
-                        <div className="tplb-flow-arrow">↓</div>
-                      </div>
                     );
                   })}
                 </div>
               ))}
-              {draft.canvasBlocks.length > 0 ? (
-                <button className="tplb-inline-insert" type="button" onClick={() => setInsertMenuIndex((previous) => previous === draft.canvasBlocks.length ? -1 : draft.canvasBlocks.length)}>+ Add block</button>
-              ) : null}
-              {insertMenuIndex === draft.canvasBlocks.length ? (
-                <div className="tplb-inline-insert-menu">
-                  {BLOCK_TYPE_LIBRARY.map((item) => (
-                    <button key={`insert-end-${item.type}`} className="table-btn" type="button" onClick={() => insertCanvasBlockAt(item.type, draft.canvasBlocks.length)}>{item.label}</button>
-                  ))}
-                </div>
-              ) : null}
             </div>
           </div>
         </article>
@@ -1854,6 +1866,66 @@ export function TemplateBuilderPage({ toolContext }) {
               {selectedEntry && !selectedComponent ? (
                 <div>
                   <h4>{labelForType(selectedEntry.type)}</h4>
+                  {AI_LINKABLE_TYPES.has(selectedEntry.type) ? (
+                    <div className="tplb-content-source">
+                      <span className="hint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Content</span>
+                      <div className="tplb-content-toggle">
+                        <button
+                          className={`tplb-toggle-btn ${!selectedEntry.contentSource || selectedEntry.contentSource === "hardcoded" ? "on" : ""}`}
+                          type="button"
+                          onClick={() => patchSelectedEntry({ contentSource: "hardcoded", bindField: "" })}
+                        >✎ Hardcoded</button>
+                        <button
+                          className={`tplb-toggle-btn ${selectedEntry.contentSource === "ai" ? "on" : ""}`}
+                          type="button"
+                          onClick={() => patchSelectedEntry({ contentSource: "ai" })}
+                        >⚡ AI Output</button>
+                      </div>
+                      {(!selectedEntry.contentSource || selectedEntry.contentSource === "hardcoded") ? (
+                        <textarea
+                          className="table-btn tplb-content-textarea"
+                          rows={3}
+                          placeholder="Enter hardcoded text..."
+                          value={selectedEntry.illustrativeText || ""}
+                          onChange={(event) => patchSelectedEntry({ illustrativeText: event.target.value })}
+                        />
+                      ) : (
+                        <>
+                          <label className="hint">AI variable
+                            <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.bindField || ""} onChange={(event) => patchSelectedEntry({ bindField: event.target.value, repeatField: "" })}>
+                              <option value="">Not mapped</option>
+                              {scalarFields.map((field) => <option key={field.name} value={field.name}>{field.name} ({field.dataType})</option>)}
+                            </select>
+                          </label>
+                          <button className="table-btn" type="button" style={{ marginTop: 6 }} onClick={() => openQuickVariableCreator({
+                            name: selectedEntry.bindField || labelForType(selectedEntry.type).toLowerCase().replace(/[^a-z0-9]+/g, "_"),
+                            label: labelForType(selectedEntry.type),
+                            dataType: "string",
+                            required: true
+                          })}>+ Create variable</button>
+                          {showQuickVariableCreator ? (
+                            <div className="tplb-component-popover" style={{ marginTop: 8 }}>
+                              <strong>Create variable</strong>
+                              <label className="hint">Variable name<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableName} onChange={(event) => setQuickVariableName(event.target.value)} /></label>
+                              <label className="hint">Label<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableLabel} onChange={(event) => setQuickVariableLabel(event.target.value)} /></label>
+                              <label className="hint">Type<select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableType} onChange={(event) => setQuickVariableType(event.target.value)}>{DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
+                              <label className="hint">Description<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableDescription} onChange={(event) => setQuickVariableDescription(event.target.value)} /></label>
+                              <label className="hint"><input type="checkbox" checked={quickVariableRequired} onChange={(event) => setQuickVariableRequired(event.target.checked)} /> Required</label>
+                              <div className="inline-actions" style={{ justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
+                                <button className="table-btn" type="button" onClick={() => setShowQuickVariableCreator(false)}>Cancel</button>
+                                <button className="table-btn primary" type="button" onClick={createVariableForSelectedBlock} disabled={!quickVariableName.trim()}>Create</button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="tplb-content-source">
+                      <span className="hint" style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>Content</span>
+                      <p className="hint" style={{ marginTop: 4 }}>Visual element — no content mapping available.</p>
+                    </div>
+                  )}
                   <label className="hint">Repeat scope
                     <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={normalizeRepeatScope(selectedEntry.repeatScope || "once")} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -1885,50 +1957,34 @@ export function TemplateBuilderPage({ toolContext }) {
                         {arrayFields.map((field) => <option key={field.name} value={field.name}>{field.name}</option>)}
                       </select>
                     </label>
-                  ) : (
-                    <label className="hint">Data variable
-                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.bindField || ""} onChange={(event) => patchSelectedEntry({ bindField: event.target.value, repeatField: "" })}>
-                        <option value="">Not mapped</option>
-                        {scalarFields.map((field) => <option key={field.name} value={field.name}>{field.name} ({field.dataType})</option>)}
-                      </select>
-                    </label>
-                  )}
-                  <button className="table-btn" type="button" style={{ marginTop: 6 }} onClick={() => openQuickVariableCreator({
-                    name: selectedEntry.bindField || labelForType(selectedEntry.type).toLowerCase().replace(/[^a-z0-9]+/g, "_"),
-                    label: labelForType(selectedEntry.type),
-                    dataType: normalizeRepeatScope(selectedEntry.repeatScope || "once") === "per-field" ? "array" : "string",
-                    required: true
-                  })}>+ Create variable</button>
-                  {showQuickVariableCreator ? (
-                    <div className="tplb-component-popover" style={{ marginTop: 8 }}>
-                      <strong>Create variable</strong>
-                      <label className="hint">Variable name<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableName} onChange={(event) => setQuickVariableName(event.target.value)} /></label>
-                      <label className="hint">Label<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableLabel} onChange={(event) => setQuickVariableLabel(event.target.value)} /></label>
-                      <label className="hint">Type<select className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableType} onChange={(event) => setQuickVariableType(event.target.value)}>{DATA_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}</select></label>
-                      <label className="hint">Description<input className="table-btn" style={{ display: "block", marginTop: 4, width: "100%" }} value={quickVariableDescription} onChange={(event) => setQuickVariableDescription(event.target.value)} /></label>
-                      <label className="hint"><input type="checkbox" checked={quickVariableRequired} onChange={(event) => setQuickVariableRequired(event.target.checked)} /> Required</label>
-                      <div className="inline-actions" style={{ justifyContent: "flex-end", gap: 6, marginTop: 8 }}>
-                        <button className="table-btn" type="button" onClick={() => setShowQuickVariableCreator(false)}>Cancel</button>
-                        <button className="table-btn primary" type="button" onClick={createVariableForSelectedBlock} disabled={!quickVariableName.trim()}>Create</button>
-                      </div>
-                    </div>
                   ) : null}
 
                   <div className="tplb-property-section">
-                    <strong>Position (metadata)</strong>
-                    <div className="tplb-mapping-row">
-                      <input className="table-btn" placeholder="X" value={selectedEntry.position?.x || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, x: event.target.value } })} />
-                      <input className="table-btn" placeholder="Y" value={selectedEntry.position?.y || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, y: event.target.value } })} />
+                    <strong>Size</strong>
+                    <div className="tplb-size-row">
+                      <label>
+                        Width %
+                        <input className="table-btn" placeholder="100" value={selectedEntry.blockSize?.w || ""} onChange={(event) => patchSelectedEntry({ blockSize: { ...selectedEntry.blockSize, w: event.target.value === "" ? undefined : Number(event.target.value) } })} />
+                      </label>
+                      <label>
+                        Min Height mm
+                        <input className="table-btn" placeholder="auto" value={selectedEntry.blockSize?.h || ""} onChange={(event) => patchSelectedEntry({ blockSize: { ...selectedEntry.blockSize, h: event.target.value === "" ? undefined : Number(event.target.value) } })} />
+                      </label>
                     </div>
-                    <div className="tplb-mapping-row">
-                      <input className="table-btn" placeholder="W" value={selectedEntry.position?.w || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, w: event.target.value } })} />
-                      <input className="table-btn" placeholder="H" value={selectedEntry.position?.h || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, h: event.target.value } })} />
-                    </div>
-                    <label className="hint">Anchor to
-                      <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.anchor || "Page"} onChange={(event) => patchSelectedEntry({ anchor: event.target.value })}>
-                        {ANCHOR_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
-                      </select>
-                    </label>
+                    <button className="table-btn" type="button" style={{ marginTop: 6 }} onClick={() => patchSelectedEntry({ blockSize: { ...selectedEntry.blockSize, w: 100 } })}>Full width</button>
+                    {isAbsoluteEntry(selectedEntry) ? (
+                      <>
+                        <div className="tplb-mapping-row" style={{ marginTop: 8 }}>
+                          <input className="table-btn" placeholder="X" value={selectedEntry.position?.x || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, x: event.target.value } })} />
+                          <input className="table-btn" placeholder="Y" value={selectedEntry.position?.y || ""} onChange={(event) => patchSelectedEntry({ position: { ...selectedEntry.position, y: event.target.value } })} />
+                        </div>
+                        <label className="hint">Anchor to
+                          <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={selectedEntry.anchor || "Page"} onChange={(event) => patchSelectedEntry({ anchor: event.target.value })}>
+                            {ANCHOR_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+                          </select>
+                        </label>
+                      </>
+                    ) : null}
                   </div>
 
                   <details className="tplb-property-section">

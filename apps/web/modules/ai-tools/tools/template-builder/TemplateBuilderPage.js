@@ -1053,6 +1053,21 @@ export function TemplateBuilderPage({ toolContext }) {
     updateDraft((next) => ({ ...next, renderVariants: (next.renderVariants || []).map((variant) => variant.id === variantId ? { ...variant, ...patch } : variant) }));
   }
 
+  function movePageInVariant(variantId, fromIndex, toIndex) {
+    if (!variantId || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+    updateDraft((next) => ({
+      ...next,
+      renderVariants: (next.renderVariants || []).map((variant) => {
+        if (variant.id !== variantId) return variant;
+        const pages = [...(variant.pages || [])];
+        const [movedPage] = pages.splice(fromIndex, 1);
+        if (!movedPage) return variant;
+        pages.splice(toIndex, 0, movedPage);
+        return { ...variant, pages };
+      })
+    }));
+  }
+
   function inspectRenderVariant(variant) {
     const currentVariantId = selectedVariantId;
     const currentBlocks = cloneDraft(draft.canvasBlocks || []);
@@ -1671,7 +1686,7 @@ export function TemplateBuilderPage({ toolContext }) {
         return (
           <div className="tplb-page-tabs">
             <span className="tplb-page-tabs-label">Pages:</span>
-            {variantPages.map((page) => (
+            {variantPages.map((page, pageIndex) => (
               <div key={page.id} className={`tplb-page-tab${selectedPageId === page.id ? " on" : ""}`}>
                 {editingPageId === page.id ? (
                   <input
@@ -1690,17 +1705,23 @@ export function TemplateBuilderPage({ toolContext }) {
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <button
-                    type="button"
-                    className="tplb-page-tab-btn"
-                    onClick={() => setSelectedPageId(page.id)}
-                    onDoubleClick={() => { setEditingPageId(page.id); setEditingPageName(page.name); }}
-                  >
-                    {page.name}
-                    <span className={`tplb-page-tab-mode ${page.repeatMode === "per-ai-output" ? "orange" : ""}`}>
-                      {page.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
-                    </span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      className="tplb-page-tab-btn"
+                      onClick={() => setSelectedPageId(page.id)}
+                      onDoubleClick={() => { setEditingPageId(page.id); setEditingPageName(page.name); }}
+                    >
+                      {page.name}
+                      <span className={`tplb-page-tab-mode ${page.repeatMode === "per-ai-output" ? "orange" : ""}`}>
+                        {page.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
+                      </span>
+                    </button>
+                    <div className="tplb-page-tab-actions">
+                      <button className="tplb-micro-btn" type="button" disabled={pageIndex === 0} onClick={(event) => { event.stopPropagation(); movePageInVariant(selectedVariantId, pageIndex, pageIndex - 1); }}>↑</button>
+                      <button className="tplb-micro-btn" type="button" disabled={pageIndex === variantPages.length - 1} onClick={(event) => { event.stopPropagation(); movePageInVariant(selectedVariantId, pageIndex, pageIndex + 1); }}>↓</button>
+                    </div>
+                  </>
                 )}
               </div>
             ))}
@@ -2358,8 +2379,8 @@ export function TemplateBuilderPage({ toolContext }) {
                               {page.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
                             </span>
                             <div className="tplb-struc-page-actions">
-                              <button className="tplb-micro-btn" type="button" disabled={pageIdx === 0} onClick={(e) => { e.stopPropagation(); }}>↑</button>
-                              <button className="tplb-micro-btn" type="button" disabled={pageIdx === variantPages.length - 1} onClick={(e) => { e.stopPropagation(); }}>↓</button>
+                              <button className="tplb-micro-btn" type="button" disabled={pageIdx === 0} onClick={(e) => { e.stopPropagation(); movePageInVariant(variant.id, pageIdx, pageIdx - 1); }}>↑</button>
+                              <button className="tplb-micro-btn" type="button" disabled={pageIdx === variantPages.length - 1} onClick={(e) => { e.stopPropagation(); movePageInVariant(variant.id, pageIdx, pageIdx + 1); }}>↓</button>
                             </div>
                           </div>
                           {!isCollapsedPage && pageBlocks.map((entry) => {

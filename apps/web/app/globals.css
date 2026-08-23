@@ -4736,6 +4736,12 @@ body {
   color: var(--tplb-purple, #6c5ce7);
   font-weight: 600;
 }
+.tplb-page-tab-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+}
 .tplb-page-tab-input {
   border: none;
   outline: none;

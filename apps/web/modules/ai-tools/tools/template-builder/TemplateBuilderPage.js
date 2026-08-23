@@ -215,7 +215,9 @@ function blockCanvasStyle(type, formatStyle = {}) {
     letterSpacing: formatStyle.letterSpacing || "0",
     borderRadius: formatStyle.radius || "0",
     boxSizing: "border-box",
-    width: "100%"
+    width: "100%",
+    opacity: Number(formatStyle.opacity ?? 1),
+    zIndex: Number(formatStyle.zIndex ?? 1)
   };
   if (formatStyle.borderColor && formatStyle.borderWidth) {
     base.border = `${formatStyle.borderWidth} solid ${formatStyle.borderColor}`;
@@ -284,7 +286,7 @@ function outputFormatMeta(format) {
   return OUTPUT_FORMAT_OPTIONS.find((item) => item.value === format) || OUTPUT_FORMAT_OPTIONS[0];
 }
 
-function WysiwygBlock({ type, text, style, isAiLinked }) {
+function WysiwygBlock({ type, text, style, isAiLinked, imageSrc, selected = false }) {
   if (type === "divider") {
     return <hr style={{ border: "none", borderTop: "1.5px solid #ddd9f5", margin: "8px 0" }} />;
   }
@@ -301,8 +303,25 @@ function WysiwygBlock({ type, text, style, isAiLinked }) {
     return <div style={{ height: 24 }} />;
   }
   if (type === "image") {
+    const imageStyle = {
+      ...style,
+      display: "block",
+      width: "100%",
+      maxWidth: "100%",
+      height: "auto",
+      minHeight: 80,
+      objectFit: style?.objectFit || "cover",
+      opacity: Number(style?.opacity ?? 1),
+      borderRadius: style?.radius || style?.borderRadius || 8,
+      background: imageSrc ? "transparent" : "#f5f3ff",
+      border: selected ? "2px solid rgba(124,92,240,0.9)" : (imageSrc ? "1px solid rgba(124,92,240,0.2)" : "1.5px dashed #c0b8e8"),
+      boxShadow: selected ? "0 0 0 3px rgba(124,92,240,0.12)" : "none"
+    };
+    if (imageSrc) {
+      return <img src={imageSrc} alt={text || "Image block"} style={imageStyle} />;
+    }
     return (
-      <div style={{ ...style, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 80, background: "#f5f3ff", border: "1.5px dashed #c0b8e8", borderRadius: 8, color: "#9b93d6", fontSize: 28 }}>
+      <div style={{ ...style, display: "flex", alignItems: "center", justifyContent: "center", minHeight: 80, background: "#f5f3ff", border: selected ? "2px solid rgba(124,92,240,0.9)" : "1.5px dashed #c0b8e8", borderRadius: 8, color: "#9b93d6", fontSize: 28, opacity: Number(style?.opacity ?? 1), boxShadow: selected ? "0 0 0 3px rgba(124,92,240,0.12)" : "none" }}>
         🖼
       </div>
     );
@@ -464,6 +483,8 @@ export function TemplateBuilderPage({ toolContext }) {
   const [collapsedStructureIds, setCollapsedStructureIds] = useState(new Set());
   const [collapsedBlockGroups, setCollapsedBlockGroups] = useState(new Set());
   const [selectedPageId, setSelectedPageId] = useState("page-1");
+  const [favoriteBlockTypes, setFavoriteBlockTypes] = useState(["heading1", "paragraph", "image", "table"]);
+  const [favoriteComponents, setFavoriteComponents] = useState([]);
   const [clipboardBlocks, setClipboardBlocks] = useState([]);
   const [pendingInsertScope, setPendingInsertScope] = useState(null);
   const [showInsertScopePopover, setShowInsertScopePopover] = useState(false);
@@ -712,8 +733,34 @@ export function TemplateBuilderPage({ toolContext }) {
       repeatField: "",
       repeatScope: "once",
       layoutMode: "Flow",
-      illustrativeText: illustrativeText(type)
+      illustrativeText: illustrativeText(type),
+      imageSrc: "",
+      opacity: 1,
+      zIndex: 0
     };
+  }
+
+  function readFileAsDataUrl(file) {
+    if (!file || typeof FileReader === "undefined") return Promise.resolve("");
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => resolve("");
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function moveCanvasEntryLayer(entryId, direction) {
+    updateDraft((next) => {
+      const index = next.canvasBlocks.findIndex((entry) => entry.id === entryId);
+      if (index < 0) return next;
+      const list = [...next.canvasBlocks];
+      const [item] = list.splice(index, 1);
+      const targetIndex = direction === "front" ? list.length : 0;
+      list.splice(targetIndex, 0, item);
+      next.canvasBlocks = list.map((entry, idx) => ({ ...entry, zIndex: idx + 1 }));
+      return next;
+    });
   }
 
   function insertCanvasBlockAt(type, insertAt = -1, scope = "current") {
@@ -1244,6 +1291,37 @@ export function TemplateBuilderPage({ toolContext }) {
     setShowComponentPopover(false);
   }
 
+  function toggleFavoriteBlock(type) {
+    setFavoriteBlockTypes((previous) => previous.includes(type) ? previous.filter((entry) => entry !== type) : [...previous, type]);
+  }
+
+  function toggleFavoriteComponent(componentId) {
+    setFavoriteComponents((previous) => previous.includes(componentId) ? previous.filter((entry) => entry !== componentId) : [...previous, componentId]);
+  }
+
+  async function handleSelectedImageUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file || !selectedEntryId) return;
+    const dataUrl = await readFileAsDataUrl(file);
+    if (!dataUrl) return;
+    patchSelectedEntry({ imageSrc: dataUrl, opacity: Number(selectedEntry?.opacity ?? 1) || 1 });
+    event.target.value = "";
+  }
+
+  function handlePageBackgroundUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    readFileAsDataUrl(file).then((dataUrl) => {
+      if (!dataUrl) return;
+      updateDraft((next) => ({
+        ...next,
+        canvasSettings: { ...next.canvasSettings, backgroundImage: dataUrl, backgroundMode: "fixed" },
+        pageLayouts: (next.pageLayouts || []).map((page) => page.id === next.activePageId ? { ...page, backgroundImage: dataUrl } : page)
+      }));
+    });
+    event.target.value = "";
+  }
+
   function createIllustrativeRecords(count) {
     return Array.from({ length: Math.max(1, Number(count) || 1) }, (_, index) => ({
       index: index + 1,
@@ -1590,6 +1668,7 @@ export function TemplateBuilderPage({ toolContext }) {
   const canvasPxH = pageDim.h ? pageDim.h * mmToPx : undefined;
   const gridSizePx = Math.max(2, Number(draft.canvasSettings?.gridSize || 5)) * mmToPx;
   const canvasMarginPx = (Number(draft.canvasSettings?.margin || 16)) * mmToPx;
+  const pageBackgroundImage = draft.canvasSettings?.backgroundImage || "";
   const canvasPageStyle = {
     position: "relative",
     width: CANVAS_PX_W,
@@ -1599,10 +1678,14 @@ export function TemplateBuilderPage({ toolContext }) {
     overflow: "visible",
     padding: draft.canvasSettings?.showMargins ? `${canvasMarginPx}px` : "8px",
     background: "#fff",
-    backgroundImage: draft.canvasSettings?.showGrid
-      ? "linear-gradient(rgba(112, 99, 183, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(112, 99, 183, 0.1) 1px, transparent 1px)"
-      : "none",
-    backgroundSize: `${gridSizePx}px ${gridSizePx}px`
+    backgroundImage: pageBackgroundImage
+      ? `url("${pageBackgroundImage}")`
+      : (draft.canvasSettings?.showGrid
+        ? "linear-gradient(rgba(112, 99, 183, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(112, 99, 183, 0.1) 1px, transparent 1px)"
+        : "none"),
+    backgroundSize: pageBackgroundImage ? "cover" : `${gridSizePx}px ${gridSizePx}px`,
+    backgroundPosition: "center",
+    backgroundRepeat: pageBackgroundImage ? "no-repeat" : "repeat"
   };
 
   return (
@@ -1907,6 +1990,34 @@ export function TemplateBuilderPage({ toolContext }) {
             })}
           </div>
 
+          <div className="tplb-panel-subheader tplb-panel-subheader-row">
+            <span>FAVORITES</span>
+          </div>
+          <div className="tplb-block-list" style={{ marginBottom: 8 }}>
+            {favoriteBlockTypes.length ? favoriteBlockTypes.map((type) => {
+              const meta = BLOCK_TYPE_LIBRARY.find((item) => item.type === type);
+              if (!meta) return null;
+              return (
+                <button key={type} type="button" className="tplb-block-row" onClick={() => addCanvasBlock(type)}>
+                  <span className="tplb-block-emoji">{meta.emoji}</span>
+                  <span>{meta.label}</span>
+                  <span style={{ marginLeft: "auto", color: "#7c5cf0" }} onClick={(event) => { event.stopPropagation(); toggleFavoriteBlock(type); }}>★</span>
+                </button>
+              );
+            }) : <p className="hint">Star blocks or components you reuse often.</p>}
+            {favoriteComponents.length ? (
+              <div style={{ marginTop: 8 }}>
+                {(draft.components || []).filter((component) => favoriteComponents.includes(component.id)).map((component) => (
+                  <button key={component.id} type="button" className="tplb-block-row" onClick={() => addComponentToCanvas(component.id)}>
+                    <span className="tplb-block-emoji">🧩</span>
+                    <span>{component.name}</span>
+                    <span style={{ marginLeft: "auto", color: "#7c5cf0" }} onClick={(event) => { event.stopPropagation(); toggleFavoriteComponent(component.id); }}>★</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
           {(draft.components || []).length ? (
             <>
               <div className="tplb-panel-subheader tplb-panel-subheader-row">
@@ -1919,7 +2030,10 @@ export function TemplateBuilderPage({ toolContext }) {
                     <strong>{"\ud83e\udde9"} {component.name}</strong>
                     <span>{component.blocks.length} blocks &middot; click to insert</span>
                   </button>
-                  <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === `component:${component.id}` ? "" : `component:${component.id}`)}>&bull;&bull;&bull;</button>
+                  <div className="inline-actions" style={{ gap: 4 }}>
+                    <button className="table-btn" type="button" onClick={() => toggleFavoriteComponent(component.id)} title="Toggle favorite">★</button>
+                    <button className="table-btn" type="button" onClick={() => setOpenBlockMenuId((previous) => previous === `component:${component.id}` ? "" : `component:${component.id}`)}>&bull;&bull;&bull;</button>
+                  </div>
                   {openBlockMenuId === `component:${component.id}` ? (
                     <div className="tplb-block-menu">
                       <button type="button" onClick={() => { setComponentEditorId(component.id); setOpenBlockMenuId(""); }}>Edit</button>
@@ -2012,6 +2126,10 @@ export function TemplateBuilderPage({ toolContext }) {
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showGrid: event.target.checked } }))} /> Grid</label>
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
+            <label className="hint tplb-toolbar-check" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <span>BG</span>
+              <input type="file" accept="image/*" onChange={handlePageBackgroundUpload} style={{ maxWidth: 90 }} />
+            </label>
             <select className="table-btn" style={{ fontSize: 11 }} title="Margin preset"
               value={MARGIN_PRESETS.find((p) => p.value === (draft.canvasSettings?.margin || 16))?.value ?? "custom"}
               onChange={(e) => {
@@ -2122,7 +2240,7 @@ export function TemplateBuilderPage({ toolContext }) {
                               {(component?.blocks || []).map((block) => {
                                 const blockFmt = (draft.blockFormats[block.type] || []).find((f) => f.name === (block.formatName || "Default"));
                                 const bs = blockCanvasStyle(block.type, blockFmt?.style || {});
-                                return <WysiwygBlock key={block.id} type={block.type} text={block.bindField ? `{${block.bindField}}` : (block.illustrativeText || illustrativeText(block.type))} style={bs} />;
+                                return <WysiwygBlock key={block.id} type={block.type} text={block.bindField ? `{${block.bindField}}` : (block.illustrativeText || illustrativeText(block.type))} style={{ ...bs, opacity: Number(block.opacity ?? bs.opacity ?? 1) }} imageSrc={block.imageSrc} />;
                               })}
                             </div>
                           ) : (
@@ -2133,7 +2251,13 @@ export function TemplateBuilderPage({ toolContext }) {
                                 type={entry.type}
                                 text={entry.contentSource === "ai" && entry.bindField ? `{${entry.bindField}}` : (entry.illustrativeText || illustrativeText(entry.type))}
                                 isAiLinked={entry.contentSource === "ai" && Boolean(entry.bindField)}
-                                style={blockCanvasStyle(entry.type, ((draft.blockFormats[entry.type] || []).find((f) => f.name === (entry.formatName || "Default"))?.style || {}))}
+                                imageSrc={entry.imageSrc || ""}
+                                selected={selectedEntryId === entry.id}
+                                style={{
+                                  ...blockCanvasStyle(entry.type, ((draft.blockFormats[entry.type] || []).find((f) => f.name === (entry.formatName || "Default"))?.style || {})),
+                                  opacity: Number(entry.opacity ?? 1),
+                                  zIndex: Number(entry.zIndex ?? 1)
+                                }}
                               />
                             </div>
                           )}
@@ -2270,6 +2394,36 @@ export function TemplateBuilderPage({ toolContext }) {
                       <p className="hint" style={{ marginTop: 4 }}>Visual element — no content mapping available.</p>
                     </div>
                   )}
+
+                  {selectedEntry.type === "image" ? (
+                    <div className="tplb-property-section">
+                      <strong>Image</strong>
+                      <label className="hint" style={{ display: "block", marginTop: 6 }}>
+                        Upload image
+                        <input type="file" accept="image/*" onChange={handleSelectedImageUpload} style={{ display: "block", marginTop: 4, width: "100%" }} />
+                      </label>
+                      {selectedEntry.imageSrc ? (
+                        <img src={selectedEntry.imageSrc} alt="Selected image" style={{ width: "100%", maxHeight: 120, objectFit: "cover", borderRadius: 8, marginTop: 8, border: "1px solid #e7e2ff" }} />
+                      ) : null}
+                      <label className="hint" style={{ display: "block", marginTop: 8 }}>
+                        Transparency
+                        <input type="range" min={0.1} max={1} step={0.05} value={Number(selectedEntry.opacity ?? 1)} onChange={(event) => patchSelectedEntry({ opacity: Number(event.target.value) })} style={{ width: "100%" }} />
+                      </label>
+                    </div>
+                  ) : null}
+
+                  <div className="tplb-property-section">
+                    <strong>Layer</strong>
+                    <div className="inline-actions" style={{ gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+                      <button className="table-btn" type="button" onClick={() => moveCanvasEntryLayer(selectedEntry.id, "back")}>Send to back</button>
+                      <button className="table-btn" type="button" onClick={() => moveCanvasEntryLayer(selectedEntry.id, "front")}>Send to front</button>
+                    </div>
+                    <label className="hint" style={{ display: "block", marginTop: 8 }}>
+                      Stack order
+                      <input className="table-btn" value={Number(selectedEntry.zIndex ?? 0)} onChange={(event) => patchSelectedEntry({ zIndex: Number(event.target.value) || 0 })} style={{ display: "block", marginTop: 4, width: "100%" }} />
+                    </label>
+                  </div>
+
                   <label className="hint">Repeat scope
                     <select className="table-btn" style={{ display: "block", marginTop: 4 }} value={normalizeRepeatScope(selectedEntry.repeatScope || "once")} onChange={(event) => patchSelectedEntry({ repeatScope: event.target.value })}>
                       {REPEAT_SCOPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}

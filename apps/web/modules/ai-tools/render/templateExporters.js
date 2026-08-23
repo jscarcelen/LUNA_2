@@ -132,6 +132,8 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
                 pageId,
                 hidden: Boolean(spec.hidden || entry.hidden),
                 text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
+                imageSrc: spec.imageSrc || entry.imageSrc || "",
+                opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1,
                 index: index + 1,
                 letter: letterForIndex(index)
               });
@@ -152,7 +154,9 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
             hidden: Boolean(spec.hidden || entry.hidden),
             text: value === undefined || value === null || value === ""
               ? fallbackText
-              : (Array.isArray(value) ? value.join(", ") : String(value))
+              : (Array.isArray(value) ? value.join(", ") : String(value)),
+            imageSrc: spec.imageSrc || entry.imageSrc || "",
+            opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1
           });
         }
       }
@@ -182,6 +186,8 @@ function styleObjectToCss(style = {}) {
   if (style.margin) rules.push(`margin:${style.margin}`);
   if (style.borderWidth && style.borderColor) rules.push(`border:${style.borderWidth} solid ${style.borderColor}`);
   if (style.radius) rules.push(`border-radius:${style.radius}`);
+  if (style.opacity !== undefined) rules.push(`opacity:${Number(style.opacity)}`);
+  if (style.objectFit) rules.push(`object-fit:${style.objectFit}`);
   if (style.keepTogether) rules.push("break-inside:avoid");
   if (style.layoutMode === "Absolute") rules.push("position:absolute");
   return rules.join(";");
@@ -216,6 +222,11 @@ function renderBlockHtml(block) {
   if (block.type === "heading3") return `<h3${classAttr}${styleAttr}>${text}</h3>`;
   if (block.type === "divider") return `<hr${classAttr}${styleAttr} />`;
   if (block.type === "badge") return `<span${classAttr}${styleAttr}>${text}</span>`;
+  if (block.type === "image") {
+    const src = block.imageSrc || "data:image/svg+xml;charset=UTF-8," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="220"><rect width="100%" height="100%" fill="#f5f3ff"/><text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" font-size="22" fill="#7c5cf0">Image</text></svg>');
+    const imageCss = css ? `${css};width:100%;max-width:100%;height:auto;display:block;object-fit:cover;` : "width:100%;max-width:100%;height:auto;display:block;object-fit:cover;";
+    return `<img${classAttr} src="${src}" alt="${text}" style="${imageCss}" />`;
+  }
   if (block.type === "spacer") return `<div${classAttr}${styleAttr} style="height:16px;${css}"></div>`;
   if (block.type === "page_break") return "<div style=\"page-break-after:always;\"></div>";
   if (block.type === "bullet_list" || block.type === "numbered_list") {

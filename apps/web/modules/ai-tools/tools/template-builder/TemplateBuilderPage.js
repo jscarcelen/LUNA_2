@@ -868,23 +868,39 @@ export function TemplateBuilderPage({ toolContext }) {
   }
 
   function alignSelected(alignment) {
-    if (multiSelectedIds.length < 2) return;
+    if (multiSelectedIds.length < 1) return;
     updateDraft((next) => {
-      const entries = next.canvasBlocks.filter((entry) => multiSelectedIds.includes(entry.id));
-      const left = Math.min(...entries.map((entry) => Number(entry.position?.x || 0)));
-      const top = Math.min(...entries.map((entry) => Number(entry.position?.y || 0)));
-      const right = Math.max(...entries.map((entry) => Number(entry.position?.x || 0) + Number(entry.position?.width || entry.position?.w || 0)));
-      const bottom = Math.max(...entries.map((entry) => Number(entry.position?.y || 0) + Number(entry.position?.height || entry.position?.h || 0)));
-      const centerX = (left + right) / 2;
-      const centerY = (top + bottom) / 2;
       next.canvasBlocks = next.canvasBlocks.map((entry) => {
         if (!multiSelectedIds.includes(entry.id)) return entry;
-        const position = entry.position || {};
-        const width = Number(position.width || position.w || 0);
-        const height = Number(position.height || position.h || 0);
-        const patch = alignment.includes("left") ? { x: left } : alignment.includes("right") ? { x: right - width } : alignment.includes("center") ? { x: centerX - width / 2 } : {};
-        const verticalPatch = alignment.includes("top") ? { y: top } : alignment.includes("bottom") ? { y: bottom - height } : alignment.includes("middle") ? { y: centerY - height / 2 } : {};
-        return { ...entry, position: { ...position, ...patch, ...verticalPatch } };
+        const hasPosition = entry.position?.x !== undefined;
+        if (hasPosition) {
+          // Absolute block — move position
+          const entries = next.canvasBlocks.filter((e) => multiSelectedIds.includes(e.id));
+          const left = Math.min(...entries.map((e) => Number(e.position?.x || 0)));
+          const top = Math.min(...entries.map((e) => Number(e.position?.y || 0)));
+          const right = Math.max(...entries.map((e) => Number(e.position?.x || 0) + Number(e.position?.width || e.position?.w || 0)));
+          const bottom = Math.max(...entries.map((e) => Number(e.position?.y || 0) + Number(e.position?.height || e.position?.h || 0)));
+          const centerX = (left + right) / 2;
+          const centerY = (top + bottom) / 2;
+          const position = entry.position || {};
+          const width = Number(position.width || position.w || 0);
+          const height = Number(position.height || position.h || 0);
+          const xPatch = alignment === "left" ? { x: left } : alignment === "right" ? { x: right - width } : alignment === "center" ? { x: centerX - width / 2 } : {};
+          const yPatch = alignment === "top" ? { y: top } : alignment === "bottom" ? { y: bottom - height } : alignment === "middle" ? { y: centerY - height / 2 } : {};
+          return { ...entry, position: { ...position, ...xPatch, ...yPatch } };
+        } else {
+          // Flow block — apply text-align style via blockFormats
+          const textAlignMap = { left: "left", center: "center", right: "right" };
+          const ta = textAlignMap[alignment];
+          if (!ta) return entry;
+          const formatList = next.blockFormats[entry.type] || [];
+          const formatName = entry.formatName || "Default";
+          const exists = formatList.some((f) => f.name === formatName);
+          next.blockFormats[entry.type] = exists
+            ? formatList.map((f) => f.name === formatName ? { ...f, style: { ...f.style, textAlign: ta } } : f)
+            : [...formatList, { name: formatName, className: `tplb-${entry.type}`, htmlTemplate: "", style: { textAlign: ta } }];
+          return entry;
+        }
       });
       return next;
     });
@@ -1355,19 +1371,35 @@ export function TemplateBuilderPage({ toolContext }) {
 
   const selectedVariant = (draft.renderVariants || []).find((variant) => variant.id === selectedVariantId) || null;
   const canvasDisplayPageFormat = selectedVariant?.pageFormat || draft.pageFormat;
+  // Page dimensions in mm for each format
+  const PAGE_DIMS = {
+    "a4-portrait": { w: 210, h: 297 },
+    "a4-landscape": { w: 297, h: 210 },
+    "letter-portrait": { w: 216, h: 279 },
+    "letter-landscape": { w: 279, h: 216 },
+    "ppt-16-9": { w: 338, h: 190 },
+    "ppt-4-3": { w: 254, h: 190 },
+    "html-continuous": { w: 210, h: null }
+  };
+  const pageDim = PAGE_DIMS[canvasDisplayPageFormat] || { w: 210, h: 297 };
+  // Canvas display width in px (fixed at 680px, scale with zoom)
+  const CANVAS_PX_W = 680;
+  const mmToPx = CANVAS_PX_W / pageDim.w;
+  const canvasPxH = pageDim.h ? pageDim.h * mmToPx : undefined;
+  const gridSizePx = Math.max(2, Number(draft.canvasSettings?.gridSize || 5)) * mmToPx;
   const canvasPageStyle = {
     position: "relative",
-    width: "min(100%, 720px)",
+    width: CANVAS_PX_W,
+    height: canvasPxH || undefined,
+    minHeight: canvasPxH ? undefined : 520,
     margin: "0 auto",
-    aspectRatio: `1 / ${pageRatio(canvasDisplayPageFormat)}`,
-    minHeight: 520,
     overflow: "visible",
     padding: 0,
     background: "#fff",
     backgroundImage: draft.canvasSettings?.showGrid
       ? "linear-gradient(rgba(112, 99, 183, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(112, 99, 183, 0.1) 1px, transparent 1px)"
       : "none",
-    backgroundSize: `${Math.max(2, Number(draft.canvasSettings?.gridSize || 5))}mm ${Math.max(2, Number(draft.canvasSettings?.gridSize || 5))}mm`
+    backgroundSize: `${gridSizePx}px ${gridSizePx}px`
   };
 
   return (
@@ -1547,6 +1579,30 @@ export function TemplateBuilderPage({ toolContext }) {
         </div>
       </div>
 
+      {/* Page tabs — shows pages belonging to the selected format variant */}
+      {(() => {
+        const currentFormatVariants = (draft.renderVariants || []).filter((v) => v.format === selectedVariant?.format);
+        if (currentFormatVariants.length <= 1) return null;
+        return (
+          <div className="tplb-page-tabs">
+            <span className="tplb-page-tabs-label">Pages:</span>
+            {currentFormatVariants.map((variant) => (
+              <button
+                key={variant.id}
+                className={`tplb-page-tab${selectedVariantId === variant.id ? " on" : ""}`}
+                type="button"
+                onClick={() => inspectRenderVariant(variant)}
+              >
+                {variant.label}
+                <span className={`tplb-page-tab-mode ${variant.repeatMode === "per-ai-output" ? "orange" : ""}`}>
+                  {variant.repeatMode === "per-ai-output" ? "↻ per output" : "1×"}
+                </span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       <div className="tplb-main-grid">
         <article className="panel tplb-left-panel">
           <div className="tplb-panel-header">
@@ -1710,14 +1766,41 @@ export function TemplateBuilderPage({ toolContext }) {
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.showMargins)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, showMargins: event.target.checked } }))} /> Margins</label>
             <label className="hint tplb-toolbar-check"><input type="checkbox" checked={Boolean(draft.canvasSettings?.snapToGrid)} onChange={(event) => updateDraft((next) => ({ ...next, canvasSettings: { ...next.canvasSettings, snapToGrid: event.target.checked } }))} /> Snap</label>
             <span className="tplb-document-badge">{selectedVariant?.label || "PDF"} · {canvasDisplayPageFormat}</span>
+            {/* Page name and repeat mode inline controls */}
+            {selectedVariant ? (
+              <>
+                <input
+                  className="tplb-page-name-input"
+                  value={selectedVariant.label}
+                  onChange={(event) => updateRenderVariant(selectedVariant.id, { label: event.target.value })}
+                  title="Page name"
+                />
+                <select
+                  className="tplb-format-page-select"
+                  value={selectedVariant.repeatMode || "once"}
+                  onChange={(event) => updateRenderVariant(selectedVariant.id, { repeatMode: event.target.value })}
+                  title="Page repeat mode"
+                >
+                  <option value="once">1× Appears once</option>
+                  <option value="per-ai-output">↻ One page per AI output</option>
+                </select>
+                <button className="table-btn" type="button" style={{ fontSize: 11 }} onClick={() => addFormatPage(selectedVariant.format)}>+ New page</button>
+              </>
+            ) : null}
           </div>
 
-          {multiSelectedIds.length >= 2 ? (
+          {(multiSelectedIds.length >= 1 || selectedEntryId) ? (
             <div className="tplb-align-toolbar">
-              <span className="hint">Align</span>
-              {[["left", "Left"], ["center", "Center"], ["right", "Right"], ["top", "Top"], ["middle", "Middle"], ["bottom", "Bottom"]].map(([value, label]) => <button className="table-btn" type="button" key={value} onClick={() => alignSelected(value)}>{label}</button>)}
-              <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("x")}>Distribute H</button>
-              <button className="table-btn" type="button" disabled={multiSelectedIds.length < 3} onClick={() => distributeSelected("y")}>Distribute V</button>
+              <span className="hint" style={{ fontSize: 11 }}>Align:</span>
+              {[["left", "⬅"], ["center", "↔"], ["right", "➡"]].map(([value, label]) => <button className="table-btn" type="button" key={value} title={`Align ${value}`} onClick={() => {
+                if (multiSelectedIds.length >= 1) alignSelected(value);
+                else if (selectedEntryId) { setMultiSelectedIds([selectedEntryId]); setTimeout(() => alignSelected(value), 0); }
+              }}>{label}</button>)}
+              {multiSelectedIds.length >= 2 ? [["top", "⬆"], ["middle", "⬍"], ["bottom", "⬇"]].map(([value, label]) => <button className="table-btn" type="button" key={value} title={`Align ${value}`} onClick={() => alignSelected(value)}>{label}</button>) : null}
+              {multiSelectedIds.length >= 3 ? <>
+                <button className="table-btn" type="button" onClick={() => distributeSelected("x")}>Distribute H</button>
+                <button className="table-btn" type="button" onClick={() => distributeSelected("y")}>Distribute V</button>
+              </> : null}
             </div>
           ) : null}
 
@@ -1750,7 +1833,7 @@ export function TemplateBuilderPage({ toolContext }) {
                     return (
                       <div
                         key={entry.id}
-                          className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${entry.hidden ? "hidden-entry" : ""} ${isAbsolute ? "absolute-entry" : "flow-entry"}`}
+                          className={`tplb-canvas-entry ${selectedEntryId === entry.id ? "selected" : ""} ${multiSelectedIds.includes(entry.id) ? "multi-selected" : ""} ${entry.hidden ? "hidden-entry" : ""} ${isAbsolute ? "absolute-entry" : "flow-entry"}`}
                           style={isAbsolute ? positionToCanvasStyle(entry.position, canvasDisplayPageFormat) : undefined}
                           onPointerDown={isAbsolute ? (event) => startPointerInteraction(event, entry) : undefined}
                           onClick={() => setSelectedEntryId(entry.id)}
@@ -1786,6 +1869,7 @@ export function TemplateBuilderPage({ toolContext }) {
                             </div>
                           ) : (
                             <div className="tplb-canvas-block-preview" style={{ minHeight: entry.blockSize?.h ? `${entry.blockSize.h}mm` : undefined, width: entry.blockSize?.w ? `${entry.blockSize.w}%` : undefined }}>
+                              {entry.linkWithPrevious ? <span className="tplb-link-prev-badge" title="Beside previous block">⇥</span> : null}
                               {normalizedRepeatScope !== "once" ? <span className="tplb-repeat-badge tplb-repeat-badge-inline">{repeatBadgeLabel(normalizedRepeatScope)}</span> : null}
                               <WysiwygBlock
                                 type={entry.type}
@@ -1985,6 +2069,23 @@ export function TemplateBuilderPage({ toolContext }) {
                         </label>
                       </>
                     ) : null}
+                  </div>
+
+                  <div className="tplb-property-section">
+                    <strong>Flow &amp; Anchor</strong>
+                    <div className="tplb-content-toggle" style={{ marginTop: 6 }}>
+                      <button
+                        className={`tplb-toggle-btn ${!selectedEntry.linkWithPrevious ? "on" : ""}`}
+                        type="button"
+                        onClick={() => patchSelectedEntry({ linkWithPrevious: false })}
+                      >↓ Below previous</button>
+                      <button
+                        className={`tplb-toggle-btn ${selectedEntry.linkWithPrevious ? "on" : ""}`}
+                        type="button"
+                        onClick={() => patchSelectedEntry({ linkWithPrevious: true })}
+                      >⇥ Beside previous</button>
+                    </div>
+                    <p className="hint" style={{ marginTop: 4, fontSize: 11 }}>{selectedEntry.linkWithPrevious ? "This block flows inline next to the previous block." : "This block appears below the previous block in the document flow."}</p>
                   </div>
 
                   <details className="tplb-property-section">

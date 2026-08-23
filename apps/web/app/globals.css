@@ -4454,3 +4454,133 @@ body {
   flex-direction: column;
   gap: 3px;
 }
+
+/* ================================================================
+   Template Builder — Page tabs, multi-select, link-prev, page ratio
+   ================================================================ */
+
+/* Multi-selected blocks get a purple dashed outline */
+.tplb-canvas-entry.multi-selected {
+  border: 2px dashed var(--tplb-accent) !important;
+  background: rgba(124, 92, 240, 0.04) !important;
+}
+
+/* Page tabs bar (second level under format tabs) */
+.tplb-page-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: #f7f5ff;
+  border: 1px solid var(--tplb-line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.tplb-page-tabs-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--tplb-muted);
+  text-transform: uppercase;
+  margin-right: 4px;
+}
+
+.tplb-page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1.5px solid var(--tplb-line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--tplb-ink);
+  font-weight: 500;
+}
+
+.tplb-page-tab:hover {
+  border-color: var(--tplb-accent);
+  background: var(--tplb-lavender);
+}
+
+.tplb-page-tab.on {
+  border-color: var(--tplb-accent);
+  background: var(--tplb-lavender);
+  font-weight: 700;
+  color: var(--tplb-accent-dark);
+}
+
+.tplb-page-tab-mode {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #eee;
+  color: var(--tplb-muted);
+}
+
+.tplb-page-tab-mode.orange {
+  background: #fff4e5;
+  color: #c4660a;
+}
+
+/* Page name input in canvas toolbar */
+.tplb-page-name-input {
+  border: 1.5px solid var(--tplb-line);
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #fff;
+  color: var(--tplb-ink);
+  min-width: 100px;
+  max-width: 160px;
+}
+
+.tplb-page-name-input:focus {
+  outline: none;
+  border-color: var(--tplb-accent);
+}
+
+/* Link with previous badge on canvas block */
+.tplb-link-prev-badge {
+  display: inline-block;
+  font-size: 11px;
+  background: #e6f0ff;
+  color: #3b7cf0;
+  border: 1px solid #c0d8ff;
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 6px;
+  font-weight: 700;
+  vertical-align: middle;
+}
+
+/* Canvas scroll now accommodates fixed-width page */
+.tplb-canvas-scroll {
+  overflow-x: auto;
+  overflow-y: auto;
+  padding: 20px 16px 40px;
+  flex: 1;
+}
+
+/* Canvas page — no max-width; exact pixel width is set inline */
+.tplb-canvas-page {
+  border: 1px solid var(--tplb-line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 18px;
+  box-shadow: 0 20px 44px rgba(99, 84, 168, 0.14);
+}
+
+/* Align toolbar shows for single or multi selection */
+.tplb-align-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0 8px;
+  flex-wrap: wrap;
+}
+

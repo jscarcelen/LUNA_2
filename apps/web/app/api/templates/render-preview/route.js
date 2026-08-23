@@ -9,17 +9,22 @@ function resolveRenderVariant(template, format) {
   const variant = variants.find((item) => item.format === format && item.enabled !== false);
   if (!variant) return template;
   const pages = Array.isArray(variant.pages) && variant.pages.length ? variant.pages : [];
-  const pageIds = new Set(pages.map((page) => page.id).filter(Boolean));
-  const nextPageLayouts = Array.isArray(template.pageLayouts) ? template.pageLayouts.map((page) => {
-    const mapped = pages.find((item) => item.id === page.id);
-    if (mapped) return { ...page, blocks: Array.isArray(mapped.blocks) ? mapped.blocks : page.blocks || [] };
-    return page;
-  }) : [];
-  const resolvedLayouts = nextPageLayouts.length ? nextPageLayouts : (pages.length ? pages.map((page) => ({ ...page, blocks: Array.isArray(page.blocks) ? page.blocks : [] })) : template.pageLayouts || []);
+  const nextPageLayouts = Array.isArray(template.pageLayouts) && template.pageLayouts.length
+    ? template.pageLayouts.map((page) => {
+        const mapped = pages.find((item) => item.id === page.id);
+        return mapped ? { ...page, ...mapped, blocks: Array.isArray(mapped.blocks) ? mapped.blocks : page.blocks || [] } : page;
+      })
+    : [];
+  const resolvedLayouts = nextPageLayouts.length
+    ? nextPageLayouts
+    : (pages.length ? pages.map((page) => ({ ...page, blocks: Array.isArray(page.blocks) ? page.blocks : [] })) : template.pageLayouts || []);
+  for (const page of pages) {
+    const existing = resolvedLayouts.findIndex((item) => item.id === page.id);
+    if (existing === -1) resolvedLayouts.push({ ...page, blocks: Array.isArray(page.blocks) ? page.blocks : [] });
+    else resolvedLayouts[existing] = { ...resolvedLayouts[existing], ...page, blocks: Array.isArray(page.blocks) ? page.blocks : resolvedLayouts[existing].blocks || [] };
+  }
   const activePage = resolvedLayouts.find((page) => page.id === template.activePageId) || resolvedLayouts[0] || null;
-  const blocks = pages.length
-    ? resolvedLayouts.flatMap((page) => Array.isArray(page.blocks) ? page.blocks : [])
-    : (variant.blocks?.length ? variant.blocks : (activePage?.blocks || template.canvasBlocks || []));
+  const blocks = resolvedLayouts.flatMap((page) => Array.isArray(page.blocks) ? page.blocks : []);
   return {
     ...template,
     pageFormat: variant.pageFormat || template.pageFormat,

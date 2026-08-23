@@ -575,8 +575,24 @@ export function TemplateBuilderPage({ toolContext }) {
         return { ...variant, blocks: cloneDraft(next.canvasBlocks), pages: syncedPages };
       });
       next.activePageId = pageIdToUse;
-      const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? next.pageLayouts : defaultPageLayouts();
-      next.pageLayouts = pageLayouts.map((page) => page.id === pageIdToUse ? { ...page, pageFormat: next.pageFormat, blocks: cloneDraft(next.canvasBlocks) } : page);
+      const pageLayouts = Array.isArray(next.pageLayouts) && next.pageLayouts.length ? [...next.pageLayouts] : defaultPageLayouts();
+      const variantPages = Array.isArray(selectedVariant?.pages) && selectedVariant.pages.length
+        ? selectedVariant.pages
+        : [{ id: pageIdToUse, name: selectedVariant?.label || "Page 1", repeatMode: "once", blocks: cloneDraft(next.canvasBlocks) }];
+      const nextPageLayouts = [...pageLayouts];
+      for (const page of variantPages) {
+        const existing = nextPageLayouts.findIndex((item) => item.id === page.id);
+        const pageEntry = {
+          id: page.id,
+          name: page.name || `${selectedVariant?.label || "Page"} ${nextPageLayouts.length + 1}`,
+          pageFormat: selectedVariant?.pageFormat || next.pageFormat,
+          repeatMode: page.repeatMode || "once",
+          blocks: Array.isArray(page.blocks) ? cloneDraft(page.blocks) : cloneDraft(next.canvasBlocks)
+        };
+        if (existing >= 0) nextPageLayouts[existing] = pageEntry;
+        else nextPageLayouts.push(pageEntry);
+      }
+      next.pageLayouts = nextPageLayouts;
       pushHistory(next);
       return next;
     });
@@ -1109,13 +1125,11 @@ export function TemplateBuilderPage({ toolContext }) {
         return { ...v, pages, pageLayoutId: pageId, blocks: Array.isArray(v.blocks) ? cloneDraft(v.blocks) : [] };
       });
       next.renderVariants = updatedVariants;
-      const activePage = (updatedVariants || []).find((v) => v.id === selectedVariantId)?.pages?.find((page) => page.id === pageId) || null;
-      if (activePage) {
-        next.canvasBlocks = cloneDraft(activePage.blocks);
-      }
+      next.pageLayouts = [...(next.pageLayouts || [])].concat({ id: pageId, name: pageName, pageFormat: next.pageFormat, repeatMode: "once", blocks: [] });
       return next;
     });
     setSelectedPageId(pageId);
+    setTimeout(() => switchActivePage(pageId), 0);
   }
 
   function updateActivePageFormat(pageFormat) {

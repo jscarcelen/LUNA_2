@@ -15,6 +15,10 @@ const CREATIVITY_OPTIONS = [
 ];
 
 const FIELD_TYPE_OPTIONS = ["string", "number", "boolean", "array"];
+const FIELD_FREQUENCY_OPTIONS = [
+  { value: "once", label: "Once per document" },
+  { value: "per-output", label: "Loop (one per generated item)" }
+];
 const QUESTION_TYPE_OPTIONS = [
   { value: "text", label: "Text" },
   { value: "number", label: "Number" },
@@ -39,8 +43,8 @@ function createQuestionId() {
 
 function defaultFields() {
   return [
-    { id: createFieldId(), name: "front", label: "Front", type: "string" },
-    { id: createFieldId(), name: "back", label: "Back", type: "string" }
+    { id: createFieldId(), name: "front", label: "Front", type: "string", repeatScope: "per-output" },
+    { id: createFieldId(), name: "back", label: "Back", type: "string", repeatScope: "per-output" }
   ];
 }
 
@@ -97,6 +101,7 @@ export function AgentBuilderPage({ toolContext }) {
   const [fields, setFields] = useState(defaultFields());
   const [fieldNameDraft, setFieldNameDraft] = useState("");
   const [fieldTypeDraft, setFieldTypeDraft] = useState("string");
+  const [fieldRepeatScopeDraft, setFieldRepeatScopeDraft] = useState("per-output");
 
   const [model, setModel] = useState(AGENT_MODEL_OPTIONS[0].value);
   const [creativity, setCreativity] = useState("medium");
@@ -145,9 +150,10 @@ export function AgentBuilderPage({ toolContext }) {
       setErrorMessage("A field with that name already exists.");
       return;
     }
-    setFields((previous) => [...previous, { id: createFieldId(), name: normalized, label: name, type: fieldTypeDraft }]);
+    setFields((previous) => [...previous, { id: createFieldId(), name: normalized, label: name, type: fieldTypeDraft, repeatScope: fieldRepeatScopeDraft }]);
     setFieldNameDraft("");
     setFieldTypeDraft("string");
+    setFieldRepeatScopeDraft("per-output");
     setErrorMessage("");
   }
 
@@ -190,7 +196,7 @@ export function AgentBuilderPage({ toolContext }) {
       contextPrompt,
       questions,
       outputExample,
-      template: { fields: fields.map(({ id: _id, ...field }) => field) },
+      template: { fields: fields.map(({ id: _id, ...field }) => ({ ...field, repeatScope: field.repeatScope || "per-output" })) },
       model,
       creativity,
       scope: {
@@ -276,7 +282,7 @@ export function AgentBuilderPage({ toolContext }) {
       setCreativity(String(parsed.creativity || "medium"));
       setReferenceDocumentIds(Array.isArray(parsed.scope?.documentIds) ? parsed.scope.documentIds : []);
       const loadedFields = Array.isArray(parsed.template?.fields) && parsed.template.fields.length
-        ? parsed.template.fields.map((field) => ({ id: createFieldId(), ...field }))
+        ? parsed.template.fields.map((field) => ({ id: createFieldId(), ...field, repeatScope: field.repeatScope || "per-output" }))
         : defaultFields();
       setFields(loadedFields);
       setOutput(parsed.savedOutput || null);
@@ -425,14 +431,15 @@ export function AgentBuilderPage({ toolContext }) {
           </div>
 
           <div className="selection-box">
-            <span className="quiz-picker-kicker">Step 3 · Template mapping</span>
-            <h5 style={{ marginTop: "4px" }}>Output structure</h5>
-            <p className="hint quiz-mini-copy">Define the fields every generated item should include.</p>
+            <span className="quiz-picker-kicker">Step 3 · Output variables</span>
+            <h5 style={{ marginTop: "4px" }}>Agent output variables (template-independent)</h5>
+            <p className="hint quiz-mini-copy">Define variable names and frequency now. Template mapping happens later when running the agent.</p>
             <div className="agent-field-list">
               {fields.map((field) => (
                 <div className="agent-field-row" key={field.id}>
                   <span className="agent-field-name">{field.label || field.name}</span>
                   <span className="scope-chip">{field.type}</span>
+                  <span className="scope-chip">{field.repeatScope === "once" ? "Once" : "Loop"}</span>
                   <button className="table-btn danger icon-btn" type="button" onClick={() => removeField(field.id)} disabled={fields.length <= 1}>×</button>
                 </div>
               ))}
@@ -441,6 +448,9 @@ export function AgentBuilderPage({ toolContext }) {
               <input className="input" style={{ flex: 1, minWidth: "140px" }} value={fieldNameDraft} onChange={(event) => setFieldNameDraft(event.target.value)} placeholder="Field name (e.g. Front)" />
               <select className="input" value={fieldTypeDraft} onChange={(event) => setFieldTypeDraft(event.target.value)}>
                 {FIELD_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+              <select className="input" value={fieldRepeatScopeDraft} onChange={(event) => setFieldRepeatScopeDraft(event.target.value)}>
+                {FIELD_FREQUENCY_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
               <button className="table-btn" type="button" onClick={addField}>Add field</button>
             </div>

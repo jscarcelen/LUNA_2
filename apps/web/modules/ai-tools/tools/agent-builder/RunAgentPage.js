@@ -13,6 +13,10 @@ const BLOCK_TYPE_OPTIONS = [
 ];
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
+const FIELD_FREQUENCY_LABELS = {
+  once: "Once per document",
+  loop: "Looped per AI item"
+};
 
 function toggleInList(value, setter) {
   setter((previous) => (
@@ -58,6 +62,50 @@ function writeTemplatesToStorage(templates = []) {
   } catch {
     // Ignore localStorage limits and keep in-memory state only.
   }
+}
+
+function normalizeFrequency(scope = "") {
+  return scope === "once" ? "once" : "loop";
+}
+
+function inferTemplateFieldFrequencies(template = {}) {
+  const inferred = {};
+  const markFrequency = (fieldName, scope) => {
+    const name = String(fieldName || "").trim();
+    if (!name) return;
+    const normalized = normalizeFrequency(scope);
+    if (inferred[name] === "loop" || normalized === "loop") inferred[name] = "loop";
+    else inferred[name] = inferred[name] || "once";
+  };
+  const normalizeScope = (scope = "") => (scope === "once" ? "once" : "per-output");
+  const collectFromBlock = (block, fallbackScope = "once") => {
+    if (!block) return;
+    const scope = normalizeScope(block.repeatScope || fallbackScope);
+    if (block.bindField) markFrequency(block.bindField, scope);
+    if (block.repeatField) markFrequency(block.repeatField, "per-output");
+  };
+  const componentsById = Object.fromEntries((Array.isArray(template.components) ? template.components : []).map((component) => [component.id, component]));
+  const pageBlocks = Array.isArray(template.pageLayouts)
+    ? template.pageLayouts.flatMap((page) => page.blocks || [])
+    : [];
+  const canvasBlocks = pageBlocks.length ? pageBlocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []);
+  for (const block of canvasBlocks) {
+    if (block?.componentRefId) {
+      const component = componentsById[block.componentRefId];
+      for (const child of component?.blocks || []) {
+        collectFromBlock(child, block.repeatScope || "once");
+      }
+      continue;
+    }
+    collectFromBlock(block, block?.repeatScope || "once");
+  }
+  for (const field of Array.isArray(template.dataFields) ? template.dataFields : []) {
+    const name = String(field?.name || "").trim();
+    if (!name) continue;
+    const scope = field?.repeatScope || inferred[name] || "once";
+    markFrequency(name, scope);
+  }
+  return inferred;
 }
 
 export function RunAgentPage({ toolContext, agentDocumentId }) {
@@ -159,34 +207,81 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const fields = Array.isArray(agentConfig?.template?.fields) ? agentConfig.template.fields : [];
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
   const activeTemplate = templates.find((template) => template.id === templateId) || null;
-  const templateFields = Array.isArray(activeTemplate?.dataFields) ? activeTemplate.dataFields : [];
-  const templateFieldTypeByName = useMemo(
-    () => Object.fromEntries(templateFields.map((field) => [field.name, field.dataType || "string"])),
-    [templateFields]
+  const templateFieldFrequencyByName = useMemo(
+    () => (activeTemplate ? inferTemplateFieldFrequencies(activeTemplate) : {}),
+    [activeTemplate]
   );
-  const generationFields = useMemo(() => {
-    if (!activeTemplate || !templateFields.length) return fields;
-    return templateFields.map((field) => {
-      const mappedAgentFieldName = fieldMappingByTemplateField[field.name] || field.name;
-      const mappedAgentField = fields.find((candidate) => candidate.name === mappedAgentFieldName) || null;
-      const inferredType = mappedAgentField?.type || templateFieldTypeByName[field.name] || "string";
-      return {
+  const templateFields = useMemo(() => {
+    if (!activeTemplate) return [];
+    const explicit = Array.isArray(activeTemplate.dataFields) ? activeTemplate.dataFields : [];
+    const inferredNames = Object.keys(templateFieldFrequencyByName);
+    if (explicit.length) {
+      return explicit.map((field) => ({
+        id: field.id || field.name,
         name: field.name,
         label: field.label || field.name,
-        type: ["string", "number", "boolean", "array"].includes(inferredType) ? inferredType : "string"
-      };
-    });
-  }, [activeTemplate, templateFields, fieldMappingByTemplateField, fields, templateFieldTypeByName]);
-  const outputDisplayFields = activeTemplate && templateFields.length
-    ? generationFields
-    : fields;
+        dataType: field.dataType || "string",
+        frequency: templateFieldFrequencyByName[field.name] || normalizeFrequency(field.repeatScope || "once")
+      }));
+    }
+    return inferredNames.map((name) => ({
+      id: `inferred-${name}`,
+      name,
+      label: name,
+      dataType: "string",
+      frequency: templateFieldFrequencyByName[name] || "once"
+    }));
+  }, [activeTemplate, templateFieldFrequencyByName]);
+  const agentFields = useMemo(
+    () => fields.map((field) => ({
+      ...field,
+      frequency: normalizeFrequency(field.repeatScope || "per-output")
+    })),
+    [fields]
+  );
+  const outputDisplayFields = agentFields;
   const answeredQuestionCount = questions.filter((question) => {
     const answer = answersByQuestionId[question.id];
     return Array.isArray(answer) ? answer.length > 0 : String(answer || "").trim().length > 0;
   }).length;
+  const mappingIssues = useMemo(() => {
+    if (!activeTemplate) return [];
+    const issues = [];
+    const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
+    for (const templateField of templateFields) {
+      const mappedAgentFieldName = fieldMappingByTemplateField[templateField.name] || "";
+      if (!mappedAgentFieldName) {
+        issues.push(`Map template field "${templateField.name}".`);
+        continue;
+      }
+      const mappedAgentField = agentFieldsByName[mappedAgentFieldName];
+      if (!mappedAgentField) {
+        issues.push(`Mapped variable "${mappedAgentFieldName}" for "${templateField.name}" does not exist in this agent.`);
+        continue;
+      }
+      if (mappedAgentField.frequency !== templateField.frequency) {
+        issues.push(`Frequency mismatch: "${templateField.name}" expects ${templateField.frequency}, mapped to "${mappedAgentField.name}" (${mappedAgentField.frequency}).`);
+      }
+    }
+    return issues;
+  }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
 
   function setFieldType(name, type) {
     setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
+  }
+
+  function setTemplateFieldMapping(templateFieldName, agentFieldName) {
+    setFieldMappingByTemplateField((previous) => {
+      const next = { ...previous };
+      for (const [targetField, mappedAgentField] of Object.entries(next)) {
+        if (targetField !== templateFieldName && mappedAgentField === agentFieldName) {
+          delete next[targetField];
+        }
+      }
+      if (!agentFieldName) delete next[templateFieldName];
+      else next[templateFieldName] = agentFieldName;
+      return next;
+    });
   }
 
   function setAnswer(questionId, value) {
@@ -240,10 +335,6 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
 
   async function handleGenerate() {
     if (!agentConfig) return;
-    if (activeTemplate && !templateFields.length) {
-      setErrorMessage("The selected template has no data fields to map. Add fields in Template Builder first.");
-      return;
-    }
     setIsGenerating(true);
     setErrorMessage("");
     try {
@@ -261,7 +352,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
             model: agentConfig.model,
             creativity: agentConfig.creativity,
             template: {
-              fields: generationFields
+              fields: fields
             },
             outputMapping: activeTemplate ? {
               templateId: activeTemplate.id,
@@ -313,6 +404,10 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
 
   async function handleSaveAsDocument() {
     if (!onSaveGeneratedQuizDocument || !Array.isArray(output?.items)) return;
+    if (activeTemplate && mappingIssues.length) {
+      setStatusMessage(`Complete template mapping first. ${mappingIssues[0]}`);
+      return;
+    }
     setIsSavingDocument(true);
     setStatusMessage("");
     try {
@@ -461,19 +556,45 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
           </div>
           {templateFields.length ? (
             <div className="selection-box" style={{ marginTop: 10 }}>
-              <p className="hint" style={{ marginTop: 0 }}>Template data fields</p>
+              <p className="hint" style={{ marginTop: 0 }}>Map template AI-input variables to agent output variables (one-to-one, matching frequency)</p>
               {templateFields.map((field) => (
                 <div className="agent-field-row" key={field.id || field.name}>
-                  <span className="agent-field-name">{field.label || field.name} <small>({field.dataType})</small></span>
-                  <select className="input" value={fieldMappingByTemplateField[field.name] || field.name} onChange={(event) => setFieldMappingByTemplateField((previous) => ({ ...previous, [field.name]: event.target.value }))}>
-                    <option value={field.name}>{field.name}</option>
-                    {fields.map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}</option>)}
+                  <span className="agent-field-name">
+                    {field.label || field.name} <small>({field.dataType})</small>
+                    <span className="scope-chip" style={{ marginLeft: 6 }}>{FIELD_FREQUENCY_LABELS[field.frequency] || field.frequency}</span>
+                  </span>
+                  <select
+                    className="input"
+                    value={fieldMappingByTemplateField[field.name] || ""}
+                    onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}
+                  >
+                    <option value="">Select agent variable</option>
+                    {agentFields
+                      .filter((agentField) => agentField.frequency === field.frequency)
+                      .filter((agentField) => {
+                        const selectedForThisField = fieldMappingByTemplateField[field.name];
+                        const alreadyUsedByOtherField = Object.entries(fieldMappingByTemplateField).some(
+                          ([templateFieldName, mappedAgentName]) => templateFieldName !== field.name && mappedAgentName === agentField.name
+                        );
+                        return !alreadyUsedByOtherField || selectedForThisField === agentField.name;
+                      })
+                      .map((agentField) => (
+                        <option key={agentField.name} value={agentField.name}>
+                          {agentField.label || agentField.name}
+                        </option>
+                      ))}
                   </select>
                 </div>
               ))}
             </div>
           ) : null}
-          {activeTemplate ? <p className="hint" style={{ marginTop: "8px" }}>Using "{activeTemplate.name}" as the reference layout for this mapping.</p> : null}
+          {activeTemplate && !templateFields.length ? (
+            <p className="hint" style={{ marginTop: "8px", color: "#b84a77" }}>No AI-input variables were found in this template yet. Add AI-linked blocks or data fields in Template Builder.</p>
+          ) : null}
+          {activeTemplate && mappingIssues.length ? (
+            <p className="hint" style={{ marginTop: "8px", color: "#b84a77" }}>{mappingIssues[0]}</p>
+          ) : null}
+          {activeTemplate ? <p className="hint" style={{ marginTop: "8px" }}>Using "{activeTemplate.name}" as the reference layout for this mapping. Template and agent variable names can differ.</p> : null}
           <button className="table-btn" type="button" style={{ marginTop: "10px" }} onClick={handleSavePreset} disabled={isSavingPreset}>
             {isSavingPreset ? "Saving preset..." : "Save mapping as preset for next time"}
           </button>

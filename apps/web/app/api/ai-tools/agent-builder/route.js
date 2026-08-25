@@ -28,7 +28,8 @@ function normalizeConfig(input = {}) {
           .map((field) => ({
             name: String(field?.name || "").trim(),
             label: String(field?.label || field?.name || "").trim(),
-            type: ["string", "number", "boolean", "array"].includes(field?.type) ? field.type : "string"
+            type: ["string", "number", "boolean", "array"].includes(field?.type) ? field.type : "string",
+            repeatScope: field?.repeatScope === "once" ? "once" : "per-output"
           }))
           .filter((field) => field.name)
         : []

@@ -12,6 +12,8 @@ const BLOCK_TYPE_OPTIONS = [
   { value: "code", label: "Code" }
 ];
 
+const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
+
 function toggleInList(value, setter) {
   setter((previous) => (
     previous.includes(value)
@@ -36,6 +38,26 @@ function renderFieldAsMarkdown(type, value) {
 function defaultAnswerForQuestion(question) {
   if (question.type === "multi-select") return [];
   return "";
+}
+
+function readTemplatesFromStorage() {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(TEMPLATE_BUILDER_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeTemplatesToStorage(templates = []) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(TEMPLATE_BUILDER_STORAGE_KEY, JSON.stringify(Array.isArray(templates) ? templates : []));
+  } catch {
+    // Ignore localStorage limits and keep in-memory state only.
+  }
 }
 
 export function RunAgentPage({ toolContext, agentDocumentId }) {
@@ -99,12 +121,20 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   useEffect(() => {
     let cancelled = false;
     async function loadTemplates() {
-      if (typeof onListDocumentBlockTemplates !== "function") return;
+      let nextTemplates = readTemplatesFromStorage();
+      if (typeof onListDocumentBlockTemplates !== "function") {
+        if (!cancelled) setTemplates(nextTemplates);
+        return;
+      }
       try {
         const list = await onListDocumentBlockTemplates();
-        if (!cancelled) setTemplates(Array.isArray(list) ? list : []);
+        if (Array.isArray(list)) {
+          nextTemplates = list;
+          writeTemplatesToStorage(list);
+        }
+        if (!cancelled) setTemplates(nextTemplates);
       } catch {
-        if (!cancelled) setTemplates([]);
+        if (!cancelled) setTemplates(nextTemplates);
       }
     }
     loadTemplates();
@@ -130,6 +160,26 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
   const activeTemplate = templates.find((template) => template.id === templateId) || null;
   const templateFields = Array.isArray(activeTemplate?.dataFields) ? activeTemplate.dataFields : [];
+  const templateFieldTypeByName = useMemo(
+    () => Object.fromEntries(templateFields.map((field) => [field.name, field.dataType || "string"])),
+    [templateFields]
+  );
+  const generationFields = useMemo(() => {
+    if (!activeTemplate || !templateFields.length) return fields;
+    return templateFields.map((field) => {
+      const mappedAgentFieldName = fieldMappingByTemplateField[field.name] || field.name;
+      const mappedAgentField = fields.find((candidate) => candidate.name === mappedAgentFieldName) || null;
+      const inferredType = mappedAgentField?.type || templateFieldTypeByName[field.name] || "string";
+      return {
+        name: field.name,
+        label: field.label || field.name,
+        type: ["string", "number", "boolean", "array"].includes(inferredType) ? inferredType : "string"
+      };
+    });
+  }, [activeTemplate, templateFields, fieldMappingByTemplateField, fields, templateFieldTypeByName]);
+  const outputDisplayFields = activeTemplate && templateFields.length
+    ? generationFields
+    : fields;
   const answeredQuestionCount = questions.filter((question) => {
     const answer = answersByQuestionId[question.id];
     return Array.isArray(answer) ? answer.length > 0 : String(answer || "").trim().length > 0;
@@ -190,6 +240,10 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
 
   async function handleGenerate() {
     if (!agentConfig) return;
+    if (activeTemplate && !templateFields.length) {
+      setErrorMessage("The selected template has no data fields to map. Add fields in Template Builder first.");
+      return;
+    }
     setIsGenerating(true);
     setErrorMessage("");
     try {
@@ -206,7 +260,14 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
             outputExample: agentConfig.outputExample || "",
             model: agentConfig.model,
             creativity: agentConfig.creativity,
-            template: agentConfig.template,
+            template: {
+              fields: generationFields
+            },
+            outputMapping: activeTemplate ? {
+              templateId: activeTemplate.id,
+              fieldMappingByTemplateField,
+              repeatCollectionField: activeTemplate.repeatCollectionField || ""
+            } : null,
             scope: {
               workspaceId,
               subjectId,
@@ -256,14 +317,14 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     setStatusMessage("");
     try {
       const textContent = output.items
-        .map((item) => fields.map((field) => renderFieldAsMarkdown(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n\n"))
+        .map((item) => outputDisplayFields.map((field) => renderFieldAsMarkdown(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n\n"))
         .join("\n\n---\n\n");
       let renderedContent = textContent;
       let name = `${agentConfig?.name || "Agent Output"}.txt`;
       if (activeTemplate) {
         const mappedItems = output.items.map((item) => templateFields.reduce((mapped, field) => {
             const sourceName = fieldMappingByTemplateField[field.name] || field.name;
-            mapped[field.name] = item[sourceName];
+            mapped[field.name] = item[field.name] ?? item[sourceName];
             return mapped;
           }, {}));
         const templateData = activeTemplate.repeatCollectionField
@@ -437,7 +498,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
               <div className="agent-output-grid">
                 {outputItems.map((item, index) => (
                   <article className="agent-output-card" key={`output-${index}`}>
-                    {fields.map((field) => (
+                    {outputDisplayFields.map((field) => (
                       <p key={field.name} style={{ margin: "0 0 4px" }}>
                         <strong>{field.label || field.name}:</strong> {Array.isArray(item[field.name]) ? item[field.name].join(", ") : String(item[field.name] ?? "")}
                       </p>

@@ -1,11 +1,12 @@
-import { QuizGeneratorToolPage } from "./QuizGeneratorToolPage";
+import { QuizGeneratorPage } from "./QuizGeneratorPage";
+import { QUIZ_AGENT } from "./quizAgent";
 
 export const quizGeneratorTool = {
   id: "quiz-generator",
-  name: "Quiz Generator",
-  description: "Build chapter quizzes and exams from selected workspace documents.",
+  name: QUIZ_AGENT.name,
+  description: QUIZ_AGENT.tagline,
   runLabel: "Open Quiz Generator",
-  component: QuizGeneratorToolPage,
+  component: QuizGeneratorPage,
   pipelineConfig: {
     mode: "configurable-rag-pipeline",
     template: "quiz-generator-v1"

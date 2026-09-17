@@ -90,36 +90,50 @@ function inferTemplateFieldFrequencies(template = {}) {
 }
 
 
-const cardClass = "rounded-bento border border-ink/8 bg-paper p-5 shadow-glow transition-colors";
-const fieldClass = "w-full rounded-xl border border-ink/10 bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-soft-ink/60 outline-none transition focus:border-teal/60 focus:ring-2 focus:ring-teal/20";
-const chipClass = "inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink ring-1 ring-ink/10";
+const cardClass = "rounded-[18px] border border-ink/8 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
+const fieldClass = "w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink placeholder:text-soft-ink/70 outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]";
+const chipClass = "inline-flex items-center rounded-full bg-[var(--surface-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink";
+const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0077ed] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
+const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
+const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
 
-function StepCard({ index, title, description, status, badge, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
-  const tone = status === "done" ? "border-accent/30" : status === "warn" ? "border-warn/40" : "border-ink/10";
+const FLOW_STEPS = [
+  { id: 1, title: "Configure questions", text: "Material and a few choices" },
+  { id: 2, title: "Configure output", text: "Layout and styling" },
+  { id: 3, title: "Export", text: "Download, save or share" }
+];
+
+function Stepper({ current, onSelect, unlocked }) {
   return (
-    <article className={`${cardClass} ${tone} animate-rise`} style={{ animationDelay: `${index * 60}ms` }}>
-      <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-3 bg-transparent p-0 text-left" aria-expanded={open}>
-        <span className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold ring-1 ${status === "done" ? "bg-teal/15 text-accent ring-accent/50" : "bg-ink/5 text-ink ring-ink/15"}`}>
-          {status === "done" ? "✓" : index + 1}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-base font-bold text-ink">{title}</span>
-          <span className="block text-xs text-soft-ink">{description}</span>
-        </span>
-        {badge ? <span className={chipClass}>{badge}</span> : null}
-        <span className={`text-soft-ink transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
-      </button>
-      {open ? <div className="mt-4 grid gap-3">{children}</div> : null}
-    </article>
+    <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
+      {FLOW_STEPS.map((step) => {
+        const state = step.id === current ? "current" : step.id < current || unlocked >= step.id ? "done" : "locked";
+        return (
+          <li key={step.id}>
+            <button
+              type="button"
+              disabled={state === "locked"}
+              onClick={() => onSelect(step.id)}
+              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${state === "current" ? "border-[var(--accent)] bg-[var(--accent-soft)]" : state === "done" ? "border-ink/10 bg-white hover:bg-[var(--surface-soft)]" : "border-ink/8 bg-white opacity-50"}`}
+            >
+              <span className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold ${state === "current" ? "bg-[var(--accent)] text-white" : state === "done" ? "bg-teal/20 text-accent" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{state === "done" && step.id < current ? "✓" : step.id}</span>
+              <span className="min-w-0">
+                <span className="block text-sm font-bold text-ink">{step.title}</span>
+                <span className="block text-xs text-soft-ink">{step.text}</span>
+              </span>
+            </button>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
 function SegmentedControl({ value, options, onChange }) {
   return (
-    <div className="grid gap-1 rounded-xl bg-ink/5 p-1 ring-1 ring-ink/10" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div className="grid gap-1 rounded-xl bg-[var(--surface-soft)] p-1" style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((option) => (
-        <button key={option.value} type="button" onClick={() => onChange(option.value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${value === option.value ? "bg-ink text-bg shadow" : "text-soft-ink hover:text-ink"}`}>
+        <button key={option.value} type="button" onClick={() => onChange(option.value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${value === option.value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>
           {option.label}
         </button>
       ))}
@@ -127,13 +141,76 @@ function SegmentedControl({ value, options, onChange }) {
   );
 }
 
-export function RunAgentPage({ toolContext, agentDocumentId }) {
+function HowItWorks({ agent, open, onToggle }) {
+  const steps = Array.isArray(agent.howItWorks) && agent.howItWorks.length ? agent.howItWorks : [
+    { title: "Choose your material", text: "Pick the documents the agent should learn from." },
+    { title: "Answer a few questions", text: "The agent asks only what it needs to tailor the result." },
+    { title: "Pick a layout", text: "Any template works with any agent." },
+    { title: "Export or save", text: "PDF, Word, HTML — or straight into your workspace." }
+  ];
+  return (
+    <section className={cardClass}>
+      <button type="button" onClick={onToggle} className="flex w-full items-center justify-between gap-3 text-left" aria-expanded={open}>
+        <span className="text-sm font-bold text-ink">How it works</span>
+        <span className={`text-soft-ink transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+      </button>
+      {open ? (
+        <ol className="m-0 mt-4 grid list-none gap-3 p-0 sm:grid-cols-2 xl:grid-cols-4">
+          {steps.map((step, index) => (
+            <li key={step.title} className="rounded-2xl bg-[var(--surface-soft)] p-4">
+              <span className="grid size-8 place-items-center rounded-full bg-white text-sm font-bold text-[var(--accent-ink)] shadow-[0_1px_2px_rgba(0,0,0,0.06)]">{index + 1}</span>
+              <p className="m-0 mt-3 text-sm font-bold text-ink">{step.title}</p>
+              <p className="m-0 mt-1 text-xs leading-relaxed text-soft-ink">{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
+function DocumentPicker({ documents, selectedIds, onChange, emptyText }) {
+  const [search, setSearch] = useState("");
+  const visible = documents.filter((document) => !search.trim() || String(document.name || "").toLowerCase().includes(search.trim().toLowerCase()));
+  return (
+    <div className="grid gap-2">
+      {documents.length > 4 ? <input className={fieldClass} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by name" /> : null}
+      <div className="grid max-h-60 gap-1 overflow-auto pr-1">
+        {visible.map((document) => {
+          const selected = selectedIds.includes(document.id);
+          return (
+            <label key={document.id} className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition ${selected ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-ink" : "border-ink/10 bg-white text-ink hover:bg-[var(--surface-soft)]"}`}>
+              <input className="sr-only" type="checkbox" checked={selected} onChange={() => toggleInList(document.id, onChange)} />
+              <span className={`grid size-4 shrink-0 place-items-center rounded-md text-[10px] ring-1 ring-inset ${selected ? "bg-[var(--accent)] text-white ring-[var(--accent)]" : "ring-ink/30"}`}>{selected ? "✓" : ""}</span>
+              <span className="truncate">{document.name}</span>
+            </label>
+          );
+        })}
+        {!visible.length ? <p className="m-0 py-3 text-center text-xs text-soft-ink">{emptyText}</p> : null}
+      </div>
+      {documents.length ? (
+        <div className="flex gap-3 text-xs">
+          <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => onChange(() => documents.map((document) => document.id))}>Select all</button>
+          <button type="button" className="font-semibold text-soft-ink hover:underline" onClick={() => onChange(() => [])}>Clear</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Shared 3-step agent flow (Configure questions → Configure output → Export).
+ * Renders a saved agent (`agentDocumentId`) or a built-in one (`builtinAgent`, e.g. the Quiz
+ * Generator). Every agent in LUNA goes through this component so the experience is identical.
+ */
+export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent = null }) {
   const workspaces = toolContext?.workspaces || [];
   const workspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
   const subjectId = toolContext?.selectedSubjectId || "";
   const onSaveGeneratedQuizDocument = toolContext?.onSaveGeneratedQuizDocument;
   const onUpdateGeneratedDocument = toolContext?.onUpdateGeneratedDocument;
   const onListDocumentBlockTemplates = toolContext?.onListDocumentBlockTemplates;
+  const onOpenTool = toolContext?.onOpenTool;
 
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === workspaceId) || null;
   const selectedSubject = selectedWorkspace?.subjects?.find((subject) => subject.id === subjectId) || null;
@@ -142,10 +219,13 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
 
   const [agentConfig, setAgentConfig] = useState(null);
   const [loadError, setLoadError] = useState("");
+  const [flowStep, setFlowStep] = useState(1);
+  const [howOpen, setHowOpen] = useState(true);
 
   const [knowledgeMode, setKnowledgeMode] = useState("workspace");
-  const [documentSearchText, setDocumentSearchText] = useState("");
   const [referenceDocumentIds, setReferenceDocumentIds] = useState([]);
+  const [styleDocumentIds, setStyleDocumentIds] = useState([]);
+  const [showStyleDocs, setShowStyleDocs] = useState(false);
   const [contextPromptDraft, setContextPromptDraft] = useState("");
 
   const [answersByQuestionId, setAnswersByQuestionId] = useState({});
@@ -155,7 +235,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const [fieldTypeByName, setFieldTypeByName] = useState({});
   const [fieldMappingByTemplateField, setFieldMappingByTemplateField] = useState({});
   const [customization, setCustomization] = useState({ brand: defaultBrand(), hiddenFields: [], fieldOrder: [] });
-  const [rightTab, setRightTab] = useState("preview");
+  const [outputTab, setOutputTab] = useState("layout");
 
   const [output, setOutput] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -166,31 +246,42 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   const generation = useAgentGenerationStream();
 
   useEffect(() => {
-    if (!agentDocument) return;
-    try {
-      const parsed = JSON.parse(String(agentDocument.content || "{}"));
-      setAgentConfig(parsed);
-      setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
-      setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
-      setTemplateId(String(parsed.outputMapping?.templateId || ""));
-      setCustomization({
-        brand: { ...defaultBrand(parsed.name), ...(parsed.outputMapping?.customization?.brand || {}) },
-        hiddenFields: parsed.outputMapping?.customization?.hiddenFields || [],
-        fieldOrder: parsed.outputMapping?.customization?.fieldOrder || []
-      });
-      setReferenceDocumentIds(Array.isArray(parsed.scope?.documentIds) ? parsed.scope.documentIds : []);
-      setContextPromptDraft(String(parsed.contextPrompt || ""));
-      setKnowledgeMode(Array.isArray(parsed.scope?.documentIds) && parsed.scope.documentIds.length ? "workspace" : (parsed.contextPrompt ? "context" : "workspace"));
-      const initialAnswers = {};
-      for (const question of Array.isArray(parsed.questions) ? parsed.questions : []) {
-        initialAnswers[question.id] = defaultAnswerForQuestion(question);
+    let parsed = null;
+    if (builtinAgent) parsed = builtinAgent;
+    else if (agentDocument) {
+      try {
+        parsed = JSON.parse(String(agentDocument.content || "{}"));
+      } catch {
+        setLoadError("This saved agent could not be read.");
+        return;
       }
-      setAnswersByQuestionId(initialAnswers);
-      if (Array.isArray(parsed.savedOutput?.items) && parsed.savedOutput.items.length) setOutput(parsed.savedOutput);
-    } catch {
-      setLoadError("This saved agent could not be read.");
     }
-  }, [agentDocument]);
+    if (!parsed) return;
+    setAgentConfig(parsed);
+    setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
+    setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
+    setTemplateId(String(parsed.outputMapping?.templateId || ""));
+    setCustomization({
+      brand: { ...defaultBrand(parsed.name), ...(parsed.outputMapping?.customization?.brand || {}) },
+      hiddenFields: parsed.outputMapping?.customization?.hiddenFields || [],
+      fieldOrder: parsed.outputMapping?.customization?.fieldOrder || []
+    });
+    setReferenceDocumentIds(Array.isArray(parsed.scope?.documentIds) ? parsed.scope.documentIds : []);
+    setStyleDocumentIds(Array.isArray(parsed.scope?.styleDocumentIds) ? parsed.scope.styleDocumentIds : []);
+    setContextPromptDraft(String(parsed.contextPrompt || ""));
+    setKnowledgeMode(Array.isArray(parsed.scope?.documentIds) && parsed.scope.documentIds.length ? "workspace" : (parsed.contextPrompt ? "context" : "workspace"));
+    const initialAnswers = {};
+    for (const question of Array.isArray(parsed.questions) ? parsed.questions : []) {
+      initialAnswers[question.id] = defaultAnswerForQuestion(question);
+    }
+    setAnswersByQuestionId(initialAnswers);
+    if (Array.isArray(parsed.savedOutput?.items) && parsed.savedOutput.items.length) setOutput(parsed.savedOutput);
+    try {
+      if (window.localStorage.getItem("luna-agent-how-it-works") === "collapsed") setHowOpen(false);
+    } catch {
+      // ignore
+    }
+  }, [agentDocument, builtinAgent]);
 
   useEffect(() => {
     let cancelled = false;
@@ -225,10 +316,6 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     () => documents.filter((document) => String(document.reviewStatus || "approved") === "approved"),
     [documents]
   );
-  const visibleDocuments = useMemo(() => {
-    const search = documentSearchText.trim().toLowerCase();
-    return approvedDocuments.filter((document) => !search || String(document.name || "").toLowerCase().includes(search));
-  }, [approvedDocuments, documentSearchText]);
 
   const fields = useMemo(() => (Array.isArray(agentConfig?.template?.fields) ? agentConfig.template.fields : []), [agentConfig]);
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
@@ -259,20 +346,13 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     }));
   }, [activeTemplate, templateFieldFrequencyByName]);
   const agentFields = useMemo(
-    () => fields.map((field) => ({
-      ...field,
-      frequency: normalizeFrequency(field.repeatScope || "per-output")
-    })),
+    () => fields.map((field) => ({ ...field, frequency: normalizeFrequency(field.repeatScope || "per-output") })),
     [fields]
   );
   const requiredUnanswered = questions.filter((question) => {
     if (!question.required) return false;
     const answer = answersByQuestionId[question.id];
     return Array.isArray(answer) ? answer.length === 0 : !String(answer || "").trim();
-  }).length;
-  const answeredQuestionCount = questions.filter((question) => {
-    const answer = answersByQuestionId[question.id];
-    return Array.isArray(answer) ? answer.length > 0 : String(answer || "").trim().length > 0;
   }).length;
   const mappingIssues = useMemo(() => {
     if (!activeTemplate) return [];
@@ -281,21 +361,39 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     for (const templateField of templateFields) {
       const mappedAgentFieldName = fieldMappingByTemplateField[templateField.name] || "";
       if (!mappedAgentFieldName) {
-        issues.push(`Map template field "${templateField.name}".`);
+        issues.push(`Map template field "${templateField.label || templateField.name}".`);
         continue;
       }
       const mappedAgentField = agentFieldsByName[mappedAgentFieldName];
       if (!mappedAgentField) {
-        issues.push(`Mapped variable "${mappedAgentFieldName}" for "${templateField.name}" does not exist in this agent.`);
+        issues.push(`"${mappedAgentFieldName}" does not exist in this agent.`);
         continue;
       }
       if (mappedAgentField.frequency !== templateField.frequency) {
-        issues.push(`Frequency mismatch: "${templateField.name}" expects ${templateField.frequency}, mapped to "${mappedAgentField.name}" (${mappedAgentField.frequency}).`);
+        issues.push(`"${templateField.label || templateField.name}" repeats ${templateField.frequency === "loop" ? "per item" : "once"}, but "${mappedAgentField.label || mappedAgentField.name}" ${mappedAgentField.frequency === "loop" ? "repeats per item" : "appears once"}.`);
       }
     }
     return issues;
   }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
   const mappingReady = !activeTemplate || (templateFields.length > 0 && mappingIssues.length === 0);
+
+  // Auto-map template fields whose name/label matches an agent field.
+  useEffect(() => {
+    if (!activeTemplate || !templateFields.length) return;
+    setFieldMappingByTemplateField((previous) => {
+      const next = { ...previous };
+      const used = new Set(Object.values(next));
+      for (const templateField of templateFields) {
+        if (next[templateField.name]) continue;
+        const match = agentFields.find((agentField) => !used.has(agentField.name) && agentField.frequency === templateField.frequency && [agentField.name, agentField.label].map((value) => String(value || "").toLowerCase()).includes(String(templateField.name).toLowerCase()));
+        if (match) {
+          next[templateField.name] = match.name;
+          used.add(match.name);
+        }
+      }
+      return next;
+    });
+  }, [activeTemplate, templateFields, agentFields]);
 
   function setFieldType(name, type) {
     setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
@@ -305,9 +403,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     setFieldMappingByTemplateField((previous) => {
       const next = { ...previous };
       for (const [targetField, mappedAgentField] of Object.entries(next)) {
-        if (targetField !== templateFieldName && mappedAgentField === agentFieldName) {
-          delete next[targetField];
-        }
+        if (targetField !== templateFieldName && mappedAgentField === agentFieldName) delete next[targetField];
       }
       if (!agentFieldName) delete next[templateFieldName];
       else next[templateFieldName] = agentFieldName;
@@ -319,22 +415,38 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     setAnswersByQuestionId((previous) => ({ ...previous, [questionId]: value }));
   }
 
+  function toggleHow() {
+    setHowOpen((value) => {
+      try {
+        window.localStorage.setItem("luna-agent-how-it-works", value ? "collapsed" : "open");
+      } catch {
+        // ignore
+      }
+      return !value;
+    });
+  }
+
   function renderQuestionInput(question) {
     const answer = answersByQuestionId[question.id];
-    const optionClass = (selected) => `flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${selected ? "border-accent/50 bg-teal/10 text-ink" : "border-ink/10 bg-ink/[0.03] text-soft-ink hover:border-ink/25 hover:text-ink"}`;
+    const optionClass = (selected) => `flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${selected ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-ink" : "border-ink/10 bg-white text-ink hover:bg-[var(--surface-soft)]"}`;
     if (question.type === "number") {
-      return <input className={fieldClass} type="number" value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)} placeholder="e.g., 20" />;
+      return (
+        <div className="flex items-center gap-2">
+          <button type="button" className={ghostBtn} onClick={() => setAnswer(question.id, String(Math.max(1, Number(answer || 0) - 1)))}>−</button>
+          <input className={`${fieldClass} w-24 text-center`} type="number" min="1" value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)} placeholder="10" />
+          <button type="button" className={ghostBtn} onClick={() => setAnswer(question.id, String(Number(answer || 0) + 1))}>+</button>
+        </div>
+      );
     }
     if (question.type === "yes-no") {
       return <SegmentedControl value={answer || ""} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={(value) => setAnswer(question.id, value)} />;
     }
     if (question.type === "single-select") {
       return (
-        <div className="grid gap-1.5 sm:grid-cols-2">
+        <div className="flex flex-wrap gap-1.5">
           {(question.options || []).map((option) => (
-            <label className={optionClass(answer === option)} key={option}>
+            <label className={`${optionClass(answer === option)} rounded-full py-1.5`} key={option}>
               <input className="sr-only" type="radio" name={question.id} checked={answer === option} onChange={() => setAnswer(question.id, option)} />
-              <span className={`size-3.5 rounded-full ring-2 ring-inset ${answer === option ? "bg-accent ring-accent" : "ring-ink/30"}`} />
               <span>{option}</span>
             </label>
           ))}
@@ -350,6 +462,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
             return (
               <label className={`${optionClass(on)} rounded-full py-1.5`} key={option}>
                 <input className="sr-only" type="checkbox" checked={on} onChange={() => setAnswer(question.id, on ? selected.filter((item) => item !== option) : [...selected, option])} />
+                <span className={`grid size-3.5 place-items-center rounded-[4px] text-[9px] ring-1 ring-inset ${on ? "bg-[var(--accent)] text-white ring-[var(--accent)]" : "ring-ink/30"}`}>{on ? "✓" : ""}</span>
                 <span>{option}</span>
               </label>
             );
@@ -357,13 +470,14 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
         </div>
       );
     }
-    return <input className={fieldClass} value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)} placeholder="Your answer" />;
+    return <input className={fieldClass} value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)} placeholder="Type your answer" />;
   }
 
   async function handleGenerate() {
     if (!agentConfig || generation.isGenerating) return;
     setStatusMessage("");
-    setRightTab("preview");
+    setFlowStep(2);
+    setOutputTab("layout");
     try {
       const questionAnswers = questions.map((question) => ({ question: question.text, answer: answersByQuestionId[question.id] }));
       const data = await generation.generate({
@@ -378,12 +492,13 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
         scope: {
           workspaceId,
           subjectId,
-          documentIds: knowledgeMode === "workspace" ? referenceDocumentIds : []
+          documentIds: knowledgeMode === "workspace" ? referenceDocumentIds : [],
+          styleDocumentIds
         }
       });
       setOutput(data);
     } catch {
-      // The hook already exposes the error state to the preview pane.
+      // The hook exposes the error state to the preview pane.
     }
   }
 
@@ -394,15 +509,13 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     try {
       const nextConfig = {
         ...agentConfig,
-        scope: { ...(agentConfig.scope || {}), documentIds: referenceDocumentIds },
+        scope: { ...(agentConfig.scope || {}), documentIds: referenceDocumentIds, styleDocumentIds },
         outputMapping: { templateId, fieldTypeByName, fieldMappingByTemplateField, customization }
       };
       const textContent = JSON.stringify(nextConfig, null, 2);
-      await onUpdateGeneratedDocument(agentDocument.id, {
-        file: { name: agentDocument.name, content: textContent, sizeBytes: textContent.length }
-      });
+      await onUpdateGeneratedDocument(agentDocument.id, { file: { name: agentDocument.name, content: textContent, sizeBytes: textContent.length } });
       setAgentConfig(nextConfig);
-      setStatusMessage("Saved template, mapping and styling as the preset for future runs.");
+      setStatusMessage("Saved as the default for next time.");
     } catch (error) {
       setStatusMessage(String(error.message || error));
     } finally {
@@ -410,38 +523,47 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     }
   }
 
+  function buildDocumentHtml(forPrint = false) {
+    const visible = applyOutputCustomization(output?.items || [], fields, customization);
+    return {
+      visible,
+      textContent: renderPlainOutputText(visible.items, visible.fields, fieldTypeByName),
+      plainFragment: renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand),
+      wrap: (fragment) => wrapPreviewDocument(fragment, customization.brand, { forPrint })
+    };
+  }
+
+  async function renderFinalHtml(forPrint) {
+    const { visible, textContent, plainFragment, wrap } = buildDocumentHtml(forPrint);
+    let fragment = plainFragment;
+    if (activeTemplate) {
+      const templateData = buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, activeTemplate);
+      const response = await fetch("/api/templates/render-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result?.error || "Template rendering failed");
+      fragment = result.html || "";
+    }
+    return { html: wrap(fragment), textContent };
+  }
+
   async function handleSaveAsDocument() {
     if (!onSaveGeneratedQuizDocument || !Array.isArray(output?.items)) return;
-    if (activeTemplate && mappingIssues.length) {
-      setStatusMessage(`Complete template mapping first. ${mappingIssues[0]}`);
+    if (!mappingReady) {
+      setStatusMessage(`Finish the template mapping first. ${mappingIssues[0] || ""}`);
       return;
     }
     setIsSavingDocument(true);
     setStatusMessage("");
     try {
-      const visible = applyOutputCustomization(output.items, fields, customization);
-      const textContent = renderPlainOutputText(visible.items, visible.fields, fieldTypeByName);
-      let fragment = renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand);
-      if (activeTemplate) {
-        const templateData = buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, activeTemplate);
-        const response = await fetch("/api/templates/render-preview", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result?.error || "Template rendering failed");
-        fragment = result.html || "";
-      }
-      const renderedContent = wrapPreviewDocument(fragment, customization.brand, { forPrint: true });
+      const { html, textContent } = await renderFinalHtml(true);
       const name = `${customization.brand?.title || agentConfig?.name || "Agent Output"}.html`;
-      const saved = await onSaveGeneratedQuizDocument({
-        folderIds: saveFolderId ? [saveFolderId] : [],
-        tags: [],
-        file: { name, content: renderedContent, preview: textContent, sizeBytes: renderedContent.length }
-      });
+      const saved = await onSaveGeneratedQuizDocument({ folderIds: saveFolderId ? [saveFolderId] : [], tags: [], file: { name, content: html, preview: textContent, sizeBytes: html.length } });
       if (!saved) throw new Error("Output could not be saved to the workspace.");
-      setStatusMessage(`Saved "${name}" to the workspace.`);
+      setStatusMessage(`Saved "${name}" to your workspace.`);
     } catch (error) {
       setStatusMessage(String(error.message || error));
     } finally {
@@ -449,199 +571,265 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
     }
   }
 
-  if (loadError) {
-    return <p className="rounded-2xl border border-danger/40 bg-rose/10 p-4 text-sm text-danger">{loadError}</p>;
+  async function handleDownloadHtml() {
+    try {
+      const { html } = await renderFinalHtml(true);
+      const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${customization.brand?.title || agentConfig?.name || "output"}.html`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setStatusMessage(String(error.message || error));
+    }
   }
 
+  async function handlePrint() {
+    try {
+      const { html } = await renderFinalHtml(true);
+      const frame = document.createElement("iframe");
+      frame.style.position = "fixed";
+      frame.style.right = "0";
+      frame.style.bottom = "0";
+      frame.style.width = "0";
+      frame.style.height = "0";
+      frame.style.border = "0";
+      document.body.appendChild(frame);
+      frame.srcdoc = html;
+      frame.onload = () => {
+        frame.contentWindow?.focus();
+        frame.contentWindow?.print();
+        window.setTimeout(() => frame.remove(), 1000);
+      };
+    } catch (error) {
+      setStatusMessage(String(error.message || error));
+    }
+  }
+
+  if (loadError) {
+    return <p className="rounded-2xl border border-[var(--color-danger)]/30 bg-rose/10 p-4 text-sm text-[var(--color-danger)]">{loadError}</p>;
+  }
   if (!agentConfig) {
     return (
       <div className="grid gap-3">
-        {[0, 1, 2].map((index) => <div key={index} className="h-24 animate-shimmer rounded-bento bg-[linear-gradient(90deg,rgba(255,255,255,0.03),rgba(255,255,255,0.08),rgba(255,255,255,0.03))] bg-[length:200%_100%]" />)}
+        {[0, 1, 2].map((index) => <div key={index} className="h-24 animate-shimmer rounded-[18px] bg-[linear-gradient(90deg,rgba(0,0,0,0.03),rgba(0,0,0,0.07),rgba(0,0,0,0.03))] bg-[length:200%_100%]" />)}
       </div>
     );
   }
 
   const outputItems = Array.isArray(output?.items) ? output.items : [];
-  const knowledgeStatus = knowledgeMode === "workspace" ? (referenceDocumentIds.length ? "done" : "warn") : (contextPromptDraft.trim() ? "done" : "warn");
-  const knowledgeBadge = knowledgeMode === "workspace" ? `${referenceDocumentIds.length} doc${referenceDocumentIds.length === 1 ? "" : "s"}` : (contextPromptDraft.trim() ? "Context" : "Empty");
-  const questionsStatus = !questions.length || requiredUnanswered === 0 ? "done" : "warn";
-  const templateStatus = activeTemplate ? (mappingReady ? "done" : "warn") : "done";
-  const canGenerate = !generation.isGenerating && requiredUnanswered === 0;
+  const hasOutput = outputItems.length > 0;
+  const knowledgeReady = knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0;
+  const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
+  const unlockedStep = hasOutput ? 3 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
+
+  const previewPane = (
+    <LivePreviewPane
+      items={outputItems}
+      fields={fields}
+      fieldTypeByName={fieldTypeByName}
+      customization={customization}
+      template={activeTemplate}
+      templateFields={templateFields}
+      fieldMappingByTemplateField={fieldMappingByTemplateField}
+      mappingReady={mappingReady}
+      generation={generation}
+      onCancelGeneration={generation.cancel}
+      agentName={customization.brand?.title || agentConfig.name}
+      emptyHint="Generate in step 1 and your result appears here. Then choose a layout and styling."
+    />
+  );
 
   return (
     <section className="tw-scope grid gap-4">
-      {/* Hero */}
-      <header className="relative overflow-hidden rounded-bento border border-ink/8 bg-paper p-6 shadow-glow animate-rise">
+      {/* Intro */}
+      <header className={cardClass}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 max-w-2xl">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-teal/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-accent ring-1 ring-accent/40">Run agent</span>
+              <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">AI agent</span>
               <span className={chipClass}>{modelLabel}</span>
-              <span className={chipClass}>Creativity: {agentConfig.creativity || "medium"}</span>
               {output?.model ? <span className={chipClass}>Last run: {output.model}</span> : null}
             </div>
-            <h3 className="m-0 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">{agentConfig.name || "Untitled Agent"}</h3>
-            <p className="m-0 mt-1.5 line-clamp-2 text-sm text-soft-ink">{agentConfig.instructions}</p>
+            <h3 className="m-0 text-[26px] font-bold tracking-tight text-ink">{agentConfig.name || "Untitled Agent"}</h3>
+            <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{agentConfig.description || agentConfig.tagline || agentConfig.instructions}</p>
           </div>
-          <div className="flex shrink-0 flex-col items-stretch gap-2 sm:items-end">
-            <button
-              type="button"
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-bold text-white shadow-[0_6px_16px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed] hover:shadow-[0_8px_20px_rgba(0,113,227,0.3)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-            >
-                            <span className="relative">{generation.isGenerating ? "Generating…" : outputItems.length ? "Regenerate" : "Generate output"}</span>
-              {!generation.isGenerating ? <span className="relative">→</span> : null}
-            </button>
-            <p className="m-0 text-center text-[11px] text-soft-ink sm:text-right">
-              {requiredUnanswered ? `${requiredUnanswered} required question${requiredUnanswered === 1 ? "" : "s"} left` : "Uses 1 credit per generation"}
-            </p>
-          </div>
+          {flowStep === 1 ? (
+            <div className="flex shrink-0 flex-col items-stretch gap-1.5 sm:items-end">
+              <button type="button" onClick={handleGenerate} disabled={!canGenerate} className={primaryBtn}>{generation.isGenerating ? "Generating…" : hasOutput ? "Generate again" : "Generate"} <span aria-hidden>→</span></button>
+              <p className="m-0 text-center text-[11px] text-soft-ink sm:text-right">
+                {!knowledgeReady ? "Choose material first" : requiredUnanswered ? `${requiredUnanswered} question${requiredUnanswered === 1 ? "" : "s"} left` : "Uses 1 credit"}
+              </p>
+            </div>
+          ) : null}
         </div>
       </header>
 
-      {/* Workspace: steps left, live preview right */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <div className="grid gap-3">
-          <StepCard index={0} title="Provide knowledge" description="What the agent should learn from." status={knowledgeStatus} badge={knowledgeBadge}>
-            <SegmentedControl
-              value={knowledgeMode}
-              onChange={setKnowledgeMode}
-              options={[{ value: "workspace", label: "My workspace" }, { value: "context", label: "Write context" }]}
-            />
-            {knowledgeMode === "workspace" ? (
-              <>
-                <input className={fieldClass} value={documentSearchText} onChange={(event) => setDocumentSearchText(event.target.value)} placeholder="Search documents by name" />
-                <div className="grid max-h-56 gap-1 overflow-auto pr-1">
-                  {visibleDocuments.map((document) => {
-                    const selected = referenceDocumentIds.includes(document.id);
-                    return (
-                      <label key={document.id} className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition ${selected ? "border-accent/50 bg-teal/10 text-ink" : "border-ink/10 bg-ink/[0.03] text-soft-ink hover:border-ink/25 hover:text-ink"}`}>
-                        <input className="sr-only" type="checkbox" checked={selected} onChange={() => toggleInList(document.id, setReferenceDocumentIds)} />
-                        <span className={`grid size-4 shrink-0 place-items-center rounded-md ring-1 ring-inset ${selected ? "bg-accent text-white ring-accent" : "ring-ink/30"}`}>{selected ? "✓" : ""}</span>
-                        <span className="truncate">{document.name}</span>
-                      </label>
-                    );
-                  })}
-                  {!visibleDocuments.length ? <p className="m-0 py-4 text-center text-xs text-soft-ink">No approved documents in this subject yet.</p> : null}
-                </div>
-                {approvedDocuments.length ? (
-                  <div className="flex gap-2 text-xs">
-                    <button type="button" className="text-accent hover:underline" onClick={() => setReferenceDocumentIds(approvedDocuments.map((document) => document.id))}>Select all</button>
-                    <button type="button" className="text-soft-ink hover:underline" onClick={() => setReferenceDocumentIds([])}>Clear</button>
-                  </div>
-                ) : null}
-              </>
-            ) : (
-              <textarea className={`${fieldClass} min-h-32 resize-y`} value={contextPromptDraft} onChange={(event) => setContextPromptDraft(event.target.value)} placeholder="Describe the specific context or paste the content this run should use." />
-            )}
-          </StepCard>
+      <HowItWorks agent={agentConfig} open={howOpen} onToggle={toggleHow} />
 
-          <StepCard index={1} title="Answer questions" description="The agent tailors its output to these." status={questionsStatus} badge={questions.length ? `${answeredQuestionCount}/${questions.length}` : "None"}>
-            {questions.map((question) => (
-              <div key={question.id}>
-                <p className="m-0 mb-1.5 flex items-center gap-2 text-sm font-semibold text-ink">
-                  {question.text}
-                  <span className={`${chipClass} ${question.required ? "text-warn ring-warn/40" : ""}`}>{question.required ? "Required" : "Optional"}</span>
-                </p>
-                {renderQuestionInput(question)}
+      <Stepper current={flowStep} onSelect={setFlowStep} unlocked={unlockedStep} />
+
+      {/* Step 1: configure questions */}
+      {flowStep === 1 ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="grid gap-3">
+            <section className={cardClass}>
+              <p className={kicker}>1 · Material</p>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">What should the agent read?</h4>
+              <div className="mt-3 grid gap-3">
+                <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} />
+                {knowledgeMode === "workspace" ? (
+                  <>
+                    <DocumentPicker documents={approvedDocuments} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} emptyText="No approved documents in this subject yet. Upload some in Workspaces." />
+                    {!showStyleDocs ? (
+                      <button type="button" className="justify-self-start text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setShowStyleDocs(true)}>+ Add an example of the style you want (optional)</button>
+                    ) : (
+                      <div className="rounded-2xl bg-[var(--surface-soft)] p-3">
+                        <p className="m-0 mb-2 text-xs text-soft-ink"><strong className="text-ink">Style examples.</strong> A past paper or worksheet: the agent copies its format and level, not its content.</p>
+                        <DocumentPicker documents={approvedDocuments.filter((document) => !referenceDocumentIds.includes(document.id))} selectedIds={styleDocumentIds} onChange={setStyleDocumentIds} emptyText="No other documents available." />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <textarea className={`${fieldClass} min-h-32 resize-y`} value={contextPromptDraft} onChange={(event) => setContextPromptDraft(event.target.value)} placeholder="Paste the text the agent should work from." />
+                )}
               </div>
-            ))}
-            {!questions.length ? <p className="m-0 text-sm text-soft-ink">This agent has no questions — it runs straight from your knowledge.</p> : null}
-          </StepCard>
+            </section>
 
-          <StepCard index={2} title="Choose template" description="How the output should be laid out." status={templateStatus} badge={activeTemplate?.name || "Plain layout"} defaultOpen={Boolean(activeTemplate)}>
-            <select className={fieldClass} value={templateId} onChange={(event) => setTemplateId(event.target.value)}>
-              <option value="">Plain layout (styled cards)</option>
-              {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-            </select>
-            {templateFields.length ? (
-              <div className="grid gap-2 rounded-2xl border border-ink/8 bg-ink/[0.04] p-3">
-                <p className="m-0 text-xs text-soft-ink">Map each template variable to an agent variable (matching frequency).</p>
-                {templateFields.map((field) => (
-                  <div className="grid gap-1 sm:grid-cols-[1fr_1fr] sm:items-center" key={field.id || field.name}>
-                    <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">
-                      {field.label || field.name}
-                      <span className={chipClass}>{FIELD_FREQUENCY_LABELS[field.frequency] || field.frequency}</span>
-                    </span>
-                    <select className={fieldClass} value={fieldMappingByTemplateField[field.name] || ""} onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}>
-                      <option value="">Select agent variable</option>
-                      {agentFields
-                        .filter((agentField) => agentField.frequency === field.frequency)
-                        .filter((agentField) => {
-                          const selectedForThisField = fieldMappingByTemplateField[field.name];
-                          const alreadyUsedByOtherField = Object.entries(fieldMappingByTemplateField).some(
-                            ([templateFieldName, mappedAgentName]) => templateFieldName !== field.name && mappedAgentName === agentField.name
-                          );
-                          return !alreadyUsedByOtherField || selectedForThisField === agentField.name;
-                        })
-                        .map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}</option>)}
-                    </select>
+            <section className={cardClass}>
+              <p className={kicker}>2 · A few choices</p>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">Tell the agent what you need</h4>
+              <div className="mt-3 grid gap-4">
+                {questions.map((question) => (
+                  <div key={question.id}>
+                    <p className="m-0 mb-1.5 flex items-center gap-2 text-sm font-semibold text-ink">{question.text}{question.required ? null : <span className={chipClass}>Optional</span>}</p>
+                    {renderQuestionInput(question)}
                   </div>
                 ))}
+                {!questions.length ? <p className="m-0 text-sm text-soft-ink">Nothing to choose — this agent runs straight from your material.</p> : null}
               </div>
-            ) : null}
-            {activeTemplate && !templateFields.length ? <p className="m-0 text-xs text-danger">No AI-input variables found in this template. Add AI-linked blocks or data fields in Template Builder.</p> : null}
-            {activeTemplate && mappingIssues.length ? <p className="m-0 text-xs text-warn">{mappingIssues[0]}</p> : null}
-            <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className="justify-self-start rounded-full px-4 py-1.5 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-50">
-              {isSavingPreset ? "Saving…" : "Save as preset for next time"}
-            </button>
-          </StepCard>
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ink/8 pt-4">
+                <p className="m-0 text-xs text-soft-ink">{!knowledgeReady ? "Choose material above to continue." : requiredUnanswered ? `${requiredUnanswered} required choice${requiredUnanswered === 1 ? "" : "s"} left.` : "Ready when you are."}</p>
+                <button type="button" onClick={handleGenerate} disabled={!canGenerate} className={primaryBtn}>{generation.isGenerating ? "Generating…" : "Generate"} <span aria-hidden>→</span></button>
+              </div>
+            </section>
+          </div>
+          <div className="lg:sticky lg:top-4">
+            <section className={cardClass}>
+              <p className={kicker}>What happens next</p>
+              <ul className="m-0 mt-2 grid list-none gap-2 p-0 text-sm text-ink">
+                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">1.</span> The agent reads {knowledgeMode === "workspace" ? `${referenceDocumentIds.length} document${referenceDocumentIds.length === 1 ? "" : "s"}` : "your text"}{styleDocumentIds.length ? ` and ${styleDocumentIds.length} style example${styleDocumentIds.length === 1 ? "" : "s"}` : ""}.</li>
+                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It writes {fields.length} field{fields.length === 1 ? "" : "s"} per item: {fields.slice(0, 4).map((field) => field.label || field.name).join(", ")}{fields.length > 4 ? "…" : ""}.</li>
+                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">3.</span> You pick a layout and export — or save it to your workspace.</li>
+              </ul>
+              {hasOutput ? <button type="button" className={`${ghostBtn} mt-4`} onClick={() => setFlowStep(2)}>See last result →</button> : null}
+            </section>
+          </div>
+        </div>
+      ) : null}
 
-          {outputItems.length ? (
-            <article className={`${cardClass} animate-rise`}>
-              <h5 className="m-0 mb-1 text-base font-bold text-ink">Save to workspace</h5>
-              <p className="m-0 mb-3 text-xs text-soft-ink">Stores exactly what you see in the preview, including your styling.</p>
-              <div className="flex flex-wrap gap-2">
+      {/* Step 2: configure output */}
+      {flowStep === 2 ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="grid gap-3">
+            <section className={cardClass}>
+              <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
+                {[{ id: "layout", label: "Layout" }, { id: "style", label: "Styling" }].map((tab) => (
+                  <button key={tab.id} type="button" onClick={() => setOutputTab(tab.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${outputTab === tab.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>{tab.label}</button>
+                ))}
+              </div>
+              {outputTab === "layout" ? (
+                <div className="mt-4 grid gap-3">
+                  <div>
+                    <p className={kicker}>Template</p>
+                    <div className="mt-2 grid gap-1.5">
+                      <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${!templateId ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
+                        <input className="sr-only" type="radio" name="template" checked={!templateId} onChange={() => setTemplateId("")} />
+                        <span className="grid size-9 place-items-center rounded-lg bg-white text-base shadow-[0_1px_2px_rgba(0,0,0,0.08)]">▤</span>
+                        <span className="min-w-0"><span className="block text-sm font-semibold text-ink">Clean default</span><span className="block text-xs text-soft-ink">One card per item, your colours and fonts.</span></span>
+                      </label>
+                      {templates.map((template) => (
+                        <label key={template.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${templateId === template.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
+                          <input className="sr-only" type="radio" name="template" checked={templateId === template.id} onChange={() => setTemplateId(template.id)} />
+                          <span className="grid size-9 place-items-center rounded-lg bg-white text-base shadow-[0_1px_2px_rgba(0,0,0,0.08)]">▦</span>
+                          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{template.name}</span><span className="block text-xs text-soft-ink">{(template.dataFields || []).length || Object.keys(inferTemplateFieldFrequencies(template)).length} fields · {template.pageFormat || "A4"}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                    {typeof onOpenTool === "function" ? <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => onOpenTool("template-builder")}>Design a new template →</button> : null}
+                  </div>
+                  {activeTemplate ? (
+                    <div>
+                      <p className={kicker}>Match fields</p>
+                      <p className="m-0 mt-1 text-xs text-soft-ink">Tell the template which agent field fills each slot. Matching names are filled in for you.</p>
+                      <div className="mt-2 grid gap-2">
+                        {templateFields.map((field) => (
+                          <div className="grid gap-1 sm:grid-cols-[1fr_1fr] sm:items-center" key={field.id || field.name}>
+                            <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">{field.label || field.name}<span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span></span>
+                            <select className={fieldClass} value={fieldMappingByTemplateField[field.name] || ""} onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}>
+                              <option value="">Choose…</option>
+                              {agentFields.filter((agentField) => agentField.frequency === field.frequency).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}</option>)}
+                            </select>
+                          </div>
+                        ))}
+                        {!templateFields.length ? <p className="m-0 text-xs text-[var(--color-danger)]">This template has no field tags yet. Open it in the Template Builder and tag its blocks.</p> : null}
+                        {mappingIssues.length ? <p className="m-0 text-xs text-[var(--color-warn)]">{mappingIssues[0]}</p> : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <OutputCustomizerPanel fields={fields} fieldTypeByName={fieldTypeByName} onFieldTypeChange={setFieldType} customization={customization} onChange={setCustomization} hasTemplate={Boolean(activeTemplate)} />
+                </div>
+              )}
+              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-ink/8 pt-4">
+                {agentDocument ? <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button> : <span />}
+                <button type="button" onClick={() => setFlowStep(3)} disabled={!hasOutput || !mappingReady} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
+              </div>
+              {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
+            </section>
+          </div>
+          <div className="lg:sticky lg:top-4">{previewPane}</div>
+        </div>
+      ) : null}
+
+      {/* Step 3: export */}
+      {flowStep === 3 ? (
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="grid gap-3">
+            <section className={cardClass}>
+              <p className={kicker}>Download</p>
+              <div className="mt-3 grid gap-2">
+                <button type="button" className={`${ghostBtn} !justify-between`} onClick={handlePrint}><span>PDF</span><span className="text-xs font-normal text-soft-ink">via print dialog</span></button>
+                <button type="button" className={`${ghostBtn} !justify-between`} onClick={handleDownloadHtml}><span>HTML</span><span className="text-xs font-normal text-soft-ink">opens in any browser</span></button>
+                {activeTemplate ? <p className="m-0 text-xs text-soft-ink">Word and PowerPoint exports are available from the preview toolbar when a template is selected.</p> : <p className="m-0 text-xs text-soft-ink">Choose a template in step 2 for Word / PowerPoint exports.</p>}
+              </div>
+            </section>
+            <section className={cardClass}>
+              <p className={kicker}>Save to workspace</p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 <select className={`${fieldClass} flex-1`} value={saveFolderId} onChange={(event) => setSaveFolderId(event.target.value)}>
                   <option value="">Unfiled</option>
                   {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
                 </select>
-                <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !mappingReady} className="rounded-full bg-ink px-5 py-2 text-sm font-bold text-bg transition hover:bg-ink/85 disabled:opacity-50">
-                  {isSavingDocument ? "Saving…" : "Save"}
-                </button>
+                <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !mappingReady} className={primaryBtn}>{isSavingDocument ? "Saving…" : "Save"}</button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
-            </article>
-          ) : statusMessage ? <p className="m-0 text-xs text-accent">{statusMessage}</p> : null}
-        </div>
-
-        <div className="lg:sticky lg:top-4">
-          <div className="mb-2 flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10 lg:w-fit">
-            {[{ id: "preview", label: "Live preview" }, { id: "customize", label: "Customize" }].map((item) => (
-              <button key={item.id} type="button" onClick={() => setRightTab(item.id)} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${rightTab === item.id ? "bg-ink text-bg shadow" : "text-soft-ink hover:text-ink"}`}>{item.label}</button>
-            ))}
+            </section>
+            <section className={cardClass}>
+              <p className={kicker}>Share with students</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">Assigning to a class and answering online arrives with student accounts. For now, download or save and share the file.</p>
+            </section>
+            <button type="button" className={ghostBtn} onClick={() => setFlowStep(2)}>← Back to output</button>
           </div>
-          {rightTab === "preview" ? (
-            <LivePreviewPane
-              items={outputItems}
-              fields={fields}
-              fieldTypeByName={fieldTypeByName}
-              customization={customization}
-              template={activeTemplate}
-              templateFields={templateFields}
-              fieldMappingByTemplateField={fieldMappingByTemplateField}
-              mappingReady={mappingReady}
-              generation={generation}
-              onCancelGeneration={generation.cancel}
-              agentName={agentConfig.name}
-            />
-          ) : (
-            <div className={cardClass}>
-              <OutputCustomizerPanel
-                fields={fields}
-                fieldTypeByName={fieldTypeByName}
-                onFieldTypeChange={setFieldType}
-                customization={customization}
-                onChange={setCustomization}
-                hasTemplate={Boolean(activeTemplate)}
-              />
-            </div>
-          )}
-          {output?.fallbackReason ? <p className="m-0 mt-2 text-xs text-warn">Used the local fallback: {output.fallbackReason}</p> : null}
+          <div className="lg:sticky lg:top-4">{previewPane}</div>
         </div>
-      </div>
+      ) : null}
+
+      {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}
     </section>
   );
 }

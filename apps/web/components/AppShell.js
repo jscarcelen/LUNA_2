@@ -163,6 +163,7 @@ export function AppShell() {
               selectedWorkspaceId,
               selectedSubjectId,
               onUploadTxt: handleUploadTxt,
+              onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`),
               onReviewDocumentExtraction: handleReviewDocumentExtraction,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
@@ -185,7 +186,8 @@ export function AppShell() {
               selectedSubjectId,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
-              onListDocumentBlockTemplates: handleListDocumentBlockTemplates
+              onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
+              onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`)
             }}
           />
         </AIToolRuntimePage>

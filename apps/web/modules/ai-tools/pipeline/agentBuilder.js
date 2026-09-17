@@ -136,7 +136,7 @@ async function readOpenAiStream(response, onToken) {
   return { content, usage };
 }
 
-async function callOpenAiAgent(config, chunks, schema, { onToken } = {}) {
+async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = [] } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing required environment variable: OPENAI_API_KEY");
@@ -179,7 +179,10 @@ async function callOpenAiAgent(config, chunks, schema, { onToken } = {}) {
             outputExample: config.outputExample || "",
             refinementPrompt: config.refinementPrompt || "",
             previousOutput: config.previousOutput || null,
-            referenceMaterial: buildChunksContext(chunks)
+            referenceMaterial: buildChunksContext(chunks),
+            styleExamples: styleChunks.length
+              ? { note: "Imitate the format, tone and difficulty of these examples. Do not take content from them.", samples: buildChunksContext(styleChunks, 4) }
+              : null
           })
         }
       ]
@@ -263,11 +266,16 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   emit({ step: "scope", status: "start" });
   const workspaces = await loadWorkspaceTreeForAi();
   const scopedDocuments = collectScopedDocuments(workspaces, config.scope || {});
-  emit({ step: "scope", status: "end", documentCount: scopedDocuments.length });
+  const styleDocumentIds = Array.isArray(config.scope?.styleDocumentIds) ? config.scope.styleDocumentIds.filter(Boolean) : [];
+  const styleDocuments = styleDocumentIds.length
+    ? collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: styleDocumentIds })
+    : [];
+  emit({ step: "scope", status: "end", documentCount: scopedDocuments.length, styleDocumentCount: styleDocuments.length });
 
   emit({ step: "chunk", status: "start" });
   const chunking = { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS };
   const chunks = scopedDocuments.length ? chunkDocuments(scopedDocuments, chunking) : [];
+  const styleChunks = styleDocuments.length ? chunkDocuments(styleDocuments, chunking).slice(0, 4) : [];
   emit({ step: "chunk", status: "end", chunkCount: chunks.length });
 
   emit({ step: "retrieve", status: "start" });
@@ -291,6 +299,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   if (isAgentLlmConfigured()) {
     try {
       result = await callOpenAiAgent(config, rankedChunks, schema, {
+        styleChunks,
         onToken: (delta, content) => emit({ step: "generate", status: "token", delta, chars: content.length })
       });
     } catch (error) {

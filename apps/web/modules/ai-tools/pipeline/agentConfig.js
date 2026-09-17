@@ -32,7 +32,9 @@ export function normalizeConfig(input = {}) {
     scope: {
       workspaceId: String(input.scope?.workspaceId || ""),
       subjectId: String(input.scope?.subjectId || ""),
-      documentIds: Array.isArray(input.scope?.documentIds) ? input.scope.documentIds : []
+      documentIds: Array.isArray(input.scope?.documentIds) ? input.scope.documentIds : [],
+      // Optional documents that show the desired style/level; never used as source content.
+      styleDocumentIds: Array.isArray(input.scope?.styleDocumentIds) ? input.scope.styleDocumentIds : []
     }
   };
 }

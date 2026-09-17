@@ -47,7 +47,7 @@ export function GenerationProgress({ steps, tokenChars, tokenTail, elapsedMs, is
   const percent = Math.min(100, Math.round((doneCount / GENERATION_STEPS.length) * 100 + (activeStep ? 12 : 0)));
 
   return (
-    <div className={`@container rounded-bento border border-ink/10 bg-paper/70 backdrop-blur-md shadow-glow animate-rise ${compact ? "p-4" : "p-5"}`} aria-live="polite">
+    <div className={`@container rounded-bento border border-ink/8 bg-paper shadow-glow animate-rise ${compact ? "p-4" : "p-5"}`} aria-live="polite">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">{isGenerating ? "Building" : error ? "Stopped" : "Complete"}</p>

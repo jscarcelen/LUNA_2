@@ -2,23 +2,33 @@ export const appName = "LUNA";
 
 export const navByRole = {
   student: [
+    { key: "dashboard", label: "Home" },
     { key: "workspaces", label: "Workspaces" },
-    { key: "dashboard", label: "Dashboard" },
     { key: "ai-tools", label: "AI Tools" },
-    { key: "ai-tool:template-builder", label: "Template Builder" },
-    { key: "marketplace", label: "Agent Marketplace" }
+    { key: "marketplace", label: "Marketplace" }
   ],
   teacher: [
+    { key: "dashboard", label: "Classes" },
     { key: "workspaces", label: "Workspaces" },
-    { key: "dashboard", label: "Dashboard" },
     { key: "ai-tools", label: "AI Tools" },
     { key: "ai-tool:template-builder", label: "Template Builder" },
-    { key: "marketplace", label: "Agent Marketplace" }
+    { key: "marketplace", label: "Marketplace" }
+  ],
+  parent: [
+    { key: "dashboard", label: "Children" },
+    { key: "workspaces", label: "Workspaces" },
+    { key: "marketplace", label: "Marketplace" }
   ]
 };
 
+export const roleProfiles = {
+  student: { name: "Maria G.", subtitle: "Student", initials: "MG" },
+  teacher: { name: "Prof. Rivera", subtitle: "Teacher · Creator", initials: "PR" },
+  parent: { name: "Elena G.", subtitle: "Parent of Maria & Tom", initials: "EG" }
+};
+
 export const pageTitles = {
-  dashboard: "Dashboard",
+  dashboard: "Home",
   workspaces: "Workspaces",
   "ai-tools": "AI Tools",
   "ai-tool-quiz": "Quiz Generator",

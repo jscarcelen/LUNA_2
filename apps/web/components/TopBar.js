@@ -1,5 +1,3 @@
-import { ThemeToggle } from "./ThemeToggle";
-
 export function TopBar({ title, navItems, page, onPageChange }) {
   return (
     <header className="top-bar">
@@ -17,7 +15,6 @@ export function TopBar({ title, navItems, page, onPageChange }) {
           </button>
         ))}
       </nav>
-      <ThemeToggle />
     </header>
   );
 }

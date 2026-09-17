@@ -12,9 +12,12 @@ send targeted homework.
 - Exists: workspaces/subjects/folders/tags/documents CRUD on Supabase, DOCX/PDF document-processing
   pipeline, RAG (chunking + pgvector retrieval), OpenAI-backed quiz generator, agent builder + run
   page with template output mappings, template builder / block editor, HTML/DOCX/PDF exporters.
-- Does NOT exist yet: real auth (ownership is a hardcoded demo uuid), a `parent` role (role switch is
-  cosmetic client state, `student`/`teacher` only), student performance analytics, marketplace
-  purchases/payments (marketplace browsing + install works; listings are localStorage), RLS, TypeScript.
+- Does NOT exist yet: real auth (ownership is a hardcoded demo uuid; the student/teacher/parent
+  switch is client state with sample dashboards), quiz attempts + real analytics, marketplace
+  purchases/payments (browsing + install works; listings are localStorage), RLS, TypeScript.
+- Roadmap agreed with the user: 1 design system ✔ → 2 accounts & roles (auth provider TBD later) →
+  3 online quiz player + attempts + assignments → 4 insights/format-preference intelligence →
+  5 marketplace v2 (templates + Supabase + payments) → 6 document formats (PDF/OCR/handwriting/Excel, PPTX export).
 
 ## Stack
 
@@ -25,10 +28,15 @@ send targeted homework.
   new/redesigned surfaces use **Tailwind v4 utilities** (tokens in the `@theme` block at the top of
   `globals.css`, referencing the existing CSS variables). Preflight is NOT loaded — wrap Tailwind-
   styled trees in `.tw-scope` for the base reset. Vitest. Flat ESLint (`eslint.config.mjs`).
-- Theming: light is the default `:root`; `:root[data-theme="dark"]` (end of `globals.css`) flips the
-  tokens. Use `var(--surface)` / `rgba(var(--surface-rgb), a)` instead of hardcoded whites so new
-  CSS works in both themes. Toggle: `components/ThemeToggle.js`; pre-paint script in `app/layout.js`.
-  Template Builder (`tplb-*`) is intentionally light-only for now.
+- **Design language (Phase 1, 2026-09-16): crisp, light, Apple-like.** The final "LUNA design
+  language" block at the end of `globals.css` overrides the older pastel theme at token level
+  (`--bg #f5f5f7`, `--paper #fff`, `--ink #1d1d1f`, single accent `--accent #0071e3`, hairline
+  `--line`, soft `--shadow`). Rules: solid white surfaces, no `backdrop-blur` / translucency, no
+  gradients on controls, pill buttons, 12–18px radii, 180ms `--ease` motion. The user rejected a
+  dark theme as "blurry" — do not reintroduce dark mode or glassmorphism.
+- Roles: `student` / `teacher` / `parent` are a client-side switch (`components/data.js`
+  `navByRole`, `roleProfiles`). Each has its own home (`modules/dashboard/ui/DashboardPage.js`).
+  `modules/dashboard/insights.js` is the data seam — sample data now, Supabase later.
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
 

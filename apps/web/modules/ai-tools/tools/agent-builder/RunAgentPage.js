@@ -90,7 +90,7 @@ function inferTemplateFieldFrequencies(template = {}) {
 }
 
 
-const cardClass = "rounded-bento border border-ink/10 bg-paper/60 p-5 shadow-glow backdrop-blur-md transition-colors";
+const cardClass = "rounded-bento border border-ink/8 bg-paper p-5 shadow-glow transition-colors";
 const fieldClass = "w-full rounded-xl border border-ink/10 bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-soft-ink/60 outline-none transition focus:border-teal/60 focus:ring-2 focus:ring-teal/20";
 const chipClass = "inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink ring-1 ring-ink/10";
 
@@ -472,7 +472,7 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
   return (
     <section className="tw-scope grid gap-4">
       {/* Hero */}
-      <header className="relative overflow-hidden rounded-bento border border-ink/10 bg-[radial-gradient(circle_at_85%_-20%,rgba(64,230,255,0.22),transparent_45%),radial-gradient(circle_at_5%_120%,rgba(255,214,107,0.18),transparent_40%),var(--color-paper)] p-6 shadow-glow animate-rise">
+      <header className="relative overflow-hidden rounded-bento border border-ink/8 bg-paper p-6 shadow-glow animate-rise">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0 max-w-2xl">
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -489,10 +489,9 @@ export function RunAgentPage({ toolContext, agentDocumentId }) {
               type="button"
               onClick={handleGenerate}
               disabled={!canGenerate}
-              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[linear-gradient(120deg,var(--color-mustard),var(--color-burnt))] px-6 py-3 text-sm font-extrabold text-ink shadow-[0_10px_30px_rgba(255,135,84,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_36px_rgba(255,135,84,0.45)] active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+              className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full bg-[var(--accent)] px-6 py-3 text-sm font-bold text-white shadow-[0_6px_16px_rgba(0,113,227,0.25)] transition hover:bg-[#0077ed] hover:shadow-[0_8px_20px_rgba(0,113,227,0.3)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
             >
-              <span className="absolute inset-0 -translate-x-full bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.35),transparent)] transition-transform duration-700 group-hover:translate-x-full" />
-              <span className="relative">{generation.isGenerating ? "Generating…" : outputItems.length ? "Regenerate" : "Generate output"}</span>
+                            <span className="relative">{generation.isGenerating ? "Generating…" : outputItems.length ? "Regenerate" : "Generate output"}</span>
               {!generation.isGenerating ? <span className="relative">→</span> : null}
             </button>
             <p className="m-0 text-center text-[11px] text-soft-ink sm:text-right">

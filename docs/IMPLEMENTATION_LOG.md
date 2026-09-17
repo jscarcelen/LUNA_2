@@ -2,6 +2,16 @@
 
 ## 2026-09-16
 
+### Phase 1 — design language + role homes
+
+- Dark mode removed at the user's request (blurry). New crisp light design language appended to
+  `globals.css`: Apple-like tokens, solid surfaces, no blur, single blue accent, pill buttons.
+  Tailwind components lost their `backdrop-blur` / gradient CTAs.
+- Roles: added Parent; role-specific nav and identity; new `DashboardPage` with Student "Home",
+  Teacher "Classes" (student table, learns-best-with, suggested targeted homework) and Parent
+  "Children". Data comes from `modules/dashboard/insights.js` (sample data, labelled) until
+  accounts + attempts exist.
+
 ### Agent Marketplace rebuilt
 
 - Replaced the placeholder `MarketplaceView` with `modules/agent-marketplace` (Tailwind): hero,

@@ -17,8 +17,6 @@
   .tw-scope svg { display: block; }
 }
 
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
 /* Colors reference the design-system variables declared below (:root), so Tailwind utilities
    follow the active theme. Strong variants exist for text on light surfaces. */
 @theme inline {
@@ -40,7 +38,7 @@
   --color-warn: #a86d00;
   --color-danger: #c2418a;
   --font-display: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
-  --radius-bento: 22px;
+  --radius-bento: 18px;
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-rise: rise 0.35s ease-out both;
   --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
@@ -1753,7 +1751,7 @@ body {
 :root {
   color-scheme: light;
   --surface: #ffffff;
-  --surface-soft: var(--surface-soft);
+  --surface-soft: #f5f5f7;
   --surface-rgb: 255, 255, 255;
   --surface-soft-rgb: 245, 242, 255;
   --bg: #f6f4ff;
@@ -4819,102 +4817,196 @@ body {
   max-width: 160px;
 }
 
-/* Dark theme: restores the original navy palette on top of the light tokens above.
-   Toggle lives in TopBar (ThemeToggle); the attribute is set pre-paint in app/layout.js. */
-:root[data-theme="dark"] {
-  color-scheme: dark;
-  --surface: #0f2648;
-  --surface-soft: #0b1f3f;
-  --surface-rgb: 15, 38, 72;
-  --surface-soft-rgb: 10, 31, 63;
-  --bg: #04122b;
-  --paper: rgba(15, 38, 72, 0.92);
-  --ink: #f5ecda;
-  --soft-ink: #a9bddb;
-  --line: rgba(151, 184, 229, 0.3);
-  --burnt: #ff8754;
-  --mustard: #ffd66b;
-  --teal: #40e6ff;
-  --sky: #78a8ff;
-  --rose: #ff75c6;
-  --shadow: 0 20px 34px rgba(1, 8, 20, 0.46);
-  --color-accent: #5fe0c8;
-  --color-warn: #ffd66b;
-  --color-danger: #ff8fce;
+/* =====================================================================================
+   LUNA design language (Phase 1): crisp, light, Apple-like. Overrides the pastel theme
+   above at token and core-surface level. No translucency, no blur, single accent.
+   ===================================================================================== */
+:root {
+  --bg: #f5f5f7;
+  --paper: #ffffff;
+  --surface: #ffffff;
+  --surface-soft: #f5f5f7;
+  --surface-rgb: 255, 255, 255;
+  --surface-soft-rgb: 245, 245, 247;
+  --ink: #1d1d1f;
+  --soft-ink: #6e6e73;
+  --line: rgba(0, 0, 0, 0.08);
+  --line-strong: rgba(0, 0, 0, 0.14);
+  --accent: #0071e3;
+  --accent-soft: rgba(0, 113, 227, 0.1);
+  --accent-ink: #0060c0;
+  --burnt: #ff9500;
+  --mustard: #ffcc00;
+  --teal: #34c7b8;
+  --sky: #5ac8fa;
+  --rose: #ff375f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --color-accent: var(--accent-ink);
+  --color-warn: #b25e00;
+  --color-danger: #d70015;
 }
 
-:root[data-theme="dark"] html,
-:root[data-theme="dark"] body,
-[data-theme="dark"] body {
-  background:
-    radial-gradient(circle at 12% 18%, rgba(255, 214, 107, 0.14), transparent 36%),
-    radial-gradient(circle at 85% -5%, rgba(64, 230, 255, 0.16), transparent 38%),
-    radial-gradient(circle at 60% 80%, rgba(120, 168, 255, 0.12), transparent 34%),
-    var(--bg);
+html,
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", "Segoe UI", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
 }
 
-/* Theme toggle (TopBar) */
-.theme-toggle {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin-left: auto;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.theme-toggle-track {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  width: 46px;
-  height: 26px;
-  border-radius: 999px;
-  background: linear-gradient(120deg, var(--mustard), var(--burnt));
+h1, h2, h3, h4, h5, h6 { letter-spacing: -0.02em; font-weight: 700; }
+h2 { font-size: 22px; }
+h3 { font-size: 20px; }
+h4 { font-size: 17px; }
+h5 { font-size: 15px; }
+.hint, small { color: var(--soft-ink); }
+
+/* Surfaces: solid white, hairline border, soft shadow */
+.side-nav,
+.top-bar,
+.nav-item,
+.list-btn,
+.chip,
+.workspace-card,
+.subject-card,
+.ws-card,
+.subject-row,
+.folder-row,
+.folder-node,
+.doc-card,
+.doc-inline-row,
+.doc-visual-card,
+.upload-box,
+.selection-box,
+.finder-surface,
+.finder-body,
+.finder-sidebar,
+.explorer-panel,
+.workspace-shell,
+.modal-card,
+.chat-feed,
+.scope-bar,
+.ai-tool-card,
+.panel,
+.kpi-card,
+.quiz-preview-card,
+.quiz-hero,
+.rail-workspace-item,
+.quiz-doc-card,
+.quiz-choice-card,
+.agent-output-card {
+  background: var(--paper);
+  color: var(--ink);
   border: 1px solid var(--line);
-  transition: background 0.3s ease;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
-.theme-toggle-track.dark {
-  background: linear-gradient(120deg, #1d3a6b, #0a1c3c);
+.panel, .selection-box, .ai-tool-card, .kpi-card, .quiz-hero, .modal-card, .workspace-shell, .finder-surface {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
 }
-.theme-toggle-thumb {
-  position: absolute;
-  left: 2px;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.theme-toggle-track.dark .theme-toggle-thumb {
-  transform: translateX(20px);
-}
+.side-nav { background: #fbfbfd; border-right: 1px solid var(--line); box-shadow: none; border-radius: 0; }
+.top-bar { background: rgba(255, 255, 255, 0.98); border-bottom: 1px solid var(--line); box-shadow: none; border-radius: 0; }
+.quiz-hero::before { display: none; }
 
-/* Dark-mode adjustments for legacy surfaces that hardcode light colours */
-[data-theme="dark"] .ws-card.on,
-[data-theme="dark"] .subject-row.on,
-[data-theme="dark"] .folder-row.on,
-[data-theme="dark"] .folder-node.on,
-[data-theme="dark"] .panel.accent,
-[data-theme="dark"] .view-on {
+/* Selection states: tinted accent instead of gradients */
+.role-switch button.on,
+.nav-item.on,
+.list-btn.on,
+.workspace-card.on,
+.subject-card.on,
+.ws-card.on,
+.subject-row.on,
+.folder-row.on,
+.folder-node.on,
+.panel.accent,
+.view-on,
+.rail-workspace-item.on,
+.quiz-doc-card.on,
+.quiz-choice-card.on,
+.quiz-picker-row.on,
+.quiz-choice-pill.on {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+  border-color: rgba(0, 113, 227, 0.25);
+  box-shadow: none;
+}
+.top-map-item { border: 1px solid transparent; background: transparent; color: var(--soft-ink); border-radius: 980px; font-weight: 600; transition: background 0.18s var(--ease), color 0.18s var(--ease); }
+.top-map-item:hover { background: var(--surface-soft); color: var(--ink); }
+.top-map-item.on { background: var(--ink); color: #fff; border-color: transparent; }
+.role-switch { background: var(--surface-soft); border-radius: 980px; padding: 3px; border: 1px solid var(--line); }
+.role-switch button { background: transparent; border: 0; box-shadow: none; border-radius: 980px; color: var(--soft-ink); font-weight: 600; }
+.role-switch button.on { background: #fff; color: var(--ink); box-shadow: var(--shadow-sm); border: 0; }
+
+/* Buttons */
+.primary-btn {
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 980px;
+  font-weight: 600;
+  box-shadow: none;
+  transition: background 0.18s var(--ease), transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.primary-btn:hover { background: #0077ed; box-shadow: 0 6px 16px rgba(0, 113, 227, 0.25); }
+.primary-btn:active { transform: scale(0.98); }
+.table-btn, .ghost-btn, .list-btn, .chip, .action-icon {
+  background: #fff;
   color: var(--ink);
-  background: linear-gradient(135deg, rgba(120, 92, 230, 0.55), rgba(64, 200, 190, 0.5));
+  border: 1px solid var(--line-strong);
+  border-radius: 980px;
+  box-shadow: none;
+  font-weight: 600;
+  transition: background 0.18s var(--ease), border-color 0.18s var(--ease);
 }
-[data-theme="dark"] .quiz-selection-count { background: rgba(var(--surface-soft-rgb), 0.9); }
-[data-theme="dark"] .quiz-doc-picker-content,
-[data-theme="dark"] .quiz-doc-picker-reference { background: var(--surface); }
-[data-theme="dark"] .rail-workspace-item.on,
-[data-theme="dark"] .quiz-tool-page .quiz-doc-card.on,
-[data-theme="dark"] .quiz-choice-card.on {
-  background: linear-gradient(180deg, rgba(120, 92, 230, 0.35), rgba(64, 200, 190, 0.28));
+.table-btn:hover, .ghost-btn:hover, .list-btn:hover, .chip:hover { background: var(--surface-soft); }
+.table-btn.danger { color: var(--color-danger); border-color: rgba(215, 0, 21, 0.3); }
+.scope-chip { background: var(--surface-soft); color: var(--soft-ink); border: 1px solid var(--line); border-radius: 980px; font-weight: 600; }
+
+/* Inputs */
+.input, .search input, textarea.input, select.input {
+  background: #fff;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  color: var(--ink);
+  box-shadow: none;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-[data-theme="dark"] .quiz-choice-pill.on { background: rgba(120, 92, 230, 0.4); }
-[data-theme="dark"] .folder-node { background: linear-gradient(180deg, rgba(20, 52, 96, 0.96), rgba(14, 38, 72, 0.96)); }
-[data-theme="dark"] .folder-node.unfiled.uploaded-group { background: linear-gradient(180deg, rgba(18, 64, 60, 0.9), rgba(14, 44, 50, 0.9)); }
-[data-theme="dark"] .folder-node.unfiled.generated-group { background: linear-gradient(180deg, rgba(34, 44, 96, 0.95), rgba(20, 32, 78, 0.95)); }
-[data-theme="dark"] .folder-docs-block.generated { background: linear-gradient(180deg, rgba(40, 52, 110, 0.9), rgba(26, 38, 90, 0.9)); }
-[data-theme="dark"] .action-icon.edit { background: rgba(40, 90, 70, 0.7); }
-[data-theme="dark"] .quiz-preview-mode-toggle { background: rgba(var(--surface-soft-rgb), 0.8); }
+.input:focus, .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+
+/* Brand */
+.brand-dot { background: conic-gradient(var(--accent), var(--sky), var(--teal), var(--accent)); }
+.brand-wrap h1 { letter-spacing: 1px; font-weight: 800; }
+
+/* KPI cards keep a single accent bar instead of coloured fills */
+.kpi-card { position: relative; overflow: hidden; }
+.kpi-card::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--accent); }
+.kpi-card.teal::before { background: var(--teal); }
+.kpi-card.orange::before { background: var(--burnt); }
+.kpi-card.sky::before { background: var(--sky); }
+.kpi-card.rose::before { background: var(--rose); }
+
+/* Quiet, smooth motion everywhere */
+button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-function: var(--ease); }
+
+/* Workspace page specifics */
+.workspace-tab { border-color: var(--line-strong); background: #fff; font-weight: 600; }
+.workspace-tab:hover { background: var(--surface-soft); }
+.workspace-tab.on { background: var(--ink); color: #fff; border-color: transparent; }
+.folder-node,
+.folder-node.unfiled.uploaded-group,
+.folder-node.unfiled.generated-group,
+.folder-docs-block,
+.folder-docs-block.generated { background: #fff; border: 1px solid var(--line); box-shadow: none; }
+.folder-node.on { background: var(--accent-soft); border-color: rgba(0, 113, 227, 0.25); }
+.subject-card { background: #fff; }
+.subject-card.on { background: var(--accent-soft); }
+.role-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+.role-switch button { padding: 7px 4px; font-size: 13px; }

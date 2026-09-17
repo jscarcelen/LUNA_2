@@ -142,7 +142,7 @@ export function LivePreviewPane({
   const isBusy = generation.isGenerating;
 
   return (
-    <div className="@container flex h-full min-h-[520px] flex-col overflow-hidden rounded-bento border border-ink/10 bg-paper/60 shadow-glow backdrop-blur-md">
+    <div className="@container flex h-full min-h-[520px] flex-col overflow-hidden rounded-bento border border-ink/8 bg-paper shadow-glow">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-4 py-3">
         <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">
           {TABS.map((item) => (
@@ -178,7 +178,7 @@ export function LivePreviewPane({
 
       <div className="relative flex-1 bg-ink/[0.06]">
         {isBusy || generation.error ? (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg/60 p-5 backdrop-blur-sm">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/80 p-5">
             <div className="w-full max-w-lg">
               <GenerationProgress
                 steps={generation.steps}

@@ -10,7 +10,7 @@ import { AgentMarketplacePage } from "../modules/agent-marketplace";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
-const defaultPage = { student: "workspaces", teacher: "workspaces" };
+const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
 
 export function AppShell() {
@@ -25,7 +25,8 @@ export function AppShell() {
   const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "") : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
   const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "") : "";
-  const title = currentAiTool ? currentAiTool.name : (pageTitles[page] || "LUNA");
+  const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
+  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
   const navItems = navByRole[role] || [];
 
   useEffect(() => {
@@ -101,7 +102,7 @@ export function AppShell() {
   }
 
   const content = useMemo(() => {
-    if (page === "dashboard") return <DashboardPage />;
+    if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
     if (page === "workspaces") {
       return (
         <WorkspacePage
@@ -204,7 +205,7 @@ export function AppShell() {
     }
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
-    return <DashboardPage />;
+    return <DashboardPage role={role} onNavigate={setPage} />;
   }, [page, role, currentAiTool, currentCustomAgentId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {

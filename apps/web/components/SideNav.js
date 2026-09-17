@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { appName } from "./data";
+import { appName, roleProfiles } from "./data";
 
 export function SideNav({
   role,
@@ -50,6 +50,7 @@ export function SideNav({
       <div className="role-switch" role="tablist" aria-label="Role selector">
         <button className={role === "student" ? "on" : ""} onClick={() => onRoleChange("student")}>Student</button>
         <button className={role === "teacher" ? "on" : ""} onClick={() => onRoleChange("teacher")}>Teacher</button>
+        <button className={role === "parent" ? "on" : ""} onClick={() => onRoleChange("parent")}>Parent</button>
       </div>
 
       <section className="rail-workspaces">
@@ -153,10 +154,10 @@ export function SideNav({
       </div>
 
       <div className="side-footer">
-        <div className="avatar">MG</div>
+        <div className="avatar">{(roleProfiles[role] || roleProfiles.student).initials}</div>
         <div>
-          <strong>{role === "teacher" ? "Prof. Rivera" : "Maria G."}</strong>
-          <p>{role === "teacher" ? "Teacher and Creator" : "Student Pro"}</p>
+          <strong>{(roleProfiles[role] || roleProfiles.student).name}</strong>
+          <p>{(roleProfiles[role] || roleProfiles.student).subtitle}</p>
         </div>
       </div>
     </aside>

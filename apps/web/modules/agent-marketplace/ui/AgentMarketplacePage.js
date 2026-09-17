@@ -42,7 +42,7 @@ function ListingCard({ listing, onPreview, installed, featured }) {
   const fields = listing.agent?.template?.fields || [];
   return (
     <article
-      className={`group relative flex flex-col gap-3 rounded-bento border border-ink/10 bg-paper/70 p-5 shadow-glow backdrop-blur-md transition hover:-translate-y-0.5 hover:border-ink/20 animate-rise ${featured ? "md:col-span-2 md:flex-row md:items-start md:gap-6" : ""}`}
+      className={`group relative flex flex-col gap-3 rounded-bento border border-ink/8 bg-paper p-5 shadow-glow transition hover:-translate-y-0.5 hover:border-ink/20 animate-rise ${featured ? "md:col-span-2 md:flex-row md:items-start md:gap-6" : ""}`}
     >
       <div className={`flex items-start gap-3 ${featured ? "md:w-64 md:shrink-0 md:flex-col" : ""}`}>
         <Cover listing={listing} size={featured ? "lg" : "md"} />
@@ -61,7 +61,7 @@ function ListingCard({ listing, onPreview, installed, featured }) {
         ) : null}
         <div className="mt-auto flex items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-2">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${Number(listing.price) ? "bg-mustard/25 text-ink" : "bg-teal/20 text-accent"}`}>{priceLabel(listing)}</span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${Number(listing.price) ? "bg-[var(--surface-soft)] text-ink" : "bg-teal/20 text-accent"}`}>{priceLabel(listing)}</span>
             {listing.agent?.model ? <span className={chipClass}>{MODEL_LABELS[listing.agent.model] || listing.agent.model}</span> : null}
             {installed ? <span className={`${chipClass} text-accent ring-accent/40`}>Installed</span> : null}
           </div>
@@ -89,7 +89,7 @@ function DetailsDrawer({ listing, onClose, onInstall, onRemove, onRun, installed
   const questions = agent?.questions || [];
 
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-bg/50 backdrop-blur-sm" onClick={onClose} role="presentation">
+    <div className="fixed inset-0 z-40 flex justify-end bg-bg/50" onClick={onClose} role="presentation">
       <aside
         className="flex h-full w-full max-w-lg flex-col overflow-hidden border-l border-ink/10 bg-paper shadow-glow animate-rise"
         onClick={(event) => event.stopPropagation()}
@@ -103,7 +103,7 @@ function DetailsDrawer({ listing, onClose, onInstall, onRemove, onRun, installed
             <h3 className="m-0 text-xl font-extrabold text-ink">{listing.name}</h3>
             <p className="m-0 mt-0.5 text-sm text-soft-ink">by {listing.author || "Community"}{listing.category ? ` · ${listing.category}` : ""}</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${Number(listing.price) ? "bg-mustard/25 text-ink" : "bg-teal/20 text-accent"}`}>{priceLabel(listing)}</span>
+              <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${Number(listing.price) ? "bg-[var(--surface-soft)] text-ink" : "bg-teal/20 text-accent"}`}>{priceLabel(listing)}</span>
               <span className={chipClass}>{PRICING_TYPE_LABELS[listing.pricingType] || listing.pricingType || "Free"}</span>
               {agent?.model ? <span className={chipClass}>{MODEL_LABELS[agent.model] || agent.model}</span> : null}
             </div>
@@ -153,7 +153,7 @@ function DetailsDrawer({ listing, onClose, onInstall, onRemove, onRun, installed
           {status ? <p className="m-0 mb-3 text-xs text-accent">{status}</p> : null}
           <div className="flex flex-wrap gap-2">
             {installedDocumentId ? (
-              <button type="button" onClick={() => onRun(installedDocumentId)} className="flex-1 rounded-full bg-[linear-gradient(120deg,var(--color-mustard),var(--color-burnt))] px-5 py-2.5 text-sm font-extrabold text-ink shadow-[0_10px_30px_rgba(255,135,84,0.3)] transition hover:-translate-y-0.5">Run this agent →</button>
+              <button type="button" onClick={() => onRun(installedDocumentId)} className="flex-1 rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#0077ed]">Run this agent →</button>
             ) : agent ? (
               <button type="button" disabled={!canInstall || installing} onClick={() => onInstall(listing)} className="flex-1 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-bg transition hover:bg-ink/85 disabled:opacity-50">
                 {installing ? "Adding…" : Number(listing.price) ? `Get for ${priceLabel(listing)} (preview — no charge)` : "Add to my AI Tools"}
@@ -249,7 +249,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
 
   return (
     <section className="tw-scope grid gap-4">
-      <header className="relative overflow-hidden rounded-bento border border-ink/10 bg-[radial-gradient(circle_at_85%_-20%,rgba(64,230,255,0.22),transparent_45%),radial-gradient(circle_at_5%_120%,rgba(255,214,107,0.18),transparent_40%),var(--color-paper)] p-6 shadow-glow animate-rise">
+      <header className="relative overflow-hidden rounded-bento border border-ink/8 bg-paper p-6 shadow-glow animate-rise">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center">
           <div>
             <span className="rounded-full bg-teal/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-accent ring-1 ring-accent/40">Agent marketplace</span>
@@ -271,7 +271,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-bento border border-ink/10 bg-paper/60 p-3 shadow-glow backdrop-blur-md">
+      <div className="flex flex-wrap items-center gap-2 rounded-bento border border-ink/8 bg-paper p-3 shadow-glow">
         <input className={`${fieldClass} sm:max-w-xs`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agents, outputs, authors…" aria-label="Search agents" />
         <div className="flex flex-wrap gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">
           {CATEGORIES.map((item) => (

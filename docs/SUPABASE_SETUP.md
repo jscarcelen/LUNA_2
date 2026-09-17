@@ -23,17 +23,27 @@ You can start from `.env.example`.
 
 ## 3) Create database schema
 
-Apply SQL migration:
+Apply the SQL migrations in order (all 15, from `supabase/migrations/`):
 
-- `supabase/migrations/202608040001_init_luna.sql`
-- `supabase/migrations/202608040002_add_folder_hierarchy.sql`
-- `supabase/migrations/202608040003_add_document_folder_map.sql`
-- `supabase/migrations/202608040004_add_topic_tag_color.sql`
-- `supabase/migrations/202608040005_add_workspace_subject_color.sql`
-- `supabase/migrations/202608040006_add_document_chunks.sql`
-- `supabase/migrations/202608040007_add_document_chunk_embeddings.sql`
-- `supabase/migrations/202608040008_add_document_source_type.sql`
-- `supabase/migrations/202608040009_add_generated_document_exports.sql`
+- `202608040001_init_luna.sql`
+- `202608040002_add_folder_hierarchy.sql`
+- `202608040003_add_document_folder_map.sql`
+- `202608040004_add_topic_tag_color.sql`
+- `202608040005_add_workspace_subject_color.sql`
+- `202608040006_add_document_chunks.sql`
+- `202608040007_add_document_chunk_embeddings.sql`
+- `202608040008_add_document_source_type.sql`
+- `202608040009_add_generated_document_exports.sql`
+- `202608060001_add_document_review_status.sql`
+- `202608070001_add_document_extraction_review_enhancements.sql`
+- `202608070002_add_document_source_visual_payload.sql`
+- `202608070003_add_document_chunk_markdown_metadata.sql`
+- `202608160001_add_document_block_editor_templates.sql`
+- `202609160001_fix_match_document_chunks_search_path.sql`
+
+From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
+(ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be
+restored from the dashboard before the app or MCP tools can reach the database.
 
 This creates:
 
@@ -49,6 +59,9 @@ This creates:
 - `document_chunks.embedding` via pgvector for vector similarity retrieval
 - `documents.source_type` to distinguish uploaded vs generated workspace documents
 - `generated_document_exports` to store saved HTML/JSON/DOCX/PDF downloads for generated documents
+- `documents` review status, extraction review fields and source visual payload
+- `document_chunks` markdown metadata
+- `document_block_templates` for the template builder / block editor
 
 ## 3.1) Optional embedding env vars
 

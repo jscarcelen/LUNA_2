@@ -1,5 +1,18 @@
 # Implementation Log
 
+## 2026-09-13
+
+### Claude Code project setup
+
+- Added root `CLAUDE.md` (stack, commands, layout, Supabase/LLM/Vercel rules, conventions).
+- `.env.example` now lists every env var the code reads (OpenAI, math OCR, extraction tuning).
+- `.gitignore` guards `auxiliary/**/node_modules` and `auxiliary/**/output`.
+- Refreshed README "Current Status" / "Scope Boundaries" and the migration list in `docs/SUPABASE_SETUP.md` (14 migrations).
+- Baseline: lint 0 errors / 66 warnings; production build green; 3 document-processing tests fail
+  (expect `docx-ooxml-cdm` parser, code uses `docx-auxiliary-json-extractor`; 9 obsolete snapshots).
+- Supabase project "Luna" was found INACTIVE (paused) and restored; all 14 migrations confirmed applied.
+- Added migration `202609160001_fix_match_document_chunks_search_path.sql` (security linter 0011) and applied it via Supabase MCP.
+
 ## 2026-08-03
 
 ### Step 1: Repository scaffold

@@ -9,3 +9,7 @@ pnpm-lock.yaml
 yarn.lock
 .vercel
 .env*
+# local extractor experiments
+auxiliary/**/node_modules/
+auxiliary/**/output/
+!.env.example

@@ -4,19 +4,21 @@ This repository contains a scalable, modular scaffold for the LUNA platform base
 
 ## Current Status
 
-- Done: Monorepo structure (`apps`, `packages`, `modules`, `docs`, `scripts`)
-- Done: Initial Next.js website shell with placeholder-only implementation
-- Done: Demo-aligned pages (Dashboard, Workspaces, Quiz, Chat, Analytics, Marketplace, Builder, Revenue)
-- Done: Interactive workspace management UI (create workspace, create subject, upload TXT documents)
-- Done: Subject organization UI (folders + topic tags)
-- Done: Subject organization full CRUD (folders + topic tags)
-- Done: Workspace and subject full CRUD (rename/delete with cascade safety checks)
-- Done: Document table actions (rename, remove, preview modal)
-- Done: Mock API persistence for workspace/subject/document workflows
-- Done: Supabase backend scaffold (schema, repository queries, API routes)
-- Done: Web workspace manager switched to Supabase API route
-- Done: Per-folder README documentation for apps and packages
-- Not done: Backend, auth, database schema, RAG, LLM providers, render pipeline
+Last refreshed: 2026-09-13. See `CLAUDE.md` for the working guide and `docs/IMPLEMENTATION_LOG.md` for history.
+
+- Done: Monorepo structure (`apps`, `packages`, `modules`, `docs`, `scripts`) with per-folder READMEs
+- Done: Next.js App Router web app (`apps/web`) with Dashboard, Workspaces, Quiz, Chat, Analytics, Marketplace, Builder, Revenue pages
+- Done: Workspace / subject / folder (nested) / topic tag / document full CRUD on Supabase (`/api/workspaces-supabase`), with mock route fallback
+- Done: Document-processing pipeline (DOCX/PDF/TXT parsing, canonical document model, math normalization, OCR hooks, markdown output)
+- Done: RAG — persisted document chunks with pgvector embeddings and heuristic rerank (`modules/ai-tools/pipeline`)
+- Done: LLM provider — OpenAI via fetch with local heuristic fallback when no key is configured
+- Done: Quiz generator tool; Agent Builder + Run Agent (custom prompt/context/output template, variable mapping, JSON-schema output)
+- Done: Template builder / block editor with saved templates; HTML, DOCX, PDF exporters and stored generated exports
+- Done: 15 Supabase migrations (`supabase/migrations`), Vercel deployment from repo root
+- Not done: Real authentication and role model (teacher / student / **parent**), RLS
+- Not done: Student performance tracking and analytics (Analytics page is static)
+- Not done: Marketplace transactions / payments (marketplace is UI only)
+- Not done: AI tutor and chatbot tools (stubs in the registry), TypeScript migration
 
 ## Folder Structure
 
@@ -127,11 +129,10 @@ Use nvm to match the project runtime:
 
 ## Scope Boundaries (Intentional)
 
-This first version keeps all AI/business-critical pieces as placeholders:
+Still deferred in the current version:
 
-- No LLM integration
-- No rendering engine implementation
-- No RAG retrieval implementation
-- No real authentication and payments
+- No real authentication or payments (ownership uses a demo user id)
+- No parent role or student performance analytics
+- No row-level security on Supabase tables
 
 These are documented as future tasks in `docs/ROADMAP.md`.

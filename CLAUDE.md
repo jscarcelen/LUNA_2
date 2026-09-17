@@ -14,7 +14,7 @@ send targeted homework.
   page with template output mappings, template builder / block editor, HTML/DOCX/PDF exporters.
 - Does NOT exist yet: real auth (ownership is a hardcoded demo uuid), a `parent` role (role switch is
   cosmetic client state, `student`/`teacher` only), student performance analytics, marketplace
-  purchases/payments, RLS, TypeScript.
+  purchases/payments (marketplace browsing + install works; listings are localStorage), RLS, TypeScript.
 
 ## Stack
 

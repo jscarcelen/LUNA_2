@@ -190,7 +190,18 @@ export function AppShell() {
         </AIToolRuntimePage>
       );
     }
-    if (page === "marketplace") return <AgentMarketplacePage onGoBuilder={() => setPage("ai-tool:agent-builder")} />;
+    if (page === "marketplace") {
+      return (
+        <AgentMarketplacePage
+          onGoBuilder={() => setPage("ai-tool:agent-builder")}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onOpenAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
+        />
+      );
+    }
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return <DashboardPage />;

@@ -293,6 +293,10 @@ export function AgentBuilderPage({ toolContext }) {
       pictureUrl: String(listingPictureUrl || "").trim(),
       price: Number(listingPrice || 0),
       pricingType,
+      author: "You",
+      category: "Community",
+      // Bundle the full config so the marketplace can install this agent into other subjects.
+      agent: { ...buildAgentConfig(), name, scope: { workspaceId: "", subjectId: "", documentIds: [] } },
       createdAt: new Date().toISOString()
     };
     const existing = readMarketplaceListingsFromStorage();

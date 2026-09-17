@@ -2,6 +2,14 @@
 
 ## 2026-09-16
 
+### Agent Marketplace rebuilt
+
+- Replaced the placeholder `MarketplaceView` with `modules/agent-marketplace` (Tailwind): hero,
+  search/category/sort, listing cards, details drawer, one-click install into the current subject
+  (`.agent.json` + `ai-agent` tag) and "Run this agent" hand-off to the Run Agent page.
+- Three curated starter agents (Flashcard Maker, Exam Question Writer, Vocabulary Builder) with
+  real configs; Agent Builder listings now bundle the agent config. Prices shown, installs free.
+
 ### Dark mode + test fixes
 
 - `ThemeToggle` in the TopBar (stored in `localStorage["luna-theme"]`, falls back to OS preference;

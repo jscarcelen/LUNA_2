@@ -6494,43 +6494,6 @@ export function AnalyticsView() {
   );
 }
 
-export function MarketplaceView({ onGoBuilder }) {
-  const [listings, setListings] = useState([]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const raw = window.localStorage.getItem("luna.agentMarketplaceListings.v1");
-      const parsed = raw ? JSON.parse(raw) : [];
-      setListings(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setListings([]);
-    }
-  }, []);
-
-  return (
-    <section className="view-stack">
-      <div className="panel-grid three">
-        <article className="panel"><h4>GMAT Coach</h4><p>Adaptive exam prep placeholder.</p></article>
-        <article className="panel"><h4>IELTS Speaking Coach</h4><p>Speaking simulation placeholder.</p></article>
-        <article className="panel"><h4>Worksheet Generator</h4><p>Teacher worksheet placeholder.</p></article>
-        {listings.map((listing) => (
-          <article className="panel" key={listing.id}>
-            <h4>{listing.name}</h4>
-            <p>{listing.description || "No description provided."}</p>
-            <p className="hint">${Number(listing.price || 0).toFixed(2)} · {listing.pricingType}</p>
-          </article>
-        ))}
-      </div>
-      <article className="panel">
-        <h4>Build your own agent</h4>
-        <p>Create prompt, scope and pricing without coding.</p>
-        <button className="primary-btn" onClick={onGoBuilder}>Create Agent</button>
-      </article>
-    </section>
-  );
-}
-
 export function BuilderView() {
   return (
     <section className="view-stack">

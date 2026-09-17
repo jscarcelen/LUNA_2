@@ -25,6 +25,10 @@ send targeted homework.
   new/redesigned surfaces use **Tailwind v4 utilities** (tokens in the `@theme` block at the top of
   `globals.css`, referencing the existing CSS variables). Preflight is NOT loaded — wrap Tailwind-
   styled trees in `.tw-scope` for the base reset. Vitest. Flat ESLint (`eslint.config.mjs`).
+- Theming: light is the default `:root`; `:root[data-theme="dark"]` (end of `globals.css`) flips the
+  tokens. Use `var(--surface)` / `rgba(var(--surface-rgb), a)` instead of hardcoded whites so new
+  CSS works in both themes. Toggle: `components/ThemeToggle.js`; pre-paint script in `app/layout.js`.
+  Template Builder (`tplb-*`) is intentionally light-only for now.
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
 

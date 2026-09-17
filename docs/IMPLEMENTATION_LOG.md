@@ -2,6 +2,16 @@
 
 ## 2026-09-16
 
+### Dark mode + test fixes
+
+- `ThemeToggle` in the TopBar (stored in `localStorage["luna-theme"]`, falls back to OS preference;
+  applied pre-paint by an inline script in `app/layout.js`).
+- Light-section surfaces tokenized (`--surface`, `--surface-rgb`, `--surface-soft-rgb`) and a
+  `:root[data-theme="dark"]` block restores the navy palette. Targeted overrides for legacy rows /
+  folder nodes. Template Builder stays light-only.
+- Document-processing tests updated to the auxiliary parser contract; the auxiliary math tokenizer
+  now parses linear-format scripts/accents (`x_(i)`, `^(2)`, `bar{x}`, `sqrt(...)`). 5/5 tests pass.
+
 ### Run Agent / Agent Builder redesign (branch `feat/agent-run-redesign`)
 
 - Added Tailwind v4 (`@tailwindcss/postcss`, utilities + theme only, no preflight). Tokens in

@@ -20,8 +20,11 @@ send targeted homework.
 
 - npm workspaces monorepo. **Only `apps/web` (`@luna/web`) is real**; `apps/admin`, `packages/*` and
   root `modules/*` are placeholders (`packages/database` is duplicated inside `apps/web/lib`).
-- Next.js 16 canary, App Router (`apps/web/app`), React 18. **Plain JS/JSX — no TypeScript, no
-  Tailwind** (single class-based `apps/web/app/globals.css`). Vitest. Flat ESLint (`eslint.config.mjs`).
+- Next.js 16 canary, App Router (`apps/web/app`), React 18. **Plain JS/JSX — no TypeScript.**
+  Styling is hybrid: legacy pages use the hand-written class system in `apps/web/app/globals.css`;
+  new/redesigned surfaces use **Tailwind v4 utilities** (tokens in the `@theme` block at the top of
+  `globals.css`, referencing the existing CSS variables). Preflight is NOT loaded — wrap Tailwind-
+  styled trees in `.tw-scope` for the base reset. Vitest. Flat ESLint (`eslint.config.mjs`).
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
 
@@ -40,12 +43,14 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 
 ## Where things live (`apps/web`)
 
-- `app/api/*` — route handlers: `ai-tools/quiz`, `ai-tools/agent-builder`, `templates/render-preview`,
-  `workspaces` (mock), `workspaces-supabase`, `supabase/health`.
+- `app/api/*` — route handlers: `ai-tools/quiz`, `ai-tools/agent-builder` (+ `/stream`, NDJSON
+  progress events), `templates/render-preview`, `workspaces` (mock), `workspaces-supabase`,
+  `supabase/health`.
 - `components/views.js` — ~2500-line file holding most page views. Edit surgically; don't reformat.
 - `components/AppShell.js`, `SideNav.js`, `TopBar.js`, `data.js` (per-role nav).
 - `lib/supabaseClient.js`, `lib/workspacesRepository.js`, `lib/mockStore.js`, `lib/fileTextExtraction.js`.
-- `modules/ai-tools/` — `registry.js` (tool registry), `tools/<tool-id>/` (manifest + pages),
+- `modules/ai-tools/` — `registry.js` (tool registry), `tools/<tool-id>/` (manifest + pages;
+  `tools/agent-builder/README.md` documents the streaming + live-preview building blocks),
   `pipeline/` (`workspaceSource` → `chunking` → `retrieval` → `provider-openai`/`provider-local`,
   `agentBuilder.js`, `embeddings.js`), `render/` (templates + exporters).
 - `modules/document-processing/` — parsers, canonical model (CDM), math, normalization, renderers.
@@ -99,7 +104,10 @@ See `apps/web/modules/README.md`.
 
 ## Workflow
 
-- Don't commit or push unless asked. `main` deploys to production on Vercel.
+- Don't commit or push unless asked. `main` deploys to production on Vercel — do feature work on a
+  branch (`feat/...`) and let the user merge.
+- Long-running AI work must stream (see the agent-builder `/stream` route) rather than rely on Edge
+  runtime; the pipeline needs Node (Supabase, chunking, document parsers).
 - `~/LUNA_2.worktrees/` holds agent worktrees (e.g. `agents/ui-redesign-template-builder`).
 - `Statistics.pdf`, `auxiliary/PDF_JS_Jupyter/`, `auxiliary/pdf-json-extractor/` are intentionally
   untracked local experiments — leave them alone.

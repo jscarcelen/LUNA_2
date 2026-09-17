@@ -1,6 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useAgentGenerationStream } from "./useAgentGenerationStream";
+import { LivePreviewPane } from "./LivePreviewPane";
+import { defaultBrand } from "./previewHtml";
 
 const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o-mini", label: "Luna 3 Mini (Recommended, low cost)" },
@@ -108,8 +111,9 @@ export function AgentBuilderPage({ toolContext }) {
   const [refinementPrompt, setRefinementPrompt] = useState("");
   const [output, setOutput] = useState(null);
   const [iteration, setIteration] = useState(0);
-  const [isGenerating, setIsGenerating] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const generation = useAgentGenerationStream();
+  const isGenerating = generation.isGenerating;
 
   const [publishMode, setPublishMode] = useState("self");
   const [listingName, setListingName] = useState("");
@@ -212,31 +216,19 @@ export function AgentBuilderPage({ toolContext }) {
       setErrorMessage("Add at least one output field first.");
       return;
     }
-    setIsGenerating(true);
+    if (isGenerating) return;
     setErrorMessage("");
     try {
-      const response = await fetch("/api/ai-tools/agent-builder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          config: {
-            ...buildAgentConfig(),
-            refinementPrompt: isRefinement ? refinementPrompt : "",
-            previousOutput: isRefinement ? output : null
-          }
-        })
+      const data = await generation.generate({
+        ...buildAgentConfig(),
+        refinementPrompt: isRefinement ? refinementPrompt : "",
+        previousOutput: isRefinement ? output : null
       });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Agent generation failed");
-      }
       setOutput(data);
       setIteration((previous) => previous + 1);
       if (isRefinement) setRefinementPrompt("");
     } catch (error) {
       setErrorMessage(String(error.message || error));
-    } finally {
-      setIsGenerating(false);
     }
   }
 
@@ -503,29 +495,34 @@ export function AgentBuilderPage({ toolContext }) {
             </button>
             <p className="hint" style={{ marginTop: "6px" }}>Uses 1 credit per generation.</p>
 
-            {output ? (
-              <div style={{ marginTop: "12px" }}>
-                <div className="inline-actions" style={{ justifyContent: "space-between" }}>
+            <div className="tw-scope" style={{ marginTop: "12px" }}>
+              {output ? (
+                <div className="inline-actions" style={{ justifyContent: "space-between", marginBottom: "8px" }}>
                   <strong>Output preview</strong>
                   <span className="scope-chip">Iteration {iteration} · {output.model}</span>
                 </div>
-                <div className="agent-output-grid">
-                  {outputItems.map((item, index) => (
-                    <article className="agent-output-card" key={`output-${index}`}>
-                      {Object.entries(item).map(([key, value]) => (
-                        <p key={key} style={{ margin: "0 0 4px" }}><strong>{key}:</strong> {Array.isArray(value) ? value.join(", ") : String(value)}</p>
-                      ))}
-                    </article>
-                  ))}
-                  {!outputItems.length ? <p className="hint">No items returned.</p> : null}
-                </div>
-
-                <div className="selection-box" style={{ marginTop: "10px" }}>
-                  <p className="hint" style={{ marginTop: 0 }}>What do you want to change?</p>
-                  <div className="inline-actions" style={{ gap: "8px" }}>
-                    <input className="input" style={{ flex: 1 }} value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} placeholder="Example: Include more intermediate words" />
-                    <button className="table-btn" type="button" onClick={() => handleGenerate(true)} disabled={isGenerating || !refinementPrompt.trim()}>Improve with prompt</button>
-                  </div>
+              ) : null}
+              <LivePreviewPane
+                items={outputItems}
+                fields={fields}
+                fieldTypeByName={{}}
+                customization={{ brand: defaultBrand(agentName), hiddenFields: [], fieldOrder: [] }}
+                template={null}
+                templateFields={[]}
+                fieldMappingByTemplateField={{}}
+                mappingReady
+                generation={generation}
+                onCancelGeneration={generation.cancel}
+                agentName={agentName}
+                emptyHint="Press Generate to test your agent. You'll see each build step live, then the rendered output here."
+              />
+            </div>
+            {output ? (
+              <div className="selection-box" style={{ marginTop: "10px" }}>
+                <p className="hint" style={{ marginTop: 0 }}>What do you want to change?</p>
+                <div className="inline-actions" style={{ gap: "8px" }}>
+                  <input className="input" style={{ flex: 1 }} value={refinementPrompt} onChange={(event) => setRefinementPrompt(event.target.value)} placeholder="Example: Include more intermediate words" />
+                  <button className="table-btn" type="button" onClick={() => handleGenerate(true)} disabled={isGenerating || !refinementPrompt.trim()}>Improve with prompt</button>
                 </div>
               </div>
             ) : null}

@@ -100,12 +100,49 @@ function parseJsonFromContent(content) {
   }
 }
 
-async function callOpenAiAgent(config, chunks, schema) {
+async function readOpenAiStream(response, onToken) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let content = "";
+  let usage = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === "[DONE]") continue;
+      let event = null;
+      try {
+        event = JSON.parse(data);
+      } catch {
+        continue;
+      }
+      if (event.usage) usage = event.usage;
+      const delta = event.choices?.[0]?.delta?.content;
+      if (delta) {
+        content += delta;
+        if (typeof onToken === "function") onToken(delta, content);
+      }
+    }
+  }
+
+  return { content, usage };
+}
+
+async function callOpenAiAgent(config, chunks, schema, { onToken } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing required environment variable: OPENAI_API_KEY");
   }
   const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const streaming = typeof onToken === "function";
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -117,6 +154,8 @@ async function callOpenAiAgent(config, chunks, schema) {
       model,
       temperature: creativityToTemperature(config.creativity),
       max_tokens: 2600,
+      stream: streaming,
+      ...(streaming ? { stream_options: { include_usage: true } } : {}),
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -147,18 +186,27 @@ async function callOpenAiAgent(config, chunks, schema) {
     })
   });
 
-  const payload = await response.json();
   if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error?.message || "OpenAI agent generation failed");
   }
 
-  const content = payload.choices?.[0]?.message?.content;
+  let content = "";
+  let usage = null;
+  if (streaming) {
+    ({ content, usage } = await readOpenAiStream(response, onToken));
+  } else {
+    const payload = await response.json();
+    content = payload.choices?.[0]?.message?.content;
+    usage = payload.usage || null;
+  }
+
   const parsed = parseJsonFromContent(content);
   if (!parsed || !Array.isArray(parsed.items)) {
     throw new Error("Agent response could not be parsed into structured output");
   }
 
-  return { items: parsed.items, model };
+  return { items: parsed.items, model, usage };
 }
 
 function generateAgentOutputLocally(chunks, fields, config = {}) {
@@ -197,16 +245,32 @@ function generateAgentOutputLocally(chunks, fields, config = {}) {
   return { items, model: "local-heuristic-v1" };
 }
 
-export async function runAgentGeneration(config) {
+/**
+ * Runs one agent generation. `onProgress` (optional) receives step events so callers can
+ * stream a live "building" state to the UI:
+ *   { step: "scope" | "chunk" | "retrieve" | "generate" | "done", status: "start" | "end", ...meta }
+ *   { step: "generate", status: "token", chars, delta }
+ */
+export async function runAgentGeneration(config, { onProgress } = {}) {
+  const emit = (event) => {
+    if (typeof onProgress === "function") onProgress(event);
+  };
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   if (!fields.length) {
     throw new Error("Add at least one output field before generating output.");
   }
 
+  emit({ step: "scope", status: "start" });
   const workspaces = await loadWorkspaceTreeForAi();
   const scopedDocuments = collectScopedDocuments(workspaces, config.scope || {});
+  emit({ step: "scope", status: "end", documentCount: scopedDocuments.length });
+
+  emit({ step: "chunk", status: "start" });
   const chunking = { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS };
   const chunks = scopedDocuments.length ? chunkDocuments(scopedDocuments, chunking) : [];
+  emit({ step: "chunk", status: "end", chunkCount: chunks.length });
+
+  emit({ step: "retrieve", status: "start" });
   const rankedChunks = chunks.length
     ? selectTopChunks(chunks, {
       topicPrompt: config.instructions,
@@ -215,15 +279,20 @@ export async function runAgentGeneration(config) {
       scope: config.scope || {}
     })
     : [];
+  emit({ step: "retrieve", status: "end", chunkCount: rankedChunks.length });
 
   const schema = buildJsonSchemaFromFields(fields);
 
   let result = null;
   let fallbackReason = "";
 
+  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  emit({ step: "generate", status: "start", model: isAgentLlmConfigured() ? model : "local-heuristic-v1" });
   if (isAgentLlmConfigured()) {
     try {
-      result = await callOpenAiAgent(config, rankedChunks, schema);
+      result = await callOpenAiAgent(config, rankedChunks, schema, {
+        onToken: (delta, content) => emit({ step: "generate", status: "token", delta, chars: content.length })
+      });
     } catch (error) {
       fallbackReason = String(error.message || error);
     }
@@ -232,12 +301,16 @@ export async function runAgentGeneration(config) {
   if (!result) {
     result = generateAgentOutputLocally(rankedChunks, fields, config);
   }
+  emit({ step: "generate", status: "end", model: result.model, itemCount: result.items.length, fallbackReason });
 
-  return {
+  const payload = {
     items: result.items,
     model: result.model,
+    usage: result.usage || null,
     fallbackReason,
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length
   };
+  emit({ step: "done", status: "end", ...payload });
+  return payload;
 }

@@ -1,5 +1,25 @@
 # Implementation Log
 
+## 2026-09-16
+
+### Run Agent / Agent Builder redesign (branch `feat/agent-run-redesign`)
+
+- Added Tailwind v4 (`@tailwindcss/postcss`, utilities + theme only, no preflight). Tokens in
+  `app/globals.css` `@theme inline` reference the existing CSS variables so utilities follow the
+  active theme; `.tw-scope` provides a scoped base reset for Tailwind-styled surfaces.
+- Pipeline: `runAgentGeneration(config, { onProgress })` emits step events; the OpenAI call
+  streams (`stream: true`) and reports token progress. `normalizeConfig` moved to
+  `pipeline/agentConfig.js`.
+- New route `POST /api/ai-tools/agent-builder/stream` (NDJSON, Node runtime, `maxDuration = 60`).
+- Run Agent page rebuilt as a two-pane workspace: collapsible step cards on the left, sticky
+  live preview on the right (iframe `srcDoc`, Preview/Data/Raw, PDF/DOCX export, desktop/mobile
+  width) with a step-by-step generation overlay, plus a Customize sidebar (branding, accent, font,
+  density, field order/visibility, block types, item limit). Presets now persist customization.
+  Saved documents are rendered through the same `wrapPreviewDocument` used by the preview.
+- Agent Builder test-run uses the same streaming hook and preview pane.
+- Verification: lint 0 errors; `next build --webpack` green; document-processing tests unchanged
+  (same 3 pre-existing failures).
+
 ## 2026-09-13
 
 ### Claude Code project setup

@@ -1,5 +1,64 @@
 @import "katex/dist/katex.min.css";
 
+/* Tailwind v4 — utilities and theme only. Preflight is intentionally NOT imported so the
+   existing hand-written design system below keeps its base styles. New components use
+   Tailwind utilities with the tokens declared in @theme; legacy components keep their classes. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Scoped base reset for Tailwind-styled surfaces (preflight is not loaded globally). */
+@layer base {
+  .tw-scope button { background: none; border: 0; padding: 0; margin: 0; font: inherit; color: inherit; cursor: pointer; }
+  .tw-scope button:disabled { cursor: not-allowed; }
+  .tw-scope input, .tw-scope select, .tw-scope textarea { font: inherit; color: inherit; margin: 0; }
+  .tw-scope select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%); background-position: calc(100% - 16px) 55%, calc(100% - 11px) 55%; background-size: 5px 5px; background-repeat: no-repeat; padding-right: 28px; }
+  .tw-scope h1, .tw-scope h2, .tw-scope h3, .tw-scope h4, .tw-scope h5, .tw-scope h6, .tw-scope p, .tw-scope ul, .tw-scope ol { margin: 0; }
+  .tw-scope svg { display: block; }
+}
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* Colors reference the design-system variables declared below (:root), so Tailwind utilities
+   follow the active theme. Strong variants exist for text on light surfaces. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-soft-ink: var(--soft-ink);
+  --color-line: var(--line);
+  --color-burnt: var(--burnt);
+  --color-mustard: var(--mustard);
+  --color-teal: var(--teal);
+  --color-sky: var(--sky);
+  --color-rose: var(--rose);
+  --shadow-glow: var(--shadow);
+}
+
+@theme {
+  --color-accent: #1f8f7c;
+  --color-warn: #a86d00;
+  --color-danger: #c2418a;
+  --font-display: "Avenir Next", "Segoe UI", "Trebuchet MS", sans-serif;
+  --radius-bento: 22px;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-rise: rise 0.35s ease-out both;
+  --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
+
+  @keyframes shimmer {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+}
+
 :root {
   --bg: #04122b;
   --paper: #0f2648;

@@ -155,7 +155,7 @@ function BlockCard({ block, depth, selectedId, onSelect, onDragStart, onDrop, dr
         </div>
       </div>
       {isGroup ? (
-        <div className="mt-2 grid gap-1.5 pl-2" style={{ paddingLeft: depth ? 8 : 8 }}>
+        <div className="mt-2 grid content-start gap-1.5 pl-2">
           {children}
           {!(block.children || []).length ? <p className="m-0 rounded-lg border border-dashed border-ink/15 p-2 text-center text-xs text-soft-ink">Empty group — add blocks from the left with this group selected.</p> : null}
         </div>
@@ -164,8 +164,79 @@ function BlockCard({ block, depth, selectedId, onSelect, onDragStart, onDrop, dr
   );
 }
 
+/* ------------------------------------------------------------------ field picker */
+const LIST_DISPLAYS = ["bullet_list", "numbered_list", "answer_choice"];
+
+function FieldPicker({ block, suggestions, usedTags, onChange }) {
+  const known = useMemo(() => {
+    const map = new Map();
+    for (const item of suggestions) map.set(item.name, { ...item, isList: false });
+    for (const tag of usedTags) if (!map.has(tag.name)) map.set(tag.name, { name: tag.name, label: tag.name, source: "This template", isList: tag.isList });
+    return [...map.values()];
+  }, [suggestions, usedTags]);
+  const isKnown = known.some((item) => item.name === block.field);
+  const [creating, setCreating] = useState(Boolean(block.field) && !isKnown);
+  const [draftName, setDraftName] = useState(!isKnown ? block.field : "");
+  const displays = FIELD_DISPLAYS.filter((item) => (block.fieldType === "list" ? LIST_DISPLAYS.includes(item.value) : !LIST_DISPLAYS.includes(item.value)));
+
+  function chooseExisting(name) {
+    const item = known.find((entry) => entry.name === name);
+    const suggestedList = item?.isList || QUIZ_AGENT.template.fields.find((field) => field.name === name)?.type === "array";
+    onChange({ field: name, fieldType: suggestedList ? "list" : "text", display: suggestedList ? "answer_choice" : block.display && !LIST_DISPLAYS.includes(block.display) ? block.display : "paragraph" });
+    setCreating(false);
+  }
+
+  function commitNew() {
+    const name = draftName.trim().replace(/[^A-Za-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!name) return;
+    onChange({ field: name, display: block.fieldType === "list" ? "bullet_list" : "paragraph" });
+    setCreating(false);
+    setDraftName("");
+  }
+
+  return (
+    <>
+      <div>
+        <label className={labelClass}>Field</label>
+        {!creating ? (
+          <>
+            <select className={fieldClass} value={isKnown ? block.field : ""} onChange={(event) => (event.target.value === "__new" ? setCreating(true) : chooseExisting(event.target.value))}>
+              <option value="">Choose a field…</option>
+              {known.map((item) => <option key={item.name} value={item.name}>{item.label !== item.name ? `${item.label} (${item.name})` : item.name} · {item.source}</option>)}
+              <option value="__new">＋ Create a new field…</option>
+            </select>
+            <p className="m-0 mt-1.5 text-xs text-soft-ink">Fields come from your agents' output. Pick one, or create a new one and use the same name when you build the agent.</p>
+          </>
+        ) : (
+          <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3">
+            <label className={labelClass}>New field name</label>
+            <input autoFocus className={`${fieldClass} font-mono`} value={draftName} onChange={(event) => setDraftName(event.target.value)} onKeyDown={(event) => event.key === "Enter" && commitNew()} placeholder="e.g. hint" />
+            <label className={`${labelClass} mt-2`}>What the agent will put here</label>
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-white p-1">
+              {[["text", "One value (text)"], ["list", "A list of values"]].map(([value, label]) => (
+                <button key={value} type="button" onClick={() => onChange({ fieldType: value, display: value === "list" ? "bullet_list" : "paragraph" })} className={`rounded-lg px-2 py-1.5 text-xs font-semibold ${(block.fieldType || "text") === value ? "bg-[var(--accent)] text-white" : "text-soft-ink"}`}>{label}</button>
+              ))}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" className={primaryBtn} onClick={commitNew} disabled={!draftName.trim()}>Use this field</button>
+              <button type="button" className={ghostBtn} onClick={() => { setCreating(false); setDraftName(""); }}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {block.field ? <p className="m-0 mt-1.5 text-xs text-ink">Tag: <span className="rounded-md bg-[var(--surface-soft)] px-1.5 py-0.5 font-mono">{block.field}</span> · {block.fieldType === "list" ? "list of values" : "one value"}</p> : null}
+      </div>
+      <div>
+        <label className={labelClass}>Show as</label>
+        <select className={fieldClass} value={displays.some((item) => item.value === block.display) ? block.display : displays[0].value} onChange={(event) => onChange({ display: event.target.value })}>
+          {displays.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
+        </select>
+      </div>
+    </>
+  );
+}
+
 /* ------------------------------------------------------------------ inspector */
-function Inspector({ block, parent, suggestions, onChange, onDelete, onDuplicate, onMove, siblings, onPlaceAfter }) {
+function Inspector({ block, parent, suggestions, usedTags, onChange, onDelete, onDuplicate, onMove, siblings, onPlaceAfter }) {
   if (!block) {
     return (
       <div className="p-5">
@@ -196,27 +267,7 @@ function Inspector({ block, parent, suggestions, onChange, onDelete, onDuplicate
       ) : null}
 
       {block.kind === "field" ? (
-        <>
-          <div>
-            <label className={labelClass}>Field tag</label>
-            <input list="studio-field-suggestions" className={`${fieldClass} font-mono`} value={block.field} onChange={(event) => set({ field: event.target.value.trim() })} placeholder="e.g. question" />
-            <datalist id="studio-field-suggestions">
-              {suggestions.map((item) => <option key={item.name} value={item.name}>{item.label} · {item.source}</option>)}
-            </datalist>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {suggestions.slice(0, 8).map((item) => (
-                <button key={item.name} type="button" onClick={() => set({ field: item.name })} className={`rounded-full px-2 py-0.5 font-mono text-[11px] transition ${block.field === item.name ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:text-ink"}`}>{item.name}</button>
-              ))}
-            </div>
-            <p className="m-0 mt-1.5 text-xs text-soft-ink">Must match a field name in the agent's output. The agent's fields are suggested above.</p>
-          </div>
-          <div>
-            <label className={labelClass}>Show as</label>
-            <select className={fieldClass} value={block.display} onChange={(event) => set({ display: event.target.value })}>
-              {FIELD_DISPLAYS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </div>
-        </>
+        <FieldPicker block={block} suggestions={suggestions} usedTags={usedTags} onChange={set} />
       ) : null}
 
       {block.kind === "image" ? (
@@ -566,7 +617,7 @@ export function TemplateStudioPage({ toolContext }) {
             <p className="m-0 text-[11px] text-soft-ink">{view === "design" ? "Click to select · drag to reorder · drop onto a group to move inside" : previewError || "Exactly what PDF / Word / HTML exports will contain"}</p>
           </div>
           {view === "design" ? (
-            <div className="mx-auto grid max-w-[640px] gap-1.5 rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]" style={{ minHeight: 480 }}>
+            <div className="mx-auto grid max-w-[640px] content-start gap-1.5 rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.06)]" style={{ minHeight: 480 }}>
               {renderBlocks(studio.blocks)}
               {!studio.blocks.length ? <p className="m-0 py-16 text-center text-sm text-soft-ink">Your page is empty. Add a block from the left.</p> : null}
             </div>
@@ -581,6 +632,7 @@ export function TemplateStudioPage({ toolContext }) {
             block={selected}
             parent={selectedParent}
             suggestions={suggestions}
+            usedTags={tags}
             onChange={changeBlock}
             onDelete={deleteSelected}
             onDuplicate={duplicateSelected}

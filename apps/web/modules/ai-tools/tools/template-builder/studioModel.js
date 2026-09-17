@@ -67,7 +67,7 @@ export function createBlock(kind, overrides = {}) {
   const defaults = {
     heading: { text: "Heading", level: 1, size: "xl", weight: "bold" },
     text: { text: "Write your text here." },
-    field: { field: "", display: "paragraph" },
+    field: { field: "", fieldType: "text", display: "paragraph" },
     group: { children: [], padding: 12 },
     number: {},
     image: { src: "" },
@@ -102,7 +102,7 @@ export function createQuizStarter() {
         children: [
           createBlock("number"),
           createBlock("field", { field: "question", display: "heading3" }),
-          createBlock("field", { field: "options", display: "answer_choice" }),
+          createBlock("field", { field: "options", fieldType: "list", display: "answer_choice" }),
           createBlock("spacer")
         ]
       }),
@@ -135,7 +135,8 @@ export function collectFieldTags(studio) {
     const name = String(block.field).trim();
     const perItem = Boolean(parent && parent.kind === "group");
     const existing = tags.get(name);
-    tags.set(name, { name, perItem: existing ? existing.perItem || perItem : perItem, isList: ["bullet_list", "numbered_list", "answer_choice"].includes(block.display) });
+    const isList = block.fieldType === "list" || ["bullet_list", "numbered_list", "answer_choice"].includes(block.display);
+    tags.set(name, { name, perItem: existing ? existing.perItem || perItem : perItem, isList: existing ? existing.isList || isList : isList });
   });
   return [...tags.values()];
 }
@@ -169,8 +170,8 @@ function compileBlock(block, formats) {
     return { id: block.id, type: "paragraph", text: block.text, illustrativeText: block.text, formatName: register("paragraph") };
   }
   if (block.kind === "field") {
-    const type = block.display || "paragraph";
-    const isList = ["bullet_list", "numbered_list", "answer_choice"].includes(type);
+    const isList = block.fieldType === "list" || ["bullet_list", "numbered_list", "answer_choice"].includes(block.display);
+    const type = block.display && (isList ? ["bullet_list", "numbered_list", "answer_choice"].includes(block.display) : true) ? block.display : (isList ? "bullet_list" : "paragraph");
     return {
       id: block.id,
       type,

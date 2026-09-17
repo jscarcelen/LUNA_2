@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
@@ -283,30 +283,35 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     }
   }, [agentDocument, builtinAgent]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function loadTemplates() {
-      let nextTemplates = readTemplatesFromStorage();
-      if (typeof onListDocumentBlockTemplates !== "function") {
-        if (!cancelled) setTemplates(nextTemplates);
-        return;
+  // Template loading is decoupled from the handler's identity (AppShell recreates it on every
+  // render) so an in-flight request is never cancelled; it re-runs when the output step opens.
+  const listTemplatesRef = useRef(onListDocumentBlockTemplates);
+  listTemplatesRef.current = onListDocumentBlockTemplates;
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const loadTemplates = useCallback(async () => {
+    const cached = readTemplatesFromStorage();
+    if (cached.length) setTemplates((current) => (current.length ? current : cached));
+    const list = listTemplatesRef.current;
+    if (typeof list !== "function") return;
+    setTemplatesLoading(true);
+    try {
+      const result = await list();
+      if (Array.isArray(result)) {
+        setTemplates(result);
+        writeTemplatesToStorage(result);
       }
-      try {
-        const list = await onListDocumentBlockTemplates();
-        if (Array.isArray(list)) {
-          nextTemplates = list;
-          writeTemplatesToStorage(list);
-        }
-        if (!cancelled) setTemplates(nextTemplates);
-      } catch {
-        if (!cancelled) setTemplates(nextTemplates);
-      }
+    } catch {
+      // keep cached list
+    } finally {
+      setTemplatesLoading(false);
     }
+  }, []);
+  useEffect(() => {
     loadTemplates();
-    return () => {
-      cancelled = true;
-    };
-  }, [onListDocumentBlockTemplates]);
+  }, [loadTemplates]);
+  useEffect(() => {
+    if (flowStep === 2) loadTemplates();
+  }, [flowStep, loadTemplates]);
 
   const documents = useMemo(
     () => (selectedSubject?.documents || []).filter((document) => document.sourceType !== "generated"),
@@ -758,7 +763,10 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                         </label>
                       ))}
                     </div>
-                    {typeof onOpenTool === "function" ? <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => onOpenTool("template-builder")}>Design a new template →</button> : null}
+                    <div className="mt-2 flex items-center gap-3">
+                      {typeof onOpenTool === "function" ? <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => onOpenTool("template-builder")}>Design a new template →</button> : null}
+                      <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={loadTemplates} disabled={templatesLoading}>{templatesLoading ? "Refreshing…" : "Refresh list"}</button>
+                    </div>
                   </div>
                   {activeTemplate ? (
                     <div>

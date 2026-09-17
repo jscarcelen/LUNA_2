@@ -21,8 +21,11 @@ describe("statistics real pipeline", () => {
 
     expect(report.processingRunId).toBeTruthy();
     expect(report.processingPipelineVersion).toBeTruthy();
-    expect(report.processingSummary?.schemaVersion).toBe("2.0");
-    expect(report.processingSummary?.cdmVersion).toBe("cdm.v2");
+    // The upload path uses the vendored auxiliary DOCX parser (commit 3513582), not the CDM v2 extractor.
+    expect(report.method).toBe("docx-auxiliary-json-extractor");
+    expect(report.processingSummary?.schemaVersion).toBe("1.0");
+    expect(report.processingSummary?.cdmVersion).toBe("auxiliary-docx-tree");
+    expect(report.processingSummary?.equationCount).toBeGreaterThan(0);
 
     expect(countOccurrences(markdown, "# Statistics Report")).toBe(1);
     expect(countOccurrences(markdown, "## Statistics Report")).toBe(0);

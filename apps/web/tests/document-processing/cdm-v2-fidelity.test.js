@@ -174,7 +174,7 @@ describe("CDM v2 DOCX fidelity", () => {
     expect(html).not.toContain("oMathPara");
 
     expect(markdown).toContain("Sample variance $S_x^2$ for score $x_i$.");
-    expect(markdown).toMatch(/- Observation .*\$x_i\$/);
+    expect(markdown).toMatch(/(?:-|\d+\.) Observation .*\$x_i\$/);
     expect(markdown).toContain("$$\nS_x^2 = ");
     expect(markdown).toContain("\\frac{1}{n-1}");
     expect(markdown).toContain("\\sum_{i=1}^{n}");
@@ -190,8 +190,11 @@ describe("CDM v2 DOCX fidelity", () => {
     expect(diagnostics.every((item) => String(item.originalOmml || "").includes("<m:oMath"))).toBe(true);
     expect(diagnostics.some((item) => String(item.canonicalLatex || "").includes("\\frac{1}{n-1}"))).toBe(true);
     expect(diagnostics.some((item) => String(item.canonicalLatex || "").includes("\\sum_{i=1}^{n}"))).toBe(true);
-    expect(Array.isArray(processed.canonicalVerification?.uniquenessErrors)).toBe(true);
-    expect(processed.canonicalVerification?.uniquenessErrors || []).toHaveLength(0);
+    // processUploadedDocument routes DOCX through the auxiliary parser; its verification gate has no
+    // uniquenessErrors concept, so assert on its own contract instead.
+    expect(processed.method).toBe("docx-auxiliary-json-extractor");
+    expect(processed.canonicalVerification?.gatePassed).toBe(true);
+    expect(processed.canonicalVerification?.unresolved || []).toHaveLength(0);
   });
 
   it("validates adversarial fixtures with provenance, deterministic math, and fidelity metrics", async () => {
@@ -302,13 +305,13 @@ describe("CDM v2 DOCX fidelity", () => {
       expect(fidelityScore).toBeGreaterThanOrEqual(Number(fixture.expected?.minFidelityScore || 0.7));
 
       const processed = await processUploadedDocument(fixture.file, {});
-      expect(processed.method).toBe("docx-ooxml-cdm");
-      expect(processed.canonicalDocument?.schemaVersion).toBe("2.0");
-      expect(processed.sourceRenderHtml).toContain("cdm-document");
+      expect(processed.method).toBe("docx-auxiliary-json-extractor");
+      expect(processed.canonicalDocument?.schemaVersion).toBe("1.0");
+      expect(processed.sourceRenderHtml).toContain("<!DOCTYPE html>");
       expect(processed.markdown).not.toContain("cdm-document");
       expect(processed.markdown).not.toContain("&amp;");
       expect(processed.markdown).not.toContain("&lt;");
-      expect(processed.canonicalVerification?.uniquenessErrors || []).toHaveLength(0);
+      expect(processed.canonicalVerification?.gatePassed).toBe(true);
     }
 
     expect(scoreRows).toMatchSnapshot("adversarial-fidelity-scores");

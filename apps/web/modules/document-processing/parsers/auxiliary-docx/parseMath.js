@@ -57,6 +57,47 @@ function isBalancedWrapped(text = "") {
   return depth === 0;
 }
 
+const LINEAR_ACCENTS = { bar: "¯", overline: "¯", hat: "^", vec: "→" };
+const LINEAR_GROUP_CLOSER = { "(": ")", "{": "}", "[": "]" };
+
+// Reads a balanced (...) / {...} / [...] group starting at `start`; returns { inner, end } or null.
+function readBalancedGroup(text, start) {
+  const open = text[start];
+  const close = LINEAR_GROUP_CLOSER[open];
+  if (!close) return null;
+  let depth = 0;
+  for (let index = start; index < text.length; index += 1) {
+    if (text[index] === open) depth += 1;
+    else if (text[index] === close) {
+      depth -= 1;
+      if (depth === 0) return { inner: text.slice(start + 1, index), end: index + 1 };
+    }
+  }
+  return null;
+}
+
+// Reads the argument of a linear-format script (`_(i)`, `^{2}`, `_i`, `^2`).
+function readScriptArgument(text, start) {
+  const group = readBalancedGroup(text, start);
+  if (group) return { node: createExpression(tokenizeMathText(group.inner)), end: group.end };
+  const single = text.slice(start).match(/^(\d+(?:\.\d+)?|\p{L})/u);
+  if (!single) return null;
+  return { node: createExpression(tokenizeMathText(single[1])), end: start + single[1].length };
+}
+
+function attachLinearScript(tokens, marker, argument) {
+  const base = tokens.pop();
+  if (marker === "_" && base?.type === "superscript") {
+    tokens.push({ type: "subsuperscript", base: base.base, subscript: argument, superscript: base.superscript });
+  } else if (marker === "^" && base?.type === "subscript") {
+    tokens.push({ type: "subsuperscript", base: base.base, subscript: base.subscript, superscript: argument });
+  } else if (marker === "_") {
+    tokens.push({ type: "subscript", base, subscript: argument });
+  } else {
+    tokens.push({ type: "superscript", base, superscript: argument });
+  }
+}
+
 function tokenizeMathText(text = "") {
   const cleaned = String(text || "").trim();
   if (!cleaned) return [];
@@ -78,6 +119,23 @@ function tokenizeMathText(text = "") {
     if (/\s/u.test(current)) {
       cursor += 1;
       continue;
+    }
+    // Word "linear format" scripts: x_(i), x^(2), x_i, x^2, x_{i}^{2}.
+    if ((current === "_" || current === "^") && tokens.length) {
+      const argument = readScriptArgument(cleaned, cursor + 1);
+      if (argument) {
+        attachLinearScript(tokens, current, argument.node);
+        cursor = argument.end;
+        continue;
+      }
+    }
+    if (["(", "[", "{"].includes(current)) {
+      const group = readBalancedGroup(cleaned, cursor);
+      if (group) {
+        tokens.push({ type: "delimiter", open: current, close: LINEAR_GROUP_CLOSER[current], body: createExpression(tokenizeMathText(group.inner)) });
+        cursor = group.end;
+        continue;
+      }
     }
     if (["(", ")", "[", "]", "{", "}", ",", ".", ":", ";"].includes(current)) {
       tokens.push(tokenNode("punctuation", current));
@@ -104,10 +162,28 @@ function tokenizeMathText(text = "") {
       tokens.push(tokenNode("number", value));
       continue;
     }
-    if (/[_\p{L}]/u.test(current)) {
+    if (current === "\\" || /\p{L}/u.test(current)) {
+      const wordMatch = cleaned.slice(cursor).match(/^\\?(\p{L}+)/u);
+      const word = wordMatch ? wordMatch[1] : current;
+      const afterWord = cursor + (wordMatch ? wordMatch[0].length : 1);
+      // Linear accents / radicals written as bar{x}, \hat{x}, sqrt(y+1).
+      if ((LINEAR_ACCENTS[word] || word === "sqrt") && ["(", "{"].includes(cleaned[afterWord] || "")) {
+        const group = readBalancedGroup(cleaned, afterWord);
+        if (group) {
+          const body = createExpression(tokenizeMathText(group.inner));
+          tokens.push(word === "sqrt" ? { type: "radical", body } : { type: "accent", accent: LINEAR_ACCENTS[word], body });
+          cursor = group.end;
+          continue;
+        }
+      }
+      if (wordMatch && cleaned[cursor] === "\\") {
+        tokens.push(tokenNode("identifier", word));
+        cursor = afterWord;
+        continue;
+      }
       let value = current;
       cursor += 1;
-      while (cursor < cleaned.length && /[_\p{L}]/u.test(cleaned[cursor])) {
+      while (cursor < cleaned.length && /\p{L}/u.test(cleaned[cursor])) {
         value += cleaned[cursor];
         cursor += 1;
       }

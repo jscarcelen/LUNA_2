@@ -100,64 +100,79 @@ export function buildCanvasRenderList(template = {}, sampleData = {}) {
       const maxBottom = positionedSpecs.length ? Math.max(...positionedSpecs.map((spec) => positionMetrics(spec.position).bottom)) : 0;
       const entryStackGap = 6;
       const entrySpan = Math.max(14, maxBottom - baseY) + entryStackGap;
-      for (const spec of expandedSpecs) {
-        const repeatScope = normalizeRepeatScope(spec.repeatScope || entry.repeatScope || "once");
-        const records = repeatScope === "per-output" && hasOutputCollection ? outputRecords : [sampleData];
-        for (const [recordIndex, record] of records.entries()) {
-          const type = String(spec.type || "paragraph");
-          const formatName = String(spec.formatName || "");
-          const format = resolveFormat(type, formatName);
-          const className = format?.className || blockClasses[type] || "";
-          const style = format?.style && typeof format.style === "object" ? format.style : {};
-          const isAbsolute = String(style.layoutMode || "").toLowerCase() === "absolute";
-          const htmlTemplate = String(format?.htmlTemplate || "");
-          const specPosition = spec.position || entry.position || null;
-          const blockMetrics = positionMetrics(specPosition || {});
-          const blockStackGap = 4;
-          const repeatedPosition = specPosition
-            ? shiftPosition(specPosition, recordIndex * entrySpan)
-            : null;
+      const component = entry.componentRefId ? components.find((item) => item.id === entry.componentRefId) : null;
+      const groupStyle = component?.style && typeof component.style === "object" ? component.style : null;
+      const entryRepeat = normalizeRepeatScope(entry.repeatScope || "once");
+      // A repeated group (component ref repeated per output) renders record-major so each item's
+      // blocks stay together; single blocks keep the original spec-major behaviour.
+      const recordMajor = Boolean(entry.componentRefId) && entryRepeat === "per-output" && hasOutputCollection;
+      const recordList = recordMajor ? outputRecords : [null];
 
-          if (repeatScope === "per-field" || spec.repeatField) {
-            const values = getPath(record, spec.repeatField);
-            const items = Array.isArray(values) ? values : [];
-            items.forEach((value, index) => {
-              rendered.push({
-                type,
-                formatName,
-                className,
-                style,
-                htmlTemplate,
-                position: isAbsolute && repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
-                pageId,
-                hidden: Boolean(spec.hidden || entry.hidden),
-                text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
-                imageSrc: spec.imageSrc || entry.imageSrc || "",
-                opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1,
-                index: index + 1,
-                letter: letterForIndex(index)
+      for (const [groupRecordIndex, groupRecord] of recordList.entries()) {
+        for (const spec of expandedSpecs) {
+          const repeatScope = recordMajor ? "once" : normalizeRepeatScope(spec.repeatScope || entry.repeatScope || "once");
+          const records = recordMajor ? [groupRecord] : (repeatScope === "per-output" && hasOutputCollection ? outputRecords : [sampleData]);
+          for (const [innerIndex, record] of records.entries()) {
+            const recordIndex = recordMajor ? groupRecordIndex : innerIndex;
+            const type = String(spec.type || "paragraph");
+            const formatName = String(spec.formatName || "");
+            const format = resolveFormat(type, formatName);
+            const className = format?.className || blockClasses[type] || "";
+            const style = format?.style && typeof format.style === "object" ? format.style : {};
+            const isAbsolute = String(style.layoutMode || "").toLowerCase() === "absolute";
+            const htmlTemplate = String(format?.htmlTemplate || "");
+            const specPosition = spec.position || entry.position || null;
+            const blockMetrics = positionMetrics(specPosition || {});
+            const blockStackGap = 4;
+            const repeatedPosition = specPosition ? shiftPosition(specPosition, recordIndex * entrySpan) : null;
+            const groupKey = component ? `${entry.id || entry.componentRefId}:${recordIndex}` : "";
+
+            if (repeatScope === "per-field" || spec.repeatField) {
+              const values = getPath(record, spec.repeatField);
+              const items = Array.isArray(values) ? values : [];
+              items.forEach((value, index) => {
+                rendered.push({
+                  type,
+                  formatName,
+                  className,
+                  style,
+                  htmlTemplate,
+                  position: isAbsolute && repeatedPosition ? shiftPosition(repeatedPosition, index * (blockMetrics.height + blockStackGap)) : null,
+                  pageId,
+                  groupKey,
+                  groupStyle,
+                  hidden: Boolean(spec.hidden || entry.hidden),
+                  text: typeof value === "object" && value !== null ? JSON.stringify(value) : String(value ?? ""),
+                  imageSrc: spec.imageSrc || entry.imageSrc || "",
+                  opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1,
+                  index: index + 1,
+                  letter: letterForIndex(index)
+                });
               });
-            });
-            continue;
-          }
+              continue;
+            }
 
-          const value = spec.bindField ? getPath(record, spec.bindField) : "";
-          const fallbackText = String(spec.illustrativeText || entry.illustrativeText || "Content placeholder");
-          rendered.push({
-            type,
-            formatName,
-            className,
-            style,
-            htmlTemplate,
-            position: isAbsolute ? repeatedPosition : null,
-            pageId,
-            hidden: Boolean(spec.hidden || entry.hidden),
-            text: value === undefined || value === null || value === ""
-              ? fallbackText
-              : (Array.isArray(value) ? value.join(", ") : String(value)),
-            imageSrc: spec.imageSrc || entry.imageSrc || "",
-            opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1
-          });
+            const value = spec.bindField ? getPath(record, spec.bindField) : "";
+            const fallbackText = String(spec.illustrativeText || entry.illustrativeText || spec.text || "Content placeholder");
+            rendered.push({
+              type,
+              formatName,
+              className,
+              style,
+              htmlTemplate,
+              position: isAbsolute ? repeatedPosition : null,
+              pageId,
+              groupKey,
+              groupStyle,
+              hidden: Boolean(spec.hidden || entry.hidden),
+              text: value === undefined || value === null || value === ""
+                ? fallbackText
+                : (Array.isArray(value) ? value.join(", ") : String(value)),
+              imageSrc: spec.imageSrc || entry.imageSrc || "",
+              opacity: spec.opacity ?? entry.opacity ?? style.opacity ?? 1,
+              index: recordIndex + 1
+            });
+          }
         }
       }
     }
@@ -258,6 +273,27 @@ export function getPageFormatDimensionsMm(pageFormat = "a4-portrait", custom = {
   return PAGE_FORMAT_DIMENSIONS_MM[pageFormat] || PAGE_FORMAT_DIMENSIONS_MM["a4-portrait"];
 }
 
+// Wraps consecutive blocks belonging to the same repeated group/record in a container so a
+// "card" of blocks stays together and can carry the group's own style (padding, border...).
+function renderGroupedBlocksHtml(blocks = []) {
+  const output = [];
+  let openKey = "";
+  for (const block of blocks) {
+    const key = block.groupKey || "";
+    if (key !== openKey) {
+      if (openKey) output.push("</div>");
+      if (key) output.push(`<div class="tpl-group" style="${styleObjectToCss(block.groupStyle || {})}">`);
+      openKey = key;
+    }
+    output.push(renderBlockHtml(block));
+  }
+  if (openKey) output.push("</div>");
+  // Consecutive list items produced by a repeated field render as one list, not many.
+  return output.join("\n")
+    .replace(/<\/ul>\n<ul([^>]*)>/g, "")
+    .replace(/<\/ol>\n<ol([^>]*)>/g, "");
+}
+
 export function renderTemplateHtml(template = {}, sampleData = {}) {
   const blocks = buildCanvasRenderList(template, sampleData);
   const css = String(template.css || "");
@@ -270,7 +306,7 @@ export function renderTemplateHtml(template = {}, sampleData = {}) {
     const pageBlocks = blocks.filter((block) => (block.pageId || "page-1") === (page.id || "page-1") || (pageIndex === 0 && !block.pageId));
     const activeDimensions = getPageFormatDimensionsMm(page.pageFormat || template.pageFormat, page.customPageSize || template.customPageSize);
     const pageStyle = `position:relative;width:${activeDimensions.width}mm;min-height:${activeDimensions.height}mm;box-sizing:border-box;padding:16mm;margin:0 auto;background:#fff;border:1px solid #e5e1f7;box-shadow:0 3px 10px rgba(43, 49, 84, 0.06);page-break-inside:avoid;`
-    return `<div class="${escapeHtml(containerClass)}-page" style="${pageStyle}">${pageBlocks.map(renderBlockHtml).join("\n")}</div>`;
+    return `<div class="${escapeHtml(containerClass)}-page" style="${pageStyle}">${renderGroupedBlocksHtml(pageBlocks)}</div>`;
   }).join("\n");
   const styleTag = css || pageCss ? `<style>${pageCss}${css}</style>` : "";
   return `${styleTag}<div class="${escapeHtml(containerClass)}">${body}</div>`;

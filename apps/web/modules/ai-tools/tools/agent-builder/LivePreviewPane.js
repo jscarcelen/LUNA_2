@@ -112,7 +112,7 @@ export function LivePreviewPane({
   const fragment = template && templateHtml
     ? templateHtml
     : renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, brand);
-  const documentHtml = useMemo(() => wrapPreviewDocument(fragment, brand), [fragment, brand]);
+  const documentHtml = useMemo(() => wrapPreviewDocument(fragment, brand, { header: !(template && templateHtml) }), [fragment, brand, template, templateHtml]);
   const rawText = useMemo(() => renderPlainOutputText(visible.items, visible.fields, fieldTypeByName), [visible, fieldTypeByName]);
 
   async function handleExport(format) {

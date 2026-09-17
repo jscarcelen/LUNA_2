@@ -11,7 +11,7 @@ export const navByRole = {
     { key: "dashboard", label: "Classes" },
     { key: "workspaces", label: "Workspaces" },
     { key: "ai-tools", label: "AI Tools" },
-    { key: "ai-tool:template-builder", label: "Template Builder" },
+    { key: "ai-tool:template-builder", label: "Templates" },
     { key: "marketplace", label: "Marketplace" }
   ],
   parent: [

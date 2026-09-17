@@ -112,12 +112,12 @@ export function renderPlainOutputText(items = [], fields = [], fieldTypeByName =
  * self-contained document carrying the brand overrides. Used for the iframe preview and for the
  * saved .html document so the two never drift apart.
  */
-export function wrapPreviewDocument(fragment, brand = {}, { forPrint = false } = {}) {
+export function wrapPreviewDocument(fragment, brand = {}, { forPrint = false, header = true } = {}) {
   const font = FONT_OPTIONS.find((option) => option.value === brand.font) || FONT_OPTIONS[0];
   const accent = /^#[0-9a-f]{3,8}$/i.test(String(brand.accent || "")) ? brand.accent : ACCENT_PRESETS[0];
   const dense = brand.density === "compact";
   const logo = isSafeImageUrl(brand.logoUrl) ? `<img class="brand-logo" src="${escapeHtml(brand.logoUrl)}" alt="" />` : "";
-  const header = brand.title || brand.subtitle || logo
+  const headerHtml = header && (brand.title || brand.subtitle || logo)
     ? `<header class="brand-header">${logo}<div>${brand.title ? `<h1 class="brand-title">${escapeHtml(brand.title)}</h1>` : ""}${brand.subtitle ? `<p class="brand-subtitle">${escapeHtml(brand.subtitle)}</p>` : ""}</div></header>`
     : "";
 
@@ -149,6 +149,6 @@ export function wrapPreviewDocument(fragment, brand = {}, { forPrint = false } =
   .luna-template-default { --accent-override: var(--accent); }
 </style>
 </head>
-<body>${header}${fragment}</body>
+<body>${headerHtml}${fragment}</body>
 </html>`;
 }

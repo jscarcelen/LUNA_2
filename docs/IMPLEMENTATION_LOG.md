@@ -1,5 +1,22 @@
 # Implementation Log
 
+## 2026-09-17
+
+### Reference agent flow + Template Studio
+
+- Every agent now runs through one shell (`RunAgentPage`): intro + "How it works", then
+  Configure questions (material, optional style examples, guided choices) → Configure output
+  (template picker with auto field mapping, styling, live preview) → Export (PDF via print, HTML,
+  save to workspace). The Quiz Generator is a built-in agent config (`quizAgent.js`) rendered by
+  the same shell; the 1,000-line legacy wizard was removed.
+- Pipeline accepts `scope.styleDocumentIds` (format/level examples only).
+- New Template Studio (`TemplateStudioPage.js` + `studioModel.js`): block canvas, field tags with
+  suggestions from real agent fields, repeating groups, position/style inspector, live preview,
+  Quiz starter. Compiles to the existing renderer model; `template.studio` persisted in
+  `document_block_templates` meta for lossless reopening. Advanced builder kept behind a link.
+- Renderer: repeated groups render record-major and wrapped (`.tpl-group`); consecutive repeated
+  list items merge into one list; item index available to badges (`{{index}}`).
+
 ## 2026-09-16
 
 ### Phase 1 — design language + role homes

@@ -529,7 +529,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       visible,
       textContent: renderPlainOutputText(visible.items, visible.fields, fieldTypeByName),
       plainFragment: renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand),
-      wrap: (fragment) => wrapPreviewDocument(fragment, customization.brand, { forPrint })
+      wrap: (fragment, { header = true } = {}) => wrapPreviewDocument(fragment, customization.brand, { forPrint, header })
     };
   }
 
@@ -547,7 +547,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       if (!response.ok) throw new Error(result?.error || "Template rendering failed");
       fragment = result.html || "";
     }
-    return { html: wrap(fragment), textContent };
+    return { html: wrap(fragment, { header: !activeTemplate }), textContent };
   }
 
   async function handleSaveAsDocument() {

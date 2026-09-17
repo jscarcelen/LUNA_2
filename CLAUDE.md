@@ -70,6 +70,15 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 - `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 15 so far.
 - `docs/` — `ROADMAP.md`, `IMPLEMENTATION_LOG.md`, `SUPABASE_SETUP.md`, `VERCEL_DO_NOT_DO.md`.
 
+### Agents and templates (product rule)
+Every agent — built-in, user-made or from the marketplace — renders through
+`modules/ai-tools/tools/agent-builder/RunAgentPage.js`: intro + How it works → Configure questions
+→ Configure output → Export. Built-in agents are plain config objects (see
+`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are edited in the
+Template Studio (`tools/template-builder/TemplateStudioPage.js`, model in `studioModel.js`) and
+matched to agents by **field tags** (`dataFields`); output data is `{ items: [...] }` when the
+template repeats per item.
+
 ### Adding an AI tool
 Create `modules/ai-tools/tools/<id>/index.js` exporting a manifest (validated by
 `validateAiToolManifest`) plus its page component, then register it in `modules/ai-tools/registry.js`.

@@ -146,9 +146,10 @@ function splitTemplateBlockClassesMeta(raw = {}) {
   const activePageId = String(meta.activePageId || "").trim();
   // Template Studio's editable block tree (lossless round trip for the friendly editor).
   const studio = meta.studio && typeof meta.studio === "object" ? meta.studio : null;
+  const docModel = meta.docModel && typeof meta.docModel === "object" ? meta.docModel : null;
   const blockClasses = { ...source };
   delete blockClasses.__luna_meta;
-  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, canvasSettings, formatSets, pageLayouts, activeFormatSetId, activePageId, studio };
+  return { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, canvasSettings, formatSets, pageLayouts, activeFormatSetId, activePageId, studio, docModel };
 }
 
 function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates = {}, blockFormats = {}, folderId = "tpl-folder-root", extra = {}) {
@@ -171,7 +172,8 @@ function composeTemplateBlockClassesMeta(blockClasses = {}, blockHtmlTemplates =
     pageLayouts: Array.isArray(extra?.pageLayouts) ? extra.pageLayouts : [],
     activeFormatSetId: String(extra?.activeFormatSetId || "").trim(),
     activePageId: String(extra?.activePageId || "").trim(),
-    studio: extra?.studio && typeof extra.studio === "object" ? extra.studio : null
+    studio: extra?.studio && typeof extra.studio === "object" ? extra.studio : null,
+    docModel: extra?.docModel && typeof extra.docModel === "object" ? extra.docModel : null
   };
   return classes;
 }
@@ -2414,9 +2416,10 @@ export async function listDocumentBlockTemplates(ownerUserId = getDemoOwnerUserI
 
   return (data || []).map((row) => ({
     ...(function mapTemplate() {
-      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, canvasSettings, formatSets, pageLayouts, activeFormatSetId, activePageId, studio } = splitTemplateBlockClassesMeta(row.block_classes);
+      const { blockClasses, blockHtmlTemplates, blockFormats, folderId, components, canvasBlocks, pageFormat, dataBindings, dataFields, renderVariants, repeatCollectionField, canvasSettings, formatSets, pageLayouts, activeFormatSetId, activePageId, studio, docModel } = splitTemplateBlockClassesMeta(row.block_classes);
       return {
         studio,
+        docModel,
         id: row.id,
         ownerUserId: row.owner_user_id,
         name: row.name,
@@ -2481,7 +2484,8 @@ export async function saveDocumentBlockTemplate(ownerUserId, payload = {}) {
         pageLayouts: payload.pageLayouts,
         activeFormatSetId: payload.activeFormatSetId,
         activePageId: payload.activePageId,
-        studio: payload.studio
+        studio: payload.studio,
+        docModel: payload.docModel
       }
     ),
     css: String(payload.css || ""),

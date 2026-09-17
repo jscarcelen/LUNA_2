@@ -2,6 +2,20 @@
 
 ## 2026-09-17
 
+### Template Studio v2 — document model
+
+- New document model (`render/docModel.js`): pages with locked backgrounds (uploaded PDF pages via
+  pdf.js, or images), static elements (text, image, shape, line) and dynamic elements (AI fields,
+  groups) positioned in mm. Three repeat modes: field lists, flow groups that auto-paginate and
+  repeat the header, and per-item pages. `layoutDocument()` is the single layout engine; HTML,
+  PDF (pdf-lib), DOCX and PPTX (pptxgenjs) renderers draw its output (`render/docRenderers.js`).
+- Canva-style editor (`TemplateStudioPage.js`): source chooser (blank / PDF / image / starters /
+  saved), Design (page navigator, palette, drag/resize canvas, purple group boundaries, inspector,
+  design-with-sample-data toggle), Data (agent → field mapping, sample items, paginated preview),
+  Export (PDF / Word / PowerPoint / HTML). Legacy templates import into a group.
+- `docModel` persisted in template meta; render route branches on it; agents' preview offers PPTX.
+- Not yet: Word import, "Detect fields from PDF".
+
 ### Reference agent flow + Template Studio
 
 - Every agent now runs through one shell (`RunAgentPage`): intro + "How it works", then

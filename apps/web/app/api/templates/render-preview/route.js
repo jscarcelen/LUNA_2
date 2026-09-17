@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { renderTemplateHtml, renderTemplatePdfBuffer, renderTemplateDocxBuffer } from "../../../../modules/ai-tools/render/templateExporters.js";
+import { renderDocHtml, renderDocPdfBuffer, renderDocDocxBuffer, renderDocPptxBuffer } from "../../../../modules/ai-tools/render/docRenderers.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,6 +41,17 @@ export async function POST(request) {
     const template = body?.template && typeof body.template === "object" ? body.template : {};
     const sampleData = body?.sampleData && typeof body.sampleData === "object" ? body.sampleData : {};
     const format = String(body?.format || "html").trim();
+
+    // Document-model templates (Template Studio v2) share one layout engine for every format.
+    if (template.docModel && typeof template.docModel === "object") {
+      const doc = template.docModel;
+      const showFieldMarkers = Boolean(body?.showFieldMarkers);
+      if (format === "html") return NextResponse.json({ html: renderDocHtml(doc, sampleData, { showFieldMarkers }) });
+      if (format === "pdf") return NextResponse.json({ fileBase64: (await renderDocPdfBuffer(doc, sampleData)).toString("base64"), mimeType: "application/pdf" });
+      if (format === "docx") return NextResponse.json({ fileBase64: (await renderDocDocxBuffer(doc, sampleData)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      if (format === "pptx") return NextResponse.json({ fileBase64: (await renderDocPptxBuffer(doc, sampleData)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
+    }
 
     const resolvedTemplate = resolveRenderVariant(template, format);
     if (format === "html") {

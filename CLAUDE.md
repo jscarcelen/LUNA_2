@@ -74,10 +74,12 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 Every agent — built-in, user-made or from the marketplace — renders through
 `modules/ai-tools/tools/agent-builder/RunAgentPage.js`: intro + How it works → Configure questions
 → Configure output → Export. Built-in agents are plain config objects (see
-`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are edited in the
-Template Studio (`tools/template-builder/TemplateStudioPage.js`, model in `studioModel.js`) and
-matched to agents by **field tags** (`dataFields`); output data is `{ items: [...] }` when the
-template repeats per item.
+`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are a **document
+model** (`modules/ai-tools/render/docModel.js`: pages → background / static / dynamic elements,
+three repeat modes) edited Canva-style in `tools/template-builder/TemplateStudioPage.js`
+(Design | Data | Export) and rendered by one layout engine for HTML/PDF/DOCX/PPTX
+(`render/docRenderers.js`). Agents match templates by field name (`dataFields`); agent output is
+`{ items: [...] }`. Do not add per-format template code or bring back the block-list editor.
 
 ### Adding an AI tool
 Create `modules/ai-tools/tools/<id>/index.js` exporting a manifest (validated by

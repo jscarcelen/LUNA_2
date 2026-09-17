@@ -813,7 +813,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <div className="mt-3 grid gap-2">
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handlePrint}><span>PDF</span><span className="text-xs font-normal text-soft-ink">via print dialog</span></button>
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handleDownloadHtml}><span>HTML</span><span className="text-xs font-normal text-soft-ink">opens in any browser</span></button>
-                {activeTemplate ? <p className="m-0 text-xs text-soft-ink">Word and PowerPoint exports are available from the preview toolbar when a template is selected.</p> : <p className="m-0 text-xs text-soft-ink">Choose a template in step 2 for Word / PowerPoint exports.</p>}
+                {activeTemplate ? <p className="m-0 text-xs text-soft-ink">PDF, Word{activeTemplate.docModel ? " and PowerPoint" : ""} downloads are in the preview toolbar on the right.</p> : <p className="m-0 text-xs text-soft-ink">Choose a template in step 2 for Word / PowerPoint exports.</p>}
               </div>
             </section>
             <section className={cardClass}>

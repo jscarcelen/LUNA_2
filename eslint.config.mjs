@@ -4,6 +4,7 @@ import globals from "globals";
 export default [
   {
     ignores: [
+      "**/public/**",
       "**/.next/**",
       "**/node_modules/**",
       "**/dist/**",

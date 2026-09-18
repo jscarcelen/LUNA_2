@@ -1,5 +1,24 @@
 # Implementation Log
 
+## 2026-09-18
+
+### Template Studio v3 — milestone 1
+
+- Architecture per `docs/TEMPLATE_STUDIO_ARCHITECTURE.md` (approved). New TypeScript module
+  `modules/template-studio/`: typed model (Template → Layout → View; elements with content
+  source; groups own repetition; page scope separate from repetition; fields with stable ids),
+  layout engine with flow pagination, nested repeats, page-per-item, views, overflow report;
+  mapping proposals; migration of v2/legacy templates; component registry; undo/redo store.
+- Editor: source chooser (blank / PDF / image / starters / saved), Design (Add · Pages · Layers,
+  canvas, floating toolbar Group/Align/Duplicate/Delete, inspector Content · Layout · Style ·
+  Visibility · Repeat), Data (editable field tree, optional agent schema + proposals), Preview
+  (sample items, page/item counts, overflow warning), Export (by layout class).
+- Templates are agent-independent: fields can be defined in the studio before any agent exists.
+- Integration: `templateV3` persisted; render route branches on it (layout/view selectable);
+  agents auto-map by field name and export PDF/DOCX/PPTX. v2 editor removed; legacy builder
+  kept for reference.
+- 12 engine tests; `npm run typecheck` (TS scoped to the module).
+
 ## 2026-09-17
 
 ### Template Studio v2 — document model

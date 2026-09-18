@@ -168,7 +168,7 @@ export function LivePreviewPane({
             <>
               <button type="button" disabled={Boolean(exporting) || !mappingReady} onClick={() => handleExport("pdf")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "pdf" ? "…" : "PDF"}</button>
               <button type="button" disabled={Boolean(exporting) || !mappingReady} onClick={() => handleExport("docx")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "docx" ? "…" : "DOCX"}</button>
-              {template.docModel ? <button type="button" disabled={Boolean(exporting) || !mappingReady} onClick={() => handleExport("pptx")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "pptx" ? "…" : "PPTX"}</button> : null}
+              {template.docModel || (template.templateV3 && template.templateV3.layouts?.[0]?.class === "slides") ? <button type="button" disabled={Boolean(exporting) || !mappingReady} onClick={() => handleExport("pptx")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "pptx" ? "…" : "PPTX"}</button> : null}
             </>
           ) : null}
           {hasOutput ? (

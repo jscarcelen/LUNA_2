@@ -23,7 +23,8 @@ send targeted homework.
 
 - npm workspaces monorepo. **Only `apps/web` (`@luna/web`) is real**; `apps/admin`, `packages/*` and
   root `modules/*` are placeholders (`packages/database` is duplicated inside `apps/web/lib`).
-- Next.js 16 canary, App Router (`apps/web/app`), React 18. **Plain JS/JSX — no TypeScript.**
+- Next.js 16 canary, App Router (`apps/web/app`), React 18. **Plain JS/JSX** except
+  `modules/template-studio/**`, which is TypeScript (`tsconfig.json` with `allowJs`; `npm run typecheck`).
   Styling is hybrid: legacy pages use the hand-written class system in `apps/web/app/globals.css`;
   new/redesigned surfaces use **Tailwind v4 utilities** (tokens in the `@theme` block at the top of
   `globals.css`, referencing the existing CSS variables). Preflight is NOT loaded — wrap Tailwind-
@@ -74,12 +75,14 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 Every agent — built-in, user-made or from the marketplace — renders through
 `modules/ai-tools/tools/agent-builder/RunAgentPage.js`: intro + How it works → Configure questions
 → Configure output → Export. Built-in agents are plain config objects (see
-`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are a **document
-model** (`modules/ai-tools/render/docModel.js`: pages → background / static / dynamic elements,
-three repeat modes) edited Canva-style in `tools/template-builder/TemplateStudioPage.js`
-(Design | Data | Export) and rendered by one layout engine for HTML/PDF/DOCX/PPTX
-(`render/docRenderers.js`). Agents match templates by field name (`dataFields`); agent output is
-`{ items: [...] }`. Do not add per-format template code or bring back the block-list editor.
+`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are the
+**Template Studio v3** (`modules/template-studio/`, TypeScript, see its README and
+`docs/TEMPLATE_STUDIO_ARCHITECTURE.md`): Template → Layout → View; elements with
+`source: static | field`; groups own repetition (flow / page / grid) and nest; page scope is
+separate from repetition; one layout engine feeds HTML/PDF/DOCX/PPTX. Templates are
+agent-independent (fields defined in the studio; agents auto-map by name). Saved rows carry
+`templateV3` + `dataFields`. Do not add per-format template code, expose implementation
+primitives in the Add menu, or reintroduce the block-list editor.
 
 ### Adding an AI tool
 Create `modules/ai-tools/tools/<id>/index.js` exporting a manifest (validated by

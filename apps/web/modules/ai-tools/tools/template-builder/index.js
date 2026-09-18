@@ -1,13 +1,13 @@
-import { TemplateStudioPage } from "./TemplateStudioPage";
+import { TemplateStudio } from "../../../template-studio/TemplateStudio";
 
 export const templateBuilderTool = {
   id: "template-builder",
   name: "Template Studio",
-  description: "Design how agent output looks: add blocks, tag them with fields, and export the same layout to PDF, Word, slides or HTML.",
+  description: "Design the document: static design, AI fields, repeating groups, views — one template, every export format.",
   runLabel: "Open Template Studio",
-  component: TemplateStudioPage,
+  component: TemplateStudio,
   pipelineConfig: {
     mode: "visual-template-editor",
-    template: "template-builder-v1"
+    template: "template-studio-v3"
   }
 };

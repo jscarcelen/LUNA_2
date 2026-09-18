@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { renderTemplateHtml, renderTemplatePdfBuffer, renderTemplateDocxBuffer } from "../../../../modules/ai-tools/render/templateExporters.js";
 import { renderDocHtml, renderDocPdfBuffer, renderDocDocxBuffer, renderDocPptxBuffer } from "../../../../modules/ai-tools/render/docRenderers.js";
+import { renderHtml as renderV3Html, renderPdf as renderV3Pdf, renderDocx as renderV3Docx, renderPptx as renderV3Pptx } from "../../../../modules/template-studio/engine/renderers/index";
+import { normalizeTemplate } from "../../../../modules/template-studio/engine/migrate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +43,20 @@ export async function POST(request) {
     const template = body?.template && typeof body.template === "object" ? body.template : {};
     const sampleData = body?.sampleData && typeof body.sampleData === "object" ? body.sampleData : {};
     const format = String(body?.format || "html").trim();
+
+    // Template Studio v3: one layout engine for every format; layout/view selectable.
+    if (template.templateV3 && typeof template.templateV3 === "object") {
+      const doc = normalizeTemplate(template.templateV3);
+      const options = { layoutId: body?.layoutId || undefined, viewId: body?.viewId || null, showFieldMarkers: Boolean(body?.showFieldMarkers) };
+      if (format === "html") {
+        const rendered = renderV3Html(doc, sampleData, options);
+        return NextResponse.json({ html: rendered.html, pageCount: rendered.pageCount, overflows: rendered.overflows });
+      }
+      if (format === "pdf") return NextResponse.json({ fileBase64: (await renderV3Pdf(doc, sampleData, options)).toString("base64"), mimeType: "application/pdf" });
+      if (format === "docx") return NextResponse.json({ fileBase64: (await renderV3Docx(doc, sampleData, options)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+      if (format === "pptx") return NextResponse.json({ fileBase64: (await renderV3Pptx(doc, sampleData, options)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+      return NextResponse.json({ error: "Unsupported format" }, { status: 400 });
+    }
 
     // Document-model templates (Template Studio v2) share one layout engine for every format.
     if (template.docModel && typeof template.docModel === "object") {

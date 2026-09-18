@@ -13,7 +13,8 @@ import {
   createFlashcardStarter,
   createId,
   createPage,
-  createTemplate
+  createTemplate,
+  defaultMargins
 } from "../../render/docModel";
 
 /* ------------------------------------------------------------------ styling */
@@ -232,8 +233,50 @@ function CanvasElement({ element, selectedIds, sampleValues, sampleMode, onPoint
   );
 }
 
+/* ------------------------------------------------------------------ group dialog */
+function GroupDialog({ elements, preselected, onCancel, onCreate }) {
+  const [picked, setPicked] = useState(preselected);
+  const [label, setLabel] = useState("Question group");
+  const [repeat, setRepeat] = useState("item");
+  const candidates = elements.filter((element) => element.type !== "group");
+  const describe = (element) => (element.type === "field" ? `{${element.path || "field"}}` : element.type === "text" ? (element.content || "Text").slice(0, 40) : PALETTE.find((item) => item.type === element.type)?.label || element.type);
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onPointerDown={onCancel}>
+      <div className={`${card} w-full max-w-md p-5`} onPointerDown={(event) => event.stopPropagation()}>
+        <p className="m-0 text-base font-bold text-ink">Create a group</p>
+        <p className="m-0 mt-1 text-xs text-soft-ink">Pick the blocks that belong together and how often they repeat.</p>
+        <div className="mt-3 grid max-h-56 gap-1 overflow-auto">
+          {candidates.map((element) => {
+            const on = picked.includes(element.id);
+            return (
+              <label key={element.id} className={`flex cursor-pointer items-center gap-2.5 rounded-xl border px-3 py-2 text-sm transition ${on ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
+                <input type="checkbox" checked={on} onChange={() => setPicked((current) => (on ? current.filter((id) => id !== element.id) : [...current, element.id]))} />
+                <span className={`grid size-6 place-items-center rounded-md bg-white text-[10px] font-bold ${element.type === "field" ? "text-[var(--accent-ink)]" : "text-soft-ink"}`}>{PALETTE.find((item) => item.type === element.type)?.icon}</span>
+                <span className="truncate text-ink">{describe(element)}</span>
+              </label>
+            );
+          })}
+          {!candidates.length ? <p className="m-0 text-sm text-soft-ink">Add some blocks to the page first.</p> : null}
+        </div>
+        <div className="mt-3 grid gap-3">
+          <div><label className={labelClass}>Group name</label><input className={fieldClass} value={label} onChange={(event) => setLabel(event.target.value)} /></div>
+          <div>
+            <label className={labelClass}>Repetition</label>
+            <Segmented value={repeat} options={[["item", "Once per item"], ["static", "Static (once)"]]} onChange={setRepeat} />
+            <p className="m-0 mt-1.5 text-xs text-soft-ink">{repeat === "item" ? "Repeated for every item the agent returns — flows down the page and continues on new pages." : "Groups the blocks so they move together, without repeating."}</p>
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
+          <button type="button" className={primaryBtn} disabled={!picked.length} onClick={() => onCreate({ ids: picked, label, repeat })}>Create group</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ inspector */
-function Inspector({ selection, parent, page, agentFields, onChange, onChangePage, onDelete, onDuplicate, onGroup, onUngroup, onBackground, canGroup }) {
+function Inspector({ selection, parent, page, margins, onChangeMargins, agentFields, onChange, onChangePage, onDelete, onDuplicate, onGroup, onUngroup, onBackground, canGroup, onAlign }) {
   const bgRef = useRef(null);
   if (!selection) {
     return (
@@ -250,11 +293,21 @@ function Inspector({ selection, parent, page, agentFields, onChange, onChangePag
           <p className="m-0 mt-1.5 text-xs text-soft-ink">Locked layer under everything you add.</p>
         </div>
         <div>
+          <label className={labelClass}>Page margins (mm)</label>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[["top", "Top"], ["right", "Right"], ["bottom", "Bottom"], ["left", "Left"]].map(([key, label]) => (
+              <label key={key} className="grid gap-0.5 text-[10px] font-semibold text-soft-ink">{label}<input type="number" min="0" max="60" className={`${fieldBase} w-full px-2 py-1 text-xs`} value={margins[key]} onChange={(event) => onChangeMargins({ [key]: Math.max(0, Number(event.target.value) || 0) })} /></label>
+            ))}
+          </div>
+          <p className="m-0 mt-1.5 text-xs text-soft-ink">New blocks are placed inside the margins; repeating groups stop at the bottom margin.</p>
+        </div>
+        <div>
           <label className={labelClass}>Page behaviour</label>
           <Segmented value={page.repeat?.source ? "repeat" : "once"} options={[["once", "Once"], ["repeat", "Repeat per item"]]} onChange={(value) => onChangePage({ repeat: value === "repeat" ? { source: "items" } : null })} />
           <p className="m-0 mt-1.5 text-xs text-soft-ink">{page.repeat?.source ? "One copy of this page for every item the agent returns (flashcards, certificates)." : "Groups on this page can still repeat and flow onto extra pages."}</p>
         </div>
-        {canGroup ? <button type="button" className={primaryBtn} onClick={onGroup}>Create group from selection</button> : <p className="m-0 text-xs text-soft-ink">Tip: shift-click several elements, then create a repeating group.</p>}
+        <button type="button" className={primaryBtn} onClick={onGroup}>{canGroup ? "Create group from selection…" : "Create a group…"}</button>
+        <p className="m-0 text-xs text-soft-ink">A group keeps blocks together and can repeat once per item (questions, cards…).</p>
       </div>
     );
   }
@@ -274,6 +327,18 @@ function Inspector({ selection, parent, page, agentFields, onChange, onChangePag
         </div>
       </div>
       {parent ? <p className="m-0 rounded-xl px-3 py-2 text-xs" style={{ background: `${GROUP_COLOR}14`, color: GROUP_COLOR }}>Inside “{parent.label || "Group"}” — {parent.repeat?.source ? "appears once per item." : "static group."}</p> : null}
+      <div>
+        <label className={labelClass}>Align {parent ? "in group" : "to page margins"}</label>
+        <div className="grid grid-cols-6 gap-1">
+          {[["left", "⇤", "Left"], ["hcenter", "↔", "Centre"], ["right", "⇥", "Right"], ["top", "⤒", "Top"], ["vcenter", "↕", "Middle"], ["bottom", "⤓", "Bottom"]].map(([key, glyph, title]) => (
+            <button key={key} type="button" title={title} onClick={() => onAlign(key)} className="grid h-8 place-items-center rounded-lg border border-ink/15 bg-white text-sm text-ink transition hover:bg-[var(--surface-soft)]">{glyph}</button>
+          ))}
+        </div>
+        <div className="mt-1 grid grid-cols-2 gap-1">
+          <button type="button" onClick={() => onAlign("fitWidth")} className="rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)]">Full width</button>
+          <button type="button" onClick={() => onAlign("stackBelow")} className="rounded-lg border border-ink/15 bg-white px-2 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)]">Place below previous</button>
+        </div>
+      </div>
 
       {element.type === "text" ? <div><label className={labelClass}>Text</label><textarea className={`${fieldClass} min-h-20 resize-y`} value={element.content || ""} onChange={(event) => set({ content: event.target.value })} /></div> : null}
 
@@ -365,6 +430,7 @@ export function TemplateStudioPage({ toolContext }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [groupDialog, setGroupDialog] = useState(false);
   const dragRef = useRef(null);
   const canvasWrapRef = useRef(null);
   const [scale, setScale] = useState(MAX_SCALE);
@@ -515,19 +581,62 @@ export function TemplateStudioPage({ toolContext }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const margins = template?.margins || defaultMargins();
+  const contentWidth = size.width - margins.left - margins.right;
+
   function addElement(type) {
     const target = selection.element?.type === "group" ? selection.element : selection.parent;
-    const element = createElement(type, target ? { x: 4, y: Math.max(2, Number(target.h || 0) - 10) } : { x: PAGE_MARGIN_MM, y: PAGE_MARGIN_MM + 8 });
+    // New blocks default to the full width between the page margins, stacked under existing content.
+    const lastBottom = Math.max(margins.top, ...(page.elements.map((item) => Number(item.y || 0) + Number(item.h || 0))));
+    const element = createElement(type, target ? { x: 4, y: Math.max(2, Number(target.h || 0) - 10), w: Math.max(20, Number(target.w || 0) - 8) } : { x: margins.left, y: Math.min(lastBottom + 4, size.height - margins.bottom - 12), w: contentWidth });
+    if (type === "group") { element.w = contentWidth; element.h = 40; }
+    if (type === "rect" || type === "image") element.w = target ? element.w : Math.min(contentWidth, type === "image" ? 50 : contentWidth);
     if (type === "field" && agentFields.length) {
       const unused = agentFields.find((field) => !templateFields.some((item) => item.name === field.name)) || agentFields[0];
       element.path = unused.name;
       element.display = unused.type === "array" ? "choices" : "text";
-      element.w = target ? Math.max(40, Number(target.w || 0) - 8) : 120;
     }
     if (type === "group") element.repeat = { source: "items", mode: "flow" };
     if (target && type !== "group") changeElement(target.id, (group) => ({ ...group, children: [...(group.children || []), element] }));
     else updatePage((current) => ({ ...current, elements: [...current.elements, element] }));
     setSelectedIds([element.id]);
+  }
+  function alignSelection(how) {
+    if (!selectedIds.length) return;
+    const first = findElementIn(page.elements, selectedIds[0]);
+    const parent = first.parent;
+    const box = parent
+      ? { left: 0, top: 0, right: Number(parent.w || 0), bottom: Number(parent.h || 0) }
+      : { left: margins.left, top: margins.top, right: size.width - margins.right, bottom: size.height - margins.bottom };
+    const siblings = parent ? parent.children || [] : page.elements;
+    const picked = siblings.filter((element) => selectedIds.includes(element.id));
+    if (!picked.length) return;
+    // With several elements selected, align them relative to their common bounds (like PowerPoint).
+    const bounds = picked.length > 1
+      ? { left: Math.min(...picked.map((item) => Number(item.x || 0))), top: Math.min(...picked.map((item) => Number(item.y || 0))), right: Math.max(...picked.map((item) => Number(item.x || 0) + Number(item.w || 0))), bottom: Math.max(...picked.map((item) => Number(item.y || 0) + Number(item.h || 0))) }
+      : box;
+    const previous = siblings.filter((item) => !selectedIds.includes(item.id) && Number(item.y || 0) < Number(picked[0].y || 0)).sort((a, b) => (Number(b.y || 0) + Number(b.h || 0)) - (Number(a.y || 0) + Number(a.h || 0)))[0];
+    updatePage((current) => {
+      let elements = current.elements;
+      for (const item of picked) {
+        elements = updateElementIn(elements, item.id, (element) => {
+          const w = Number(element.w || 0);
+          const h = Number(element.h || 0);
+          switch (how) {
+            case "left": return { ...element, x: bounds.left };
+            case "right": return { ...element, x: bounds.right - w };
+            case "hcenter": return { ...element, x: (bounds.left + bounds.right) / 2 - w / 2 };
+            case "top": return { ...element, y: bounds.top };
+            case "bottom": return { ...element, y: bounds.bottom - h };
+            case "vcenter": return { ...element, y: (bounds.top + bounds.bottom) / 2 - h / 2 };
+            case "fitWidth": return { ...element, x: box.left, w: box.right - box.left };
+            case "stackBelow": return previous ? { ...element, y: Number(previous.y || 0) + Number(previous.h || 0) + 3 } : { ...element, y: box.top };
+            default: return element;
+          }
+        });
+      }
+      return { ...current, elements };
+    });
   }
   function deleteSelected() {
     updatePage((current) => ({ ...current, elements: selectedIds.reduce((elements, id) => removeElementIn(elements, id), current.elements) }));
@@ -541,6 +650,18 @@ export function TemplateStudioPage({ toolContext }) {
     if (selection.parent) changeElement(selection.parent.id, (group) => ({ ...group, children: [...(group.children || []), copy] }));
     else updatePage((current) => ({ ...current, elements: [...current.elements, copy] }));
     setSelectedIds([copy.id]);
+  }
+  function createGroupFrom({ ids, label, repeat }) {
+    const picked = page.elements.filter((element) => ids.includes(element.id));
+    setGroupDialog(false);
+    if (!picked.length) return;
+    const minX = Math.min(...picked.map((item) => Number(item.x || 0)));
+    const minY = Math.min(...picked.map((item) => Number(item.y || 0)));
+    const maxX = Math.max(...picked.map((item) => Number(item.x || 0) + Number(item.w || 0)));
+    const maxY = Math.max(...picked.map((item) => Number(item.y || 0) + Number(item.h || 0)));
+    const group = createElement("group", { label: label || "Group", x: minX - 2, y: minY - 2, w: maxX - minX + 4, h: maxY - minY + 4, repeat: repeat === "item" ? { source: "items", mode: "flow" } : null, children: picked.map((item) => ({ ...item, x: Number(item.x || 0) - minX + 2, y: Number(item.y || 0) - minY + 2 })) });
+    updatePage((current) => ({ ...current, elements: [...current.elements.filter((element) => !ids.includes(element.id)), group] }));
+    setSelectedIds([group.id]);
   }
   function groupSelection() {
     const picked = page.elements.filter((element) => selectedIds.includes(element.id));
@@ -698,6 +819,7 @@ export function TemplateStudioPage({ toolContext }) {
         <button type="button" className={primaryBtn} onClick={handleSave} disabled={busy || typeof onSave !== "function"}>{busy ? "Working…" : dirty ? "Save template" : "Saved"}</button>
       </div>
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
+      {groupDialog ? <GroupDialog elements={page.elements} preselected={selectedIds.filter((id) => page.elements.some((element) => element.id === id && element.type !== "group"))} onCancel={() => setGroupDialog(false)} onCreate={createGroupFrom} /> : null}
 
       {tab === "design" ? (
         <div className="grid items-start gap-3 lg:grid-cols-[190px_minmax(0,1fr)_300px]">
@@ -722,13 +844,13 @@ export function TemplateStudioPage({ toolContext }) {
               <p className={`${kicker} px-1`}>Add</p>
               <div className="mt-2 grid grid-cols-2 gap-1">
                 {PALETTE.map((item) => (
-                  <button key={item.type} type="button" onClick={() => addElement(item.type)} title={item.hint} className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-center transition hover:bg-[var(--surface-soft)] ${item.type === "field" || item.type === "group" ? "text-[var(--accent-ink)]" : "text-ink"}`}>
+                  <button key={item.type} type="button" onClick={() => (item.type === "group" ? setGroupDialog(true) : addElement(item.type))} title={item.hint} className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-center transition hover:bg-[var(--surface-soft)] ${item.type === "field" || item.type === "group" ? "text-[var(--accent-ink)]" : "text-ink"}`}>
                     <span className="grid size-8 place-items-center rounded-lg bg-[var(--surface-soft)] text-sm font-bold">{item.icon}</span>
                     <span className="text-[11px] font-semibold">{item.label}</span>
                   </button>
                 ))}
               </div>
-              {selectedIds.length > 1 ? <button type="button" className={`${primaryBtn} mt-2 w-full`} onClick={groupSelection}>Group {selectedIds.length} elements</button> : null}
+              {selectedIds.length > 1 ? <button type="button" className={`${primaryBtn} mt-2 w-full`} onClick={() => setGroupDialog(true)}>Group {selectedIds.length} elements…</button> : null}
             </div>
           </aside>
 
@@ -740,6 +862,7 @@ export function TemplateStudioPage({ toolContext }) {
               className="relative mx-auto bg-white shadow-[0_2px_16px_rgba(0,0,0,0.15)]"
               style={{ width: size.width * scale, height: size.height * scale, backgroundImage: page.background?.src ? `url(${page.background.src})` : "none", backgroundSize: "100% 100%" }}
             >
+              <div className="pointer-events-none absolute z-0 border border-dashed border-[var(--accent)]/35" style={{ left: margins.left * scale, top: margins.top * scale, width: (size.width - margins.left - margins.right) * scale, height: (size.height - margins.top - margins.bottom) * scale }} />
               {page.repeat?.source ? <span className="absolute left-2 top-2 z-30 rounded-md bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-bold text-white">↻ Page repeats per item</span> : null}
               {page.elements.map((element) => (
                 <CanvasElement key={element.id} element={element} selectedIds={selectedIds} sampleValues={sampleValues} sampleMode={sampleMode} onPointerDown={onPointerDown} onResizeStart={onResizeStart} scale={scale} />
@@ -753,12 +876,15 @@ export function TemplateStudioPage({ toolContext }) {
               selection={selection.element}
               parent={selection.parent}
               page={page}
+              margins={margins}
+              onChangeMargins={(patch) => update((current) => ({ ...current, margins: { ...(current.margins || defaultMargins()), ...patch } }))}
+              onAlign={alignSelection}
               agentFields={agentFields}
               onChange={changeElement}
               onChangePage={(patch) => updatePage((current) => ({ ...current, ...patch }))}
               onDelete={deleteSelected}
               onDuplicate={duplicateSelected}
-              onGroup={groupSelection}
+              onGroup={() => setGroupDialog(true)}
               onUngroup={ungroupSelection}
               onBackground={(file) => (file ? handleUpload(file, { intoPage: true }) : updatePage((current) => ({ ...current, background: null })))}
               canGroup={selectedIds.length > 0}

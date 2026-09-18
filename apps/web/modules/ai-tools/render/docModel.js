@@ -58,8 +58,12 @@ export function createPage(overrides = {}) {
   return { id: createId("page"), background: null, repeat: null, elements: [], ...overrides };
 }
 
+export function defaultMargins() {
+  return { top: PAGE_MARGIN_MM, right: PAGE_MARGIN_MM, bottom: PAGE_MARGIN_MM, left: PAGE_MARGIN_MM };
+}
+
 export function createTemplate(name = "Untitled template", format = "a4-portrait") {
-  return { version: DOC_MODEL_VERSION, name, format, pageSize: { ...PAGE_SIZES[format] }, pages: [createPage()] };
+  return { version: DOC_MODEL_VERSION, name, format, pageSize: { ...PAGE_SIZES[format] }, margins: defaultMargins(), pages: [createPage()] };
 }
 
 /** Exam starter: header + instructions (static) and a Question group repeating per item. */
@@ -322,7 +326,7 @@ export function layoutDocument(template, data = {}) {
         const gap = Number(element.gap || 4);
         const headerElements = elements.filter((item) => item !== element && Number(item.y || 0) + Number(item.h || 0) <= Number(element.y || 0) && !(item.type === "group" && item.repeat?.source));
         let cursor = Number(element.y || 0) + flowShift;
-        const limit = size.height - PAGE_MARGIN_MM;
+        const limit = size.height - Number(template.margins?.bottom ?? PAGE_MARGIN_MM);
         for (const [index, record] of records.entries()) {
           const recordContexts = record && typeof record === "object" ? [{ ...record, number: record.number ?? index + 1 }, ...contexts] : [{ value: record, label: record, number: index + 1 }, ...contexts];
           let laid = layoutGroupInstance(element, Number(element.x || 0), cursor, recordContexts, options);

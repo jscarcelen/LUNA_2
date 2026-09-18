@@ -52,7 +52,7 @@ export function GenerationProgress({ steps, tokenChars, tokenTail, elapsedMs, is
         <div>
           <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">{isGenerating ? "Building" : error ? "Stopped" : "Complete"}</p>
           <p className="m-0 mt-0.5 text-sm text-soft-ink">
-            {isGenerating && activeStep ? `${activeStep.label}…` : error ? error : "Your output is ready."}
+            {isGenerating ? (activeStep ? `${activeStep.label}…` : "Starting…") : error ? error : "Your output is ready."}
           </p>
         </div>
         <div className="flex items-center gap-3">

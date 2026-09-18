@@ -46,6 +46,7 @@ function buildJsonSchemaFromFields(fields = []) {
     if (!name) continue;
     const type = FIELD_TYPES.includes(field?.type) ? field.type : "string";
     properties[name] = type === "array" ? { type: "array", items: { type: "string" } } : { type };
+    if (field?.description) properties[name].description = String(field.description);
     required.push(name);
   }
 
@@ -174,6 +175,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
           content: JSON.stringify({
             task: "Generate agent output",
             agentInstructions: config.instructions || "",
+            outputFields: (config.template?.fields || []).map((field) => ({ name: field.name, meaning: field.description || field.label || field.name })),
             contextPrompt: config.contextPrompt || "",
             questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
             outputExample: config.outputExample || "",

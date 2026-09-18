@@ -235,7 +235,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [fieldTypeByName, setFieldTypeByName] = useState({});
   const [fieldMappingByTemplateField, setFieldMappingByTemplateField] = useState({});
   const [customization, setCustomization] = useState({ brand: defaultBrand(), hiddenFields: [], fieldOrder: [] });
-  const [outputTab, setOutputTab] = useState("layout");
+  const [outputTab, setOutputTab] = useState("fields");
 
   const [output, setOutput] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
@@ -482,7 +482,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!agentConfig || generation.isGenerating) return;
     setStatusMessage("");
     setFlowStep(2);
-    setOutputTab("layout");
+    setOutputTab("fields");
     try {
       const questionAnswers = questions.map((question) => ({ question: question.text, answer: answersByQuestionId[question.id] }));
       const data = await generation.generate({
@@ -741,10 +741,32 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-                {[{ id: "layout", label: "Layout" }, { id: "style", label: "Styling" }].map((tab) => (
+                {[{ id: "fields", label: "Output fields" }, { id: "layout", label: "Template" }, { id: "style", label: "Styling" }].map((tab) => (
                   <button key={tab.id} type="button" onClick={() => setOutputTab(tab.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${outputTab === tab.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>{tab.label}</button>
                 ))}
               </div>
+              {outputTab === "fields" ? (
+                <div className="mt-4 grid gap-3">
+                  <div>
+                    <p className={kicker}>What this agent produces</p>
+                    <p className="m-0 mt-1 text-xs text-soft-ink">Each item the agent returns has these fields. They are fixed for this agent and are the names a template must use.</p>
+                  </div>
+                  <ul className="m-0 grid list-none gap-1.5 p-0">
+                    {agentFields.map((field) => (
+                      <li key={field.name} className="rounded-xl border border-ink/8 bg-white px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-xs text-[var(--accent-ink)]">{field.name}</span>
+                          <span className="text-sm font-semibold text-ink">{field.label || field.name}</span>
+                          <span className={chipClass}>{field.type === "array" ? "list of values" : field.type}</span>
+                          <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
+                        </div>
+                        {field.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{field.description}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setOutputTab("layout")}>Choose a template →</button>
+                </div>
+              ) : null}
               {outputTab === "layout" ? (
                 <div className="mt-4 grid gap-3">
                   <div>
@@ -770,8 +792,9 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                   </div>
                   {activeTemplate ? (
                     <div>
-                      <p className={kicker}>Match fields</p>
-                      <p className="m-0 mt-1 text-xs text-soft-ink">Tell the template which agent field fills each slot. Matching names are filled in for you.</p>
+                      <p className={kicker}>Map template fields to agent fields</p>
+                      <p className="m-0 mt-1 text-xs text-soft-ink">Each slot in the template must be filled by one agent field. Matching names were pre-filled — check them and change any you want.</p>
+                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{templateFields.filter((field) => fieldMappingByTemplateField[field.name]).length} of {templateFields.length} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
                       <div className="mt-2 grid gap-2">
                         {templateFields.map((field) => (
                           <div className="grid gap-1 sm:grid-cols-[1fr_1fr] sm:items-center" key={field.id || field.name}>

@@ -24,7 +24,8 @@ export function normalizeConfig(input = {}) {
             name: String(field?.name || "").trim(),
             label: String(field?.label || field?.name || "").trim(),
             type: ["string", "number", "boolean", "array"].includes(field?.type) ? field.type : "string",
-            repeatScope: field?.repeatScope === "once" ? "once" : "per-output"
+            repeatScope: field?.repeatScope === "once" ? "once" : "per-output",
+            description: String(field?.description || "").trim()
           }))
           .filter((field) => field.name)
         : []

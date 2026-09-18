@@ -25,13 +25,13 @@ export const QUIZ_AGENT = {
   ],
   template: {
     fields: [
-      { name: "question", label: "Question", type: "string", repeatScope: "per-output" },
-      { name: "type", label: "Question type", type: "string", repeatScope: "per-output" },
-      { name: "options", label: "Answer options", type: "array", repeatScope: "per-output" },
-      { name: "answer", label: "Correct answer", type: "string", repeatScope: "per-output" },
-      { name: "explanation", label: "Explanation", type: "string", repeatScope: "per-output" },
-      { name: "topic", label: "Topic", type: "string", repeatScope: "per-output" },
-      { name: "difficulty", label: "Difficulty", type: "string", repeatScope: "per-output" }
+      { name: "question", label: "Question", type: "string", repeatScope: "per-output", description: "The question text, self-contained and unambiguous." },
+      { name: "type", label: "Question type", type: "string", repeatScope: "per-output", description: "One of: multiple-choice, true-false, short-answer." },
+      { name: "options", label: "Answer options", type: "array", repeatScope: "per-output", description: "Answer choices in display order (4 for multiple choice, 2 for true/false, empty for short answer)." },
+      { name: "answer", label: "Correct answer", type: "string", repeatScope: "per-output", description: "The correct option text, or the model answer for short-answer questions." },
+      { name: "explanation", label: "Explanation", type: "string", repeatScope: "per-output", description: "One sentence explaining why the answer is correct." },
+      { name: "topic", label: "Topic", type: "string", repeatScope: "per-output", description: "Short topic tag taken from the material (e.g. 'Central tendency')." },
+      { name: "difficulty", label: "Difficulty", type: "string", repeatScope: "per-output", description: "easy, medium or hard." }
     ]
   },
   model: "gpt-4o-mini",

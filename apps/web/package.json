@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:docx-fidelity": "vitest run tests/document-processing/cdm-v2-fidelity.test.js"
+    "test:docx-fidelity": "vitest run tests/document-processing/cdm-v2-fidelity.test.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.0",
@@ -36,8 +37,12 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^22.20.3",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
     "postcss": "^8.5.23",
     "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3",
     "vitest": "^2.1.9"
   }
 }

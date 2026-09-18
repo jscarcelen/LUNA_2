@@ -23,20 +23,21 @@ function hexToRgb(hex = "#1d1d1f") {
 
 /* ------------------------------------------------------------------------------ HTML */
 
-export function renderDocHtml(template, data = {}, { showFieldMarkers = false } = {}) {
-  const { pages } = layoutDocument(template, data);
+export function renderDocHtml(template, data = {}, { showFieldMarkers = false, prelaid = null } = {}) {
+  const { pages } = prelaid || layoutDocument(template, data);
   const pageHtml = pages.map((page) => {
-    const bg = page.background?.src ? `<img src="${escapeHtml(page.background.src)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none;" />` : "";
+    const bg = page.background?.src ? `<img src="${escapeHtml(page.background.src)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none;opacity:${page.background.opacity ?? 1};" />` : "";
+    const pageColor = page.background?.color || "#fff";
     const items = page.items.map((item) => {
       const base = `position:absolute;left:${item.x}mm;top:${item.y}mm;width:${item.w}mm;`;
-      if (item.type === "rect") return `<div style="${base}height:${item.h}mm;background:${item.style.fill || "transparent"};border:${item.style.stroke ? `0.3mm solid ${item.style.stroke}` : "0"};border-radius:${item.style.radius || 0}mm;"></div>`;
+      if (item.type === "rect") return `<div style="${base}height:${item.h}mm;background:${item.style.fill || "transparent"};border:${item.style.stroke ? `${item.style.strokeWidth || 0.3}mm solid ${item.style.stroke}` : "0"};border-radius:${item.ellipse ? "50%" : `${item.style.radius || 0}mm`};opacity:${item.style.opacity ?? 1};"></div>`;
       if (item.type === "line") return `<div style="${base}height:0;border-top:${Math.max(0.3, item.h)}mm solid ${item.style.stroke || "#d2d2d7"};"></div>`;
       if (item.type === "image") return item.src ? `<img src="${escapeHtml(item.src)}" alt="" style="${base}height:${item.h}mm;object-fit:contain;" />` : `<div style="${base}height:${item.h}mm;border:0.3mm dashed #c7c7cc;border-radius:1mm;"></div>`;
       const marker = showFieldMarkers && item.isField ? `<span style="position:absolute;top:-3.2mm;left:0;font-size:6pt;color:#0060c0;background:#eef2ff;padding:0 1mm;border-radius:1mm;">AI · ${escapeHtml(item.path)}</span>` : "";
       const fieldStyle = item.isField && !item.hasValue ? "color:#0060c0;background:rgba(0,113,227,0.06);border-radius:1mm;" : "";
       return `<div style="${base}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.lines.map(escapeHtml).join("\n")}</div>`;
     }).join("\n");
-    return `<section class="doc-page" style="position:relative;width:${page.width}mm;height:${page.height}mm;background:#fff;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.12);margin:0 auto 10mm;page-break-after:always;">${bg}${items}</section>`;
+    return `<section class="doc-page" style="position:relative;width:${page.width}mm;height:${page.height}mm;background:${pageColor};overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.12);margin:0 auto 10mm;page-break-after:always;">${bg}${items}</section>`;
   }).join("\n");
   return `<style>@media print{.doc-page{box-shadow:none;margin:0;}}</style><div class="doc-pages">${pageHtml}</div>`;
 }
@@ -64,8 +65,8 @@ async function embedImage(pdf, src) {
   return null;
 }
 
-export async function renderDocPdfBuffer(template, data = {}) {
-  const { size, pages } = layoutDocument(template, data);
+export async function renderDocPdfBuffer(template, data = {}, { prelaid = null } = {}) {
+  const { size, pages } = prelaid || layoutDocument(template, data);
   const pdf = await PDFDocument.create();
   const fonts = {
     sans: await pdf.embedFont(StandardFonts.Helvetica),
@@ -146,8 +147,8 @@ export async function renderDocPdfBuffer(template, data = {}) {
 
 /* ------------------------------------------------------------------------------ DOCX (flow approximation) */
 
-export async function renderDocDocxBuffer(template, data = {}) {
-  const { pages } = layoutDocument(template, data);
+export async function renderDocDocxBuffer(template, data = {}, { prelaid = null } = {}) {
+  const { pages } = prelaid || layoutDocument(template, data);
   const children = [];
   for (const [pageIndex, page] of pages.entries()) {
     if (pageIndex > 0) children.push(new Paragraph({ pageBreakBefore: true, children: [] }));
@@ -179,9 +180,9 @@ export async function renderDocDocxBuffer(template, data = {}) {
 
 /* ------------------------------------------------------------------------------ PPTX */
 
-export async function renderDocPptxBuffer(template, data = {}) {
+export async function renderDocPptxBuffer(template, data = {}, { prelaid = null } = {}) {
   const { default: PptxGenJS } = await import("pptxgenjs");
-  const { size, pages } = layoutDocument(template, data);
+  const { size, pages } = prelaid || layoutDocument(template, data);
   const pptx = new PptxGenJS();
   const toIn = (mm) => mm / 25.4;
   pptx.defineLayout({ name: "LUNA", width: toIn(size.width), height: toIn(size.height) });

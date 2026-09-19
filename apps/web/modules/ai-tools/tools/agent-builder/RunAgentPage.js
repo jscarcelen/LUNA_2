@@ -384,23 +384,33 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         issues.push(`"${mappedAgentFieldName}" does not exist in this agent.`);
         continue;
       }
-      if (mappedAgentField.frequency !== templateField.frequency) {
-        issues.push(`"${templateField.label || templateField.name}" repeats ${templateField.frequency === "loop" ? "per item" : "once"}, but "${mappedAgentField.label || mappedAgentField.name}" ${mappedAgentField.frequency === "loop" ? "repeats per item" : "appears once"}.`);
-      }
     }
     return issues;
   }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
+  const mappingWarnings = useMemo(() => {
+    if (!activeTemplate) return [];
+    const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
+    return templateFields.flatMap((templateField) => {
+      const mapped = agentFieldsByName[fieldMappingByTemplateField[templateField.name]];
+      if (!mapped || mapped.frequency === templateField.frequency) return [];
+      return [`"${templateField.label || templateField.name}" appears ${templateField.frequency === "loop" ? "per item" : "once"} in the template but "${mapped.label || mapped.name}" is ${mapped.frequency === "loop" ? "per item — only the first item will show there" : "once — it will repeat the same value"}.`];
+    });
+  }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
   const mappingReady = !activeTemplate || (templateFields.length > 0 && mappingIssues.length === 0);
 
-  // Auto-map template fields whose name/label matches an agent field.
+  // When the template changes: drop mappings that don't belong to it and auto-map by name
+  // (matching frequency preferred, any frequency accepted) so the preview refreshes immediately.
+  const templateFieldKey = templateFields.map((field) => field.name).join("|");
   useEffect(() => {
-    if (!activeTemplate || !templateFields.length) return;
     setFieldMappingByTemplateField((previous) => {
-      const next = { ...previous };
+      const next = {};
+      for (const templateField of templateFields) if (previous[templateField.name]) next[templateField.name] = previous[templateField.name];
       const used = new Set(Object.values(next));
+      const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
       for (const templateField of templateFields) {
         if (next[templateField.name]) continue;
-        const match = agentFields.find((agentField) => !used.has(agentField.name) && agentField.frequency === templateField.frequency && [agentField.name, agentField.label].map((value) => String(value || "").toLowerCase()).includes(String(templateField.name).toLowerCase()));
+        const candidates = agentFields.filter((agentField) => !used.has(agentField.name) && [agentField.name, agentField.label].map(norm).includes(norm(templateField.name)));
+        const match = candidates.find((agentField) => agentField.frequency === templateField.frequency) || candidates[0];
         if (match) {
           next[templateField.name] = match.name;
           used.add(match.name);
@@ -408,7 +418,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       }
       return next;
     });
-  }, [activeTemplate, templateFields, agentFields]);
+  }, [templateId, templateFieldKey, agentFields, templateFields]);
 
   function setFieldType(name, type) {
     setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
@@ -821,12 +831,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                             <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">{field.label || field.name}<span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span></span>
                             <select className={fieldClass} value={fieldMappingByTemplateField[field.name] || ""} onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}>
                               <option value="">Choose…</option>
-                              {agentFields.filter((agentField) => agentField.frequency === field.frequency).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}</option>)}
+                              {[...agentFields].sort((a, b) => Number(b.frequency === field.frequency) - Number(a.frequency === field.frequency)).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}{agentField.frequency === field.frequency ? "" : agentField.frequency === "loop" ? " (per item)" : " (once)"}</option>)}
                             </select>
                           </div>
                         ))}
                         {!templateFields.length ? <p className="m-0 text-xs text-[var(--color-danger)]">This template has no field tags yet. Open it in the Template Builder and tag its blocks.</p> : null}
                         {mappingIssues.length ? <p className="m-0 text-xs text-[var(--color-warn)]">{mappingIssues[0]}</p> : null}
+                        {mappingWarnings.map((warning) => <p key={warning} className="m-0 text-xs text-soft-ink">⚠ {warning}</p>)}
                       </div>
                     </div>
                   ) : null}

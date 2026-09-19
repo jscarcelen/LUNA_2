@@ -1,5 +1,12 @@
 # LUNA — Claude Code project guide
 
+## Product vision — read first
+
+**`docs/LUNA_VISION.md` is the source of truth for the idea** (profiles, archetypes, key
+functionality, tracking, revenue model, agent principles) and every change must be checked against
+its alignment checklist. Invoke the `luna-vision` skill (`.claude/skills/luna-vision/SKILL.md`)
+before planning or implementing, and append any new founder context to that document.
+
 ## What LUNA is
 
 LUNA is an education platform where teachers, students and (eventually) parents upload course

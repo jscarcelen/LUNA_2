@@ -71,6 +71,22 @@ export function createLayout(name: string, preset = "a4-portrait", overrides: Pa
   return { id: createId("lay"), name, class: spec.class, canvas: { ...spec.canvas }, margins: { ...DEFAULT_MARGINS }, views: [createView("Default")], pages: [createPage()], ...overrides };
 }
 
+/** New layout at another page size with the source layout's elements copied and scaled to the new width. */
+export function cloneLayoutForPreset(source: Layout, name: string, preset: string): Layout {
+  const created = createLayout(name, preset);
+  const ratio = created.canvas.width / source.canvas.width;
+  const scale = (element: Element): Element => {
+    const frame = { x: element.frame.x * ratio, y: element.frame.y * ratio, w: element.frame.w * ratio, h: element.frame.h * ratio };
+    const style = element.style.fontSize ? { ...element.style, fontSize: Math.max(6, Math.round(element.style.fontSize * ratio * 10) / 10) } : element.style;
+    const next = { ...element, id: createId("el"), frame, style } as Element;
+    if (next.type === "group") next.children = next.children.map(scale);
+    return next;
+  };
+  created.margins = { top: source.margins.top * ratio, right: source.margins.right * ratio, bottom: source.margins.bottom * ratio, left: source.margins.left * ratio };
+  created.pages = source.pages.map((page) => createPage({ background: page.background, elements: page.elements.map(scale) }));
+  return created;
+}
+
 export function createField(name: string, type: FieldType, overrides: Partial<FieldDef> = {}): FieldDef {
   return { id: createId("fld"), name, type, ...overrides };
 }

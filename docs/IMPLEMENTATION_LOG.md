@@ -472,3 +472,11 @@
 - `outputSkeleton()` renders a commented JSON skeleton; the prompt's `OUTPUT STRUCTURE` section and the Output step's "JSON structure the agent will return" panel both show it, so the structure the model must return is explicit.
 - Runtime accepts list-less output (`items` defaults to `[]` when the schema has no list); count / no-duplicate checks and hints only apply when a list exists.
 - Tester renders each top-level field generically (once fields as boxes, each list as numbered cards).
+
+## Template Studio: simpler editor (2026-09-19)
+
+- Top bar: name (inline rename) · Saved/Unsaved · Save · View selector (every layout+view pair as one "view") · size · Design | Views | Data | Preview | Export · undo/redo.
+- **Views mode** (`views/ViewsMode.tsx`): cards per view (formats, size, page count from sample data), New view dialog (name, description, size, export formats; same size shares elements, other size copies + scales them via `cloneLayoutForPreset`), View settings (name, description, exports, per-element visibility, delete). `View` gained `description` and `exports`; Export offers only the view's formats.
+- Add panel: Basic (Text, Heading, Image, Box, Line, Table soon) · AI fields (AI text, AI image) · Premium (built-in blocks) · Custom (my blocks), with search.
+- AI field inspector (`AiFieldPanel`): field name · type · Repeat (Once / Repeat per item / One item per page). Repeat wraps the element in a repeating group bound to the first list (creating the list/item field when needed); Once moves it back to a document-level field.
+- Layers: ▲▼ order, 👁 hide in this view, lock.

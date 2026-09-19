@@ -78,6 +78,21 @@ Consequences for the product:
     - **Canvas-style blocks** — e.g. a custom "exam question tag" block. Pure design, like the
       premium elements of Canva.
 
+
+### 5.1a Template Studio — editor model (founder spec, 2026-09-19)
+
+- A **Template** is a reusable visual document structure with **multiple Views**; a View is one output of the same template (e.g. printable exam without answers / with answers, PPT one question per slide, answer key, teacher version). A View can differ in element visibility, order, position, page/slide size, export formats and page structure; the elements stay reusable across views.
+- **Left sidebar** = Basic (Text, Heading, Image, Box/Shape, Line/Divider, Table) · **AI fields** · **Premium** pre-built components (Question card, Flashcard, Report structure, Header, Footer, Callout, Section header, Answer box…) · **Custom** (groups saved as reusable components).
+- An **AI field is simply text or image + a field name + a type** (plain text, rich text, number, date, boolean…) + **iteration**: once per document / repeat per page / repeat per item. It behaves like a normal text/image element on the canvas. This is preferred over a complex "AI component" system.
+- **Canvas**: drag, resize, move, multi-select, group, duplicate, delete, reorder, clear selection, undo/redo — Canva-like but much simpler.
+- **Right sidebar** is contextual: page settings when nothing is selected; text styling; AI field (name, type, repeat, styling, visibility); component settings.
+- **Top bar**: template name (editable inline) · Saved/Unsaved · Save · View selector · page size · Design | Data | Preview | Export.
+- **View management** screen: cards per view (name, formats, size, page count) + New view; view settings = name, description, size (A4, Letter, PPT 16:9, custom), visible elements, order, positioning, export formats.
+- **Layers** panel like Canva: reorder, hide/show, group/ungroup, lock.
+- **Data tab** explains field → agent output mapping; the editor never depends on an agent.
+- **Export**: PDF, Word, PowerPoint, HTML at the View level, respecting size, position, visibility, repeats, order, styling.
+- Philosophy: Canva (visual) + Notion (blocks) + Google Docs (structure) + Luna (AI content), but much simpler than Canva; avoid too many buttons, nested menus, technical terms, separate editors per format, over-complex AI fields. Mental model: create template → name → view → add elements → design → add AI fields → define repeats → more views → preview → export.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).
@@ -312,3 +327,4 @@ Set de guardrails
 
 ## Appendix B — Change log of this document
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.
+- 2026-09-19 — Added §5.1a Template Studio editor model (founder's detailed spec: views, element categories, AI field = text/image + name + type + repeat, contextual inspector, layers, export per view).

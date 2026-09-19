@@ -14,6 +14,7 @@ import { importPages } from "../pdfImport";
 import { fieldsInScope } from "./inspector/ContentTab";
 import { blockFromElements, instantiateBlock, removeBlockFromLibrary, saveBlockToLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { BlockDialog } from "./BlockDialog";
+import type { RepeatChoice } from "./inspector/AiFieldPanel";
 
 function parentChainOf(elements: Element[], id: ID): GroupElement[] {
   const chain: GroupElement[] = [];
@@ -68,13 +69,14 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
     const element = def.create();
     const lastBottom = Math.max(margins.top, ...pg.elements.map((item) => item.frame.y + item.frame.h));
     if (target) element.frame = { ...element.frame, x: 3, y: Math.max(2, (target.children.reduce((max, child) => Math.max(max, child.frame.y + child.frame.h), 0) || 0) + 2), w: Math.max(20, target.frame.w - 6) };
-    else element.frame = { ...element.frame, x: margins.left, y: Math.min(lastBottom + 4, canvas.height - margins.bottom - 12), w: type === "image" ? Math.min(50, contentWidth) : contentWidth };
-    if (type === "field" && element.type === "text") {
+    else element.frame = { ...element.frame, x: margins.left, y: Math.min(lastBottom + 4, canvas.height - margins.bottom - 12), w: type === "image" || type === "field_image" ? Math.min(50, contentWidth) : contentWidth };
+    if (type === "field_image") element.frame = { ...element.frame, w: Math.min(60, contentWidth), h: 40 };
+    if ((type === "field" && element.type === "text") || (type === "field_image" && element.type === "image")) {
       const { scope } = fieldsInScope(target ? [...parentChain, target] : parentChain, template.fields);
       const unused = scope.find((item) => !usesField(pg.elements, item.id)) || scope[0];
       element.source = { type: "field", fieldId: unused?.id || "" };
       if (!unused) {
-        const created = createField("New field", "text");
+        const created = createField(type === "field_image" ? "Image" : "New field", type === "field_image" ? "image" : "text");
         addField(created, target?.repeat ? findField(template.fields, target.repeat.fieldId)?.id || null : null);
         element.source = { type: "field", fieldId: created.id };
       }
@@ -87,6 +89,55 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
     else updatePage((current) => ({ ...current, elements: [...current.elements, element] }));
     select([element.id]);
   }
+  /* ---------- AI field helpers: rename / retype a field; repeat by wrapping in a group */
+  function renameField(fieldId: string, name: string) {
+    update((current) => {
+      const walk = (list: FieldDef[]): FieldDef[] => list.map((f) => (f.id === fieldId ? { ...f, name } : f.children ? { ...f, children: walk(f.children) } : f));
+      return { ...current, fields: walk(current.fields) };
+    });
+  }
+  function retypeField(fieldId: string, type: FieldDef["type"]) {
+    update((current) => {
+      const walk = (list: FieldDef[]): FieldDef[] => list.map((f) => (f.id === fieldId ? { ...f, type } : f.children ? { ...f, children: walk(f.children) } : f));
+      return { ...current, fields: walk(current.fields) };
+    });
+    if (selected.element?.type === "text") updateElements(selected.element.id, (el) => ({ ...el, format: type === "rich_text" ? "rich" : (el as { format: "plain" | "rich" }).format } as Element));
+  }
+  function setFieldRepeat(choice: RepeatChoice) {
+    const el = selected.element;
+    if (!el || (el.type !== "text" && el.type !== "image") || el.source.type !== "field") return;
+    const repeatGroup = [...parentChain].reverse().find((group) => group.repeat) || null;
+    if (choice === "once") {
+      if (!repeatGroup) return;
+      // Move the field to the document level: bind to (or create) a root scalar with the same name, take it out of the group.
+      const bound = findField(template.fields, el.source.fieldId);
+      const rootMatch = template.fields.find((f) => f.type !== "array" && f.type !== "object" && bound && f.name.toLowerCase() === bound.name.toLowerCase());
+      const rootField = rootMatch || createField(bound?.name || "Field", bound?.type || "text");
+      if (!rootMatch) addField(rootField, null);
+      const moved = { ...el, source: { type: "field" as const, fieldId: rootField.id }, frame: { ...el.frame, x: el.frame.x + repeatGroup.frame.x, y: el.frame.y + repeatGroup.frame.y } } as Element;
+      updatePage((current) => ({ ...current, elements: [...removeElements(current.elements, [el.id]), moved] }));
+      select([moved.id]);
+      return;
+    }
+    const mode = choice === "page" ? "page" : "flow";
+    if (repeatGroup) {
+      updateElements(repeatGroup.id, (group) => ({ ...(group as GroupElement), repeat: { ...(group as GroupElement).repeat!, mode } } as Element));
+      return;
+    }
+    // Wrap in a repeating group bound to the first list (or a new "Items" list) and move the field into that list.
+    const list = arrayField() || createField("Items", "array", { children: [createField("item", "object", { children: [] })] });
+    if (!arrayField()) addField(list, null);
+    const bound = findField(template.fields, el.source.fieldId);
+    const itemFields = arrayItemFields(list);
+    const itemMatch = itemFields.find((f) => bound && f.name.toLowerCase() === bound.name.toLowerCase());
+    const itemField = itemMatch || createField(bound?.name || "Field", bound?.type || "text");
+    if (!itemMatch) addField(itemField, list.id);
+    const inner = { ...el, source: { type: "field" as const, fieldId: itemField.id }, frame: { ...el.frame, x: 0, y: 0 } } as Element;
+    const group = createGroup({ name: `${itemField.name} (repeats)`, frame: { x: el.frame.x, y: el.frame.y, w: el.frame.w, h: el.frame.h + 2 }, layout: { mode: "vertical", gap: 3 }, repeat: { fieldId: list.id, mode }, children: [inner] });
+    updatePage((current) => ({ ...current, elements: [...removeElements(current.elements, [el.id]), group] }));
+    select([inner.id]);
+  }
+
   /* ---------- blocks (pre-made objects) */
   function addBlock(block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }) {
     const { fields, elements: created } = instantiateBlock(block, template.fields, options);
@@ -215,10 +266,31 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
 
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
-      <aside className="grid gap-3">
+      <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         <AddPanel onAdd={addElement} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
         <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />
-        <LayersPanel page={pg} selection={state.selection} onSelect={(id, additive) => select(additive ? [...new Set([...state.selection, id])] : [id])} onToggleLock={(id) => updateElements(id, (element) => ({ ...element, locked: !element.locked }))} />
+        <LayersPanel
+          page={pg}
+          selection={state.selection}
+          viewId={view?.id || ""}
+          onSelect={(id, additive) => select(additive ? [...new Set([...state.selection, id])] : [id])}
+          onToggleLock={(id) => updateElements(id, (element) => ({ ...element, locked: !element.locked }))}
+          onToggleVisible={(id) => updateElements(id, (element) => {
+            const all = layout!.views.map((v) => v.id);
+            const current = element.visibility.views || all;
+            const on = current.includes(view?.id || "");
+            const next = on ? current.filter((v) => v !== view?.id) : [...new Set([...current, view?.id || ""])];
+            return { ...element, visibility: { views: next.length === all.length ? undefined : next } };
+          })}
+          onMove={(id, direction) => updatePage((current) => {
+            const reorder = (list: Element[]): Element[] => {
+              const index = list.findIndex((item) => item.id === id);
+              if (index >= 0) { const next = [...list]; const target = index + direction; if (target < 0 || target >= next.length) return list; [next[index], next[target]] = [next[target], next[index]]; return next; }
+              return list.map((item) => (item.type === "group" ? { ...item, children: reorder(item.children) } : item));
+            };
+            return { ...current, elements: reorder(current.elements) };
+          })}
+        />
       </aside>
       <Canvas
         layout={layout}
@@ -250,6 +322,9 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         onChangeLayout={updateLayout}
         onBackgroundFile={backgroundFile}
         onAddField={addField}
+        onRenameField={renameField}
+        onRetypeField={retypeField}
+        onSetRepeat={setFieldRepeat}
       />
       {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
     </div>

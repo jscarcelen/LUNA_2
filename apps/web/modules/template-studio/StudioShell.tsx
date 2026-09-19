@@ -1,58 +1,65 @@
 "use client";
 
 import { useState } from "react";
-import { CANVAS_PRESETS } from "./engine/model";
 import type { Store } from "./state/useTemplateStore";
 import { card, fieldBase, ghostBtn, primaryBtn } from "./ui";
 import { Segmented } from "./design/inspector/Segmented";
+import { NewViewDialog } from "./views/NewViewDialog";
 
-/** Top bar: name · Layout · View · Design | Data | Preview | Export · sample toggle · Save. */
+export function sizeLabel(layout: { class: string; canvas: { width: number; height: number } }): string {
+  const { width, height } = layout.canvas;
+  if (layout.class === "slides") return width / height > 1.5 ? "Slides 16:9" : "Slides 4:3";
+  if (width === 210 && height === 297) return "A4";
+  if (width === 297 && height === 210) return "A4 landscape";
+  if (width === 216 && height === 279) return "Letter";
+  if (width === 148 && height === 105) return "Card A6";
+  return `${width}×${height} mm`;
+}
+
+/**
+ * Top bar — name · saved state · Save | View · size | Design · Views · Data · Preview · Export | undo/redo.
+ * Everything else lives in the side panels; keep this row calm.
+ */
 export function StudioShell({ store, busy, status, onSave, onDelete, onBack }: { store: Store; busy: boolean; status: string; onSave: () => void; onDelete: () => void; onBack: () => void }) {
   const { state, layout, view } = store;
   const template = state.template!;
-  const [adding, setAdding] = useState<"layout" | "view" | null>(null);
-  const [draft, setDraft] = useState("");
-  const [preset, setPreset] = useState("slides-16-9");
+  const [editingName, setEditingName] = useState(false);
+  const [newView, setNewView] = useState(false);
   if (!layout) return null;
-
-  function commit() {
-    if (!draft.trim()) return;
-    if (adding === "layout") store.addLayout(draft.trim(), preset);
-    if (adding === "view") store.addView(draft.trim());
-    setAdding(null);
-    setDraft("");
-  }
+  const outputs = template.layouts.flatMap((item) => item.views.map((v) => ({ layout: item, view: v })));
+  const key = `${layout.id}::${view?.id || ""}`;
 
   return (
     <>
-      <div className={`${card} flex flex-wrap items-center gap-2 px-4 py-2.5`}>
-        <button type="button" className={ghostBtn} onClick={onBack} title="Back to templates">‹</button>
-        <input className={`${fieldBase} min-w-44 font-semibold`} value={template.name} onChange={(event) => store.update((current) => ({ ...current, name: event.target.value }))} aria-label="Template name" />
-        <select className={fieldBase} value={layout.id} onChange={(event) => (event.target.value === "__new" ? setAdding("layout") : store.dispatch({ type: "setLayout", id: event.target.value }))} aria-label="Layout">
-          {template.layouts.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.class === "slides" ? "slides" : `${item.canvas.width}×${item.canvas.height}`}</option>)}
-          <option value="__new">＋ New layout…</option>
-        </select>
-        <select className={fieldBase} value={view?.id || ""} onChange={(event) => (event.target.value === "__new" ? setAdding("view") : store.dispatch({ type: "setView", id: event.target.value }))} aria-label="View">
-          {layout.views.map((item) => <option key={item.id} value={item.id}>View: {item.name}</option>)}
-          <option value="__new">＋ New view…</option>
-        </select>
-        <div className="mx-auto"><Segmented size="md" value={state.mode} options={[["design", "Design"], ["data", "Data"], ["preview", "Preview"], ["export", "Export"]]} onChange={(mode) => store.dispatch({ type: "setMode", mode })} /></div>
-        {state.mode === "design" ? <label className="flex items-center gap-2 text-xs font-semibold text-ink"><input type="checkbox" checked={state.sampleMode} onChange={(event) => store.dispatch({ type: "setSample", on: event.target.checked })} />Sample data</label> : null}
-        <button type="button" className={ghostBtn} disabled={!state.history.length} onClick={() => store.dispatch({ type: "undo" })} title="Undo">↶</button>
-        <button type="button" className={ghostBtn} disabled={!state.future.length} onClick={() => store.dispatch({ type: "redo" })} title="Redo">↷</button>
-        {state.savedId ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={onDelete}>Delete</button> : null}
-        <button type="button" className={primaryBtn} onClick={onSave} disabled={busy || !state.dirty}>{busy ? "Working…" : state.dirty ? "Save template" : "Saved"}</button>
+      <div className={`${card} flex flex-wrap items-center gap-2 px-4 py-2`}>
+        <button type="button" className={`${ghostBtn} px-3`} onClick={onBack} title="Back to templates">‹</button>
+        {editingName ? (
+          <input autoFocus className={`${fieldBase} min-w-56 font-semibold`} value={template.name} onChange={(event) => store.update((current) => ({ ...current, name: event.target.value }))} onBlur={() => setEditingName(false)} onKeyDown={(event) => event.key === "Enter" && setEditingName(false)} aria-label="Template name" />
+        ) : (
+          <button type="button" className="max-w-56 truncate rounded-lg px-2 py-1 text-left text-base font-bold text-ink hover:bg-[var(--surface-soft)]" title="Rename" onClick={() => setEditingName(true)}>{template.name || "Untitled template"} <span className="text-xs font-normal text-soft-ink">✎</span></button>
+        )}
+        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${state.dirty ? "text-[#b25e00]" : "text-[#2f9e5b]"}`}><span className={`size-1.5 rounded-full ${state.dirty ? "bg-[#e0730f]" : "bg-[#2f9e5b]"}`} />{state.dirty ? "Unsaved changes" : "Saved"}</span>
+        <button type="button" className={`${primaryBtn} px-4 py-1.5`} onClick={onSave} disabled={busy || !state.dirty}>{busy ? "Saving…" : "Save"}</button>
+
+        <span className="mx-1 hidden h-6 w-px bg-ink/10 sm:block" />
+
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink">View
+          <select className={`${fieldBase} max-w-48 py-1.5 text-sm`} value={key} onChange={(event) => { if (event.target.value === "__new") { setNewView(true); return; } const [layoutId, viewId] = event.target.value.split("::"); store.setOutput(layoutId, viewId); }} aria-label="View">
+            {outputs.map(({ layout: l, view: v }) => <option key={`${l.id}::${v.id}`} value={`${l.id}::${v.id}`}>{v.name} · {sizeLabel(l)}</option>)}
+            <option value="__new">＋ New view…</option>
+          </select>
+        </label>
+        <span className="hidden rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-[11px] font-semibold text-soft-ink xl:inline">{sizeLabel(layout)} · {layout.canvas.width}×{layout.canvas.height} mm</span>
+
+        <div className="mx-auto"><Segmented size="md" value={state.mode} options={[["design", "Design"], ["views", "Views"], ["data", "Data"], ["preview", "Preview"], ["export", "Export"]]} onChange={(mode) => store.dispatch({ type: "setMode", mode })} /></div>
+
+        {state.mode === "design" ? <label className="flex items-center gap-1.5 text-xs font-semibold text-ink"><input type="checkbox" checked={state.sampleMode} onChange={(event) => store.dispatch({ type: "setSample", on: event.target.checked })} />Sample data</label> : null}
+        <button type="button" className={`${ghostBtn} px-2.5`} disabled={!state.history.length} onClick={() => store.dispatch({ type: "undo" })} title="Undo (⌘Z)">↶</button>
+        <button type="button" className={`${ghostBtn} px-2.5`} disabled={!state.future.length} onClick={() => store.dispatch({ type: "redo" })} title="Redo (⇧⌘Z)">↷</button>
+        {state.savedId ? <button type="button" className="rounded-full px-2 py-1 text-xs font-semibold text-soft-ink hover:text-[var(--color-danger)]" onClick={onDelete} title="Delete template">Delete</button> : null}
       </div>
-      {adding ? (
-        <div className={`${card} flex flex-wrap items-center gap-2 px-4 py-3`}>
-          <span className="text-sm font-semibold text-ink">{adding === "layout" ? "New layout" : "New view"}</span>
-          <input autoFocus className={fieldBase} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => event.key === "Enter" && commit()} placeholder={adding === "layout" ? "Presentation" : "Answer key"} />
-          {adding === "layout" ? <select className={fieldBase} value={preset} onChange={(event) => setPreset(event.target.value)}>{Object.entries(CANVAS_PRESETS).map(([key, spec]) => <option key={key} value={key}>{spec.label}</option>)}</select> : <span className="text-xs text-soft-ink">Inherits this layout; hide or restyle elements per view.</span>}
-          <button type="button" className={primaryBtn} onClick={commit} disabled={!draft.trim()}>Create</button>
-          <button type="button" className={ghostBtn} onClick={() => setAdding(null)}>Cancel</button>
-        </div>
-      ) : null}
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
+      {newView ? <NewViewDialog layout={layout} onClose={() => setNewView(false)} onCreate={(input) => { store.addOutput(input); setNewView(false); store.dispatch({ type: "setMode", mode: "design" }); }} /> : null}
     </>
   );
 }

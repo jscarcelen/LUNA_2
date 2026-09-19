@@ -67,6 +67,9 @@ export interface ElementOverride {
 export interface View {
   id: ID;
   name: string;
+  description?: string;
+  /** Formats offered for this view; undefined = every format of the layout class. */
+  exports?: ExportFormat[];
   /** Overrides by element id. Inheritance from the layout is the default. */
   overrides: Record<ID, ElementOverride>;
   /** Present only when the view has been detached from the layout's pages. */

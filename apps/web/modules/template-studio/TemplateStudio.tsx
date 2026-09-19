@@ -12,6 +12,7 @@ import { importPages } from "./pdfImport";
 import { SourceChooser, type SavedTemplateRow } from "./SourceChooser";
 import { StudioShell } from "./StudioShell";
 import { DesignMode } from "./design/DesignMode";
+import { ViewsMode } from "./views/ViewsMode";
 import { PublishBlockDialog, type BlockListingInput } from "./design/PublishBlockDialog";
 import type { BlockDef } from "./engine/blocks";
 import { readListings, writeListings } from "../agent-marketplace/listings";
@@ -189,9 +190,10 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
       <StudioShell store={store} busy={busy} status={status} onSave={save} onDelete={remove} onBack={store.close} />
       {state.mode === "design" ? <DesignMode store={store} sampleValues={sampleValues} onPublishBlock={setPublishBlock} /> : null}
       {publishBlock ? <PublishBlockDialog block={publishBlock} existing={existingBlockListing} onClose={() => setPublishBlock(null)} onConfirm={confirmPublishBlock} /> : null}
+      {state.mode === "views" ? <ViewsMode store={store} template={template} sampleData={sampleData} /> : null}
       {state.mode === "data" ? <DataMode template={template} agents={agents} onChangeTemplate={store.update} /> : null}
       {state.mode === "preview" ? <PreviewMode template={template} layoutId={layout.id} viewId={view?.id || ""} sampleData={sampleData} sampleCount={sampleCount} onSampleCount={setSampleCount} compiled={compiled} /> : null}
-      {state.mode === "export" ? <ExportMode layout={layout} compiled={compiled} sampleData={sampleData} layoutId={layout.id} viewId={view?.id || ""} name={template.name} dirty={state.dirty} onSave={save} busy={busy} /> : null}
+      {state.mode === "export" ? <ExportMode layout={layout} view={view} compiled={compiled} sampleData={sampleData} layoutId={layout.id} viewId={view?.id || ""} name={template.name} dirty={state.dirty} onSave={save} busy={busy} /> : null}
     </section>
   );
 }

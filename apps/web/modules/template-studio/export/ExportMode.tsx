@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { Layout } from "../engine/types";
+import type { Layout, View } from "../engine/types";
 import { EXPORTS_BY_CLASS } from "../engine/types";
 import { card, kicker, primaryBtn } from "../ui";
 
 const LABELS: Record<string, [string, string]> = { pdf: ["PDF", "Print-ready"], docx: ["Word", "Editable text"], html_print: ["HTML", "Paged, any browser"], png: ["PNG", "Images (coming soon)"], pptx: ["PowerPoint", "One slide per page"], html_slideshow: ["HTML slideshow", "Coming soon"] };
 
-export function ExportMode({ layout, compiled, sampleData, layoutId, viewId, name, dirty, onSave, busy }: { layout: Layout; compiled: unknown; sampleData: unknown; layoutId: string; viewId: string; name: string; dirty: boolean; onSave: () => void; busy: boolean }) {
+export function ExportMode({ layout, view, compiled, sampleData, layoutId, viewId, name, dirty, onSave, busy }: { layout: Layout; view: View | null; compiled: unknown; sampleData: unknown; layoutId: string; viewId: string; name: string; dirty: boolean; onSave: () => void; busy: boolean }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState("");
   async function exportAs(format: string) {
@@ -31,12 +31,12 @@ export function ExportMode({ layout, compiled, sampleData, layoutId, viewId, nam
       setWorking("");
     }
   }
-  const formats = EXPORTS_BY_CLASS[layout.class];
+  const formats = EXPORTS_BY_CLASS[layout.class].filter((format) => !view?.exports || view.exports.includes(format));
   return (
     <div className="grid items-start gap-3 lg:grid-cols-2">
       <section className={`${card} p-5`}>
-        <p className={kicker}>{layout.name} · {layout.class === "slides" ? "Slides" : "Paged document"}</p>
-        <p className="m-0 mt-1 text-xs text-soft-ink">Only formats that render this layout class faithfully are offered.</p>
+        <p className={kicker}>{view?.name || layout.name} · {layout.class === "slides" ? "Slides" : "Paged document"}</p>
+        <p className="m-0 mt-1 text-xs text-soft-ink">Formats chosen for this view (change them under Views → Settings).</p>
         <div className="mt-3 grid grid-cols-2 gap-2">
           {formats.map((format) => {
             const disabled = format === "png" || format === "html_slideshow";

@@ -10,6 +10,7 @@ import { RepeatTab } from "./RepeatTab";
 import { Segmented } from "./Segmented";
 import { StyleTab } from "./StyleTab";
 import { VisibilityTab } from "./VisibilityTab";
+import { AiFieldPanel, type RepeatChoice } from "./AiFieldPanel";
 
 type Tab = "content" | "layout" | "style" | "visibility" | "repeat";
 
@@ -28,6 +29,9 @@ export interface InspectorProps {
   onChangeLayout: (updater: (layout: Layout) => Layout) => void;
   onBackgroundFile: (file: File) => void;
   onAddField: (field: FieldDef, intoArrayId: string | null) => void;
+  onRenameField: (fieldId: string, name: string) => void;
+  onRetypeField: (fieldId: string, type: FieldDef["type"]) => void;
+  onSetRepeat: (choice: RepeatChoice) => void;
 }
 
 function PageInspector({ layout, page, dimBackground, onDimBackground, onChangePage, onChangeLayout, onBackgroundFile }: Pick<InspectorProps, "layout" | "page" | "dimBackground" | "onDimBackground" | "onChangePage" | "onChangeLayout" | "onBackgroundFile">) {
@@ -73,7 +77,7 @@ function PageInspector({ layout, page, dimBackground, onDimBackground, onChangeP
 }
 
 export function Inspector(props: InspectorProps) {
-  const { element, parentChain, selectionCount, fields, views, page, layout, onChangeElement, onAddField } = props;
+  const { element, parentChain, selectionCount, fields, views, page, layout, onChangeElement, onAddField, onRenameField, onRetypeField, onSetRepeat } = props;
   const [tab, setTab] = useState<Tab>("content");
   if (!element) {
     if (selectionCount > 1) return <div className={`${card} min-h-[640px] p-5`}><p className="m-0 text-sm font-bold text-ink">{selectionCount} elements selected</p><p className="m-0 mt-2 text-xs text-soft-ink">Use the toolbar above the page: Group, Align, Duplicate, Delete.</p></div>;
@@ -89,7 +93,7 @@ export function Inspector(props: InspectorProps) {
       <div className="border-b border-ink/8 p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="m-0 text-sm font-bold text-ink">{isGroup ? element.name || "Group" : componentLabel(element.type)}</p>
-          {isGroup ? null : <span className="text-[11px] text-soft-ink">{element.type === "text" && element.source.type === "field" ? "AI field" : "static"}</span>}
+          {isGroup ? null : <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${(element.type === "text" || element.type === "image") && element.source.type === "field" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{(element.type === "text" || element.type === "image") && element.source.type === "field" ? "✦ AI field" : "Fixed"}</span>}
         </div>
         {isGroup ? <input className={`${fieldClass} mt-2`} value={element.name || ""} onChange={(event) => onChangeElement((current) => ({ ...current, name: event.target.value }))} placeholder="Group name" /> : null}
         {parentChain.length ? <p className="m-0 mt-2 text-xs text-soft-ink">Inside {parentChain.map((group) => `“${group.name || "Group"}”`).join(" › ")}</p> : null}
@@ -98,7 +102,12 @@ export function Inspector(props: InspectorProps) {
         </div>
       </div>
       <div className="p-4">
-        {active === "content" ? <ContentTab element={element} parentChain={parentChain} fields={fields} onChange={onChangeElement} onAddField={onAddField} /> : null}
+        {active === "content" ? (
+          <div className="grid gap-4">
+            {(element.type === "text" || element.type === "image") && element.source.type === "field" ? <AiFieldPanel element={element} parentChain={parentChain} fields={fields} onRenameField={onRenameField} onRetypeField={onRetypeField} onSetRepeat={onSetRepeat} /> : null}
+            <ContentTab element={element} parentChain={parentChain} fields={fields} onChange={onChangeElement} onAddField={onAddField} />
+          </div>
+        ) : null}
         {active === "layout" ? <LayoutTab element={element} pages={layout.pages} onChange={onChangeElement} /> : null}
         {active === "style" ? <StyleTab element={element} onChange={onChangeElement} /> : null}
         {active === "visibility" ? <VisibilityTab element={element} views={views} onChange={onChangeElement} /> : null}

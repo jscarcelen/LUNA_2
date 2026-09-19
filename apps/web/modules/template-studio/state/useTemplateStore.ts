@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useReducer } from "react";
 import type { Element, ID, Layout, Page, Template, View } from "../engine/types";
-import { createLayout, createPage, createView, findElement, removeElements, updateElement } from "../engine/model";
+import { cloneLayoutForPreset, createLayout, createPage, createView, findElement, removeElements, updateElement } from "../engine/model";
 
-export type Mode = "design" | "data" | "preview" | "export";
+export type Mode = "design" | "views" | "data" | "preview" | "export";
 
 export interface StudioState {
   template: Template | null;
@@ -125,6 +125,25 @@ export function useTemplateStore() {
       const created = createView(name);
       updateLayout((current) => ({ ...current, views: [...current.views, created] }));
       dispatch({ type: "setView", id: created.id });
+    },
+    /** A "view" as users see it: same page size → new view on this layout; another size → new layout (+ its first view). */
+    addOutput: (input: { name: string; description?: string; preset?: string; exports?: View["exports"]; blank?: boolean }) => {
+      const current = state.template?.layouts.find((item) => item.id === state.layoutId);
+      if (!current) return;
+      if (!input.preset) {
+        const created = createView(input.name, { description: input.description, exports: input.exports });
+        updateLayout((item) => ({ ...item, views: [...item.views, created] }));
+        dispatch({ type: "setView", id: created.id });
+        return;
+      }
+      const created = input.blank ? createLayout(input.name, input.preset) : cloneLayoutForPreset(current, input.name, input.preset);
+      created.views = [createView(input.name, { description: input.description, exports: input.exports })];
+      update((template) => ({ ...template, layouts: [...template.layouts, created] }));
+      dispatch({ type: "setLayout", id: created.id });
+    },
+    setOutput: (layoutId: ID, viewId: ID) => {
+      dispatch({ type: "setLayout", id: layoutId });
+      dispatch({ type: "setView", id: viewId });
     },
     addPage: () => {
       const created = createPage();

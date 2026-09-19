@@ -6,7 +6,8 @@ export const GENERATION_STEPS = [
   { id: "scope", label: "Reading your knowledge", detail: "Loading the selected documents" },
   { id: "chunk", label: "Splitting into passages", detail: "Preparing the material for retrieval" },
   { id: "retrieve", label: "Selecting relevant passages", detail: "Ranking the best evidence for this run" },
-  { id: "generate", label: "Writing the output", detail: "The agent is composing each item" }
+  { id: "generate", label: "Writing the output", detail: "The agent is composing each item" },
+  { id: "validate", label: "Checking the result", detail: "Structure, counts, duplicates" }
 ];
 
 function initialStepState() {

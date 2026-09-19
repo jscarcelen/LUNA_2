@@ -16,6 +16,11 @@ export function normalizeConfig(input = {}) {
     refinementPrompt: String(input.refinementPrompt || "").trim(),
     previousOutput: input.previousOutput || null,
     model: String(input.model || "").trim(),
+    // Agent Studio specs: prebuilt JSON schema + validation rules + the spec itself.
+    outputJsonSchema: input.outputJsonSchema && typeof input.outputJsonSchema === "object" ? input.outputJsonSchema : null,
+    validationRules: Array.isArray(input.validationRules) ? input.validationRules : [],
+    spec: input.spec && typeof input.spec === "object" ? input.spec : null,
+    inputValues: input.inputValues && typeof input.inputValues === "object" ? input.inputValues : {},
     creativity: String(input.creativity || "medium").trim(),
     template: {
       fields: Array.isArray(input.template?.fields)

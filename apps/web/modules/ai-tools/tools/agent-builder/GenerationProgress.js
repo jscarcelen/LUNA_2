@@ -12,6 +12,7 @@ function stepMetaLabel(id, meta = {}) {
   if (id === "retrieve" && meta.chunkCount != null) return `${meta.chunkCount} selected`;
   if (id === "generate" && meta.itemCount != null) return `${meta.itemCount} items · ${meta.model || ""}`.trim();
   if (id === "generate" && meta.model) return meta.model;
+  if (id === "validate" && meta.total != null) return `${meta.passed} of ${meta.total} checks passed`;
   return "";
 }
 

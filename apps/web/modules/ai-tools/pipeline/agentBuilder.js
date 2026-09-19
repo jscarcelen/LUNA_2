@@ -1,6 +1,7 @@
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
 import { selectTopChunks } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
+import { validateOutput } from "../../agent-studio/engine/validate";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o-mini", label: "Luna 3 Mini (Recommended, low cost)", tier: "cheap" },
@@ -291,7 +292,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     : [];
   emit({ step: "retrieve", status: "end", chunkCount: rankedChunks.length });
 
-  const schema = buildJsonSchemaFromFields(fields);
+  const schema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
 
   let result = null;
   let fallbackReason = "";
@@ -314,11 +315,20 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   }
   emit({ step: "generate", status: "end", model: result.model, itemCount: result.items.length, fallbackReason });
 
+  // Agent Studio specs carry validation rules — structural checks the creator can rely on.
+  let checks = [];
+  if (config.spec) {
+    emit({ step: "validate", status: "start" });
+    checks = validateOutput(config.spec, { items: result.items }, config.inputValues || {});
+    emit({ step: "validate", status: "end", passed: checks.filter((check) => check.ok).length, total: checks.length });
+  }
+
   const payload = {
     items: result.items,
     model: result.model,
     usage: result.usage || null,
     fallbackReason,
+    checks,
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length
   };

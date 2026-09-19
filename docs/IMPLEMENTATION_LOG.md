@@ -480,3 +480,4 @@
 - Add panel: Basic (Text, Heading, Image, Box, Line, Table soon) · AI fields (AI text, AI image) · Premium (built-in blocks) · Custom (my blocks), with search.
 - AI field inspector (`AiFieldPanel`): field name · type · Repeat (Once / Repeat per item / One item per page). Repeat wraps the element in a repeating group bound to the first list (creating the list/item field when needed); Once moves it back to a document-level field.
 - Layers: ▲▼ order, 👁 hide in this view, lock.
+- Canvas now draws elements as exports will (group fills/strokes/radius, element colours, no blue wash on AI fields) and previews repetition: flow/grid groups show two faded ghost copies where items 2–3 land (with `{{n}}` numbering), page-repeat groups show a stacked-pages hint. Left column widened to 248 px with wrapped block descriptions.

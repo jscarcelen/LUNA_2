@@ -10,6 +10,7 @@ import {
   readListings,
   removeListing
 } from "../listings";
+import { readBlockLibrary, saveBlockToLibrary } from "../../template-studio/engine/blocks";
 
 const fieldClass = "w-full rounded-xl border border-ink/10 bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-soft-ink/60 outline-none transition focus:border-teal/60 focus:ring-2 focus:ring-teal/20";
 const chipClass = "inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink ring-1 ring-ink/10";
@@ -183,10 +184,20 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
   const [selected, setSelected] = useState(null);
   const [installing, setInstalling] = useState(false);
   const [status, setStatus] = useState("");
+  const [area, setArea] = useState("agents");
+  const [ownedBlockIds, setOwnedBlockIds] = useState([]);
 
   useEffect(() => {
     setCommunityListings(readListings());
+    setOwnedBlockIds(readBlockLibrary().map((block) => block.id));
   }, []);
+  const blockListings = useMemo(() => communityListings.filter((listing) => listing.kind === "block"), [communityListings]);
+  function installBlock(listing) {
+    if (!listing.block) return;
+    saveBlockToLibrary({ ...listing.block, id: listing.block.id, builtIn: false, author: listing.author || "Community" });
+    setOwnedBlockIds(readBlockLibrary().map((block) => block.id));
+    setStatus(`"${listing.name}" was added to your blocks — find it in Template Studio → Add → Blocks.`);
+  }
 
   const selectedSubject = workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects?.find((subject) => subject.id === selectedSubjectId) || null;
   const installedByListingId = useMemo(() => {
@@ -204,7 +215,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
   }, [selectedSubject]);
 
   const allListings = useMemo(() => {
-    const community = communityListings.map((listing) => ({ ...listing, author: listing.author || "You", category: listing.category || "Community" }));
+    const community = communityListings.filter((listing) => listing.kind !== "block").map((listing) => ({ ...listing, author: listing.author || "You", category: listing.category || "Community" }));
     return [...STARTER_AGENTS, ...community];
   }, [communityListings]);
 
@@ -271,7 +282,46 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center gap-2 rounded-bento border border-ink/8 bg-paper p-3 shadow-glow">
+      <div className="flex gap-1 self-start rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">
+        {[["agents", `Agents (${allListings.length})`], ["blocks", `Design blocks (${blockListings.length})`]].map(([value, text]) => (
+          <button key={value} type="button" onClick={() => setArea(value)} className={`rounded-full px-4 py-1.5 text-xs font-semibold transition ${area === value ? "bg-ink text-bg shadow" : "text-soft-ink hover:text-ink"}`}>{text}</button>
+        ))}
+      </div>
+
+      {area === "blocks" && status ? <p className="m-0 text-xs font-semibold text-accent">{status}</p> : null}
+      {area === "blocks" ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {blockListings.map((listing) => {
+            const owned = ownedBlockIds.includes(listing.block?.id);
+            const fieldNames = (listing.block?.fields || []).flatMap((field) => (field.type === "array" ? (field.children?.[0]?.children || []).map((child) => child.name) : [field.name]));
+            return (
+              <article key={listing.id} className="flex flex-col gap-3 rounded-bento border border-ink/8 bg-paper p-5 shadow-glow transition hover:-translate-y-0.5 hover:border-ink/20">
+                <div className="flex items-start gap-3">
+                  <span className="grid size-12 place-items-center rounded-2xl text-xl font-bold text-white" style={{ background: `linear-gradient(135deg, ${listing.accent || "#0071e3"}, color-mix(in srgb, ${listing.accent || "#0071e3"} 55%, #ffffff))` }}>{listing.block?.icon || "★"}</span>
+                  <div className="min-w-0"><h4 className="m-0 truncate text-base font-bold text-ink">{listing.name}</h4><p className="m-0 text-xs text-soft-ink">by {listing.author || "Community"} · Design block</p></div>
+                </div>
+                <p className="m-0 line-clamp-3 text-sm text-ink/85">{listing.description || "No description provided."}</p>
+                {fieldNames.length ? <div className="flex flex-wrap gap-1.5">{fieldNames.slice(0, 6).map((name) => <span key={name} className={chipClass}>{name}</span>)}</div> : null}
+                <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+                  <span className="text-sm font-bold text-ink">{priceLabel(listing)}</span>
+                  <div className="flex gap-2">
+                    {listing.author === "You" ? <button type="button" className="rounded-full px-3 py-1.5 text-xs font-semibold text-[var(--color-danger)]" onClick={() => setCommunityListings(removeListing(listing.id))}>Remove listing</button> : null}
+                    <button type="button" disabled={owned} className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-bg transition hover:bg-ink/85 disabled:opacity-50" onClick={() => installBlock(listing)}>{owned ? "In my blocks" : "Add to my blocks"}</button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+          {!blockListings.length ? (
+            <div className="col-span-full rounded-bento border border-dashed border-ink/20 p-10 text-center">
+              <p className="m-0 text-base font-semibold text-ink">No design blocks yet</p>
+              <p className="m-0 mt-1 text-sm text-soft-ink">In Template Studio, select a group, choose “Save as block”, then “Sell in Marketplace”.</p>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={`flex flex-wrap items-center gap-2 rounded-bento border border-ink/8 bg-paper p-3 shadow-glow ${area === "blocks" ? "hidden" : ""}`}>
         <input className={`${fieldClass} sm:max-w-xs`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agents, outputs, authors…" aria-label="Search agents" />
         <div className="flex flex-wrap gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">
           {CATEGORIES.map((item) => (
@@ -286,7 +336,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
         </select>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className={`grid gap-3 md:grid-cols-2 xl:grid-cols-3 ${area === "blocks" ? "hidden" : ""}`}>
         {visible.map((listing) => (
           <ListingCard key={listing.id} listing={listing} onPreview={setSelected} installed={Boolean(installedByListingId[listing.id])} featured={featured?.id === listing.id} />
         ))}

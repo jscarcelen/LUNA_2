@@ -451,3 +451,10 @@
 - Creator knowledge (`knowledgeText`) is sent to the model as a labelled `agentKnowledge` block ("understand style, never copy layout") instead of being merged into `contextPrompt`; merging it made small models imitate the example paragraph and return several bullets in one item.
 - `max_tokens` raised to 6000, `finish_reason` tracked (explicit "ran out of space" / content-filter errors), a runaway-whitespace guard on the stream, and one automatic low-temperature non-streaming retry before the local heuristic fallback.
 - RunAgentPage recompiles spec-based agents on load (`runConfigFromSpec(spec)`), so prompt-compiler and validation improvements apply to agents saved earlier; every spec agent gets the `no_duplicates` check; failed checks are now shown under the output.
+
+## Template Studio: Blocks (pre-made objects) (2026-09-18)
+
+- `template-studio/engine/blocks.ts` — `BlockDef` (schema fragment + bound element tree + toggles + accent), built-in blocks (Exam question, Open question, True/false, Flashcard, Vocabulary table, Document structure, Key points), `instantiateBlock()` (merges fields by name, remaps ids, applies accent, hides toggled-off parts), `blockFromElements()` (save a selection as a block, keeping only the fields it uses) and a localStorage block library.
+- Static text supports `{{n}}` — the 1-based index of the innermost repeated item — for question numbering without a schema field.
+- Add panel has two tabs: **Elements** (raw) and **Blocks** (categories + My blocks, colour presets, toggles, Insert). Floating toolbar: **Save as block**. My blocks: **Sell in Marketplace** (price, one-time/subscription/free) → listing `kind: "block"`.
+- Marketplace has an **Agents | Design blocks** switch; block listings install into the buyer's block library.

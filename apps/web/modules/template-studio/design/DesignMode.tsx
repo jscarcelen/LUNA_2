@@ -12,6 +12,8 @@ import { LayersPanel } from "./LayersPanel";
 import { PagesPanel } from "./PagesPanel";
 import { importPages } from "../pdfImport";
 import { fieldsInScope } from "./inspector/ContentTab";
+import { blockFromElements, instantiateBlock, removeBlockFromLibrary, saveBlockToLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
+import { BlockDialog } from "./BlockDialog";
 
 function parentChainOf(elements: Element[], id: ID): GroupElement[] {
   const chain: GroupElement[] = [];
@@ -26,9 +28,11 @@ function parentChainOf(elements: Element[], id: ID): GroupElement[] {
   return chain;
 }
 
-export function DesignMode({ store, sampleValues }: { store: Store; sampleValues: Record<string, unknown> }) {
+export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Store; sampleValues: Record<string, unknown>; onPublishBlock?: (block: BlockDef) => void }) {
   const { state, layout, view, page, selected, select, updatePage, updateLayout, update, updateElements, deleteElements } = store;
   const [dimBackground, setDimBackground] = useState(false);
+  const [libraryVersion, setLibraryVersion] = useState(0);
+  const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
   const template = state.template!;
   const elements = page?.elements || [];
   const parentChain = useMemo(() => (selected.element ? parentChainOf(elements, selected.element.id) : []), [elements, selected.element]);
@@ -83,6 +87,37 @@ export function DesignMode({ store, sampleValues }: { store: Store; sampleValues
     else updatePage((current) => ({ ...current, elements: [...current.elements, element] }));
     select([element.id]);
   }
+  /* ---------- blocks (pre-made objects) */
+  function addBlock(block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }) {
+    const { fields, elements: created } = instantiateBlock(block, template.fields, options);
+    const lastBottom = Math.max(margins.top, ...pg.elements.map((item) => item.frame.y + item.frame.h));
+    const placed = created.map((element, index) => ({ ...element, frame: { ...element.frame, x: margins.left, y: Math.min(lastBottom + 4 + index * 4, canvas.height - margins.bottom - 12), w: contentWidth } }));
+    update((current) => ({
+      ...current,
+      fields,
+      layouts: current.layouts.map((item) => (item.id === layout!.id ? { ...item, pages: item.pages.map((p) => (p.id === pg.id ? { ...p, elements: [...p.elements, ...placed] } : p)) } : item))
+    }));
+    select(placed.map((element) => element.id));
+  }
+  function saveSelectionAsBlock() {
+    const picked = state.selection.map((id) => findElement(pg.elements, id).element).filter((element): element is Element => Boolean(element));
+    if (!picked.length) return;
+    setBlockDialog({ elements: picked });
+  }
+  function confirmSaveBlock(meta: { name: string; description: string }) {
+    if (!blockDialog) return;
+    const minX = Math.min(...blockDialog.elements.map((item) => item.frame.x));
+    const minY = Math.min(...blockDialog.elements.map((item) => item.frame.y));
+    const normalised = blockDialog.elements.map((item) => ({ ...item, frame: { ...item.frame, x: item.frame.x - minX, y: item.frame.y - minY } }));
+    saveBlockToLibrary(blockFromElements(normalised, template.fields, meta));
+    setLibraryVersion((v) => v + 1);
+    setBlockDialog(null);
+  }
+  function removeBlock(block: BlockDef) {
+    removeBlockFromLibrary(block.id);
+    setLibraryVersion((v) => v + 1);
+  }
+
   function arrayField(): FieldDef | null {
     return template.fields.find((item) => item.type === "array") || null;
   }
@@ -181,7 +216,7 @@ export function DesignMode({ store, sampleValues }: { store: Store; sampleValues
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
       <aside className="grid gap-3">
-        <AddPanel onAdd={addElement} hint={addHint} />
+        <AddPanel onAdd={addElement} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
         <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />
         <LayersPanel page={pg} selection={state.selection} onSelect={(id, additive) => select(additive ? [...new Set([...state.selection, id])] : [id])} onToggleLock={(id) => updateElements(id, (element) => ({ ...element, locked: !element.locked }))} />
       </aside>
@@ -198,7 +233,7 @@ export function DesignMode({ store, sampleValues }: { store: Store; sampleValues
         onSelect={select}
         onMove={moveSelection}
         onResize={(id, w, h, transient) => updateElements(id, (element) => ({ ...element, frame: { ...element.frame, w: Math.round(w * 2) / 2, h: Math.round(h * 2) / 2 } }), transient)}
-        toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection) }}
+        toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
       <Inspector
         layout={layout}
@@ -216,6 +251,7 @@ export function DesignMode({ store, sampleValues }: { store: Store; sampleValues
         onBackgroundFile={backgroundFile}
         onAddField={addField}
       />
+      {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
     </div>
   );
 }

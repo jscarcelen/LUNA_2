@@ -12,6 +12,9 @@ import { importPages } from "./pdfImport";
 import { SourceChooser, type SavedTemplateRow } from "./SourceChooser";
 import { StudioShell } from "./StudioShell";
 import { DesignMode } from "./design/DesignMode";
+import { PublishBlockDialog, type BlockListingInput } from "./design/PublishBlockDialog";
+import type { BlockDef } from "./engine/blocks";
+import { readListings, writeListings } from "../agent-marketplace/listings";
 import { DataMode, type AgentOption } from "./data/DataMode";
 import { PreviewMode } from "./preview/PreviewMode";
 import { ExportMode } from "./export/ExportMode";
@@ -149,6 +152,34 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  const [publishBlock, setPublishBlock] = useState<BlockDef | null>(null);
+  const existingBlockListing = useMemo<BlockListingInput | null>(() => {
+    if (!publishBlock) return null;
+    const found = readListings().find((listing) => listing.kind === "block" && listing.block?.id === publishBlock.id);
+    return found ? { price: Number(found.price || 0), pricingType: String(found.pricingType || "one-time"), accent: String(found.accent || "") } : null;
+  }, [publishBlock]);
+  function confirmPublishBlock(values: BlockListingInput) {
+    if (!publishBlock) return;
+    const listings = readListings();
+    const current = listings.find((listing) => listing.kind === "block" && listing.block?.id === publishBlock.id);
+    const listing = {
+      ...(current || { id: `listing-block-${publishBlock.id}`, createdAt: new Date().toISOString() }),
+      kind: "block",
+      name: publishBlock.name,
+      description: publishBlock.description,
+      author: "You",
+      category: "Community",
+      price: values.price,
+      pricingType: values.pricingType,
+      accent: values.accent,
+      block: { ...publishBlock, builtIn: false },
+      updatedAt: new Date().toISOString()
+    };
+    writeListings(current ? listings.map((item) => (item.id === current.id ? listing : item)) : [...listings, listing]);
+    setPublishBlock(null);
+    setStatus(current ? `Listing for “${publishBlock.name}” updated.` : `“${publishBlock.name}” is now in the Marketplace.`);
+  }
+
   if (!template || !layout) {
     return <SourceChooser templates={rows} busy={busy} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
@@ -156,7 +187,8 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   return (
     <section className="tw-scope grid gap-3">
       <StudioShell store={store} busy={busy} status={status} onSave={save} onDelete={remove} onBack={store.close} />
-      {state.mode === "design" ? <DesignMode store={store} sampleValues={sampleValues} /> : null}
+      {state.mode === "design" ? <DesignMode store={store} sampleValues={sampleValues} onPublishBlock={setPublishBlock} /> : null}
+      {publishBlock ? <PublishBlockDialog block={publishBlock} existing={existingBlockListing} onClose={() => setPublishBlock(null)} onConfirm={confirmPublishBlock} /> : null}
       {state.mode === "data" ? <DataMode template={template} agents={agents} onChangeTemplate={store.update} /> : null}
       {state.mode === "preview" ? <PreviewMode template={template} layoutId={layout.id} viewId={view?.id || ""} sampleData={sampleData} sampleCount={sampleCount} onSampleCount={setSampleCount} compiled={compiled} /> : null}
       {state.mode === "export" ? <ExportMode layout={layout} compiled={compiled} sampleData={sampleData} layoutId={layout.id} viewId={view?.id || ""} name={template.name} dirty={state.dirty} onSave={save} busy={busy} /> : null}

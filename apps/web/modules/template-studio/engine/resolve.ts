@@ -59,7 +59,11 @@ export function resolveFieldValue(fields: FieldDef[], fieldId: ID, scopes: Scope
 }
 
 export function resolveSource(fields: FieldDef[], source: ContentSource, scopes: Scope[]): { value: DataValue | undefined; isField: boolean } {
-  if (source.type === "static") return { value: source.value, isField: false };
+  if (source.type === "static") {
+    // `{{n}}` in static text is the 1-based index of the innermost repeated item (question numbers).
+    const value = source.value.includes("{{n}}") ? source.value.replace(/\{\{n\}\}/g, String((scopes[0]?.index ?? 0) + 1)) : source.value;
+    return { value, isField: false };
+  }
   return { value: resolveFieldValue(fields, source.fieldId, scopes), isField: true };
 }
 

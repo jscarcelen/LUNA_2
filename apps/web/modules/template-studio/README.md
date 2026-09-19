@@ -23,3 +23,7 @@ owns presentation, a mapping layer connects them.
   `repeatCollectionField = "items"` so `RunAgentPage` keeps working unchanged.
 
 Tests: `apps/web/tests/template-studio/engine.test.ts`. Typecheck: `npm run typecheck`.
+
+## Blocks (pre-made objects)
+
+`engine/blocks.ts` packages a schema fragment with a group of elements bound to it. Built-in blocks live in code; user blocks are saved from a selection ("Save as block") into a local library and can be listed in the Marketplace as design blocks. Elements named `opt:<key>|Label` are controlled by the block's toggles. `{{n}}` in static text renders the item number.

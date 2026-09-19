@@ -10,10 +10,11 @@ export interface FloatingToolbarProps {
   onAlign: (how: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onSaveBlock?: () => void;
 }
 
 /** Appears above the canvas when something is selected — direct manipulation instead of configuration. */
-export function FloatingToolbar({ count, canUngroup, onGroup, onUngroup, onAlign, onDuplicate, onDelete }: FloatingToolbarProps) {
+export function FloatingToolbar({ count, canUngroup, onGroup, onUngroup, onAlign, onDuplicate, onDelete, onSaveBlock }: FloatingToolbarProps) {
   if (!count) return null;
   const btn = `${ghostBtn} px-3 py-1 text-xs`;
   return (
@@ -27,6 +28,7 @@ export function FloatingToolbar({ count, canUngroup, onGroup, onUngroup, onAlign
       <button type="button" className={btn} onClick={() => onAlign("fitWidth")}>Full width</button>
       <span className="mx-1 h-4 w-px bg-ink/10" />
       <button type="button" className={btn} onClick={onDuplicate}>Duplicate</button>
+      {onSaveBlock ? <button type="button" className={btn} title="Keep this as a reusable block (and sell it in the Marketplace)" onClick={onSaveBlock}>Save as block</button> : null}
       <button type="button" className={`${btn} text-[var(--color-danger)]`} onClick={onDelete}>Delete</button>
     </div>
   );

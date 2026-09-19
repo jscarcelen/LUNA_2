@@ -444,3 +444,10 @@
   - folder/tag/text filters for document table
   - friendly filter reset and results count
   - multi-folder display per document
+
+## Agent run: once-per-document fields, creator knowledge, retries (2026-09-18)
+
+- Runtime (`pipeline/agentBuilder.js`) keeps root fields returned by the model (`data: { ...root, items }`), so once-per-document fields such as `title` reach validation, the Studio tester, the Run preview (`doc-head` section) and template mapping (`buildTemplateData(..., rootData)`).
+- Creator knowledge (`knowledgeText`) is sent to the model as a labelled `agentKnowledge` block ("understand style, never copy layout") instead of being merged into `contextPrompt`; merging it made small models imitate the example paragraph and return several bullets in one item.
+- `max_tokens` raised to 6000, `finish_reason` tracked (explicit "ran out of space" / content-filter errors), a runaway-whitespace guard on the stream, and one automatic low-temperature non-streaming retry before the local heuristic fallback.
+- RunAgentPage recompiles spec-based agents on load (`runConfigFromSpec(spec)`), so prompt-compiler and validation improvements apply to agents saved earlier; every spec agent gets the `no_duplicates` check; failed checks are now shown under the output.

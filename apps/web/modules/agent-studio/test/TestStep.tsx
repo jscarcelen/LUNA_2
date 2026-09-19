@@ -35,6 +35,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
   const [note, setNote] = useState("");
   const materialSlots = spec.contextSlots.filter((s) => s.kind === "user_material");
   const fields = collectionFields(primaryCollection(spec));
+  const onceFields = spec.outputSchema.filter((f) => f !== primaryCollection(spec) && f.type !== "object");
   const missingRequired = spec.inputs.filter((i) => i.required && (values[i.id] === "" || values[i.id] === undefined || (Array.isArray(values[i.id]) && !(values[i.id] as unknown[]).length)));
   const missingMaterial = materialSlots.some((s) => s.required) && !materialIds.length;
 
@@ -46,7 +47,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
     });
     try {
       const data = await generation.generate(config);
-      onRun({ inputValues: values, output: { items: data.items || [] }, checks: data.checks || [], model: data.model });
+      onRun({ inputValues: values, output: { ...(data.data || {}), items: data.items || [] }, checks: data.checks || [], model: data.model });
     } catch { /* hook shows the error */ }
   }
   function quick(actionId: string) {
@@ -108,7 +109,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
         <section className={`${card} p-5`}>
           <div className="flex items-center justify-between"><p className={kicker}>Output</p>{items.length ? <span className="text-xs text-soft-ink">{items.length} items</span> : null}</div>
           {!items.length ? <p className="m-0 mt-2 text-sm text-soft-ink">Run a test to see what the agent produces. The result is structured content — pick a template later to make it look the way you want.</p> : (
-            <div className="mt-3 grid gap-2">{(items as Record<string, unknown>[]).slice(0, 30).map((item, index) => <div key={index} className="rounded-xl border border-ink/10 p-3"><span className="mb-1 inline-block rounded-full bg-[var(--accent-soft)] px-2 text-[10px] font-bold text-[var(--accent-ink)]">{index + 1}</span>{fields.map((f) => { const v = item[slug(f.name)]; return <p key={f.id} className="m-0 text-sm text-ink"><span className="text-xs text-soft-ink">{f.name}: </span>{Array.isArray(v) ? v.join(" · ") : String(v ?? "—")}</p>; })}</div>)}</div>
+            <div className="mt-3 grid gap-2">{onceFields.length ? <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3">{onceFields.map((f) => { const v = (lastRun?.output as Record<string, unknown> | null)?.[slug(f.name)]; return <p key={f.id} className="m-0 text-sm text-ink"><span className="text-xs text-soft-ink">{f.name} (once): </span>{v === undefined ? <span className="text-[var(--color-danger)]">missing</span> : String(v)}</p>; })}</div> : null}{(items as Record<string, unknown>[]).slice(0, 30).map((item, index) => <div key={index} className="rounded-xl border border-ink/10 p-3"><span className="mb-1 inline-block rounded-full bg-[var(--accent-soft)] px-2 text-[10px] font-bold text-[var(--accent-ink)]">{index + 1}</span>{fields.map((f) => { const v = item[slug(f.name)]; return <p key={f.id} className="m-0 text-sm text-ink"><span className="text-xs text-soft-ink">{f.name}: </span>{Array.isArray(v) ? v.join(" · ") : String(v ?? "—")}</p>; })}</div>)}</div>
           )}
         </section>
         {lastRun && items.length ? <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => onChange((s) => ({ ...s, examples: [...s.examples, { id: `ex_${Date.now().toString(36)}`, source: "generated", inputs: lastRun.inputValues, output: { items: items.slice(0, 3) as any }, note: "Approved test output" }] }), [{ path: "examples", before: `${spec.examples.length}`, after: `${spec.examples.length + 1}` }])}>★ Use this as an example of good output</button> : null}

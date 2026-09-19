@@ -5,6 +5,7 @@ import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
 import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
+import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const FIELD_FREQUENCY_LABELS = {
@@ -267,6 +268,16 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         // keep the installed snapshot
       }
     }
+    // Recipe-based agents are recompiled from their spec so runtime improvements apply to agents saved earlier.
+    if (parsed.spec && typeof parsed.spec === "object" && Array.isArray(parsed.spec.outputSchema)) {
+      try {
+        const { spec, ...rest } = parsed;
+        const fresh = runConfigFromSpec(spec);
+        parsed = { ...rest, ...fresh, scope: { ...fresh.scope, ...(rest.scope || {}) }, installedFrom: rest.installedFrom, outputMapping: rest.outputMapping, savedOutput: rest.savedOutput };
+      } catch {
+        // keep the stored compiled config
+      }
+    }
     setAgentConfig(parsed);
     setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
     setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
@@ -512,7 +523,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const data = await generation.generate({
         name: agentConfig.name,
         instructions: agentConfig.instructions || "",
-        contextPrompt: [agentConfig.knowledgeText || "", knowledgeMode === "context" ? contextPromptDraft : ""].filter(Boolean).join("\n\n"),
+        knowledgeText: agentConfig.knowledgeText || "",
+        contextPrompt: knowledgeMode === "context" ? contextPromptDraft : "",
         questionAnswers,
         outputExample: agentConfig.outputExample || "",
         model: agentConfig.model,
@@ -556,12 +568,20 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     }
   }
 
+  // Once-per-document values: runtime results carry them in `data`; outputs saved with an agent are flat.
+  const rootData = useMemo(() => {
+    if (!output || typeof output !== "object") return {};
+    if (output.data && typeof output.data === "object") return output.data;
+    const meta = new Set(["items", "model", "usage", "fallbackReason", "checks", "referenceDocumentCount", "referenceChunkCount"]);
+    return Object.fromEntries(Object.entries(output).filter(([key]) => !meta.has(key)));
+  }, [output]);
+
   function buildDocumentHtml(forPrint = false) {
     const visible = applyOutputCustomization(output?.items || [], fields, customization);
     return {
       visible,
       textContent: renderPlainOutputText(visible.items, visible.fields, fieldTypeByName),
-      plainFragment: renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand),
+      plainFragment: renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand, rootData, fields.filter((field) => field.repeatScope === "once")),
       wrap: (fragment, { header = true } = {}) => wrapPreviewDocument(fragment, customization.brand, { forPrint, header })
     };
   }
@@ -570,7 +590,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     const { visible, textContent, plainFragment, wrap } = buildDocumentHtml(forPrint);
     let fragment = plainFragment;
     if (activeTemplate) {
-      const templateData = buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, activeTemplate);
+      const templateData = buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, activeTemplate, rootData);
       const response = await fetch("/api/templates/render-preview", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -662,6 +682,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const previewPane = (
     <LivePreviewPane
       items={outputItems}
+      rootData={rootData}
       fields={fields}
       fieldTypeByName={fieldTypeByName}
       customization={customization}
@@ -892,6 +913,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       ) : null}
 
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}
+      {Array.isArray(output?.checks) && output.checks.some((check) => !check.ok) ? (
+        <div className="rounded-xl border border-[rgba(215,0,21,0.25)] bg-[rgba(215,0,21,0.06)] px-3 py-2">
+          <p className="m-0 text-xs font-semibold text-[var(--color-danger)]">Some checks did not pass — generate again or adjust your choices.</p>
+          <ul className="m-0 mt-1 grid list-none gap-1 p-0 sm:grid-cols-2">
+            {output.checks.filter((check) => !check.ok).map((check) => <li key={check.rule} className="text-xs text-[var(--color-danger)]">✗ {check.message}</li>)}
+          </ul>
+        </div>
+      ) : null}
     </section>
   );
 }

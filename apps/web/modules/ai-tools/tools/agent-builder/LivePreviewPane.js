@@ -33,13 +33,21 @@ function downloadBase64(fileBase64, mimeType, filename) {
  * Builds the data object the template renderer expects from raw agent items + the user's mapping.
  * Exported so the save path in RunAgentPage produces exactly what the preview showed.
  */
-export function buildTemplateData(items, templateFields, fieldMappingByTemplateField, template) {
-  const mappedItems = items.map((item) => templateFields.reduce((mapped, field) => {
+export function buildTemplateData(items, templateFields, fieldMappingByTemplateField, template, rootData = {}) {
+  const itemFields = templateFields.filter((field) => field.frequency !== "once");
+  const onceFields = templateFields.filter((field) => field.frequency === "once");
+  const mappedItems = items.map((item) => itemFields.reduce((mapped, field) => {
     const sourceName = fieldMappingByTemplateField[field.name] || field.name;
     mapped[field.name] = item[field.name] ?? item[sourceName];
     return mapped;
   }, {}));
-  return template?.repeatCollectionField ? { [template.repeatCollectionField]: mappedItems } : (mappedItems[0] || {});
+  // Once-per-document slots read from the agent's root output (e.g. a title), falling back to the first item.
+  const root = onceFields.reduce((mapped, field) => {
+    const sourceName = fieldMappingByTemplateField[field.name] || field.name;
+    mapped[field.name] = rootData[sourceName] ?? rootData[field.name] ?? items[0]?.[sourceName] ?? items[0]?.[field.name];
+    return mapped;
+  }, {});
+  return template?.repeatCollectionField ? { ...root, [template.repeatCollectionField]: mappedItems } : { ...root, ...(mappedItems[0] || {}) };
 }
 
 /**
@@ -49,6 +57,7 @@ export function buildTemplateData(items, templateFields, fieldMappingByTemplateF
  */
 export function LivePreviewPane({
   items,
+  rootData = {},
   fields,
   fieldTypeByName,
   customization,
@@ -72,8 +81,8 @@ export function LivePreviewPane({
   const visible = useMemo(() => applyOutputCustomization(items, fields, customization), [items, fields, customization]);
   const brand = customization.brand || {};
   const templateData = useMemo(
-    () => (template ? buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, template) : null),
-    [template, visible.items, templateFields, fieldMappingByTemplateField]
+    () => (template ? buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, template, rootData) : null),
+    [template, visible.items, templateFields, fieldMappingByTemplateField, rootData]
   );
   const debouncedTemplateData = useDebouncedValue(templateData, 300);
 
@@ -111,7 +120,7 @@ export function LivePreviewPane({
 
   const fragment = template && templateHtml
     ? templateHtml
-    : renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, brand);
+    : renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, brand, rootData, fields.filter((field) => field.repeatScope === "once"));
   const documentHtml = useMemo(() => wrapPreviewDocument(fragment, brand, { header: !(template && templateHtml) }), [fragment, brand, template, templateHtml]);
   const rawText = useMemo(() => renderPlainOutputText(visible.items, visible.fields, fieldTypeByName), [visible, fieldTypeByName]);
 

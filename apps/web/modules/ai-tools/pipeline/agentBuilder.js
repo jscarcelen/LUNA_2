@@ -108,6 +108,7 @@ async function readOpenAiStream(response, onToken) {
   let buffer = "";
   let content = "";
   let usage = null;
+  let finishReason = "";
 
   while (true) {
     const { value, done } = await reader.read();
@@ -127,15 +128,21 @@ async function readOpenAiStream(response, onToken) {
         continue;
       }
       if (event.usage) usage = event.usage;
+      if (event.choices?.[0]?.finish_reason) finishReason = event.choices[0].finish_reason;
       const delta = event.choices?.[0]?.delta?.content;
       if (delta) {
         content += delta;
         if (typeof onToken === "function") onToken(delta, content);
+        // Runaway guard: a model stuck repeating whitespace/separators never closes the JSON.
+        if (content.length > 400 && /^(\s|-){200,}$/.test(content.slice(-200))) {
+          await reader.cancel().catch(() => {});
+          return { content, usage, finishReason: "length" };
+        }
       }
     }
   }
 
-  return { content, usage };
+  return { content, usage, finishReason };
 }
 
 async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = [] } = {}) {
@@ -155,7 +162,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
     body: JSON.stringify({
       model,
       temperature: creativityToTemperature(config.creativity),
-      max_tokens: 2600,
+      max_tokens: 6000,
       stream: streaming,
       ...(streaming ? { stream_options: { include_usage: true } } : {}),
       response_format: {
@@ -177,6 +184,9 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
             task: "Generate agent output",
             agentInstructions: config.instructions || "",
             outputFields: (config.template?.fields || []).map((field) => ({ name: field.name, meaning: field.description || field.label || field.name })),
+            agentKnowledge: config.knowledgeText
+              ? { note: "Background notes and examples from the agent creator. Use them to understand the expected style and level; never copy their content or layout into the output, and always respect the output schema (one element per item).", text: String(config.knowledgeText) }
+              : null,
             contextPrompt: config.contextPrompt || "",
             questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
             outputExample: config.outputExample || "",
@@ -199,20 +209,29 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
 
   let content = "";
   let usage = null;
+  let finishReason = "";
   if (streaming) {
-    ({ content, usage } = await readOpenAiStream(response, onToken));
+    ({ content, usage, finishReason } = await readOpenAiStream(response, onToken));
   } else {
     const payload = await response.json();
     content = payload.choices?.[0]?.message?.content;
     usage = payload.usage || null;
+    finishReason = payload.choices?.[0]?.finish_reason || "";
   }
 
   const parsed = parseJsonFromContent(content);
   if (!parsed || !Array.isArray(parsed.items)) {
-    throw new Error("Agent response could not be parsed into structured output");
+    if (finishReason === "length") {
+      throw new Error("The model ran out of space before finishing the output. Ask for fewer items or shorter text.");
+    }
+    if (finishReason === "content_filter") {
+      throw new Error("The model declined to produce this output (content filter).");
+    }
+    throw new Error(`Agent response could not be parsed into structured output (finish: ${finishReason || "unknown"}, ${String(content || "").length} chars)`);
   }
 
-  return { items: parsed.items, model, usage };
+  const { items, ...root } = parsed;
+  return { items, root, model, usage };
 }
 
 function generateAgentOutputLocally(chunks, fields, config = {}) {
@@ -308,7 +327,14 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
         onToken: (delta, content) => emit({ step: "generate", status: "token", delta, chars: content.length })
       });
     } catch (error) {
-      fallbackReason = String(error.message || error);
+      // A single retry at low temperature, non-streaming, before giving up on the model: small models
+      // occasionally loop or truncate structured output.
+      emit({ step: "generate", status: "retry", reason: String(error.message || error) });
+      try {
+        result = await callOpenAiAgent({ ...config, creativity: "low" }, rankedChunks, schema, { styleChunks });
+      } catch (retryError) {
+        fallbackReason = String(retryError.message || retryError);
+      }
     }
   }
 
@@ -321,12 +347,14 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   let checks = [];
   if (config.spec) {
     emit({ step: "validate", status: "start" });
-    checks = validateOutput(config.spec, { items: result.items }, config.inputValues || {});
+    checks = validateOutput(config.spec, { ...(result.root || {}), items: result.items }, config.inputValues || {});
     emit({ step: "validate", status: "end", passed: checks.filter((check) => check.ok).length, total: checks.length });
   }
 
   const payload = {
     items: result.items,
+    // Once-per-document fields (e.g. a title) returned alongside the items.
+    data: { ...(result.root || {}), items: result.items },
     model: result.model,
     usage: result.usage || null,
     fallbackReason,

@@ -69,7 +69,7 @@ export function useAgentGenerationStream() {
     setSteps((previous) => ({
       ...previous,
       [event.step]: {
-        status: event.status === "start" ? "active" : "done",
+        status: event.status === "start" || event.status === "retry" ? "active" : "done",
         meta: { ...(previous[event.step]?.meta || {}), ...event }
       }
     }));

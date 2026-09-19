@@ -20,6 +20,8 @@ export function validateOutput(spec: AgentSpec, output: DataObject | null, input
     if (rule.type === "required_fields") {
       const required = collectionFields(primary).filter((field) => field.required !== false).map((field) => slug(field.name));
       const missing = items.flatMap((item, index) => required.filter((name) => item[name] === undefined || item[name] === null || item[name] === "").map((name) => `item ${index + 1}: ${name}`));
+      const requiredOnce = spec.outputSchema.filter((field) => field !== primary && field.type !== "object" && field.required !== false).map((field) => slug(field.name));
+      missing.push(...requiredOnce.filter((name) => output[name] === undefined || output[name] === null || output[name] === "").map((name) => `document: ${name}`));
       checks.push({ rule: rule.type, ok: missing.length === 0, message: missing.length ? `Missing ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}` : "All required fields present" });
     }
     if (rule.type === "count_matches_input") {

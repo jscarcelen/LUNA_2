@@ -92,13 +92,15 @@ export function applyOutputCustomization(items = [], fields = [], customization 
 }
 
 /** Plain (no template) rendering: one card per item, block type per field. Returns an HTML fragment. */
-export function renderPlainOutputHtml(items = [], fields = [], fieldTypeByName = {}, brand = {}) {
+export function renderPlainOutputHtml(items = [], fields = [], fieldTypeByName = {}, brand = {}, rootData = {}, onceFields = []) {
+  const itemFields = fields.filter((field) => field.repeatScope !== "once");
+  const head = onceFields.filter((field) => rootData[field.name] !== undefined && rootData[field.name] !== "").map((field) => renderFieldAsHtml(fieldTypeByName[field.name] || (field === onceFields[0] ? "heading1" : "paragraph"), rootData[field.name])).join("\n");
   const cards = items.map((item, index) => {
-    const inner = fields.map((field) => renderFieldAsHtml(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n");
+    const inner = itemFields.map((field) => renderFieldAsHtml(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n");
     const number = brand.numbered ? `<span class="item-number">${index + 1}</span>` : "";
     return `<section class="item">${number}${inner}</section>`;
   }).join(brand.showDividers === false ? "\n" : '\n<hr class="divider" />\n');
-  return `<div class="plain-output">${cards || '<p class="empty">No items yet.</p>'}</div>`;
+  return `<div class="plain-output">${head ? `<section class="doc-head">${head}</section>` : ""}${cards || '<p class="empty">No items yet.</p>'}</div>`;
 }
 
 export function renderPlainOutputText(items = [], fields = [], fieldTypeByName = {}) {
@@ -136,6 +138,8 @@ export function wrapPreviewDocument(fragment, brand = {}, { forPrint = false, he
   .brand-title { margin: 0; font-size: 26px; letter-spacing: -0.01em; color: var(--accent); }
   .brand-subtitle { margin: 2px 0 0; color: #5a607a; font-size: 14px; }
   .plain-output { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--gap); }
+  .plain-output .doc-head { padding: 0 4px 6px; }
+  .plain-output .doc-head h1 { font-size: 26px; margin: 0 0 4px; }
   .plain-output .item { position: relative; background: #fff; border: 1px solid #e4e6ef; border-left: 4px solid var(--accent); border-radius: 14px; padding: ${dense ? "12px 16px" : "18px 22px"}; box-shadow: 0 2px 10px rgba(28, 32, 51, 0.05); }
   .plain-output .item-number { position: absolute; top: 12px; right: 14px; font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, #fff); padding: 2px 8px; border-radius: 999px; }
   .plain-output h1, .plain-output h2, .plain-output h3 { margin: 0 0 6px; color: #12162a; }

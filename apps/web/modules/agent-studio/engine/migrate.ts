@@ -46,7 +46,10 @@ export function runConfigFromSpec(spec: AgentSpec, extra: Record<string, unknown
     outputExample: spec.examples[0] ? JSON.stringify(spec.examples[0].output) : "",
     template: { fields: legacyFields(spec.outputSchema) },
     outputJsonSchema: outputJsonSchema(spec.outputSchema),
-    validationRules: spec.validationRules,
+    // Every agent gets the distinct-items check, even specs saved before it became a default.
+    validationRules: spec.validationRules.some((rule) => rule.type === "no_duplicates")
+      ? spec.validationRules
+      : [...spec.validationRules, { type: "no_duplicates", arrayFieldId: "__primary__", byFieldId: "__first__" }],
     model: spec.model.model,
     creativity: spec.model.creativity,
     scope: { workspaceId: "", subjectId: "", documentIds: spec.contextSlots.flatMap((slot) => (slot.kind === "agent_knowledge" ? slot.documentIds || [] : [])), styleDocumentIds: [] },

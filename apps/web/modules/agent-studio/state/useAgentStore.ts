@@ -2,7 +2,7 @@ import { useCallback, useReducer } from "react";
 import type { AgentSpec, SpecChange } from "../engine/types";
 
 export type Step = 1 | 2 | 3 | 4 | 5;
-export interface LastRun { inputValues: Record<string, unknown>; output: { items: unknown[] } | null; checks: { rule: string; ok: boolean; message: string }[]; model?: string }
+export interface LastRun { inputValues: Record<string, unknown>; output: ({ items: unknown[] } & Record<string, unknown>) | null; checks: { rule: string; ok: boolean; message: string }[]; model?: string }
 
 interface State { spec: AgentSpec | null; savedId: string; step: Step; wizard: boolean; history: AgentSpec[]; lastRun: LastRun | null; lastChanges: SpecChange[]; dirty: boolean }
 type Action =

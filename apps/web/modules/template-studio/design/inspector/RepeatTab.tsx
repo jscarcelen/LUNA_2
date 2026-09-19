@@ -14,6 +14,11 @@ export function RepeatTab({ element, parentChain, fields, onChange, onAddField }
   const [draftName, setDraftName] = useState("");
   if (element.type !== "group") return <p className="m-0 text-sm text-soft-ink">Repetition belongs to groups. Select this element and press <strong>Group</strong> to repeat it.</p>;
   const group = element;
+  // "Show only when": fields of the nearest repeated item (or the document) this group can test.
+  const scopeArray = [...parentChain].reverse().find((item) => item.repeat)?.repeat;
+  const scopeItemFields = scopeArray ? arrayItemFields(findField(fields, scopeArray.fieldId) || { id: "", name: "", type: "array" }).filter((item) => item.type !== "array" && item.type !== "object") : fields.filter((item) => item.type !== "array" && item.type !== "object");
+  const conditionField = group.condition ? findField(fields, group.condition.fieldId) : null;
+  const setCondition = (condition: GroupElement["condition"]) => onChange((current) => ({ ...current, condition } as Element));
   const parentRepeat = [...parentChain].reverse().find((item) => item.repeat)?.repeat;
   const parentArray = parentRepeat ? findField(fields, parentRepeat.fieldId) : null;
   // Arrays in scope: nested arrays of the parent item, else root arrays.
@@ -47,11 +52,11 @@ export function RepeatTab({ element, parentChain, fields, onChange, onAddField }
       </div>
       {choice !== "none" ? (
         <div>
-          <label className={label}>For each item of</label>
+          <label className={label}>Repeat for each element of the list</label>
           {!creating ? (
             <select className={fieldClass} value={group.repeat?.fieldId || ""} onChange={(event) => (event.target.value === "__new" ? setCreating(true) : setRepeat(choice, event.target.value))}>
               <option value="">Choose a list…</option>
-              {candidates.map((item) => <option key={item.id} value={item.id}>{item.name}[]</option>)}
+              {candidates.map((item) => <option key={item.id} value={item.id}>{item.name} · list</option>)}
               <option value="__new">＋ New list…</option>
             </select>
           ) : (
@@ -60,10 +65,25 @@ export function RepeatTab({ element, parentChain, fields, onChange, onAddField }
               <div className="mt-2 flex gap-2"><button type="button" className={primaryBtn} onClick={commitNew} disabled={!draftName.trim()}>Create list</button><button type="button" className={ghostBtn} onClick={() => setCreating(false)}>Cancel</button></div>
             </div>
           )}
-          <p className="m-0 mt-1.5 text-xs text-soft-ink">{parentArray ? `Nested inside “${parentArray.name}” — repeats for each item's list.` : "The agent's items, or a list you define."}</p>
+          <p className="m-0 mt-1.5 text-xs text-soft-ink">{parentArray ? `Nested inside “${parentArray.name}” — repeats for each element's own list.` : "A list is a field that holds many elements; the agent fills it and this group is drawn once per element, one after another."}</p>
           {choice === "grid" ? <div className="mt-2"><label className={label}>Columns</label><input type="number" min="1" max="6" className={fieldClass} value={group.repeat?.columns || 2} onChange={(event) => onChange((current) => ({ ...current, repeat: { ...(current as GroupElement).repeat!, columns: Math.max(1, Number(event.target.value) || 1) } } as Element))} /></div> : null}
         </div>
       ) : null}
+      <div>
+        <label className={label}>Show only when</label>
+        <div className="grid gap-1.5">
+          <select className={fieldClass} value={group.condition?.fieldId || ""} onChange={(event) => setCondition(event.target.value ? { fieldId: event.target.value, equals: group.condition?.equals || "" } : null)}>
+            <option value="">Always</option>
+            {scopeItemFields.map((item) => <option key={item.id} value={item.id}>{item.name}{item.options?.length ? ` (${item.options.join(" / ")})` : ""}</option>)}
+          </select>
+          {group.condition ? (
+            conditionField?.options?.length
+              ? <select className={fieldClass} value={group.condition.equals} onChange={(event) => setCondition({ ...group.condition!, equals: event.target.value })}><option value="">equals…</option>{conditionField.options.map((value) => <option key={value} value={value}>= {value}</option>)}</select>
+              : <input className={fieldClass} value={group.condition.equals} onChange={(event) => setCondition({ ...group.condition!, equals: event.target.value })} placeholder="equals… e.g. multiple_choice" />
+          ) : null}
+        </div>
+        <p className="m-0 mt-1.5 text-xs text-soft-ink">Put several groups at the same spot, each shown for a different value, and the agent's output picks the design — e.g. a “Type” field with multiple_choice / true_false / open.</p>
+      </div>
       {choice !== "none" ? (
         <div>
           <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setAdvanced((value) => !value)}>{advanced ? "Hide advanced" : "Advanced…"}</button>

@@ -85,7 +85,7 @@ export function Inspector(props: InspectorProps) {
   }
   const isGroup = element.type === "group";
   const tabs: [Tab, string][] = isGroup
-    ? [["repeat", "Repeat"], ["layout", "Layout"], ["style", "Style"], ["visibility", "Visibility"]]
+    ? [["repeat", "Repeat · Show when"], ["layout", "Layout"], ["style", "Style"], ["visibility", "Visibility"]]
     : [["content", "Content"], ["layout", "Layout"], ["style", "Style"], ["visibility", "Visibility"]];
   const active = tabs.some(([key]) => key === tab) ? tab : tabs[0][0];
   return (

@@ -23,6 +23,8 @@ export interface FieldDef {
   /** object → members; array → exactly one child describing the item shape. */
   children?: FieldDef[];
   required?: boolean;
+  /** Allowed values for text fields (e.g. a question "Type": multiple_choice | true_false | open). */
+  options?: string[];
 }
 
 /* ---------------------------------------------------------------- template → layout → view */
@@ -183,6 +185,12 @@ export interface GroupElement extends ElementBase {
   repeat: RepeatRule | null;
   pagination: Pagination;
   children: Element[];
+  /**
+   * "Show only when": the group is rendered only when a field of the current item (or document)
+   * equals this value. Several sibling groups at the same spot with different values act as
+   * "one of" — the agent's output decides which design appears.
+   */
+  condition?: { fieldId: ID; equals: string } | null;
 }
 
 export type Element = TextElement | ImageElement | ShapeElement | TableElement | GroupElement;

@@ -17,6 +17,8 @@ export interface ElementViewProps {
   ordinal?: number;
   /** Ghost = a faded preview copy of a repeating group; not interactive. */
   ghost?: boolean;
+  /** Draw faded copies of repeating groups (items 2–3). Off by default in Design. */
+  previewRepeats?: boolean;
 }
 
 function textFor(element: Element, fields: FieldDef[], sampleMode: boolean, sampleValues: Record<string, unknown>, ordinal: number): string {
@@ -39,7 +41,7 @@ const GHOSTS = 2;
  * groups additionally preview two faded copies so the repetition rule is visible at a glance.
  */
 export function ElementView(props: ElementViewProps) {
-  const { element, scale, selectedIds, fields, sampleMode, sampleValues, onPointerDown, onResizeStart, ordinal = 1, ghost = false } = props;
+  const { element, scale, selectedIds, fields, sampleMode, sampleValues, onPointerDown, onResizeStart, ordinal = 1, ghost = false, previewRepeats = false } = props;
   const selected = !ghost && selectedIds.includes(element.id);
   const { x, y, w, h } = element.frame;
   const style = element.style;
@@ -74,13 +76,27 @@ export function ElementView(props: ElementViewProps) {
     : {};
   const outline = ghost ? "none" : selected ? `2px solid ${isGroup ? GROUP_COLOR : "var(--accent)"}` : repeat ? `1.5px dashed ${GROUP_COLOR}99` : isField ? "1px dashed rgba(0,113,227,0.45)" : "1px solid transparent";
 
-  const renderChildren = (n: number, asGhost: boolean) => (group ? group.children.map((child) => (
-    <ElementView key={child.id} {...props} element={child} ordinal={n} ghost={asGhost} />
-  )) : null);
+  // "One of" variants share a spot; on the canvas they are shown stacked so each can be edited.
+  const variantOffsets = new Map<string, number>();
+  let variantCursor = 0;
+  if (group) for (const child of group.children) {
+    if (child.type === "group" && child.condition?.fieldId) { variantOffsets.set(child.id, variantCursor); variantCursor += child.frame.h + 3; }
+  }
+  const stackedHeight = group ? Math.max(h, ...group.children.map((child) => (variantOffsets.get(child.id) ?? 0) + child.frame.y + child.frame.h)) : h;
+  const renderChildren = (n: number, asGhost: boolean) => (group ? group.children.map((child) => {
+    const offset = variantOffsets.get(child.id);
+    const shifted = offset ? ({ ...child, frame: { ...child.frame, y: child.frame.y + offset } } as Element) : child;
+    return (
+      <span key={child.id}>
+        {offset !== undefined && !asGhost ? <span className="absolute z-30 rounded-md bg-white px-1 text-[8px] font-semibold text-[var(--accent-ink)] ring-1 ring-[var(--accent)]/40" style={{ left: px(child.frame.x) + 2, top: px(child.frame.y + offset) - 7 }}>when {findField(fields, (child as GroupElement).condition!.fieldId)?.name || "field"} = {(child as GroupElement).condition!.equals || "…"}</span> : null}
+        <ElementView {...props} element={shifted} ordinal={n} ghost={asGhost} />
+      </span>
+    );
+  }) : null);
 
   // Ghost copies: where the 2nd and 3rd items would land (flow → below, grid → next columns).
   const ghosts: React.ReactNode[] = [];
-  if (group && repeat && !ghost && repeat.mode !== "page") {
+  if (group && repeat && !ghost && previewRepeats && repeat.mode !== "page") {
     const gap = group.layout.gap || 0;
     for (let k = 1; k <= GHOSTS; k += 1) {
       const columns = repeat.mode === "grid" ? Math.max(1, repeat.columns || 2) : 1;
@@ -95,7 +111,7 @@ export function ElementView(props: ElementViewProps) {
       );
     }
   }
-  const pageStack = group && repeat && repeat.mode === "page" && !ghost;
+  const pageStack = group && repeat && repeat.mode === "page" && !ghost && previewRepeats;
 
   return (
     <>
@@ -105,7 +121,7 @@ export function ElementView(props: ElementViewProps) {
         data-element-id={ghost ? undefined : element.id}
         onPointerDown={ghost ? undefined : (event) => onPointerDown(event, element)}
         className={`absolute select-none ${ghost ? "" : element.locked ? "cursor-default" : "cursor-move"} ${selected ? "z-20" : "z-10"}`}
-        style={{ left: px(x), top: px(y), width: px(w), minHeight: px(Math.max(h, 1)), height: isGroup ? px(h) : undefined, outline, outlineOffset: 1, ...groupBox }}
+        style={{ left: px(x), top: px(y), width: px(w), minHeight: px(Math.max(h, 1)), height: isGroup ? px(stackedHeight) : undefined, outline, outlineOffset: 1, ...groupBox }}
       >
         {group ? (
           <>

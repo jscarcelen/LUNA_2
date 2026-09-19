@@ -99,6 +99,19 @@ function repeatRecords(group: GroupElement, scopes: Scope[], ctx: Ctx): Scope[] 
   return records.map((data, index) => ({ data: data as DataValue, index }));
 }
 
+/** Normalises values for "show only when" comparisons: "Multiple choice" ≈ "multiple_choice". */
+function normal(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+}
+
+/** Conditional groups render only when their field equals the chosen value (booleans: "true"/"false"). */
+export function isShown(element: Element, scopes: Scope[], ctx: Ctx): boolean {
+  if (element.type !== "group" || !element.condition || !element.condition.fieldId) return true;
+  const value = resolveFieldValue(ctx.fields, element.condition.fieldId, scopes);
+  if (value === undefined) return true; // no data yet (design time) → show
+  return normal(value) === normal(element.condition.equals);
+}
+
 /** Lays out the children of ONE instance at (x, y). Stacks by mode; nested repeats expand and push siblings. */
 function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope[], ctx: Ctx, limitBottom: number): Laid {
   const items: LaidOutItem[] = [];
@@ -111,7 +124,11 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   let right = x;
   let shift = 0; // free mode: how far content pushed things down
 
+  const conditional = group.children.some((child) => child.type === "group" && child.condition?.fieldId);
+  let designedBottom = 0;
   for (const child of children) {
+    if (!isShown(child, scopes, ctx)) continue;
+    designedBottom = Math.max(designedBottom, child.frame.y + child.frame.h);
     const nestedRepeat = child.type === "group" && child.repeat;
     if (mode === "free") {
       // Children keep their own positions; a taller-than-designed child pushes later (lower) siblings.
@@ -157,7 +174,10 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
     bottom = Math.max(bottom, laid.bottom);
     right = Math.max(right, laid.right);
   }
-  const height = Math.max(mode === "free" ? group.frame.h + shift : 0, bottom - y);
+  // With "one of" children the designed height is the tallest variant; fit the one actually shown.
+  const pad = conditional ? Math.max(0, group.frame.h - Math.max(...group.children.map((child) => child.frame.y + child.frame.h), 0)) : 0;
+  const height = conditional && mode === "free" ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + shift : 0, bottom - y);
+  void designedBottom;
   const chrome: LaidOutItem[] = group.style.fill || group.style.stroke ? [{ type: "rect", x, y, w: group.frame.w, h: height, style: group.style, elementId: group.id }] : [];
   return { items: [...chrome, ...items], bottom: y + height, right, height };
 }
@@ -232,7 +252,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   const stamp = (target: LaidOutPage, continuation: boolean) => {
     for (const element of staticElements) {
       const header = continuation ? element.pageScope.mode === "every" : true;
-      if (!header) continue;
+      if (!header || !isShown(element, scopes, ctx)) continue;
       const laid = layoutElement(element, 0, 0, scopes, ctx, limit);
       target.items.push(...laid.items);
       if (laid.bottom > limit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(target), reason: "exceeds-page" });
@@ -243,6 +263,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   let flowShift = 0;
   for (const element of elements) {
     if (!(element.type === "group" && element.repeat && element.repeat.mode === "flow")) continue;
+    if (!isShown(element, scopes, ctx)) continue;
     const group = element;
     const records = repeatRecords(group, scopes, ctx);
     const gap = group.layout.gap ?? 0;

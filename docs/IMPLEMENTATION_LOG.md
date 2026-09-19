@@ -487,3 +487,10 @@
 - **Simple | Advanced** switch (stored as `template.editorMode`, default simple). Simple = `design/SimpleDesign.tsx`: ordered list of top-level blocks (output order), ▲▼, duplicate, delete, repeat chips (Once / per item / one per page / grid), field chips and nested repeat summary; `stackElements()` keeps blocks stacked inside the margins so the same list flows into A4, Letter or slides; footers (`pageScope every`, lower page) stay pinned. Advanced = the canvas.
 - Blocks have `family` + `variant`; the Premium section shows one row per family with a "Design" dropdown. New blocks: Header (Exam header / Centered title), Footer (title + `{{page}}`), Section header, **Section + questions** (nested `Sections[] → Questions[]`, agent order), Question card compact (2-column options), Answer box, Flashcard one-per-page, Callout.
 - `{{page}}` / `{{pages}}` tokens in static text are resolved after pagination.
+
+## Template Studio: "one of" designs, repeat toggle, group scaling (2026-09-19)
+
+- `GroupElement.condition { fieldId, equals }` — "Show only when" (Repeat · Show when tab). Sibling groups at the same spot with different values = one-of designs; the layout engine skips non-matching groups and fits the parent's height to the shown variant. `FieldDef.options` lists allowed values (sample data cycles through them). New block: Question card → "Mixed — design chosen by question Type".
+- Canvas: variants are drawn stacked with "when Type = …" labels so each can be edited; repeat ghosts are now behind a "Show repetitions ×3" toggle (default: one iteration).
+- Resizing a group scales children positions, sizes and font sizes proportionally.
+- Wording: lists explained as fields with many elements; "Repeat for each element of the list".

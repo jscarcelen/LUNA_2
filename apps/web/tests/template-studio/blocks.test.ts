@@ -107,3 +107,23 @@ describe("simple design + families", () => {
     expect(texts.filter((t) => /^q[123]$/.test(t))).toHaveLength(3);
   });
 });
+
+describe("one-of designs (show only when)", () => {
+  it("renders the variant matching each item's Type and fits its height", () => {
+    const template = createTemplate("T");
+    const { fields, elements } = instantiateBlock(byName("Question (any type)"), template.fields, { toggles: { number: true, answer: false } });
+    template.fields = fields;
+    template.layouts[0].pages[0].elements = elements;
+    const data = { questions: [{ type: "multiple_choice", question: "MC?", options: ["a", "b"], answer: "a" }, { type: "true_false", question: "TF?", options: [], answer: "true" }, { type: "open", question: "Open?", options: [], answer: "" }] };
+    const result = layoutDocument(template, data);
+    const texts = result.pages.flatMap((page) => page.items.filter((item) => item.type === "text").map((item) => (item as { lines: string[] }).lines.join(" ")));
+    expect(texts).toContain("MC?");
+    expect(texts).toContain("TF?");
+    expect(texts).toContain("Open?");
+    expect(texts.filter((t) => t === "True")).toHaveLength(1);
+    expect(texts.filter((t) => t === "a")).toHaveLength(1);
+    // Sample data cycles through the Type options so every design shows up in previews.
+    const sample = buildSampleData(template, 3) as { questions: { type: string }[] };
+    expect(sample.questions.map((q) => q.type)).toEqual(["multiple_choice", "true_false", "open"]);
+  });
+});

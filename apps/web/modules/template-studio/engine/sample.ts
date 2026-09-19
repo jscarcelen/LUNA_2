@@ -25,6 +25,7 @@ function sampleFor(field: FieldDef, index: number, hints: Record<string, string>
       return Array.from({ length: count }, (_, i) => (item.type === "object" ? sampleFor(item, i, hints, itemCount) : hint ? `${hint} ${i + 1}` : `${field.name} ${i + 1}`));
     }
     default: {
+      if (field.options && field.options.length) return field.options[index % field.options.length];
       if (slug(field.name) === "number") return String(index + 1);
       if (hint) return index ? `${hint} (${index + 1})` : hint;
       return index ? `Sample ${field.name.toLowerCase()} ${index + 1}` : `Sample ${field.name.toLowerCase()}`;

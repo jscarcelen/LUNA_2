@@ -41,7 +41,11 @@ function fieldsOf(element: Element): string[] {
 
 function nestedRepeats(element: Element, fields: FieldDef[]): string[] {
   const out: string[] = [];
-  const walk = (list: Element[]) => list.forEach((item) => { if (item.type === "group") { if (item.repeat) out.push(`${item.name || "Group"} · for each of ${findField(fields, item.repeat.fieldId)?.name || "items"}`); walk(item.children); } });
+  const walk = (list: Element[]) => {
+    const variants = list.filter((item): item is GroupElement => item.type === "group" && Boolean(item.condition?.fieldId));
+    if (variants.length) out.push(`one of ${variants.length} designs by ${findField(fields, variants[0].condition!.fieldId)?.name || "field"}: ${variants.map((v) => `${v.name || "design"} (${v.condition!.equals})`).join(" · ")}`);
+    list.forEach((item) => { if (item.type === "group") { if (item.repeat) out.push(`${item.name || "Group"} · for each of ${findField(fields, item.repeat.fieldId)?.name || "items"}`); walk(item.children); } });
+  };
   if (element.type === "group") walk(element.children);
   return out;
 }

@@ -67,7 +67,7 @@ export function ContentTab({ element, parentChain, fields, onChange, onAddField 
                 {scope.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.type}</option>)}
                 <option value="__new">＋ New field…</option>
               </select>
-              <p className="m-0 mt-1.5 text-xs text-soft-ink">{arrayId ? "Fields of each repeated item." : "Fields filled once per document."} Renaming a field never breaks this link.</p>
+              <p className="m-0 mt-1.5 text-xs text-soft-ink">{arrayId ? "Fields of each element of the list this group repeats over." : "Fields filled once per document. Lists (many elements) are used by repeating groups, not by single text elements."} Renaming a field never breaks this link.</p>
             </>
           ) : (
             <div className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3">

@@ -29,6 +29,7 @@ export interface CanvasProps {
 export function Canvas({ layout, page, pageIndex, pageCount, fields, selection, sampleMode, sampleValues, dimBackground, onSelect, onMove, onResize, toolbar }: CanvasProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(MAX_SCALE);
+  const [previewRepeats, setPreviewRepeats] = useState(false);
   const dragRef = useRef<{ kind: "move"; ids: ID[]; startX: number; startY: number; starts: Record<ID, { x: number; y: number }>; moved: boolean } | { kind: "resize"; id: ID; startX: number; startY: number; w: number; h: number } | null>(null);
   const { width, height } = layout.canvas;
   const { margins } = layout;
@@ -89,7 +90,10 @@ export function Canvas({ layout, page, pageIndex, pageCount, fields, selection, 
     <div ref={wrapRef} className={`${card} relative overflow-auto p-4`} style={{ background: "#e9e9ee", minHeight: 640 }} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
       <div className="mb-2 flex items-center justify-between text-[11px] text-soft-ink">
         <span>Page {pageIndex + 1} of {pageCount} · {width}×{height} mm · {layout.name}</span>
-        <span>Drag to move · corner to resize · shift-click to multi-select · ⌫ deletes · ⌘Z undo</span>
+        <span className="flex items-center gap-3">
+          <span>Drag to move · corner to resize · shift-click to multi-select · ⌫ deletes · ⌘Z undo</span>
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2 py-0.5 font-semibold text-ink"><input type="checkbox" checked={previewRepeats} onChange={(event) => setPreviewRepeats(event.target.checked)} />Show repetitions ×3</label>
+        </span>
       </div>
       <div className="pointer-events-none sticky top-2 z-30 mb-2 flex justify-center">
         <FloatingToolbar count={selection.length} {...toolbar} canUngroup={Boolean(selectedGroup && selectedGroup.type === "group")} />
@@ -102,7 +106,7 @@ export function Canvas({ layout, page, pageIndex, pageCount, fields, selection, 
         {bgSrc ? <img src={bgSrc} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: (bg.type === "image" || bg.type === "pdf" ? bg.opacity ?? 1 : 1) * (dimBackground ? 0.5 : 1) }} draggable={false} /> : null}
         <div className="pointer-events-none absolute z-0 border border-dashed border-[var(--accent)]/35" style={{ left: margins.left * scale, top: margins.top * scale, width: (width - margins.left - margins.right) * scale, height: (height - margins.top - margins.bottom) * scale }} />
         {page.elements.map((element) => (
-          <ElementView key={element.id} element={element} scale={scale} selectedIds={selection} fields={fields} sampleMode={sampleMode} sampleValues={sampleValues} onPointerDown={onPointerDown} onResizeStart={onResizeStart} />
+          <ElementView key={element.id} element={element} scale={scale} selectedIds={selection} fields={fields} sampleMode={sampleMode} sampleValues={sampleValues} onPointerDown={onPointerDown} onResizeStart={onResizeStart} previewRepeats={previewRepeats} />
         ))}
       </div>
     </div>

@@ -94,6 +94,10 @@ Consequences for the product:
 - **Component designs**: each premium component family (Question card, Flashcard, Header, Footer, Section header, Callout, Answer box, Table, Formal report, Puzzle, Math problem, Document/file, Table of contents, Diagram, Comparison, Progress bar…) offers **several designs to choose from** via a dropdown.
 - **Two design levels**: **Block design** — a drag-and-drop ordered list of blocks (header, questions…) with repetition and formatting options, which flows into any page layout (questions one after another on A4, one per slide in PPT); and **Advanced** — the full page-layout canvas. Fast design and detailed design coexist.
 - **Agent-order composition**: blocks combine so they appear in the AI output order — e.g. 3 sections, each a title plus N questions: the user only defines the header and question-card formats and the agent output is laid out accordingly.
+- **"One of" designs at the same spot**: several element designs share one position and the AI output decides which one is used per item (e.g. an exam mixing multiple-choice, true/false and written questions — the agent sets the order, the user defines the styles). Combined with forced order (header first) this lets the template follow the agent's output order.
+- A **list is a field** (it holds many elements and is repeated consecutively by default) — the UI must make this clear.
+- Advanced view shows **one iteration** of a repeating block (the space it takes) with a toggle to preview ×3 repetitions and how overflow pushes the rest down; Preview shows the real repetitions.
+- **Groups scale as a whole**: resizing a group resizes every element inside proportionally.
 - Philosophy: Canva (visual) + Notion (blocks) + Google Docs (structure) + Luna (AI content), but much simpler than Canva; avoid too many buttons, nested menus, technical terms, separate editors per format, over-complex AI fields. Mental model: create template → name → view → add elements → design → add AI fields → define repeats → more views → preview → export.
 
 ### 5.2 Performance tracking (different UIs)
@@ -330,5 +334,6 @@ Set de guardrails
 
 ## Appendix B — Change log of this document
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.
+- 2026-09-19 — §5.1a: "one of" designs chosen by agent output, list-is-a-field clarity, single-iteration canvas + ×3 toggle, proportional group scaling.
 - 2026-09-19 — §5.1a: component design variants, Block vs Advanced design levels, agent-order composition (sections with questions).
 - 2026-09-19 — Added §5.1a Template Studio editor model (founder's detailed spec: views, element categories, AI field = text/image + name + type + repeat, contextual inspector, layers, export per view).

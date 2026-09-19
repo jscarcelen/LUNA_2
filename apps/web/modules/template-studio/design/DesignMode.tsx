@@ -334,7 +334,22 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         dimBackground={dimBackground}
         onSelect={select}
         onMove={moveSelection}
-        onResize={(id, w, h, transient) => updateElements(id, (element) => ({ ...element, frame: { ...element.frame, w: Math.round(w * 2) / 2, h: Math.round(h * 2) / 2 } }), transient)}
+        onResize={(id, w, h, transient) => updateElements(id, (element) => {
+          const nextW = Math.round(w * 2) / 2;
+          const nextH = Math.round(h * 2) / 2;
+          if (element.type !== "group" || !element.frame.w || !element.frame.h) return { ...element, frame: { ...element.frame, w: nextW, h: nextH } };
+          // Resizing a group scales everything inside it (positions, sizes and font sizes) so the design stays proportional.
+          const rx = nextW / element.frame.w;
+          const ry = nextH / element.frame.h;
+          const scaleChild = (child: Element): Element => {
+            const frame = { x: child.frame.x * rx, y: child.frame.y * ry, w: child.frame.w * rx, h: child.frame.h * ry };
+            const style = child.style.fontSize ? { ...child.style, fontSize: Math.max(5, Math.round(child.style.fontSize * Math.min(rx, ry) * 10) / 10) } : child.style;
+            const next = { ...child, frame, style } as Element;
+            if (next.type === "group") next.children = next.children.map(scaleChild);
+            return next;
+          };
+          return { ...element, frame: { ...element.frame, w: nextW, h: nextH }, children: element.children.map(scaleChild) } as Element;
+        }, transient)}
         toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
       )}

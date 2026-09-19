@@ -590,8 +590,69 @@ function compactQuestion(): BlockDef {
   return { id: "block-question-compact", family: "Question card", variant: "Compact, options in 2 columns", name: "Question (compact)", description: "Numbered question with options in two columns — fits many per page.", category: "questions", icon: "❶", fields: [questions], elements: [group], accent: A, builtIn: true };
 }
 
+
+function mixedQuestions(): BlockDef {
+  const type = createField("Type", "text", { description: "multiple_choice, true_false or open — decides which design is used", options: ["multiple_choice", "true_false", "open"] });
+  const question = createField("Question", "rich_text");
+  const option = createField("Option", "text");
+  const options = createField("Options", "array", { children: [option] });
+  const answer = createField("Answer", "text", { description: "The correct option, true/false, or a model answer" });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [type, question, options, answer] })] });
+  const numberBadge = () => [
+    createShape("rect", { name: "opt:number|Number badge", frame: { x: 4, y: 4, w: 9, h: 9 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 4.5 }) }),
+    st("{{n}}", { x: 4, y: 5.6, w: 9, h: 6 }, { fontSize: 9, fontWeight: "bold", color: "#ffffff", align: "center" }, { name: "opt:number|Number" })
+  ];
+  const mc = createGroup({
+    name: "Multiple choice", frame: { x: 0, y: 0, w: 186, h: 36 }, layout: { mode: "free", gap: 2 }, repeat: null,
+    condition: { fieldId: type.id, equals: "multiple_choice" },
+    style: defaultStyle({ fill: A.tint, stroke: "", radius: 3 }),
+    children: [
+      ...numberBadge(),
+      tx(question.id, "Which organelle produces ATP?", { x: 17, y: 5, w: 160, h: 8 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
+      createGroup({ name: "Options", frame: { x: 17, y: 15, w: 160, h: 18 }, layout: { mode: "vertical", gap: 1.2 }, repeat: { fieldId: options.id, mode: "flow" }, children: [
+        createGroup({ name: "Option row", frame: { x: 0, y: 0, w: 160, h: 5.5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
+          createShape("ellipse", { frame: { x: 0, y: 0.8, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35 }) }),
+          tx(option.id, "Mitochondrion", { x: 6, y: 0, w: 150, h: 5.5 }, { fontSize: 10 })
+        ] })
+      ] }),
+      tx(answer.id, "B", { x: 17, y: 32, w: 100, h: 3 }, { fontSize: 7, color: A.main }, { name: "opt:answer|Answer" })
+    ]
+  });
+  const tf = createGroup({
+    name: "True / false", frame: { x: 0, y: 0, w: 186, h: 14 }, layout: { mode: "free", gap: 0 }, repeat: null,
+    condition: { fieldId: type.id, equals: "true_false" },
+    style: defaultStyle({ fill: A.tint, stroke: "", radius: 3 }),
+    children: [
+      ...numberBadge(),
+      tx(question.id, "The mitochondrion has its own DNA.", { x: 17, y: 5, w: 120, h: 6 }, { fontSize: 10.5, fontWeight: "bold" }, { format: "rich" }),
+      createShape("rect", { frame: { x: 142, y: 5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
+      st("True", { x: 148, y: 5, w: 12, h: 5 }, { fontSize: 8.5 }),
+      createShape("rect", { frame: { x: 162, y: 5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
+      st("False", { x: 168, y: 5, w: 14, h: 5 }, { fontSize: 8.5 }),
+      tx(answer.id, "true", { x: 142, y: 10, w: 40, h: 3 }, { fontSize: 6.5, color: A.main, align: "right" }, { name: "opt:answer|Answer" })
+    ]
+  });
+  const open = createGroup({
+    name: "Open answer", frame: { x: 0, y: 0, w: 186, h: 38 }, layout: { mode: "free", gap: 0 }, repeat: null,
+    condition: { fieldId: type.id, equals: "open" },
+    style: defaultStyle({ fill: "", stroke: A.main, strokeWidth: 0.3, radius: 3 }),
+    children: [
+      ...numberBadge(),
+      tx(question.id, "Explain how ATP is produced in the mitochondrion.", { x: 17, y: 5, w: 160, h: 8 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
+      ...[0, 1, 2].map((row) => createShape("line", { frame: { x: 17, y: 18 + row * 6.5, w: 160, h: 0.3 }, style: defaultStyle({ stroke: "#c7c7cc", strokeWidth: 0.3 }) })),
+      tx(answer.id, "Model answer…", { x: 17, y: 34, w: 160, h: 3 }, { fontSize: 6.5, color: A.main }, { name: "opt:answer|Answer" })
+    ]
+  });
+  const group = createGroup({
+    name: "Question (any type)", frame: { x: 12, y: 12, w: 186, h: 38 }, layout: { mode: "free", gap: 2 },
+    repeat: { fieldId: questions.id, mode: "flow" },
+    children: [mc, tf, open]
+  });
+  return { id: "block-question-mixed", family: "Question card", variant: "Mixed — design chosen by question Type", name: "Question (any type)", description: "One spot, three designs: multiple choice, true/false or open — the agent's Type field decides, in its order.", category: "questions", icon: "❶⁄", fields: [questions], elements: [group], options: [{ key: "number", label: "Question number", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+}
+
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), mixedQuestions(), examQuestion(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
 }
 
 /** Blocks grouped by family, in library order. */
@@ -630,6 +691,7 @@ function mergeFields(existing: FieldDef[], incoming: FieldDef[], idMap: Map<ID, 
       continue;
     }
     idMap.set(field.id, match.id);
+    if (field.options && !match.options) match.options = field.options;
     if (field.type === "array" && field.children?.[0] && match.children?.[0]) {
       const incomingItem = field.children[0];
       const matchItem = match.children[0];
@@ -683,6 +745,7 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
         if (next.type === "group") {
           const group = next as GroupElement;
           group.repeat = group.repeat ? { ...group.repeat, fieldId: idMap.get(group.repeat.fieldId) || group.repeat.fieldId } : null;
+          if (group.condition) group.condition = { ...group.condition, fieldId: idMap.get(group.condition.fieldId) || group.condition.fieldId };
           group.children = remapElements(group.children);
         }
         return next;
@@ -699,6 +762,7 @@ export function blockFromElements(elements: Element[], templateFields: FieldDef[
   walkElements(elements, (element) => {
     if ((element.type === "text" || element.type === "image") && element.source.type === "field") used.add(element.source.fieldId);
     if (element.type === "group" && element.repeat) used.add(element.repeat.fieldId);
+    if (element.type === "group" && element.condition) used.add(element.condition.fieldId);
   });
   const prune = (fields: FieldDef[]): FieldDef[] =>
     fields

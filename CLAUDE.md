@@ -84,6 +84,12 @@ agent-independent (fields defined in the studio; agents auto-map by name). Saved
 `templateV3` + `dataFields`. Do not add per-format template code, expose implementation
 primitives in the Add menu, or reintroduce the block-list editor.
 
+Agents are **recipes** built in the Agent Studio (`modules/agent-studio/`, TypeScript, see README
+and `docs/AGENT_STUDIO_ARCHITECTURE.md`): `AgentSpec` is canonical, the prompt is compiled from
+it, JSON Schema is generated, output is validated, and feedback patches the spec (never the
+sample). Never expose prompts/JSON outside the Advanced panel; never bake user material into an
+agent (use context slots).
+
 ### Adding an AI tool
 Create `modules/ai-tools/tools/<id>/index.js` exporting a manifest (validated by
 `validateAiToolManifest`) plus its page component, then register it in `modules/ai-tools/registry.js`.

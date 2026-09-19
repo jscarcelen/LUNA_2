@@ -268,7 +268,9 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
 
   emit({ step: "scope", status: "start" });
   const workspaces = await loadWorkspaceTreeForAi();
-  const scopedDocuments = collectScopedDocuments(workspaces, config.scope || {});
+  // Agent Studio specs use material only when explicitly selected (opt-in); legacy agents keep subject-wide scope.
+  const explicitOnly = Boolean(config.spec) && !(config.scope?.documentIds || []).length;
+  const scopedDocuments = explicitOnly ? [] : collectScopedDocuments(workspaces, config.scope || {});
   const styleDocumentIds = Array.isArray(config.scope?.styleDocumentIds) ? config.scope.styleDocumentIds.filter(Boolean) : [];
   const styleDocuments = styleDocumentIds.length
     ? collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: styleDocumentIds })

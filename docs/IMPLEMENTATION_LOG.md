@@ -2,6 +2,18 @@
 
 ## 2026-09-18
 
+### Agent Studio — milestone 1
+
+- Per `docs/AGENT_STUDIO_ARCHITECTURE.md`: canonical `AgentSpec` (purpose, instructions,
+  inputs, context slots — agent knowledge vs user material, output schema as FieldDefs,
+  examples, validation rules, model), auto JSON Schema, prompt compiler, validator, spec-patch
+  iteration (quick actions + `/improve` model route), migration from legacy `.agent.json`.
+- 5-step wizard (What it creates · Customize · Material · Output · Test & improve) with a live
+  test loop (streaming, agent checks, structured output, feedback → spec diff, undo, "use as
+  example"), Advanced panel, overview dashboard with marketplace card + publish.
+- Runtime emits a `validate` step; spec agents use material strictly opt-in. Vocabulary
+  Flashcards shipped as a built-in agent; old creator removed. 10 engine tests.
+
 ### Template Studio v3 — milestone 1
 
 - Architecture per `docs/TEMPLATE_STUDIO_ARCHITECTURE.md` (approved). New TypeScript module

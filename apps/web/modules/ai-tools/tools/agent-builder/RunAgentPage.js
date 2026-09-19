@@ -21,6 +21,7 @@ function toggleInList(value, setter) {
 }
 
 function defaultAnswerForQuestion(question) {
+  if (question.defaultValue !== undefined && question.defaultValue !== null) return question.type === "number" ? String(question.defaultValue) : question.defaultValue;
   if (question.type === "multi-select") return [];
   return "";
 }
@@ -446,6 +447,10 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (question.type === "yes-no") {
       return <SegmentedControl value={answer || ""} options={[{ value: "yes", label: "Yes" }, { value: "no", label: "No" }]} onChange={(value) => setAnswer(question.id, value)} />;
     }
+    if (question.type === "single-select" && !(question.options || []).length) {
+      const languages = ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Catalan", "Dutch", "Chinese", "Japanese", "Arabic"];
+      return <select className={fieldClass} value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)}>{languages.map((l) => <option key={l} value={l}>{l}</option>)}</select>;
+    }
     if (question.type === "single-select") {
       return (
         <div className="flex flex-wrap gap-1.5">
@@ -494,10 +499,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         model: agentConfig.model,
         creativity: agentConfig.creativity,
         template: { fields },
+        outputJsonSchema: agentConfig.outputJsonSchema || null,
+        validationRules: agentConfig.validationRules || [],
+        spec: agentConfig.spec || null,
+        inputValues: answersByQuestionId,
         scope: {
           workspaceId,
           subjectId,
-          documentIds: knowledgeMode === "workspace" ? referenceDocumentIds : [],
+          documentIds: [...(knowledgeMode === "workspace" ? referenceDocumentIds : []), ...((agentConfig.scope && agentConfig.scope.documentIds) || [])],
           styleDocumentIds
         }
       });
@@ -625,7 +634,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
   const outputItems = Array.isArray(output?.items) ? output.items : [];
   const hasOutput = outputItems.length > 0;
-  const knowledgeReady = knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0;
+  const materialOptional = Array.isArray(agentConfig.materialSlots) && (!agentConfig.materialSlots.length || agentConfig.materialSlots.every((slot) => !slot.required));
+  const knowledgeReady = materialOptional || (knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0);
   const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
   const unlockedStep = hasOutput ? 3 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
@@ -682,7 +692,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <p className={kicker}>1 · Material</p>
-              <h4 className="m-0 mt-1 text-base font-bold text-ink">What should the agent read?</h4>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the agent read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
+              {agentConfig.materialSlots?.[0]?.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{agentConfig.materialSlots[0].description}</p> : null}
               <div className="mt-3 grid gap-3">
                 <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} />
                 {knowledgeMode === "workspace" ? (

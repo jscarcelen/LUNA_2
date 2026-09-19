@@ -1,13 +1,13 @@
-import { AgentBuilderPage } from "./AgentBuilderPage";
+import { AgentStudio } from "../../../agent-studio/AgentStudio";
 
 export const agentBuilderTool = {
   id: "agent-builder",
   name: "Create AI Agent",
-  description: "Configure, test, and publish a custom AI agent from your workspace documents.",
-  runLabel: "Open Agent Builder",
-  component: AgentBuilderPage,
+  description: "Build an agent recipe: what it creates, what people customise, what it reads, what it returns. Test and improve in plain words.",
+  runLabel: "Open Agent Studio",
+  component: AgentStudio,
   pipelineConfig: {
     mode: "configurable-rag-pipeline",
-    template: "agent-builder-v1"
+    template: "agent-studio-v1"
   }
 };

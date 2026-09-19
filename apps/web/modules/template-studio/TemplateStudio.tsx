@@ -18,6 +18,7 @@ import { ExportMode } from "./export/ExportMode";
 import { QUIZ_AGENT } from "../ai-tools/tools/quiz-generator/quizAgent";
 
 interface ToolContext {
+  openTemplateId?: string;
   workspaces?: any[];
   onListDocumentBlockTemplates?: () => Promise<SavedTemplateRow[]>;
   onSaveDocumentBlockTemplate?: (payload: unknown) => Promise<{ template?: { id?: string }; templates?: SavedTemplateRow[] }>;
@@ -74,11 +75,28 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
     walk(template.fields, sampleData);
     return values;
   }, [template, sampleData]);
-  const compiled = useMemo(() => (template ? compileForSave(template, state.savedId) : null), [template, state.savedId]);
+  const [folderId, setFolderId] = useState("");
+  const compiled = useMemo(() => (template ? { ...compileForSave(template, state.savedId), folderId: folderId || "tpl-folder-root" } : null), [template, state.savedId, folderId]);
+  const openedRef = useRef("");
+  useEffect(() => {
+    const id = toolContext?.openTemplateId;
+    if (!id || openedRef.current === id || !rows.length) return;
+    const row = rows.find((item) => item.id === id);
+    if (row) { openedRef.current = id; openRow(row); }
+  });
+  async function moveToFolder(row: SavedTemplateRow, folder: string) {
+    const saveHandler = contextRef.current?.onSaveDocumentBlockTemplate;
+    if (typeof saveHandler !== "function") return;
+    try {
+      const saved = await saveHandler({ ...(row as any), folderId: folder || "tpl-folder-root" });
+      if (Array.isArray(saved?.templates)) setRows(saved.templates); else refresh();
+    } catch (error) { setStatus(String((error as Error).message || error)); }
+  }
 
   /* ---------- open / create */
   function openRow(row: SavedTemplateRow) {
     const migrated = normalizeTemplate(migrateToV3(row));
+    setFolderId(row.folderId && row.folderId !== "tpl-folder-root" ? row.folderId : "");
     store.open(migrated, row.id);
     setStatus(row.templateV3 ? "" : "Upgraded from the previous editor — check the layout, then save.");
   }
@@ -132,7 +150,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   });
 
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} />;
+    return <SourceChooser templates={rows} busy={busy} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

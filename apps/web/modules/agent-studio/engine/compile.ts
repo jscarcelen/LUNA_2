@@ -15,7 +15,7 @@ export function describeOutput(spec: AgentSpec): string {
   const primary = primaryCollection(spec);
   const lines: string[] = [];
   if (primary) {
-    lines.push(`Return a list called "items" (${primary.name}). Each item has:`);
+    lines.push(`Return a list called "items" (${primary.name}). Each element of the list is ONE ${singular(primary.name)}, distinct and self-contained — never put several ${primary.name.toLowerCase()} into one element. Each item has:`);
     for (const entry of flattenFields(collectionFields(primary))) {
       const f = entry.field;
       lines.push(`  - ${slug(f.name)} — ${f.description || f.name} (${f.type}${f.required === false ? ", optional" : ""})`);
@@ -59,8 +59,15 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
   return { system, user, schema: outputJsonSchema(spec.outputSchema), model: spec.model.model, creativity: spec.model.creativity };
 }
 
+function singular(name: string): string {
+  const n = name.trim();
+  return /ies$/i.test(n) ? n.replace(/ies$/i, "y") : /s$/i.test(n) ? n.slice(0, -1) : n;
+}
+
 function validationHints(spec: AgentSpec): string {
   const hints: string[] = [];
+  const countInput = spec.inputs.find((i) => i.type === "number");
+  if (!spec.validationRules.some((r) => r.type === "count_matches_input")) hints.push(countInput ? `Return as many items as "${countInput.name}" asks for.` : "If the instructions mention a number of items, return exactly that many elements in items.");
   for (const rule of spec.validationRules) {
     if (rule.type === "count_matches_input") hints.push(`Return exactly the number of items requested in "${spec.inputs.find((i) => i.id === rule.inputId)?.name || "the count"}".`);
     if (rule.type === "no_duplicates") hints.push("Do not repeat items.");

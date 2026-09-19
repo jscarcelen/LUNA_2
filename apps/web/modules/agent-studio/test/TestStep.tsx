@@ -59,7 +59,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
     setImproving(true);
     setNote("");
     try {
-      const response = await fetch("/api/ai-tools/agent-builder/improve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ spec, feedback, lastRun: lastRun ? { inputs: lastRun.inputValues, output: lastRun.output?.items?.slice(0, 5) } : null }) });
+      const response = await fetch("/api/ai-tools/agent-builder/improve", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ spec, feedback, lastRun: lastRun ? { inputs: lastRun.inputValues, itemCount: lastRun.output?.items?.length || 0, output: lastRun.output?.items?.slice(0, 3), checks: lastRun.checks } : null }) });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not improve the agent");
       const { spec: next, changes } = applyPatches(spec, payload.patches || []);

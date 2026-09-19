@@ -15,6 +15,7 @@ import { useAgentGenerationStream } from "../ai-tools/tools/agent-builder/useAge
 import { card, ghostBtn, primaryBtn, kicker, stepTitles } from "./ui";
 
 interface ToolContext {
+  editAgentDocumentId?: string;
   workspaces?: any[];
   selectedWorkspaceId?: string;
   selectedSubjectId?: string;
@@ -45,7 +46,25 @@ function SavedAgents({ docs, onOpen, onNew, onStarter }: { docs: { id: string; n
   );
 }
 
-function Dashboard({ spec, lastRun, onStep, onPublish, published }: { spec: AgentSpec; lastRun: any; onStep: (step: Step) => void; onPublish: () => void; published: boolean }) {
+const PRICING = [["per-use", "Per use", "Charged each time it runs"], ["subscription", "Subscription", "Monthly access"], ["one-time", "One-time purchase", "Buy once, keep forever"]] as const;
+
+function PublishDialog({ initial, onCancel, onConfirm }: { initial: { price: number; pricingType: string } | null; onCancel: () => void; onConfirm: (values: { price: number; pricingType: string }) => void }) {
+  const [price, setPrice] = useState(initial?.price ?? 0);
+  const [pricingType, setPricingType] = useState(initial?.pricingType || "per-use");
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onPointerDown={onCancel}>
+      <div className={`${card} w-full max-w-md p-5`} onPointerDown={(event) => event.stopPropagation()}>
+        <p className="m-0 text-base font-bold text-ink">{initial ? "Update marketplace listing" : "Publish to the marketplace"}</p>
+        <p className="m-0 mt-1 text-xs text-soft-ink">Other people will be able to use this agent with their own material. Payments are a preview for now.</p>
+        <div className="mt-3 grid gap-1">{PRICING.map(([value, title, hint]) => <label key={value} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2 ${pricingType === value ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10"}`}><input type="radio" className="mt-1" checked={pricingType === value} onChange={() => setPricingType(value)} /><span><span className="block text-sm font-semibold text-ink">{title}</span><span className="block text-xs text-soft-ink">{hint}</span></span></label>)}</div>
+        <div className="mt-3"><label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Price (USD, 0 = free)</label><input type="number" min="0" step="0.5" className="w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink" value={price} onChange={(event) => setPrice(Math.max(0, Number(event.target.value) || 0))} /></div>
+        <div className="mt-4 flex justify-end gap-2"><button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button><button type="button" className={primaryBtn} onClick={() => onConfirm({ price, pricingType })}>{initial ? "Update listing" : "Publish"}</button></div>
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ spec, lastRun, onStep, onPublish, published, onSave, dirty }: { spec: AgentSpec; lastRun: any; onStep: (step: Step) => void; onPublish: () => void; published: boolean; onSave: () => void; dirty: boolean }) {
   const fields = collectionFields(primaryCollection(spec));
   const cards: [Step, string, string][] = [
     [1, "What it creates", spec.purpose.headline || spec.name],
@@ -65,7 +84,11 @@ function Dashboard({ spec, lastRun, onStep, onPublish, published }: { spec: Agen
           <p className={`${kicker} mt-3`}>User chooses</p><p className="m-0 text-sm text-ink">{spec.inputs.map((i) => i.name).join(", ") || "—"}{spec.contextSlots.some((s) => s.kind === "user_material") ? ", source material" : ""}</p>
           <p className={`${kicker} mt-3`}>Returns</p><p className="m-0 text-sm text-ink">{fields.map((f) => f.name).join(", ")}</p>
         </div>
-        <button type="button" className={`${primaryBtn} mt-3 w-full`} onClick={onPublish} disabled={published}>{published ? "Listed on the marketplace" : "Publish to marketplace"}</button>
+        <div className="mt-3 grid gap-2">
+          <button type="button" className={`${primaryBtn} w-full`} onClick={onSave} disabled={!dirty}>{dirty ? "Save to my AI Tools" : "Saved to my AI Tools"}</button>
+          <button type="button" className={`${ghostBtn} w-full`} onClick={onPublish}>{published ? "Update marketplace listing" : "Publish to marketplace…"}</button>
+          {published ? <p className="m-0 text-[11px] text-soft-ink">Listed. Updating pushes the new version to everyone who uses it.</p> : null}
+        </div>
       </aside>
     </div>
   );
@@ -78,6 +101,7 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [published, setPublished] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const contextRef = useRef(toolContext);
   contextRef.current = toolContext;
   const workspaceId = toolContext?.selectedWorkspaceId || "";
@@ -86,6 +110,12 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
   const docs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType !== "generated" && String(d.reviewStatus || "approved") === "approved").map((d: any) => ({ id: d.id, name: d.name })), [subject]);
   const agentDocs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")).map((d: any) => ({ id: d.id, name: d.name, content: d.content })), [subject]);
   const spec = state.spec;
+  const editId = toolContext?.editAgentDocumentId || "";
+  const openedEditRef = useRef("");
+  if (editId && openedEditRef.current !== editId && agentDocs.length) {
+    const doc = agentDocs.find((d: any) => d.id === editId);
+    if (doc) { openedEditRef.current = editId; try { dispatch({ type: "open", spec: specFromLegacy(JSON.parse(doc.content || "{}")), savedId: doc.id, wizard: false }); } catch { /* ignore */ } }
+  }
 
   function openDoc(doc: { id: string; content: string }) {
     try { dispatch({ type: "open", spec: specFromLegacy(JSON.parse(doc.content || "{}")), savedId: doc.id, wizard: false }); } catch { setStatus("Could not read this agent."); }
@@ -103,15 +133,19 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
       setStatus(`Saved “${spec.name}”. It now appears in AI Tools.`);
     } catch (error) { setStatus(String((error as Error).message || error)); } finally { setBusy(false); }
   }
-  function publish() {
+  function readListings(): any[] { try { return JSON.parse(window.localStorage.getItem(MARKETPLACE_KEY) || "[]"); } catch { return []; } }
+  const existingListing = spec ? readListings().find((l) => l.sourceAgentId === spec.id) : null;
+  function publish({ price, pricingType }: { price: number; pricingType: string }) {
     if (!spec) return;
     try {
-      const listings = JSON.parse(window.localStorage.getItem(MARKETPLACE_KEY) || "[]");
+      const listings = readListings();
       const agent = runConfigFromSpec(spec);
-      listings.unshift({ id: `agent-listing-${Date.now().toString(36)}`, name: spec.name, description: spec.purpose.description || spec.purpose.headline, price: 0, pricingType: "pay-as-you-go", author: "You", category: spec.purpose.category || "Community", agent, spec, createdAt: new Date().toISOString() });
-      window.localStorage.setItem(MARKETPLACE_KEY, JSON.stringify(listings));
+      const listing = { id: existingListing?.id || `agent-listing-${Date.now().toString(36)}`, sourceAgentId: spec.id, name: spec.name, description: spec.purpose.description || spec.purpose.headline, price, pricingType, author: "You", category: spec.purpose.category || "Community", agent, spec, createdAt: existingListing?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+      const next = existingListing ? listings.map((l) => (l.id === listing.id ? listing : l)) : [listing, ...listings];
+      window.localStorage.setItem(MARKETPLACE_KEY, JSON.stringify(next));
       setPublished(true);
-      setStatus("Listed on the marketplace (preview — no payments yet).");
+      setPublishing(false);
+      setStatus(existingListing ? "Listing updated — everyone using it gets this version." : "Listed on the marketplace (preview — no payments yet).");
     } catch (error) { setStatus(String((error as Error).message || error)); }
   }
 
@@ -137,7 +171,8 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
       {advanced ? <AdvancedEditor spec={spec} onChange={update} /> : null}
 
-      {!state.wizard ? <Dashboard spec={spec} lastRun={state.lastRun} onStep={(s) => { dispatch({ type: "wizard", on: true }); dispatch({ type: "step", step: s }); }} onPublish={publish} published={published} /> : (
+      {publishing ? <PublishDialog initial={existingListing ? { price: existingListing.price, pricingType: existingListing.pricingType } : null} onCancel={() => setPublishing(false)} onConfirm={publish} /> : null}
+      {!state.wizard ? <Dashboard spec={spec} lastRun={state.lastRun} onStep={(s) => { dispatch({ type: "wizard", on: true }); dispatch({ type: "step", step: s }); }} onPublish={() => setPublishing(true)} published={published || Boolean(existingListing)} onSave={save} dirty={state.dirty} /> : (
         <>
           <div className="px-1"><h3 className="m-0 text-[22px] font-bold tracking-tight text-ink">{step}. {title}</h3><p className="m-0 text-sm text-soft-ink">{subtitle}</p></div>
           {step === 1 ? <PurposeStep spec={spec} onChange={update} /> : null}

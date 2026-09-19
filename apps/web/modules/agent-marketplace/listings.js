@@ -7,7 +7,9 @@ export const AGENT_MARKETPLACE_STORAGE_KEY = "luna.agentMarketplaceListings.v1";
 
 export const PRICING_TYPE_LABELS = {
   "pay-as-you-go": "Pay as you go",
+  "per-use": "Per use",
   monthly: "Monthly",
+  subscription: "Subscription",
   "one-time": "One-time"
 };
 
@@ -137,7 +139,7 @@ export function buildAgentFileFromListing(listing, { workspaceId = "", subjectId
     ...agent,
     name,
     scope: { workspaceId, subjectId, documentIds: [] },
-    installedFrom: { listingId: listing?.id || "", author: listing?.author || "", installedAt: new Date().toISOString() }
+    installedFrom: { listingId: listing?.id || "", author: listing?.author || "", installedAt: new Date().toISOString(), pricingType: listing?.pricingType || "", availableUntil: listing?.pricingType === "subscription" || listing?.pricingType === "monthly" ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString() : "" }
   };
   const content = JSON.stringify(config, null, 2);
   return { name: `${name}.agent.json`, content, sizeBytes: content.length };

@@ -5,7 +5,7 @@ import { createCollection, createField, primaryCollection, collectionFields } fr
 import { outputTypes } from "../registry";
 import { card, field, fieldBase, ghostBtn, label, kicker } from "../ui";
 
-function FieldCard({ f, onChange, onRemove }: { f: FieldDef; onChange: (next: FieldDef) => void; onRemove: () => void }) {
+function FieldCard({ f, onChange, onRemove, onMove, first, last }: { f: FieldDef; onChange: (next: FieldDef) => void; onRemove: () => void; onMove?: (direction: -1 | 1) => void; first?: boolean; last?: boolean }) {
   return (
     <div className="rounded-xl border border-ink/10 bg-white p-3">
       <div className="grid gap-2 sm:grid-cols-[1fr_150px]">
@@ -15,7 +15,8 @@ function FieldCard({ f, onChange, onRemove }: { f: FieldDef; onChange: (next: Fi
       <input className={`${fieldBase} mt-2 w-full text-xs`} value={f.description || ""} onChange={(event) => onChange({ ...f, description: event.target.value })} placeholder="What is it? e.g. The word in the first language" />
       <div className="mt-2 flex items-center gap-4 text-xs text-ink">
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={f.required !== false} onChange={(event) => onChange({ ...f, required: event.target.checked })} />Required</label>
-        <button type="button" className="ml-auto text-soft-ink hover:text-[var(--color-danger)]" onClick={onRemove}>Remove</button>
+        {onMove ? <span className="ml-auto flex gap-1"><button type="button" title="Move up" disabled={first} className="rounded-md border border-ink/15 px-2 py-0.5 disabled:opacity-30" onClick={() => onMove(-1)}>▲</button><button type="button" title="Move down" disabled={last} className="rounded-md border border-ink/15 px-2 py-0.5 disabled:opacity-30" onClick={() => onMove(1)}>▼</button></span> : null}
+        <button type="button" className={`${onMove ? "" : "ml-auto "}text-soft-ink hover:text-[var(--color-danger)]`} onClick={onRemove}>Remove</button>
       </div>
     </div>
   );
@@ -42,7 +43,7 @@ export function OutputSchemaBuilder({ spec, onChange }: { spec: AgentSpec; onCha
             <span className="text-xs text-soft-ink">the agent returns a list of these</span>
           </div>
           <div className="mt-3 grid gap-2">
-            {fields.map((f) => <FieldCard key={f.id} f={f} onChange={(next) => setFields(fields.map((x) => (x.id === next.id ? next : x)))} onRemove={() => setFields(fields.filter((x) => x.id !== f.id))} />)}
+            {fields.map((f, index) => <FieldCard key={f.id} f={f} first={index === 0} last={index === fields.length - 1} onMove={(direction) => { const next = [...fields]; const target = index + direction; if (target < 0 || target >= next.length) return; [next[index], next[target]] = [next[target], next[index]]; setFields(next); }} onChange={(next) => setFields(fields.map((x) => (x.id === next.id ? next : x)))} onRemove={() => setFields(fields.filter((x) => x.id !== f.id))} />)}
             <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => setFields([...fields, createField("", "text", { required: true })])}>＋ Add field</button>
           </div>
         </div>
@@ -56,6 +57,8 @@ export function OutputSchemaBuilder({ spec, onChange }: { spec: AgentSpec; onCha
         <p className="m-0 mt-1 text-sm text-soft-ink">Fonts, colours and positions belong to templates. Fields should describe meaning only.</p>
         <p className={`${kicker} mt-4`}>Template compatibility</p>
         <p className="m-0 mt-1 text-sm text-soft-ink">Any template with fields named like these works — templates bind to the structure, not to this agent.</p>
+        <p className={`${kicker} mt-4`}>Order</p>
+        <p className="m-0 mt-1 text-sm text-soft-ink">Use ▲ ▼ to set the order fields appear in — it is the order users and templates see.</p>
       </aside>
     </div>
   );

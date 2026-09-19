@@ -22,9 +22,11 @@ export function AppShell() {
   const [statusMessage, setStatusMessage] = useState("Loading workspaces...");
   const [isWorking, setIsWorking] = useState(false);
 
-  const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "") : "";
+  const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "").split("?")[0] : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
   const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "") : "";
+  const editAgentDocumentId = page.startsWith("agent-edit:") ? page.replace("agent-edit:", "") : "";
+  const openTemplateId = page.startsWith("ai-tool:template-builder?open=") ? page.split("?open=")[1] : "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
   const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
   const navItems = navByRole[role] || [];
@@ -147,18 +149,24 @@ export function AppShell() {
         <AIToolsHubPage
           onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)}
           onOpenCustomAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
+          onEditAgent={(documentId) => setPage(`agent-edit:${documentId}`)}
+          onListTemplates={handleListDocumentBlockTemplates}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
         />
       );
     }
-    if (currentAiTool) {
-      const ToolComponent = currentAiTool.component;
+    const editorTool = editAgentDocumentId ? findAiToolById("agent-builder") : null;
+    if (currentAiTool || editorTool) {
+      const activeTool = currentAiTool || editorTool;
+      const ToolComponent = activeTool.component;
       return (
-        <AIToolRuntimePage title={currentAiTool.name} description={currentAiTool.description} onBack={() => setPage("ai-tools")}>
+        <AIToolRuntimePage title={activeTool.name} description={activeTool.description} onBack={() => setPage("ai-tools")}>
           <ToolComponent
             toolContext={{
+              editAgentDocumentId,
+              openTemplateId,
               workspaces,
               selectedWorkspaceId,
               selectedSubjectId,
@@ -208,7 +216,7 @@ export function AppShell() {
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return <DashboardPage role={role} onNavigate={setPage} />;
-  }, [page, role, currentAiTool, currentCustomAgentId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
+  }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);

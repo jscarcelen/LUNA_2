@@ -40,7 +40,8 @@ export function runConfigFromSpec(spec: AgentSpec, extra: Record<string, unknown
       { title: "Export or save", text: "PDF, Word, PowerPoint, HTML — or straight into your workspace." }
     ],
     instructions: compiled.system,
-    contextPrompt: spec.contextSlots.filter((slot) => slot.kind === "agent_knowledge" && slot.text).map((slot) => `${slot.name}: ${slot.text}`).join("\n\n"),
+    contextPrompt: "",
+    knowledgeText: spec.contextSlots.filter((slot) => slot.kind === "agent_knowledge" && slot.text).map((slot) => `${slot.name}: ${slot.text}`).join("\n\n"),
     questions: spec.inputs.map((input) => ({ id: input.id, text: input.name, type: QUESTION_FROM_INPUT[input.type], options: input.type === "language" ? undefined : input.options, required: input.required, defaultValue: input.default, description: input.description })),
     outputExample: spec.examples[0] ? JSON.stringify(spec.examples[0].output) : "",
     template: { fields: legacyFields(spec.outputSchema) },

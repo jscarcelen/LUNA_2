@@ -2,6 +2,18 @@
 
 ## 2026-09-18
 
+### Hub, galleries, folders, publishing
+
+- AI Tools hub reorganised into four areas: My agents (Built-in / Created by me / Bought tags
+  with availability, Edit on own agents), My templates (first-page thumbnails), Agent Studio and
+  Template Studio generators. Template Studio: gallery/list views, named folders (persisted in
+  the template row), move-to-folder, `template-builder?open=<id>` deep link.
+- Agent Studio: multi-line options fixed, output fields reorderable, compiler enforces distinct
+  items + count guidance, default no-duplicates rule, agent-knowledge text no longer leaks into
+  the user's paste box, Save-to-AI-Tools + Publish dialog (price, per-use / subscription /
+  one-time), listing update pushes the new version to installed copies (they follow the listing),
+  Edit own agents from the hub.
+
 ### Agent Studio — milestone 1
 
 - Per `docs/AGENT_STUDIO_ARCHITECTURE.md`: canonical `AgentSpec` (purpose, instructions,

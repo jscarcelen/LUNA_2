@@ -4,6 +4,7 @@ import { findField } from "../../template-studio/engine/model";
 import { slug } from "../../template-studio/engine/model";
 
 function key(spec: AgentSpec, fieldId: string): string {
+  if (fieldId === "__first__") { const first = collectionFields(primaryCollection(spec))[0]; return first ? slug(first.name) : fieldId; }
   const field = findField(spec.outputSchema, fieldId);
   return field ? slug(field.name) : fieldId;
 }

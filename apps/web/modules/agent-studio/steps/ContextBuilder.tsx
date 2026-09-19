@@ -48,7 +48,7 @@ export function ContextBuilder({ spec, docs, onChange }: { spec: AgentSpec; docs
       <section className={`${card} grid gap-3 p-5`}>
         <div><p className={kicker}>User material</p><p className="m-0 mt-1 text-sm text-soft-ink">What people upload when they run the agent — their own chapter, notes or PDF. Keeps the agent reusable for any subject.</p></div>
         {material.map((slot) => <SlotCard key={slot.id} slot={slot} docs={docs} onChange={set} onRemove={() => remove(slot.id)} />)}
-        <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => onChange((s) => ({ ...s, contextSlots: [...s.contextSlots, createSlot("user_material", "", { description: "" })] }))}>＋ Add material slot</button>
+        <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => onChange((s) => ({ ...s, contextSlots: [...s.contextSlots, createSlot("user_material", "Extra material", { description: "Optional additional material." })] }))}>＋ Add material slot</button>
         <p className={`${fieldBase} m-0 border-0 bg-[var(--surface-soft)] text-xs text-soft-ink`}>{material.length ? "Users will see " + material.map((m) => `“${m.name || "material"}” (${m.required ? "required" : "optional"})`).join(" and ") + " when they run the agent." : "No material slot: the agent works from its own knowledge and the user's choices only."}</p>
       </section>
     </div>

@@ -258,6 +258,15 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       }
     }
     if (!parsed) return;
+    // Agents installed from the marketplace follow the creator's latest published version.
+    if (parsed.installedFrom?.listingId) {
+      try {
+        const listing = (JSON.parse(window.localStorage.getItem("luna.agentMarketplaceListings.v1") || "[]")).find((item) => item.id === parsed.installedFrom.listingId);
+        if (listing?.agent) parsed = { ...listing.agent, name: parsed.name || listing.agent.name, installedFrom: parsed.installedFrom, outputMapping: parsed.outputMapping || listing.agent.outputMapping };
+      } catch {
+        // keep the installed snapshot
+      }
+    }
     setAgentConfig(parsed);
     setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
     setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
@@ -493,7 +502,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const data = await generation.generate({
         name: agentConfig.name,
         instructions: agentConfig.instructions || "",
-        contextPrompt: knowledgeMode === "context" ? contextPromptDraft : "",
+        contextPrompt: [agentConfig.knowledgeText || "", knowledgeMode === "context" ? contextPromptDraft : ""].filter(Boolean).join("\n\n"),
         questionAnswers,
         outputExample: agentConfig.outputExample || "",
         model: agentConfig.model,

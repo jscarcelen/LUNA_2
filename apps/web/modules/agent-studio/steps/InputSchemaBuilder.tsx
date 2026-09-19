@@ -8,6 +8,7 @@ import { card, field, fieldBase, ghostBtn, label, primaryBtn, kicker } from "../
 
 function InputCard({ input, onChange, onRemove }: { input: InputDef; onChange: (next: InputDef) => void; onRemove: () => void }) {
   const def = getInputType(input.type);
+  const [optionsText, setOptionsText] = useState((input.options || []).join("\n"));
   return (
     <div className="rounded-2xl border border-ink/10 bg-white p-4">
       <div className="flex items-start gap-3">
@@ -18,7 +19,7 @@ function InputCard({ input, onChange, onRemove }: { input: InputDef; onChange: (
             <select className={field} value={input.type} onChange={(event) => { const type = event.target.value as InputType; onChange({ ...input, type, options: getInputType(type).needsOptions ? input.options || [] : undefined, default: getInputType(type).defaultValue }); }}>{listInputTypes().map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}</select>
           </div>
           <input className={`${fieldBase} w-full text-xs`} value={input.description || ""} onChange={(event) => onChange({ ...input, description: event.target.value })} placeholder="Help text (optional) — shown to the user and used by the agent" />
-          {def.needsOptions ? <div><label className={label}>Options (one per line)</label><textarea className={`${field} min-h-16`} value={(input.options || []).join("\n")} onChange={(event) => onChange({ ...input, options: event.target.value.split("\n").map((o) => o.trim()).filter(Boolean) })} placeholder={"Beginner\nIntermediate\nAdvanced"} /></div> : null}
+          {def.needsOptions ? <div><label className={label}>Options (one per line)</label><textarea className={`${field} min-h-20`} value={optionsText} onChange={(event) => { setOptionsText(event.target.value); onChange({ ...input, options: event.target.value.split("\n").map((o) => o.trim()).filter(Boolean) }); }} placeholder={"Beginner\nIntermediate\nAdvanced"} /><p className="m-0 mt-1 text-[11px] text-soft-ink">Press Enter for a new option · {(input.options || []).length} option{(input.options || []).length === 1 ? "" : "s"}</p></div> : null}
           <div className="flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 text-xs text-ink"><span className="font-semibold">Default</span>
               {input.type === "language" ? <select className={`${fieldBase} px-2 py-1 text-xs`} value={String(input.default || "")} onChange={(event) => onChange({ ...input, default: event.target.value })}>{LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}</select>

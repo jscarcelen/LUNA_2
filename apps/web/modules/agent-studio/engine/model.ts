@@ -35,7 +35,7 @@ export function createAgentSpec(name = "Untitled agent"): AgentSpec {
     contextSlots: [createSlot("user_material", "Source material", { description: "Draw the content from this material.", required: false, multiple: true })],
     outputSchema: [createCollection("Items", [createField("Title", "text", { description: "Short title", required: true })])],
     examples: [],
-    validationRules: [{ type: "required_fields" }],
+    validationRules: [{ type: "required_fields" }, { type: "no_duplicates", arrayFieldId: "__primary__", byFieldId: "__first__" }],
     model: { model: "gpt-4o-mini", creativity: "medium" },
     createdAt: now,
     updatedAt: now

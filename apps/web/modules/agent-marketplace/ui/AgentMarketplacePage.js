@@ -19,7 +19,7 @@ const MODEL_LABELS = { "gpt-4o-mini": "Luna 3 Mini", "gpt-4o": "Luna 3 Pro", "gp
 function priceLabel(listing) {
   const price = Number(listing.price || 0);
   if (!price) return "Free";
-  const suffix = listing.pricingType === "monthly" ? "/mo" : listing.pricingType === "pay-as-you-go" ? "/run" : "";
+  const suffix = listing.pricingType === "monthly" || listing.pricingType === "subscription" ? "/mo" : listing.pricingType === "pay-as-you-go" || listing.pricingType === "per-use" ? "/run" : "";
   return `$${price.toFixed(2)}${suffix}`;
 }
 

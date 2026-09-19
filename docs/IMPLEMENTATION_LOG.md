@@ -465,3 +465,10 @@
 - **Estimate**: `POST /api/ai-tools/agent-builder/estimate` → `estimateAgentRun(config)` runs the same material preparation without a model call and returns tokens in/out, USD (list price in `MODEL_PRICING`), documents read and whether they were truncated. Shown under Generate in the Run flow and the Studio tester (`modules/credits/RunEstimate.js`).
 - **Lunas**: `modules/credits/credits.js` — local ledger (1 luna = 1 token, 1M starting grant), charged with the real `usage.total_tokens` after each run (estimate as fallback); `CreditsBadge` in the top bar with usage history and a demo top-up. Monetisation rules (tiers, overage, marketplace fees, transfers) to replace this ledger later.
 - Stream route `maxDuration` 120s; retry attempt capped at 3,000 output tokens so a looping first attempt cannot exhaust the function time.
+
+## Agent Studio: flexible output structure (2026-09-19)
+
+- Output schema is now an ordered mix of **once-per-document fields** and **lists** (zero, one or several). The first list is emitted as `items` (template/runtime contract); other lists keep their slug. A summary agent can be just `title` + `summary` with no list.
+- `outputSkeleton()` renders a commented JSON skeleton; the prompt's `OUTPUT STRUCTURE` section and the Output step's "JSON structure the agent will return" panel both show it, so the structure the model must return is explicit.
+- Runtime accepts list-less output (`items` defaults to `[]` when the schema has no list); count / no-duplicate checks and hints only apply when a list exists.
+- Tester renders each top-level field generically (once fields as boxes, each list as numbered cards).

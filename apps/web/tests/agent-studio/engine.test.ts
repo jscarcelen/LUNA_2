@@ -30,7 +30,9 @@ describe("compiler", () => {
     const spec = createVocabularyFlashcardsSpec();
     const compiled = compileAgent(spec, { values: { [spec.inputs[0].id]: 5, [spec.inputs[1].id]: "French" } });
     expect(compiled.system).toContain("Create vocabulary flashcards");
-    expect(compiled.system).toContain("front — The word in language 1 (text)");
+    expect(compiled.system).toContain("OUTPUT STRUCTURE");
+    expect(compiled.system).toContain('"items": [');
+    expect(compiled.system).toContain('"front": "<text: The word in language 1>"');
     expect(compiled.system).toContain("Checks:");
     expect(compiled.user).toContain("Number of cards: 5");
     expect(compiled.user).toContain("Language 1: French");
@@ -101,5 +103,22 @@ describe("migration + integration", () => {
     const schema = schemaFromAgentFields(legacyFields(spec.outputSchema));
     const proposals = proposeMapping(template.fields, schema);
     expect(proposals.map((p) => p.path).sort()).toEqual(["items", "items[].back", "items[].front", "items[].topic"]);
+  });
+});
+
+describe("output structure", () => {
+  it("supports once-only outputs (no list) and secondary lists", async () => {
+    const { outputJsonSchema, outputSkeleton } = await import("../../modules/agent-studio/engine/schema");
+    const { createField } = await import("../../modules/template-studio/engine/model");
+    const { createCollection } = await import("../../modules/agent-studio/engine/model");
+    const summary = [createField("Title", "text"), createField("Summary", "rich_text", { description: "The summary" })];
+    const schema = outputJsonSchema(summary) as { properties: Record<string, unknown>; required: string[] };
+    expect(Object.keys(schema.properties)).toEqual(["title", "summary"]);
+    expect(schema.properties.items).toBeUndefined();
+    expect(outputSkeleton(summary)).toContain('"summary": "<rich_text: The summary>"');
+    const mixed = [createField("Title", "text"), createCollection("Cards", [createField("Front", "text"), createField("Back", "text")]), createCollection("Glossary", [createField("Term", "text")])];
+    const mixedSchema = outputJsonSchema(mixed) as { properties: Record<string, unknown> };
+    expect(Object.keys(mixedSchema.properties)).toEqual(["title", "items", "glossary"]);
+    expect(outputSkeleton(mixed)).toContain('"glossary": [');
   });
 });

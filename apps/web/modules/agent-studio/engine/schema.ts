@@ -38,11 +38,39 @@ function objectSchema(fields: FieldDef[], description?: string): JsonSchema {
  */
 export function outputJsonSchema(outputSchema: FieldDef[]): JsonSchema {
   const primary = outputSchema.find((field) => field.type === "array");
-  const rest = outputSchema.filter((field) => field !== primary);
   const properties: Record<string, JsonSchema> = {};
-  if (primary) properties.items = { ...fieldToJsonSchema(primary), minItems: 1 };
-  for (const field of rest) properties[slug(field.name)] = fieldToJsonSchema(field);
+  for (const field of outputSchema) {
+    if (field === primary) properties.items = { ...fieldToJsonSchema(primary), minItems: 1 };
+    else properties[slug(field.name)] = fieldToJsonSchema(field);
+  }
   return { type: "object", additionalProperties: false, properties, required: Object.keys(properties) };
+}
+
+/** The JSON key a top-level output field is emitted under (the first list is always `items`). */
+export function outputKey(outputSchema: FieldDef[], field: FieldDef): string {
+  const primary = outputSchema.find((item) => item.type === "array");
+  return field === primary ? "items" : slug(field.name);
+}
+
+/**
+ * Human-readable JSON skeleton of the output, shown in the prompt and in Advanced mode so the
+ * structure is unambiguous: which keys appear once, which are lists, and what each value holds.
+ */
+export function outputSkeleton(outputSchema: FieldDef[]): string {
+  const hint = (field: FieldDef): string => `"<${field.type}${field.required === false ? ", optional" : ""}: ${field.description || field.name}>"`;
+  const render = (field: FieldDef, indent: string): string => {
+    if (field.type === "array") {
+      const item = field.children?.[0];
+      const inner = item?.type === "object"
+        ? `${indent}  {\n${(item.children || []).map((child) => `${indent}    "${slug(child.name)}": ${render(child, `${indent}    `)}`).join(",\n")}\n${indent}  }`
+        : `${indent}  ${item ? render(item, `${indent}  `) : '"<text>"'}`;
+      return `[   // ${field.name}: one element per ${field.name.replace(/s$/i, "").toLowerCase() || "item"}, as many as needed\n${inner},\n${indent}  …\n${indent}]`;
+    }
+    if (field.type === "object") return `{\n${(field.children || []).map((child) => `${indent}  "${slug(child.name)}": ${render(child, `${indent}  `)}`).join(",\n")}\n${indent}}`;
+    return hint(field);
+  };
+  const lines = outputSchema.map((field, index) => `  "${outputKey(outputSchema, field)}": ${render(field, "  ")}${index < outputSchema.length - 1 ? "," : ""}${field.type !== "array" ? "   // once per document" : ""}`);
+  return `{\n${lines.join("\n")}\n}`;
 }
 
 /** Flat per-item field list in the legacy shape RunAgentPage/templates consume. */

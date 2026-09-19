@@ -311,6 +311,9 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
   }
 
   const parsed = parseJsonFromContent(content);
+  // A list is optional: an agent may return only once-per-document fields (e.g. title + summary).
+  const expectsItems = Boolean(schema?.properties?.items);
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && !expectsItems && !Array.isArray(parsed.items)) parsed.items = [];
   if (!parsed || !Array.isArray(parsed.items)) {
     if (finishReason === "length") {
       throw new Error("The model ran out of space before finishing the output. Ask for fewer items or shorter text.");

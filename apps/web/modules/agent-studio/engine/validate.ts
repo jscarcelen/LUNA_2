@@ -25,11 +25,13 @@ export function validateOutput(spec: AgentSpec, output: DataObject | null, input
       checks.push({ rule: rule.type, ok: missing.length === 0, message: missing.length ? `Missing ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "…" : ""}` : "All required fields present" });
     }
     if (rule.type === "count_matches_input") {
+      if (!primary) continue;
       const wanted = Number(inputValues[rule.inputId]);
       if (!Number.isFinite(wanted) || !wanted) continue;
       checks.push({ rule: rule.type, ok: items.length === wanted, message: items.length === wanted ? `Exactly ${wanted} items` : `${items.length} items, ${wanted} requested` });
     }
     if (rule.type === "no_duplicates") {
+      if (!primary) continue;
       const k = key(spec, rule.byFieldId);
       const seen = new Set<string>();
       const dupes = items.filter((item) => { const v = String(item[k] ?? "").trim().toLowerCase(); if (!v) return false; if (seen.has(v)) return true; seen.add(v); return false; });

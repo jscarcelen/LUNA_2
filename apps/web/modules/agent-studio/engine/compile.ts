@@ -1,5 +1,5 @@
 import type { AgentSpec, CompiledPrompt, InputDef } from "./types";
-import { outputJsonSchema } from "./schema";
+import { outputJsonSchema, outputSkeleton } from "./schema";
 import { collectionFields, primaryCollection } from "./model";
 import { flattenFields, slug } from "../../template-studio/engine/model";
 
@@ -12,16 +12,14 @@ function formatValue(input: InputDef, value: unknown): string {
 
 /** Plain-language rendering of the output contract, one line per field. */
 export function describeOutput(spec: AgentSpec): string {
-  const primary = primaryCollection(spec);
-  const lines: string[] = [];
-  if (primary) {
-    lines.push(`Return a list called "items" (${primary.name}). Each element of the list is ONE ${singular(primary.name)}, distinct and self-contained — never put several ${primary.name.toLowerCase()} into one element. Each item has:`);
-    for (const entry of flattenFields(collectionFields(primary))) {
-      const f = entry.field;
-      lines.push(`  - ${slug(f.name)} — ${f.description || f.name} (${f.type}${f.required === false ? ", optional" : ""})`);
-    }
+  const lists = spec.outputSchema.filter((f) => f.type === "array");
+  const once = spec.outputSchema.filter((f) => f.type !== "array");
+  const lines: string[] = ["Return ONE JSON object with exactly this structure:", outputSkeleton(spec.outputSchema)];
+  if (once.length) lines.push(`Fields that appear once (top level): ${once.map((f) => `"${slug(f.name)}"`).join(", ")}.`);
+  for (const list of lists) {
+    const key = list === primaryCollection(spec) ? "items" : slug(list.name);
+    lines.push(`"${key}" (${list.name}) is a list: each element is ONE ${singular(list.name)}, distinct and self-contained — never put several ${list.name.toLowerCase()} into one element.`);
   }
-  for (const field of spec.outputSchema.filter((f) => f !== primary)) lines.push(`- ${slug(field.name)} — ${field.description || field.name} (${field.type})`);
   return lines.join("\n");
 }
 
@@ -40,7 +38,7 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
     spec.instructions.style ? `Style: ${spec.instructions.style}` : "",
     constraints.length ? `Rules:\n${constraints.map((c) => `- ${c}`).join("\n")}` : "",
     "",
-    "OUTPUT",
+    "OUTPUT STRUCTURE",
     describeOutput(spec),
     "Output only valid JSON matching the schema. Content only — no formatting or styling instructions.",
     validationHints(spec)
@@ -66,6 +64,8 @@ function singular(name: string): string {
 
 function validationHints(spec: AgentSpec): string {
   const hints: string[] = [];
+  // Count / duplicate hints only make sense when the output has a list.
+  if (!spec.outputSchema.some((f) => f.type === "array")) return "";
   const countInput = spec.inputs.find((i) => i.type === "number");
   if (!spec.validationRules.some((r) => r.type === "count_matches_input")) hints.push(countInput ? `Return as many items as "${countInput.name}" asks for.` : "If the instructions mention a number of items, return exactly that many elements in items.");
   for (const rule of spec.validationRules) {

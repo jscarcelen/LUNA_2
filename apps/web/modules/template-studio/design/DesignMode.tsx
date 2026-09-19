@@ -265,7 +265,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   const addHint = selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
 
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
+    <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         <AddPanel onAdd={addElement} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
         <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />

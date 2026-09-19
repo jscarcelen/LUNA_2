@@ -74,7 +74,7 @@ export function AddPanel({ onAdd, onAddBlock, onPublishBlock, onRemoveBlock, hin
       <div key={block.id} className={`rounded-xl border transition ${open ? "border-[var(--accent)]/40 bg-white shadow-[0_4px_14px_rgba(0,0,0,0.06)]" : "border-transparent hover:bg-[var(--surface-soft)]"}`}>
         <button type="button" onClick={() => (open ? setActive(null) : pick(block))} className="flex w-full min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-left">
           <span className="w-12 shrink-0"><BlockPreview block={block} accent={accent} /></span>
-          <span className="min-w-0"><span className="block truncate text-[12px] font-semibold text-ink">{block.name}</span><span className="block truncate text-[10.5px] text-soft-ink">{block.description}</span></span>
+          <span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold leading-tight text-ink">{block.name}</span><span className="line-clamp-2 block text-[10.5px] leading-snug text-soft-ink">{block.description}</span></span>
         </button>
         {open ? (
           <div className="grid gap-1.5 px-2 pb-2">

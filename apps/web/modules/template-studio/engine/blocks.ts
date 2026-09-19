@@ -821,3 +821,66 @@ export function removeBlockFromLibrary(id: string): BlockDef[] {
   writeBlockLibrary(next);
   return next;
 }
+
+/* ---------------------------------------------------------------- agent-ordered content (sequence) */
+
+export interface SequenceChoice { block: BlockDef; typeValue: string }
+
+/** Fields a block contributes to one element of the sequence: its list's item fields, or its scalars. */
+function blockItemFields(block: BlockDef): FieldDef[] {
+  const out: FieldDef[] = [];
+  for (const field of block.fields) {
+    if (field.type === "array") {
+      const item = field.children?.[0];
+      if (item?.type === "object") out.push(...(item.children || []));
+      else if (item) out.push(item);
+    } else if (field.type !== "object") out.push(field);
+  }
+  return out;
+}
+
+/**
+ * Builds ONE block from several designs: a list ("Content") whose elements carry a "Type"; each
+ * chosen design is shown only for its type value. The agent decides the order — the user only
+ * decides which designs are allowed and how they look.
+ */
+export function buildSequenceBlock(choices: SequenceChoice[], listName = "Content"): BlockDef {
+  const typeField = createField("Type", "text", { description: `Which design this element uses: ${choices.map((c) => c.typeValue).join(", ")}`, options: choices.map((c) => c.typeValue) });
+  const itemFields: FieldDef[] = [typeField];
+  const elements: Element[] = [];
+  let maxH = 0;
+  for (const { block, typeValue } of choices) {
+    itemFields.push(...cloneDeep(blockItemFields(block)));
+    const source = cloneDeep(block.elements[0]);
+    const inner: GroupElement = source.type === "group"
+      ? { ...source, repeat: null, pageScope: { mode: "page" }, frame: { ...source.frame, x: 0, y: 0 } }
+      : createGroup({ name: block.name, frame: { x: 0, y: 0, w: source.frame.w, h: source.frame.h }, layout: { mode: "free", gap: 0 }, repeat: null, children: [{ ...source, frame: { ...source.frame, x: 0, y: 0 } }] });
+    inner.name = block.variant ? `${block.family || block.name} · ${block.variant}` : block.name;
+    inner.condition = { fieldId: typeField.id, equals: typeValue };
+    elements.push(inner);
+    maxH = Math.max(maxH, inner.frame.h);
+  }
+  const list = createField(listName, "array", { description: "Elements in the agent's order; each says its Type", children: [createField("item", "object", { children: itemFields })] });
+  const group = createGroup({
+    name: `${listName} (agent order)`,
+    frame: { x: 12, y: 12, w: 186, h: maxH },
+    layout: { mode: "free", gap: 3 },
+    repeat: { fieldId: list.id, mode: "flow" },
+    children: elements
+  });
+  return {
+    id: `block-sequence-${createId("s")}`,
+    name: `${listName} (agent order)`,
+    description: `One of ${choices.length} designs per element, chosen by Type: ${choices.map((c) => c.typeValue).join(" · ")}.`,
+    category: "custom",
+    icon: "⇅",
+    family: "Agent-ordered content",
+    fields: [list],
+    elements: [group],
+    builtIn: false
+  };
+}
+
+export function typeValueFor(block: BlockDef): string {
+  return (block.variant && block.family ? `${block.family} ${block.variant}` : block.name).toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 32);
+}

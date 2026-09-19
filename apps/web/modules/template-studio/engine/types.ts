@@ -129,10 +129,21 @@ export type ContentSource =
   | { type: "static"; value: string }
   | { type: "field"; fieldId: ID };
 
+/**
+ * How a top-level block is placed relative to the block above it when content grows:
+ * flow (default) — starts after the previous block, pushed down by it;
+ * fixed — always starts at its own position; the block above is limited to the space before it
+ *         (it continues on the next page if it needs more);
+ * new_page — always starts on a new page.
+ * "Every page" headers/footers are expressed with pageScope, not here.
+ */
+export type Placement = "flow" | "fixed" | "new_page";
+
 export interface ElementBase {
   id: ID;
   type: string;
   name?: string;
+  placement?: Placement;
   frame: Frame;
   style: Style;
   pageScope: PageScope;

@@ -279,7 +279,7 @@ export const STACK_GAP = 4;
 
 /** Whether an element is pinned (headers/footers on every page near the bottom) and must not be restacked. */
 export function isPinned(element: Element, layout: Layout): boolean {
-  return element.pageScope.mode === "every" && element.frame.y > layout.canvas.height * 0.6;
+  return element.placement === "fixed" || (element.pageScope.mode === "every" && element.frame.y > layout.canvas.height * 0.6);
 }
 
 /**

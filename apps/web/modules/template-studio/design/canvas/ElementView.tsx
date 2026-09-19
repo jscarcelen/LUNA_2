@@ -74,7 +74,9 @@ export function ElementView(props: ElementViewProps) {
   const groupBox: React.CSSProperties = group
     ? { background: style.fill || "transparent", border: style.stroke ? `${Math.max(1, (style.strokeWidth || 0.3) * scale)}px solid ${style.stroke}` : "none", borderRadius: px(style.radius || 0) }
     : {};
-  const outline = ghost ? "none" : selected ? `2px solid ${isGroup ? GROUP_COLOR : "var(--accent)"}` : repeat ? `1.5px dashed ${GROUP_COLOR}99` : isField ? "1px dashed rgba(0,113,227,0.45)" : "1px solid transparent";
+  // Calm by default: only the selected element is emphasised; repeating groups keep a faint dashed edge.
+  const outline = ghost ? "none" : selected ? `2px solid ${isGroup ? GROUP_COLOR : "var(--accent)"}` : repeat ? "1px dashed rgba(0,0,0,0.22)" : "1px solid transparent";
+  const hoverClass = ghost ? "" : isField ? "hover:[outline:1px_dashed_rgba(0,113,227,0.55)]" : isGroup ? "hover:[outline:1px_dashed_rgba(109,77,230,0.6)]" : "hover:[outline:1px_dashed_rgba(0,0,0,0.25)]";
 
   // "One of" variants share a spot; on the canvas they are shown stacked so each can be edited.
   const variantOffsets = new Map<string, number>();
@@ -88,7 +90,7 @@ export function ElementView(props: ElementViewProps) {
     const shifted = offset ? ({ ...child, frame: { ...child.frame, y: child.frame.y + offset } } as Element) : child;
     return (
       <span key={child.id}>
-        {offset !== undefined && !asGhost ? <span className="absolute z-30 rounded-md bg-white px-1 text-[8px] font-semibold text-[var(--accent-ink)] ring-1 ring-[var(--accent)]/40" style={{ left: px(child.frame.x) + 2, top: px(child.frame.y + offset) - 7 }}>when {findField(fields, (child as GroupElement).condition!.fieldId)?.name || "field"} = {(child as GroupElement).condition!.equals || "…"}</span> : null}
+        {offset !== undefined && !asGhost && (selected || selectedIds.includes(child.id)) ? <span className="absolute z-30 rounded-md bg-white px-1 text-[8px] font-semibold text-[var(--accent-ink)] ring-1 ring-[var(--accent)]/40" style={{ left: px(child.frame.x) + 2, top: px(child.frame.y + offset) - 7 }}>when {findField(fields, (child as GroupElement).condition!.fieldId)?.name || "field"} = {(child as GroupElement).condition!.equals || "…"}</span> : null}
         <ElementView {...props} element={shifted} ordinal={n} ghost={asGhost} />
       </span>
     );
@@ -120,12 +122,13 @@ export function ElementView(props: ElementViewProps) {
       <div
         data-element-id={ghost ? undefined : element.id}
         onPointerDown={ghost ? undefined : (event) => onPointerDown(event, element)}
-        className={`absolute select-none ${ghost ? "" : element.locked ? "cursor-default" : "cursor-move"} ${selected ? "z-20" : "z-10"}`}
+        className={`absolute select-none ${ghost ? "" : element.locked ? "cursor-default" : "cursor-move"} ${selected ? "z-20" : "z-10"} ${selected ? "" : hoverClass}`}
         style={{ left: px(x), top: px(y), width: px(w), minHeight: px(Math.max(h, 1)), height: isGroup ? px(stackedHeight) : undefined, outline, outlineOffset: 1, ...groupBox }}
       >
         {group ? (
           <>
-            {!ghost && (repeat || selected) ? <span className="absolute -top-4 left-0 whitespace-nowrap rounded-md px-1.5 py-[1px] text-[9px] font-bold text-white" style={{ background: repeat ? GROUP_COLOR : "#8e8e93" }}>{repeat ? "↻ " : ""}{element.name || "Group"}{repeat ? ` · ${repeatText}` : ""}</span> : null}
+            {!ghost && selected ? <span className="absolute -top-4 left-0 whitespace-nowrap rounded-md px-1.5 py-[1px] text-[9px] font-bold text-white" style={{ background: repeat ? GROUP_COLOR : "#8e8e93" }}>{repeat ? "↻ " : ""}{element.name || "Group"}{repeat ? ` · ${repeatText}` : ""}</span> : null}
+            {!ghost && !selected && repeat ? <span className="absolute -top-2 right-0 grid size-4 place-items-center rounded-full bg-white text-[9px] font-bold shadow-[0_1px_2px_rgba(0,0,0,0.15)]" style={{ color: GROUP_COLOR }} title={repeatText}>↻</span> : null}
             {renderChildren(ordinal, ghost)}
           </>
         ) : body}

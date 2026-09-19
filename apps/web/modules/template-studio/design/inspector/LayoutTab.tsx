@@ -3,6 +3,7 @@
 import type { Element, GroupElement, Page, PageScope } from "../../engine/types";
 import { field as fieldClass, fieldBase, label } from "../../ui";
 import { Segmented } from "./Segmented";
+import { PlacementControl } from "../PlacementControl";
 
 export function LayoutTab({ element, pages, onChange }: { element: Element; pages: Page[]; onChange: (updater: (element: Element) => Element) => void }) {
   const setFrame = (patch: Partial<Element["frame"]>) => onChange((current) => ({ ...current, frame: { ...current.frame, ...patch } }));
@@ -28,6 +29,7 @@ export function LayoutTab({ element, pages, onChange }: { element: Element; page
           ))}
         </div>
       </div>
+      <PlacementControl element={element} onChange={onChange} />
       <div>
         <label className={label}>Appears on</label>
         <select className={fieldClass} value={scope} onChange={(event) => {

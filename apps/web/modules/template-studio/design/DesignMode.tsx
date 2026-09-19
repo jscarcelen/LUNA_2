@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Element, FieldDef, GroupElement, ID } from "../engine/types";
 import { arrayItemFields, cloneElement, createField, createGroup, findElement, findField, removeElements, simpleOrder, stackElements, updateElement } from "../engine/model";
 import { SimpleDesign } from "./SimpleDesign";
+import { SequenceDialog } from "./SequenceDialog";
 import { getComponent } from "../engine/registry";
 import type { Store } from "../state/useTemplateStore";
 import { AddPanel } from "./AddPanel";
@@ -13,7 +14,7 @@ import { LayersPanel } from "./LayersPanel";
 import { PagesPanel } from "./PagesPanel";
 import { importPages } from "../pdfImport";
 import { fieldsInScope } from "./inspector/ContentTab";
-import { blockFromElements, instantiateBlock, removeBlockFromLibrary, saveBlockToLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
+import { ACCENT_PRESETS, blockFromElements, instantiateBlock, removeBlockFromLibrary, saveBlockToLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { BlockDialog } from "./BlockDialog";
 import type { RepeatChoice } from "./inspector/AiFieldPanel";
 
@@ -35,6 +36,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   const [dimBackground, setDimBackground] = useState(false);
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
+  const [sequenceOpen, setSequenceOpen] = useState(false);
   const template = state.template!;
   const simple = (template.editorMode || "simple") === "simple";
   const elements = page?.elements || [];
@@ -278,7 +280,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <AddPanel onAdd={addElement} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
+        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen(true)} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
         <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />
         <LayersPanel
           page={pg}
@@ -319,6 +321,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
             const list = group.repeat?.fieldId || arrayField()?.id || "";
             return { ...group, repeat: { fieldId: list, mode, columns: mode === "grid" ? group.repeat?.columns || 2 : undefined }, layout: mode === "grid" ? { ...group.layout, mode: "grid", columns: group.repeat?.columns || 2 } : group.layout } as Element;
           })}
+          onChangeElement={(id, updater) => updateElements(id, updater)}
           onAdvanced={() => update((current) => ({ ...current, editorMode: "advanced" }))}
         />
       ) : (
@@ -373,6 +376,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         onSetRepeat={setFieldRepeat}
       />
       {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
+      {sequenceOpen ? <SequenceDialog onClose={() => setSequenceOpen(false)} onInsert={(block) => { addBlock(block, { accent: ACCENT_PRESETS[0], toggles: {} }); setSequenceOpen(false); }} /> : null}
     </div>
   );
 }

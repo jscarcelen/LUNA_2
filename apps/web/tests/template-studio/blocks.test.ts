@@ -127,3 +127,48 @@ describe("one-of designs (show only when)", () => {
     expect(sample.questions.map((q) => q.type)).toEqual(["multiple_choice", "true_false", "open"]);
   });
 });
+
+describe("agent-ordered content + placement", () => {
+  it("builds a sequence block from chosen designs and lays items out by Type in agent order", async () => {
+    const { buildSequenceBlock } = await import("../../modules/template-studio/engine/blocks");
+    const lib = builtInBlocks();
+    const pick = (id: string) => lib.find((b) => b.id === id)!;
+    const seq = buildSequenceBlock([{ block: pick("block-section-header"), typeValue: "section" }, { block: pick("block-exam-question"), typeValue: "mc" }, { block: pick("block-callout"), typeValue: "callout" }], "Content");
+    const template = createTemplate("T");
+    const { fields, elements } = instantiateBlock(seq, template.fields);
+    template.fields = fields;
+    template.layouts[0].pages[0].elements = elements;
+    const item = fields[0].children![0].children!.map((f) => f.name);
+    expect(fields[0].name).toBe("Content");
+    expect(item).toContain("Type");
+    expect(item).toContain("Section title");
+    expect(item).toContain("Question");
+    expect(item).toContain("Note");
+    const data = { content: [{ type: "section", section_title: "Part A" }, { type: "mc", question: "Q1?", options: ["a", "b"], answer: "a" }, { type: "callout", note: "Tip!" }, { type: "mc", question: "Q2?", options: ["c"], answer: "c" }] } as unknown as Parameters<typeof layoutDocument>[1];
+    const result = layoutDocument(template, data);
+    const texts = result.pages.flatMap((page) => page.items.filter((i) => i.type === "text").map((i) => (i as { lines: string[] }).lines.join(" ")));
+    expect(texts.indexOf("Part A")).toBeLessThan(texts.indexOf("Q1?"));
+    expect(texts.indexOf("Q1?")).toBeLessThan(texts.indexOf("Tip!"));
+    expect(texts.indexOf("Tip!")).toBeLessThan(texts.indexOf("Q2?"));
+  });
+
+  it("a fixed block caps the flow above it and a new_page block starts on a fresh page", () => {
+    const template = createTemplate("T");
+    const { fields, elements } = instantiateBlock(byName("Exam question"), template.fields);
+    template.fields = fields;
+    const flow = elements[0];
+    const fixed = { ...instantiateBlock(byName("Callout"), fields).elements[0], placement: "fixed" as const, frame: { x: 12, y: 150, w: 186, h: 16 } };
+    template.layouts[0].pages[0].elements = [flow, fixed];
+    const result = layoutDocument(template, buildSampleData(template, 6));
+    const firstPage = result.pages[0];
+    const calloutOnFirst = firstPage.items.find((i) => i.elementId === fixed.id);
+    expect(calloutOnFirst && calloutOnFirst.y).toBe(150);
+    const questionBottoms = firstPage.items.filter((i) => i.type === "rect" && i.y < 150 && i.h > 20).map((i) => i.y + i.h);
+    expect(Math.max(...questionBottoms)).toBeLessThanOrEqual(150 + 0.5);
+    expect(result.pages.length).toBeGreaterThan(1);
+    const np = { ...instantiateBlock(byName("Key points"), fields).elements[0], placement: "new_page" as const };
+    template.layouts[0].pages[0].elements = [flow, np];
+    const result2 = layoutDocument(template, buildSampleData(template, 2));
+    expect(result2.pages.length).toBe(2);
+  });
+});

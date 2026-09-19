@@ -494,3 +494,9 @@
 - Canvas: variants are drawn stacked with "when Type = …" labels so each can be edited; repeat ghosts are now behind a "Show repetitions ×3" toggle (default: one iteration).
 - Resizing a group scales children positions, sizes and font sizes proportionally.
 - Wording: lists explained as fields with many elements; "Repeat for each element of the list".
+
+## Template Studio: agent-ordered content, placement, sequential flow (2026-09-19)
+
+- **Content in the agent's order** (Add → Agent order): dialog listing every design by family; tick the ones allowed, edit their Type values, name the list. `buildSequenceBlock()` produces one repeating block over `Content[]` whose item = `Type` (+ union of the chosen designs' fields), each design shown only for its Type.
+- **Placement** (`element.placement`: flow | fixed | new_page; "every page" = pageScope every) — in Simple rows and the Layout tab. Engine now lays a page out **sequentially**: flowing elements start where the previous ended (designed spacing kept), a flowing element that doesn't fit moves to the next page, fixed blocks keep their position and cap the flow above them on the first page, new_page starts a fresh page after every-page headers.
+- Advanced canvas: neutral dashed edges for repeating groups, labels and AI-field outlines only on selection/hover, quieter margins/background.

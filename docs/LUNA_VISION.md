@@ -98,6 +98,9 @@ Consequences for the product:
 - A **list is a field** (it holds many elements and is repeated consecutively by default) — the UI must make this clear.
 - Advanced view shows **one iteration** of a repeating block (the space it takes) with a toggle to preview ×3 repetitions and how overflow pushes the rest down; Preview shows the real repetitions.
 - **Groups scale as a whole**: resizing a group resizes every element inside proportionally.
+- **Agent-ordered sets, chosen visually by the user**: the user picks which components may appear (cards, titles, callouts…) and their styles; the agent decides the order and which one goes where. The user must not be forced into a fixed combination.
+- **Block placement options**: shown once on every page (header/footer) · generated from the agent output · starts at a fixed position (the previous block is clipped/reduced to the space before it) · starts after the previous block · starts on a new page (respecting every-page elements).
+- Advanced canvas must stay **clean**: few colours and lines; show groups, repetition, format and space.
 - Philosophy: Canva (visual) + Notion (blocks) + Google Docs (structure) + Luna (AI content), but much simpler than Canva; avoid too many buttons, nested menus, technical terms, separate editors per format, over-complex AI fields. Mental model: create template → name → view → add elements → design → add AI fields → define repeats → more views → preview → export.
 
 ### 5.2 Performance tracking (different UIs)
@@ -334,6 +337,7 @@ Set de guardrails
 
 ## Appendix B — Change log of this document
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.
+- 2026-09-19 — §5.1a: user-chosen agent-ordered sets, block placement options, clean advanced canvas.
 - 2026-09-19 — §5.1a: "one of" designs chosen by agent output, list-is-a-field clarity, single-iteration canvas + ×3 toggle, proportional group scaling.
 - 2026-09-19 — §5.1a: component design variants, Block vs Advanced design levels, agent-order composition (sections with questions).
 - 2026-09-19 — Added §5.1a Template Studio editor model (founder's detailed spec: views, element categories, AI field = text/image + name + type + repeat, contextual inspector, layers, export per view).

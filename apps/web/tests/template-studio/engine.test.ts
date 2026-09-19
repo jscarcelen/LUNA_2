@@ -67,11 +67,16 @@ describe("layout engine", () => {
     expect(item.type === "text" && item.style.fontSize).toBe(30);
   });
 
-  it("reports overflow when a static element exceeds the page", () => {
+  it("moves a flowing element that does not fit to the next page, and reports overflow for fixed ones", () => {
     const template = createTemplate("t");
     template.layouts[0].pages[0].elements = [createText({ type: "static", value: "x".repeat(4000) }, { frame: { x: 12, y: 280, w: 50, h: 8 } })];
-    const result = layoutDocument(template, {});
-    expect(result.overflows.length).toBe(1);
+    const flowing = layoutDocument(template, {});
+    expect(flowing.pages.length).toBe(2);
+    expect(flowing.overflows.length).toBe(0);
+    template.layouts[0].pages[0].elements = [createText({ type: "static", value: "x".repeat(4000) }, { placement: "fixed", frame: { x: 12, y: 280, w: 50, h: 8 } })];
+    const fixed = layoutDocument(template, {});
+    expect(fixed.pages.length).toBe(1);
+    expect(fixed.overflows.length).toBe(1);
   });
 });
 

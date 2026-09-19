@@ -87,7 +87,7 @@ export function Canvas({ layout, page, pageIndex, pageCount, fields, selection, 
   const selectedGroup = selection.length === 1 ? (findElement(page.elements, selection[0]).element as GroupElement | null) : null;
 
   return (
-    <div ref={wrapRef} className={`${card} relative overflow-auto p-4`} style={{ background: "#e9e9ee", minHeight: 640 }} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
+    <div ref={wrapRef} className={`${card} relative overflow-auto p-4`} style={{ background: "#f0f0f3", minHeight: 640 }} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
       <div className="mb-2 flex items-center justify-between text-[11px] text-soft-ink">
         <span>Page {pageIndex + 1} of {pageCount} · {width}×{height} mm · {layout.name}</span>
         <span className="flex items-center gap-3">
@@ -104,7 +104,7 @@ export function Canvas({ layout, page, pageIndex, pageCount, fields, selection, 
         style={{ width: width * scale, height: height * scale, background: bgColor }}
       >
         {bgSrc ? <img src={bgSrc} alt="" className="pointer-events-none absolute inset-0 h-full w-full" style={{ opacity: (bg.type === "image" || bg.type === "pdf" ? bg.opacity ?? 1 : 1) * (dimBackground ? 0.5 : 1) }} draggable={false} /> : null}
-        <div className="pointer-events-none absolute z-0 border border-dashed border-[var(--accent)]/35" style={{ left: margins.left * scale, top: margins.top * scale, width: (width - margins.left - margins.right) * scale, height: (height - margins.top - margins.bottom) * scale }} />
+        <div className="pointer-events-none absolute z-0 border border-dashed border-black/10" style={{ left: margins.left * scale, top: margins.top * scale, width: (width - margins.left - margins.right) * scale, height: (height - margins.top - margins.bottom) * scale }} />
         {page.elements.map((element) => (
           <ElementView key={element.id} element={element} scale={scale} selectedIds={selection} fields={fields} sampleMode={sampleMode} sampleValues={sampleValues} onPointerDown={onPointerDown} onResizeStart={onResizeStart} previewRepeats={previewRepeats} />
         ))}

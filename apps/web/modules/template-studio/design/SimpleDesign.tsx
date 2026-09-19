@@ -3,6 +3,7 @@
 import type { Element, FieldDef, GroupElement, Layout, Page } from "../engine/types";
 import { findField, isPinned, simpleOrder } from "../engine/model";
 import { GROUP_COLOR, card, ghostBtn, kicker } from "../ui";
+import { PlacementControl } from "./PlacementControl";
 
 export interface SimpleDesignProps {
   layout: Layout;
@@ -14,6 +15,7 @@ export interface SimpleDesignProps {
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
   onSetRepeat: (id: string, mode: "none" | "flow" | "page" | "grid") => void;
+  onChangeElement: (id: string, updater: (element: Element) => Element) => void;
   onAdvanced: () => void;
 }
 
@@ -25,7 +27,7 @@ function elementName(element: Element): string {
 }
 
 function repeatSummary(element: Element, fields: FieldDef[]): { label: string; tone: "once" | "repeat" | "page" } {
-  if (element.type !== "group" || !element.repeat) return { label: element.pageScope.mode === "every" ? "Every page" : element.pageScope.mode === "first" ? "First page" : "Once", tone: "once" };
+  if (element.type !== "group" || !element.repeat) return { label: element.pageScope.mode === "every" ? "Every page" : element.pageScope.mode === "first" ? "First page" : element.placement === "fixed" ? "Fixed position" : element.placement === "new_page" ? "New page" : "Once", tone: "once" };
   const list = findField(fields, element.repeat.fieldId)?.name || "items";
   if (element.repeat.mode === "page") return { label: `One ${list.replace(/s$/i, "").toLowerCase()} per page`, tone: "page" };
   if (element.repeat.mode === "grid") return { label: `Grid · one per ${list.replace(/s$/i, "").toLowerCase()}`, tone: "repeat" };
@@ -54,7 +56,7 @@ function nestedRepeats(element: Element, fields: FieldDef[]): string[] {
  * Simple design: the template as an ordered list of blocks. Order = output order; each block says
  * whether it appears once or repeats. The same list flows into A4, Letter or slides.
  */
-export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onAdvanced }: SimpleDesignProps) {
+export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onChangeElement, onAdvanced }: SimpleDesignProps) {
   const ordered = simpleOrder(page.elements, layout);
   const ids = ordered.map((element) => element.id);
   const move = (id: string, direction: -1 | 1) => {
@@ -91,6 +93,10 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
                 </p>
                 {fieldIds.length ? <p className="m-0 mt-1 flex flex-wrap gap-1">{fieldIds.slice(0, 8).map((id) => { const f = findField(fields, id); return f ? <span key={id} className="rounded-md bg-[var(--accent-soft)] px-1.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {f.name}</span> : null; })}</p> : <p className="m-0 mt-1 text-[11px] text-soft-ink">Fixed content</p>}
                 {nested.map((line) => <p key={line} className="m-0 mt-1 text-[11px] text-soft-ink">↳ {line}</p>)}
+                <div className="mt-2 grid gap-1.5 sm:grid-cols-[auto_1fr] sm:items-center" onClick={(event) => event.stopPropagation()}>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Placement</span>
+                  <PlacementControl compact element={element} onChange={(updater) => onChangeElement(element.id, updater)} />
+                </div>
                 {isGroup ? (
                   <div className="mt-2 flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
                     {([["none", "Once"], ["flow", "Repeat per item"], ["page", "One per page / slide"], ["grid", "Grid"]] as const).map(([mode, text]) => {

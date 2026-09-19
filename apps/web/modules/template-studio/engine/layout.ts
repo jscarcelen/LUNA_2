@@ -248,7 +248,12 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   };
   let current = makePage(false);
   const elements = [...page.elements].sort((a, b) => a.frame.y - b.frame.y);
-  const staticElements = elements.filter((element) => !(element.type === "group" && element.repeat && element.repeat.mode === "flow"));
+  const isFlowGroup = (element: Element): element is GroupElement => element.type === "group" && Boolean(element.repeat) && element.repeat!.mode === "flow";
+  // Anchored elements keep their designed position on every page they appear on: headers/footers,
+  // first/last/selected-page elements and "fixed position" blocks. Everything else flows.
+  const anchored = (element: Element) => element.pageScope.mode !== "page" || element.placement === "fixed";
+  const staticElements = elements.filter((element) => anchored(element) && !isFlowGroup(element));
+  const flowing = elements.filter((element) => !anchored(element) || isFlowGroup(element));
   const stamp = (target: LaidOutPage, continuation: boolean) => {
     for (const element of staticElements) {
       const header = continuation ? element.pageScope.mode === "every" : true;
@@ -260,58 +265,71 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   };
   stamp(current, false);
 
-  let flowShift = 0;
-  for (const element of elements) {
-    if (!(element.type === "group" && element.repeat && element.repeat.mode === "flow")) continue;
+  // Fixed blocks cap whatever flows above them on the first page (the flow continues on the next page).
+  const fixedTops = elements.filter((element) => element.placement === "fixed" && !isFlowGroup(element)).map((element) => element.frame.y);
+  const capFor = (element: Element, onFirstPage: boolean) => {
+    if (!onFirstPage) return limit;
+    const below = fixedTops.filter((top) => top >= element.frame.y + element.frame.h);
+    return below.length ? Math.min(limit, Math.min(...below)) : limit;
+  };
+
+  // Sequential flow: each flowing element starts where the previous one ended, keeping the designed spacing.
+  let cursor = layout.margins.top;
+  let previousDesignedBottom = layout.margins.top;
+  let onFirstPage = true;
+  let firstFlowing = true;
+  const newPage = (element: Element) => {
+    current = makePage(true);
+    stamp(current, true);
+    onFirstPage = false;
+    cursor = Math.max(layout.margins.top, element.type === "group" ? continuationTop(page, element as GroupElement, layout) : layout.margins.top);
+  };
+  for (const element of flowing) {
     if (!isShown(element, scopes, ctx)) continue;
-    const group = element;
-    const records = repeatRecords(group, scopes, ctx);
-    const gap = group.layout.gap ?? 0;
-    const startY = group.frame.y + flowShift;
-    let cursor = startY;
-    if (group.pagination.breakBefore && current.items.length) {
-      current = makePage(true);
-      stamp(current, true);
-      cursor = layout.margins.top;
+    const designedGap = Math.max(0, element.frame.y - previousDesignedBottom);
+    let y = firstFlowing ? element.frame.y : cursor + designedGap;
+    firstFlowing = false;
+    const group = element.type === "group" ? element : null;
+    if (((group && group.pagination.breakBefore) || element.placement === "new_page") && current.items.length) {
+      newPage(element);
+      y = cursor;
     }
-    let onPage = 0;
-    for (const record of records) {
-      const recordScopes = [record, ...scopes];
-      let laid = layoutInstance(group, group.frame.x, cursor, recordScopes, ctx, limit);
-      const tooMany = group.pagination.maxItemsPerPage ? onPage >= group.pagination.maxItemsPerPage : false;
-      if ((laid.bottom > limit && cursor > layout.margins.top && group.pagination.overflow === "continue") || tooMany) {
-        current = makePage(true);
-        stamp(current, true);
-        cursor = Math.max(layout.margins.top, continuationTop(page, group, layout));
-        onPage = 0;
-        laid = layoutInstance(group, group.frame.x, cursor, recordScopes, ctx, limit);
-      }
-      if (laid.bottom > limit + 0.5) ctx.overflows.push({ elementId: group.id, pageIndex: out.indexOf(current), reason: group.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
-      current.items.push(...laid.items);
-      cursor = laid.bottom + gap;
-      onPage += 1;
-    }
-    flowShift += Math.max(0, cursor - gap - (group.frame.y + group.frame.h));
-    if (group.pagination.breakAfter) {
-      current = makePage(true);
-      stamp(current, true);
-    }
-  }
-  // Elements below a flow group move down with it (only on the page where they were laid).
-  if (flowShift > 0) {
-    const flowGroups = elements.filter((element) => element.type === "group" && element.repeat?.mode === "flow");
-    const lastFlow = flowGroups[flowGroups.length - 1];
-    if (lastFlow) {
-      const below = staticElements.filter((element) => element.frame.y >= lastFlow.frame.y + lastFlow.frame.h);
-      const firstPage = out.find((item) => item.sourcePageId === page.id && !item.continuation);
-      if (firstPage) {
-        firstPage.items = firstPage.items.filter((item) => !below.some((element) => element.id === item.elementId));
-        for (const element of below) {
-          const laid = layoutElement({ ...element, frame: { ...element.frame, y: element.frame.y + flowShift } } as Element, 0, 0, scopes, ctx, limit);
-          current.items.push(...laid.items);
+    if (isFlowGroup(element)) {
+      const gap = element.layout.gap ?? 0;
+      let pageLimit = capFor(element, onFirstPage) - (fixedTops.length ? gap : 0);
+      let onPage = 0;
+      let c = y;
+      for (const record of repeatRecords(element, scopes, ctx)) {
+        const recordScopes = [record, ...scopes];
+        let laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
+        const tooMany = element.pagination.maxItemsPerPage ? onPage >= element.pagination.maxItemsPerPage : false;
+        if ((laid.bottom > pageLimit && c > layout.margins.top && element.pagination.overflow === "continue") || tooMany) {
+          newPage(element);
+          c = cursor;
+          onPage = 0;
+          pageLimit = limit;
+          laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
         }
+        if (laid.bottom > pageLimit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: element.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
+        current.items.push(...laid.items);
+        c = laid.bottom + gap;
+        onPage += 1;
       }
+      cursor = Math.max(y, c - gap);
+      if (element.pagination.breakAfter) newPage(element);
+    } else {
+      const pageLimit = capFor(element, onFirstPage);
+      let laid = layoutElement({ ...element, frame: { ...element.frame, y } } as Element, 0, 0, scopes, ctx, pageLimit);
+      if (laid.bottom > pageLimit + 0.5 && y > layout.margins.top + 0.5) {
+        newPage(element);
+        y = cursor;
+        laid = layoutElement({ ...element, frame: { ...element.frame, y } } as Element, 0, 0, scopes, ctx, limit);
+      }
+      if (laid.bottom > limit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: "exceeds-page" });
+      current.items.push(...laid.items);
+      cursor = laid.bottom;
     }
+    previousDesignedBottom = element.frame.y + element.frame.h;
   }
 }
 

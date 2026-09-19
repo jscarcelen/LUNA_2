@@ -481,3 +481,9 @@
 - AI field inspector (`AiFieldPanel`): field name · type · Repeat (Once / Repeat per item / One item per page). Repeat wraps the element in a repeating group bound to the first list (creating the list/item field when needed); Once moves it back to a document-level field.
 - Layers: ▲▼ order, 👁 hide in this view, lock.
 - Canvas now draws elements as exports will (group fills/strokes/radius, element colours, no blue wash on AI fields) and previews repetition: flow/grid groups show two faded ghost copies where items 2–3 land (with `{{n}}` numbering), page-repeat groups show a stacked-pages hint. Left column widened to 248 px with wrapped block descriptions.
+
+## Template Studio: block design mode, component families, sections (2026-09-19)
+
+- **Simple | Advanced** switch (stored as `template.editorMode`, default simple). Simple = `design/SimpleDesign.tsx`: ordered list of top-level blocks (output order), ▲▼, duplicate, delete, repeat chips (Once / per item / one per page / grid), field chips and nested repeat summary; `stackElements()` keeps blocks stacked inside the margins so the same list flows into A4, Letter or slides; footers (`pageScope every`, lower page) stay pinned. Advanced = the canvas.
+- Blocks have `family` + `variant`; the Premium section shows one row per family with a "Design" dropdown. New blocks: Header (Exam header / Centered title), Footer (title + `{{page}}`), Section header, **Section + questions** (nested `Sections[] → Questions[]`, agent order), Question card compact (2-column options), Answer box, Flashcard one-per-page, Callout.
+- `{{page}}` / `{{pages}}` tokens in static text are resolved after pagination.

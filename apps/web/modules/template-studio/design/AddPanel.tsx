@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listComponents } from "../engine/registry";
-import { ACCENT_PRESETS, builtInBlocks, readBlockLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
+import { ACCENT_PRESETS, blockFamilies, builtInBlocks, readBlockLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { card, fieldBase, kicker } from "../ui";
 
 export interface AddPanelProps {
@@ -51,6 +51,7 @@ export function AddPanel({ onAdd, onAddBlock, onPublishBlock, onRemoveBlock, hin
   const [query, setQuery] = useState("");
   const [accentId, setAccentId] = useState(ACCENT_PRESETS[0].id);
   const [active, setActive] = useState<BlockDef | null>(null);
+  const [variantByFamily, setVariantByFamily] = useState<Record<string, string>>({});
   const [toggles, setToggles] = useState<Record<string, boolean>>({});
   const [library, setLibrary] = useState<BlockDef[]>([]);
   useEffect(() => { setLibrary(readBlockLibrary()); }, [libraryVersion]);
@@ -60,7 +61,7 @@ export function AddPanel({ onAdd, onAddBlock, onPublishBlock, onRemoveBlock, hin
   const match = (text: string) => !q || text.toLowerCase().includes(q);
   const basic = BASIC_ORDER.map((type) => components.find((c) => c.type === type)).filter((c): c is NonNullable<typeof c> => Boolean(c) && match(c!.label));
   const ai = AI_ORDER.map((type) => components.find((c) => c.type === type)).filter((c): c is NonNullable<typeof c> => Boolean(c) && match(c!.label));
-  const premium = useMemo(() => builtInBlocks().filter((b) => match(`${b.name} ${b.description}`)), [q]);
+  const premium = useMemo(() => blockFamilies(builtInBlocks().filter((b) => match(`${b.family || ""} ${b.name} ${b.description} ${b.variant || ""}`))), [q]);
   const custom = library.filter((b) => match(`${b.name} ${b.description}`));
 
   function pick(block: BlockDef) {
@@ -68,16 +69,29 @@ export function AddPanel({ onAdd, onAddBlock, onPublishBlock, onRemoveBlock, hin
     setToggles(Object.fromEntries((block.options || []).map((option) => [option.key, option.default])));
   }
 
-  const blockRow = (block: BlockDef) => {
+  const familyRow = ({ family, variants }: { family: string; variants: BlockDef[] }) => {
+    const chosen = variants.find((b) => b.id === variantByFamily[family]) || variants[0];
+    return blockRow(chosen, family, variants);
+  };
+
+  const blockRow = (block: BlockDef, family?: string, variants: BlockDef[] = []) => {
     const open = active?.id === block.id;
     return (
       <div key={block.id} className={`rounded-xl border transition ${open ? "border-[var(--accent)]/40 bg-white shadow-[0_4px_14px_rgba(0,0,0,0.06)]" : "border-transparent hover:bg-[var(--surface-soft)]"}`}>
         <button type="button" onClick={() => (open ? setActive(null) : pick(block))} className="flex w-full min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-left">
           <span className="w-12 shrink-0"><BlockPreview block={block} accent={accent} /></span>
-          <span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold leading-tight text-ink">{block.name}</span><span className="line-clamp-2 block text-[10.5px] leading-snug text-soft-ink">{block.description}</span></span>
+          <span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold leading-tight text-ink">{family || block.name}</span><span className="line-clamp-2 block text-[10.5px] leading-snug text-soft-ink">{block.description}</span></span>
+          {variants.length > 1 ? <span className="shrink-0 rounded-full bg-[var(--surface-soft)] px-1.5 text-[9px] font-semibold text-soft-ink">{variants.length} designs</span> : null}
         </button>
         {open ? (
           <div className="grid gap-1.5 px-2 pb-2">
+            {variants.length > 1 ? (
+              <label className="grid gap-0.5 text-[10px] font-semibold text-soft-ink">Design
+                <select className={`${fieldBase} w-full py-1 text-xs`} value={block.id} onChange={(event) => { const next = variants.find((b) => b.id === event.target.value)!; setVariantByFamily((prev) => ({ ...prev, [family!]: next.id })); pick(next); }}>
+                  {variants.map((b) => <option key={b.id} value={b.id}>{b.variant || b.name}</option>)}
+                </select>
+              </label>
+            ) : null}
             <div className="flex items-center gap-1">
               {ACCENT_PRESETS.map((preset) => <button key={preset.id} type="button" title={preset.label} onClick={() => setAccentId(preset.id)} className={`size-4.5 rounded-full border-2 transition ${accentId === preset.id ? "scale-110 border-ink" : "border-white"}`} style={{ background: preset.main, boxShadow: "0 0 0 1px rgba(0,0,0,0.08)", width: 18, height: 18 }} />)}
             </div>
@@ -109,8 +123,8 @@ export function AddPanel({ onAdd, onAddBlock, onPublishBlock, onRemoveBlock, hin
       <div className="mt-3 grid max-h-[58vh] min-w-0 gap-4 overflow-y-auto overflow-x-hidden pr-0.5" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         {basic.length ? <Section title="Basic"><div className="grid grid-cols-3 gap-0.5">{basic.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} disabled={c.type === "table"} title={c.type === "table" ? "Coming soon" : undefined} onClick={() => onAdd(c.type)} />)}</div></Section> : null}
         {ai.length ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes. Give it a name, a type, and whether it repeats.</p></Section> : null}
-        {premium.length ? <Section title="Premium" badge="★"><div className="grid gap-1">{premium.map(blockRow)}</div></Section> : null}
-        <Section title="Custom"><div className="grid gap-1">{custom.map(blockRow)}{!custom.length ? <p className="m-0 px-1 text-[10.5px] text-soft-ink">Select elements on the canvas → <strong>Save as block</strong> to reuse them here.</p> : null}</div></Section>
+        {premium.length ? <Section title="Premium" badge="★"><div className="grid gap-1">{premium.map(familyRow)}</div></Section> : null}
+        <Section title="Custom"><div className="grid gap-1">{custom.map((b) => blockRow(b))}{!custom.length ? <p className="m-0 px-1 text-[10.5px] text-soft-ink">Select elements on the canvas → <strong>Save as block</strong> to reuse them here.</p> : null}</div></Section>
       </div>
     </div>
   );

@@ -272,3 +272,37 @@ export function createFlashcardStarter(): Template {
   ];
   return template;
 }
+
+/* ---------------------------------------------------------------- simple (block) design */
+
+export const STACK_GAP = 4;
+
+/** Whether an element is pinned (headers/footers on every page near the bottom) and must not be restacked. */
+export function isPinned(element: Element, layout: Layout): boolean {
+  return element.pageScope.mode === "every" && element.frame.y > layout.canvas.height * 0.6;
+}
+
+/**
+ * Simple design: top-level elements become a vertical stack inside the margins, in array order.
+ * Pinned footers keep their place. Returns the same array when nothing changes (cheap equality).
+ */
+export function stackElements(elements: Element[], layout: Layout): Element[] {
+  const { margins, canvas } = layout;
+  const width = canvas.width - margins.left - margins.right;
+  let y = margins.top;
+  let changed = false;
+  const next = elements.map((element) => {
+    if (isPinned(element, layout)) return element;
+    const frame = { x: margins.left, y, w: width, h: element.frame.h };
+    y += element.frame.h + STACK_GAP;
+    if (frame.x === element.frame.x && frame.y === element.frame.y && frame.w === element.frame.w) return element;
+    changed = true;
+    return { ...element, frame } as Element;
+  });
+  return changed ? next : elements;
+}
+
+/** Order used by the simple editor: visual order (top → bottom), pinned footers last. */
+export function simpleOrder(elements: Element[], layout: Layout): Element[] {
+  return [...elements].sort((a, b) => (isPinned(a, layout) ? 1 : 0) - (isPinned(b, layout) ? 1 : 0) || a.frame.y - b.frame.y);
+}

@@ -53,7 +53,8 @@ export function StudioShell({ store, busy, status, onSave, onDelete, onBack }: {
 
         <div className="mx-auto"><Segmented size="md" value={state.mode} options={[["design", "Design"], ["views", "Views"], ["data", "Data"], ["preview", "Preview"], ["export", "Export"]]} onChange={(mode) => store.dispatch({ type: "setMode", mode })} /></div>
 
-        {state.mode === "design" ? <label className="flex items-center gap-1.5 text-xs font-semibold text-ink"><input type="checkbox" checked={state.sampleMode} onChange={(event) => store.dispatch({ type: "setSample", on: event.target.checked })} />Sample data</label> : null}
+        {state.mode === "design" ? <Segmented value={template.editorMode || "simple"} options={[["simple", "Simple"], ["advanced", "Advanced"]]} onChange={(mode) => store.update((current) => ({ ...current, editorMode: mode }))} /> : null}
+        {state.mode === "design" && (template.editorMode || "simple") === "advanced" ? <label className="flex items-center gap-1.5 text-xs font-semibold text-ink"><input type="checkbox" checked={state.sampleMode} onChange={(event) => store.dispatch({ type: "setSample", on: event.target.checked })} />Sample data</label> : null}
         <button type="button" className={`${ghostBtn} px-2.5`} disabled={!state.history.length} onClick={() => store.dispatch({ type: "undo" })} title="Undo (⌘Z)">↶</button>
         <button type="button" className={`${ghostBtn} px-2.5`} disabled={!state.future.length} onClick={() => store.dispatch({ type: "redo" })} title="Redo (⇧⌘Z)">↷</button>
         {state.savedId ? <button type="button" className="rounded-full px-2 py-1 text-xs font-semibold text-soft-ink hover:text-[var(--color-danger)]" onClick={onDelete} title="Delete template">Delete</button> : null}

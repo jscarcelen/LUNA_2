@@ -42,6 +42,8 @@ export interface Template {
   id: ID;
   version: 3;
   name: string;
+  /** Simple = ordered blocks that flow into any page size; advanced = free canvas. */
+  editorMode?: "simple" | "advanced";
   fields: FieldDef[];
   layouts: Layout[];
   createdAt: string;

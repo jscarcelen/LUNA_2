@@ -326,6 +326,14 @@ export function layoutDocument(template: Template, data: DataObject, options: { 
     layoutSourcePage(page, layout, root, ctx, out);
   }
 
+  // Page numbers are only known now: substitute {{page}} / {{pages}} in static text.
+  out.forEach((laidPage, index) => {
+    for (const item of laidPage.items) {
+      if (item.type !== "text" || item.isField) continue;
+      if (item.lines.some((line) => line.includes("{{page"))) item.lines = item.lines.map((line) => line.replace(/\{\{page\}\}/g, String(index + 1)).replace(/\{\{pages\}\}/g, String(out.length)));
+    }
+  });
+
   // Resolve first/last page scopes now that the page count is known.
   const scoped = new Map<ID, Element>();
   for (const page of pages) for (const element of page.elements) if (element.pageScope.mode === "first" || element.pageScope.mode === "last" || element.pageScope.mode === "selected") scoped.set(element.id, element);
@@ -344,5 +352,10 @@ export function layoutDocument(template: Template, data: DataObject, options: { 
       }
     });
   }
+  out.forEach((laidPage, index) => {
+    for (const item of laidPage.items) {
+      if (item.type === "text" && !item.isField && item.lines.some((line) => line.includes("{{page"))) item.lines = item.lines.map((line) => line.replace(/\{\{page\}\}/g, String(index + 1)).replace(/\{\{pages\}\}/g, String(out.length)));
+    }
+  });
   return { pages: out, overflows: ctx.overflows, itemCounts: ctx.itemCounts };
 }

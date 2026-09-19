@@ -21,7 +21,7 @@ export interface ElementViewProps {
 
 function textFor(element: Element, fields: FieldDef[], sampleMode: boolean, sampleValues: Record<string, unknown>, ordinal: number): string {
   if (element.type !== "text") return "";
-  if (element.source.type === "static") return element.source.value.replace(/\{\{n\}\}/g, String(ordinal));
+  if (element.source.type === "static") return element.source.value.replace(/\{\{n\}\}/g, String(ordinal)).replace(/\{\{page\}\}/g, "1").replace(/\{\{pages\}\}/g, "1");
   const fieldDef = findField(fields, element.source.fieldId);
   const name = fieldDef?.name || "field";
   if (sampleMode) {

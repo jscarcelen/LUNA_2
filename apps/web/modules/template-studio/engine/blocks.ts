@@ -24,6 +24,9 @@ export interface BlockDef {
   description: string;
   category: BlockCategory;
   icon: string;
+  /** Component family (Question card, Header…) and the design variant within it. */
+  family?: string;
+  variant?: string;
   /** Schema fragment. Arrays carry their item fields; root scalars are "once per document". */
   fields: FieldDef[];
   /** Element tree (normally one group). Field bindings reference ids in `fields`. */
@@ -110,6 +113,8 @@ function examQuestion(): BlockDef {
   });
   return {
     id: "block-exam-question",
+    family: "Question card",
+    variant: "Multiple choice",
     name: "Exam question",
     description: "Numbered question card with options, points and an optional answer line.",
     category: "questions",
@@ -144,6 +149,8 @@ function openQuestion(): BlockDef {
   });
   return {
     id: "block-open-question",
+    family: "Question card",
+    variant: "Open answer",
     name: "Open question",
     description: "Question with ruled space for a written answer.",
     category: "questions",
@@ -178,6 +185,8 @@ function trueFalse(): BlockDef {
   });
   return {
     id: "block-true-false",
+    family: "Question card",
+    variant: "True / false",
     name: "True / false",
     description: "Statement with tick boxes; the answer can be shown for the key.",
     category: "questions",
@@ -219,6 +228,8 @@ function flashcard(): BlockDef {
   });
   return {
     id: "block-flashcard",
+    family: "Flashcard",
+    variant: "Grid, topic ribbon",
     name: "Flashcard",
     description: "Front / back cards in a two-column grid with a topic ribbon.",
     category: "cards",
@@ -270,6 +281,8 @@ function vocabularyRow(): BlockDef {
   });
   return {
     id: "block-vocabulary-row",
+    family: "Table",
+    variant: "Vocabulary rows",
     name: "Vocabulary table",
     description: "Word · translation · example as a clean table with a coloured header.",
     category: "cards",
@@ -310,6 +323,8 @@ function documentStructure(): BlockDef {
   });
   return {
     id: "block-document",
+    family: "Document structure",
+    variant: "Title + sections",
     name: "Document structure",
     description: "Title, subtitle and repeating sections (heading + paragraph) — great for summaries and guides.",
     category: "structure",
@@ -349,6 +364,8 @@ function keyPoints(): BlockDef {
   });
   return {
     id: "block-key-points",
+    family: "Key points",
+    variant: "Numbered rows",
     name: "Key points",
     description: "Title plus numbered highlight rows with an accent bar.",
     category: "structure",
@@ -361,8 +378,231 @@ function keyPoints(): BlockDef {
   };
 }
 
+
+/* ---------------------------------------------------------------- more families */
+
+function examHeader(): BlockDef {
+  const title = createField("Title", "text", { description: "Document title" });
+  const subtitle = createField("Subtitle", "text", { description: "Course, class or subject" });
+  const group = createGroup({
+    name: "Header",
+    frame: { x: 12, y: 12, w: 186, h: 26 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    pageScope: { mode: "first" },
+    children: [
+      createShape("ellipse", { frame: { x: 0, y: 1, w: 5, h: 5 }, style: defaultStyle({ fill: A.main, stroke: "" }) }),
+      st("LUNA", { x: 6.5, y: 0.2, w: 30, h: 7 }, { fontSize: 13, fontWeight: "bold" }, { name: "opt:logo|Logo" }),
+      tx(subtitle.id, "Biology · Grade 10", { x: 120, y: 1, w: 66, h: 5 }, { fontSize: 8, color: "#6e6e73", align: "right" }, { name: "opt:subtitle|Subtitle" }),
+      tx(title.id, "Biology Midterm Exam", { x: 0, y: 9, w: 140, h: 9 }, { fontSize: 18, fontWeight: "bold" }),
+      st("Name: ______________________", { x: 0, y: 20, w: 90, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:namedate|Name line" }),
+      st("Date: ____________", { x: 130, y: 20, w: 56, h: 5 }, { fontSize: 8.5, color: "#6e6e73", align: "right" }, { name: "opt:namedate|Date line" }),
+      createShape("line", { frame: { x: 0, y: 25.5, w: 186, h: 0.4 }, style: defaultStyle({ stroke: A.main, strokeWidth: 0.4 }) })
+    ]
+  });
+  return { id: "block-header-exam", family: "Header", variant: "Exam header", name: "Header", description: "Logo, title, subtitle and Name / Date lines on the first page.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: A, builtIn: true };
+}
+
+function minimalHeader(): BlockDef {
+  const title = createField("Title", "text", { description: "Document title" });
+  const group = createGroup({
+    name: "Header",
+    frame: { x: 12, y: 12, w: 186, h: 16 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    pageScope: { mode: "first" },
+    children: [
+      tx(title.id, "Study guide", { x: 0, y: 0, w: 186, h: 10 }, { fontSize: 20, fontWeight: "bold", align: "center" }),
+      createShape("rect", { frame: { x: 81, y: 12, w: 24, h: 1.2 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.6 }) })
+    ]
+  });
+  return { id: "block-header-minimal", family: "Header", variant: "Centered title", name: "Header", description: "Centered title with an accent rule.", category: "structure", icon: "▔", fields: [title], elements: [group], accent: A, builtIn: true };
+}
+
+function footer(): BlockDef {
+  const title = createField("Title", "text", { description: "Document title" });
+  const group = createGroup({
+    name: "Footer",
+    frame: { x: 12, y: 280, w: 186, h: 8 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    pageScope: { mode: "every" },
+    children: [
+      createShape("line", { frame: { x: 0, y: 0, w: 186, h: 0.3 }, style: defaultStyle({ stroke: "#d2d2d7", strokeWidth: 0.3 }) }),
+      tx(title.id, "Biology Midterm Exam", { x: 0, y: 2, w: 120, h: 5 }, { fontSize: 7.5, color: "#6e6e73" }),
+      st("Page {{page}}", { x: 140, y: 2, w: 46, h: 5 }, { fontSize: 7.5, color: "#6e6e73", align: "right" }, { name: "opt:page|Page number" })
+    ]
+  });
+  return { id: "block-footer", family: "Footer", variant: "Title + page number", name: "Footer", description: "Thin rule, document title and page number on every page.", category: "structure", icon: "▁", fields: [title], elements: [group], options: [{ key: "page", label: "Page number", default: true }], accent: A, builtIn: true };
+}
+
+function sectionHeader(): BlockDef {
+  const title = createField("Section title", "text");
+  const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
+  const sections = createField("Sections", "array", { children: [createField("item", "object", { children: [title, intro] })] });
+  const group = createGroup({
+    name: "Section header",
+    frame: { x: 12, y: 12, w: 186, h: 20 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: sections.id, mode: "flow" },
+    children: [
+      createShape("rect", { frame: { x: 0, y: 0, w: 24, h: 5.5 }, style: defaultStyle({ fill: A.tint, stroke: "", radius: 1.2 }) }),
+      st("SECTION {{n}}", { x: 0, y: 1, w: 24, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main, align: "center" }),
+      tx(title.id, "Multiple choice", { x: 0, y: 7, w: 186, h: 8 }, { fontSize: 15, fontWeight: "bold" }),
+      tx(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: 15, w: 186, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:intro|Intro line" })
+    ]
+  });
+  return { id: "block-section-header", family: "Section header", variant: "Badge + title", name: "Section header", description: "Numbered section badge, title and intro line — one per section.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: A, builtIn: true };
+}
+
+function sectionWithQuestions(): BlockDef {
+  const title = createField("Section title", "text");
+  const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
+  const question = createField("Question", "rich_text");
+  const option = createField("Option", "text");
+  const options = createField("Options", "array", { children: [option] });
+  const answer = createField("Answer", "text", { description: "The correct option" });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
+  const sections = createField("Sections", "array", { description: "One element per section: its title, intro and its own questions", children: [createField("item", "object", { children: [title, intro, questions] })] });
+  const card = createGroup({
+    name: "Question card",
+    frame: { x: 0, y: 22, w: 186, h: 34 },
+    layout: { mode: "free", gap: 2 },
+    repeat: { fieldId: questions.id, mode: "flow" },
+    style: defaultStyle({ fill: "#ffffff", stroke: "#e5e5ea", strokeWidth: 0.3, radius: 2.5 }),
+    children: [
+      createShape("ellipse", { frame: { x: 4, y: 4, w: 7, h: 7 }, style: defaultStyle({ fill: A.tint, stroke: "" }) }),
+      st("{{n}}", { x: 4, y: 5.4, w: 7, h: 5 }, { fontSize: 7.5, fontWeight: "bold", color: A.main, align: "center" }),
+      tx(question.id, "What is the main function of chlorophyll in plants?", { x: 15, y: 4.5, w: 165, h: 8 }, { fontSize: 10.5, fontWeight: "bold" }, { format: "rich" }),
+      createGroup({
+        name: "Options",
+        frame: { x: 15, y: 14, w: 165, h: 16 },
+        layout: { mode: "vertical", gap: 1.2 },
+        repeat: { fieldId: options.id, mode: "flow" },
+        children: [createGroup({ name: "Option row", frame: { x: 0, y: 0, w: 165, h: 5.5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
+          createShape("ellipse", { frame: { x: 0, y: 0.8, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35 }) }),
+          tx(option.id, "Absorb light energy for photosynthesis", { x: 6, y: 0, w: 155, h: 5.5 }, { fontSize: 9.5 })
+        ] })]
+      }),
+      tx(answer.id, "B", { x: 15, y: 31, w: 100, h: 3 }, { fontSize: 7, color: A.main }, { name: "opt:answer|Answer" })
+    ]
+  });
+  const group = createGroup({
+    name: "Section",
+    frame: { x: 12, y: 12, w: 186, h: 58 },
+    layout: { mode: "free", gap: 3 },
+    repeat: { fieldId: sections.id, mode: "flow" },
+    children: [
+      createShape("rect", { frame: { x: 0, y: 0, w: 24, h: 5.5 }, style: defaultStyle({ fill: A.tint, stroke: "", radius: 1.2 }) }),
+      st("SECTION {{n}}", { x: 0, y: 1, w: 24, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main, align: "center" }),
+      tx(title.id, "Multiple choice", { x: 0, y: 7, w: 186, h: 8 }, { fontSize: 15, fontWeight: "bold" }),
+      tx(intro.id, "Choose the correct answer for each question.", { x: 0, y: 15, w: 186, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:intro|Intro line" }),
+      card
+    ]
+  });
+  return { id: "block-section-questions", family: "Section header", variant: "Section with question cards", name: "Section + questions", description: "Sections in the agent's order, each with its title and its own question cards.", category: "questions", icon: "§❶", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+}
+
+function callout(): BlockDef {
+  const note = createField("Note", "rich_text", { description: "Important information, tip or reminder" });
+  const group = createGroup({
+    name: "Callout",
+    frame: { x: 12, y: 12, w: 186, h: 16 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    style: defaultStyle({ fill: A.tint, stroke: "", radius: 2.5 }),
+    children: [
+      createShape("rect", { frame: { x: 0, y: 0, w: 1.6, h: 16 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.8 }) }),
+      st("Important", { x: 6, y: 2.5, w: 60, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: A.main }, { name: "opt:label|Label" }),
+      tx(note.id, "Remember: photosynthesis only occurs in the presence of light and chlorophyll.", { x: 6, y: 8, w: 175, h: 7 }, { fontSize: 9.5 }, { format: "rich" })
+    ]
+  });
+  return { id: "block-callout", family: "Callout", variant: "Info box", name: "Callout", description: "Highlighted box for important information, tips or notes.", category: "structure", icon: "ⓘ", fields: [note], elements: [group], options: [{ key: "label", label: "Label", default: true }], accent: A, builtIn: true };
+}
+
+function answerBox(): BlockDef {
+  const answer = createField("Answer", "text");
+  const explanation = createField("Explanation", "rich_text");
+  const items = createField("Answers", "array", { children: [createField("item", "object", { children: [answer, explanation] })] });
+  const green = ACCENT_PRESETS[1];
+  const group = createGroup({
+    name: "Answer box",
+    frame: { x: 12, y: 12, w: 186, h: 22 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: items.id, mode: "flow" },
+    style: defaultStyle({ fill: green.tint, stroke: `${green.main}`, strokeWidth: 0.3, radius: 2.5 }),
+    children: [
+      createShape("ellipse", { frame: { x: 4, y: 3.5, w: 5, h: 5 }, style: defaultStyle({ fill: green.main, stroke: "" }) }),
+      st("✓", { x: 4, y: 4.2, w: 5, h: 4 }, { fontSize: 7, fontWeight: "bold", color: "#ffffff", align: "center" }),
+      st("Correct answer {{n}}", { x: 11, y: 3.5, w: 80, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: green.main }),
+      tx(answer.id, "B. Absorb light energy for photosynthesis", { x: 11, y: 9, w: 170, h: 5.5 }, { fontSize: 9.5, fontWeight: "bold" }),
+      tx(explanation.id, "Chlorophyll absorbs light energy, which is used to convert CO₂ and H₂O into glucose.", { x: 11, y: 15, w: 170, h: 6 }, { fontSize: 8.5, color: "#3a3a3c" }, { format: "rich", name: "opt:explanation|Explanation" })
+    ]
+  });
+  return { id: "block-answer-box", family: "Answer box", variant: "Correct answer + explanation", name: "Answer box", description: "Green box with the correct answer and an explanation — ideal for answer keys.", category: "questions", icon: "✓", fields: [items], elements: [group], options: [{ key: "explanation", label: "Explanation", default: true }], accent: green, builtIn: true };
+}
+
+function flashcardSingle(): BlockDef {
+  const front = createField("Front", "text");
+  const back = createField("Back", "text");
+  const cards = createField("Cards", "array", { children: [createField("item", "object", { children: [front, back] })] });
+  const group = createGroup({
+    name: "Flashcard",
+    frame: { x: 12, y: 12, w: 186, h: 60 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: cards.id, mode: "page" },
+    style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.4, radius: 4 }),
+    children: [
+      st("FRONT", { x: 6, y: 5, w: 30, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main }),
+      tx(front.id, "Photosynthesis", { x: 6, y: 14, w: 174, h: 16 }, { fontSize: 24, fontWeight: "bold", align: "center" }),
+      createShape("line", { frame: { x: 20, y: 36, w: 146, h: 0.3 }, style: defaultStyle({ stroke: A.main, strokeWidth: 0.3 }) }),
+      tx(back.id, "The process by which plants convert light energy into chemical energy.", { x: 12, y: 40, w: 162, h: 14 }, { fontSize: 11, align: "center", color: "#6e6e73" })
+    ]
+  });
+  return { id: "block-flashcard-single", family: "Flashcard", variant: "One card per page / slide", name: "Flashcard", description: "Large front / back card, one per page or slide.", category: "cards", icon: "▤", fields: [cards], elements: [group], accent: A, builtIn: true };
+}
+
+function compactQuestion(): BlockDef {
+  const question = createField("Question", "rich_text");
+  const option = createField("Option", "text");
+  const options = createField("Options", "array", { children: [option] });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options] })] });
+  const group = createGroup({
+    name: "Question (compact)",
+    frame: { x: 12, y: 12, w: 186, h: 16 },
+    layout: { mode: "free", gap: 1 },
+    repeat: { fieldId: questions.id, mode: "flow" },
+    children: [
+      st("{{n}}.", { x: 0, y: 0, w: 8, h: 6 }, { fontSize: 10, fontWeight: "bold", color: A.main }),
+      tx(question.id, "Which organelle is the powerhouse of the cell?", { x: 8, y: 0, w: 178, h: 6 }, { fontSize: 10, fontWeight: "bold" }, { format: "rich" }),
+      createGroup({
+        name: "Options",
+        frame: { x: 8, y: 7, w: 178, h: 8 },
+        layout: { mode: "grid", gap: 2, columns: 2 },
+        repeat: { fieldId: options.id, mode: "grid", columns: 2 },
+        children: [createGroup({ name: "Option", frame: { x: 0, y: 0, w: 86, h: 5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
+          st("○", { x: 0, y: 0, w: 4, h: 5 }, { fontSize: 9, color: A.main }),
+          tx(option.id, "Mitochondrion", { x: 5, y: 0, w: 80, h: 5 }, { fontSize: 9 })
+        ] })]
+      })
+    ]
+  });
+  return { id: "block-question-compact", family: "Question card", variant: "Compact, options in 2 columns", name: "Question (compact)", description: "Numbered question with options in two columns — fits many per page.", category: "questions", icon: "❶", fields: [questions], elements: [group], accent: A, builtIn: true };
+}
+
 export function builtInBlocks(): BlockDef[] {
-  return [examQuestion(), openQuestion(), trueFalse(), flashcard(), vocabularyRow(), documentStructure(), keyPoints()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
+}
+
+/** Blocks grouped by family, in library order. */
+export function blockFamilies(blocks: BlockDef[]): { family: string; variants: BlockDef[] }[] {
+  const out: { family: string; variants: BlockDef[] }[] = [];
+  for (const block of blocks) {
+    const family = block.family || block.name;
+    const entry = out.find((item) => item.family === family);
+    if (entry) entry.variants.push(block); else out.push({ family, variants: [block] });
+  }
+  return out;
 }
 
 export const BLOCK_CATEGORY_LABELS: Record<BlockCategory, string> = { questions: "Questions", cards: "Cards & tables", structure: "Document structure", custom: "My blocks" };

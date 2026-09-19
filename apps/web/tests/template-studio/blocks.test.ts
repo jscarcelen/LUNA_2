@@ -77,3 +77,33 @@ describe("blocks", () => {
     expect(again.fields.map((field) => field.name)).toEqual(["Title", "Subtitle", "Sections"]);
   });
 });
+
+describe("simple design + families", () => {
+  it("stacks top-level blocks in order inside the margins and keeps footers pinned", async () => {
+    const { createLayout, stackElements, simpleOrder } = await import("../../modules/template-studio/engine/model");
+    const layout = createLayout("Doc", "a4-portrait");
+    const header = instantiateBlock(byName("Header"), []).elements[0];
+    const section = instantiateBlock(byName("Section + questions"), []).elements[0];
+    const footer = instantiateBlock(builtInBlocks().find((b) => b.id === "block-footer")!, []).elements[0];
+    const stacked = stackElements(simpleOrder([section, footer, header].map((e, i) => ({ ...e, frame: { ...e.frame, y: e.id === footer.id ? 280 : 100 - i * 10 } })), layout), layout);
+    expect(stacked[0].frame.y).toBe(layout.margins.top);
+    expect(stacked[1].frame.y).toBe(layout.margins.top + stacked[0].frame.h + 4);
+    expect(stacked[2].frame.y).toBe(280);
+    expect(stacked[0].frame.w).toBe(layout.canvas.width - layout.margins.left - layout.margins.right);
+  });
+
+  it("groups blocks into families with variants and nested section lists lay out per section", async () => {
+    const { blockFamilies } = await import("../../modules/template-studio/engine/blocks");
+    const families = blockFamilies(builtInBlocks());
+    expect(families.find((f) => f.family === "Question card")!.variants.length).toBeGreaterThanOrEqual(3);
+    const template = createTemplate("T");
+    const { fields, elements } = instantiateBlock(byName("Section + questions"), template.fields);
+    template.fields = fields;
+    template.layouts[0].pages[0].elements = elements;
+    const data = { sections: [{ section_title: "A", section_intro: "", questions: [{ question: "q1", options: ["x", "y"], answer: "x" }, { question: "q2", options: ["x"], answer: "x" }] }, { section_title: "B", section_intro: "", questions: [{ question: "q3", options: ["z"], answer: "z" }] }] };
+    const result = layoutDocument(template, data);
+    const texts = result.pages.flatMap((page) => page.items.filter((item) => item.type === "text").map((item) => (item as { lines: string[] }).lines.join(" ")));
+    expect(texts).toContain("SECTION 2");
+    expect(texts.filter((t) => /^q[123]$/.test(t))).toHaveLength(3);
+  });
+});

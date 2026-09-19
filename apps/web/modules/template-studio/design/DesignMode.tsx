@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Element, FieldDef, GroupElement, ID } from "../engine/types";
-import { arrayItemFields, cloneElement, createField, createGroup, findElement, findField, removeElements, updateElement } from "../engine/model";
+import { arrayItemFields, cloneElement, createField, createGroup, findElement, findField, removeElements, simpleOrder, stackElements, updateElement } from "../engine/model";
+import { SimpleDesign } from "./SimpleDesign";
 import { getComponent } from "../engine/registry";
 import type { Store } from "../state/useTemplateStore";
 import { AddPanel } from "./AddPanel";
@@ -35,7 +36,17 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
   const template = state.template!;
+  const simple = (template.editorMode || "simple") === "simple";
   const elements = page?.elements || [];
+  // Simple mode keeps top-level blocks stacked inside the margins in visual order.
+  useEffect(() => {
+    if (!simple || !page || !layout) return;
+    const ordered = simpleOrder(page.elements, layout);
+    const stacked = stackElements(ordered, layout);
+    if (stacked === page.elements) return;
+    if (stacked.length === page.elements.length && stacked.every((element, index) => element === page.elements[index])) return;
+    updatePage((current) => ({ ...current, elements: stacked }), true);
+  }, [simple, page, layout, updatePage]);
   const parentChain = useMemo(() => (selected.element ? parentChainOf(elements, selected.element.id) : []), [elements, selected.element]);
   if (!layout || !page) return null;
   const pg = page;
@@ -65,7 +76,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   function addElement(type: string) {
     const def = getComponent(type);
     if (!def) return;
-    const target = selected.element?.type === "group" ? (selected.element as GroupElement) : (parentChain[parentChain.length - 1] || null);
+    const target = simple ? null : selected.element?.type === "group" ? (selected.element as GroupElement) : (parentChain[parentChain.length - 1] || null);
     const element = def.create();
     const lastBottom = Math.max(margins.top, ...pg.elements.map((item) => item.frame.y + item.frame.h));
     if (target) element.frame = { ...element.frame, x: 3, y: Math.max(2, (target.children.reduce((max, child) => Math.max(max, child.frame.y + child.frame.h), 0) || 0) + 2), w: Math.max(20, target.frame.w - 6) };
@@ -262,7 +273,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
     }, transient);
   }
 
-  const addHint = selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
+  const addHint = simple ? "Added at the end of the list." : selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
 
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
@@ -292,6 +303,25 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
           })}
         />
       </aside>
+      {simple ? (
+        <SimpleDesign
+          layout={layout}
+          page={pg}
+          fields={template.fields}
+          selection={state.selection}
+          onSelect={select}
+          onReorder={(orderedIds) => updatePage((current) => ({ ...current, elements: stackElements(orderedIds.map((id) => current.elements.find((element) => element.id === id)!).filter(Boolean), layout!) }))}
+          onDuplicate={(id) => { select([id]); const found = findElement(pg.elements, id).element; if (!found) return; const copy = cloneElement(found); updatePage((current) => { const index = current.elements.findIndex((element) => element.id === id); const next = [...current.elements]; next.splice(index + 1, 0, copy); return { ...current, elements: next }; }); select([copy.id]); }}
+          onDelete={(id) => deleteElements([id])}
+          onSetRepeat={(id, mode) => updateElements(id, (element) => {
+            const group = element as GroupElement;
+            if (mode === "none") return { ...group, repeat: null } as Element;
+            const list = group.repeat?.fieldId || arrayField()?.id || "";
+            return { ...group, repeat: { fieldId: list, mode, columns: mode === "grid" ? group.repeat?.columns || 2 : undefined }, layout: mode === "grid" ? { ...group.layout, mode: "grid", columns: group.repeat?.columns || 2 } : group.layout } as Element;
+          })}
+          onAdvanced={() => update((current) => ({ ...current, editorMode: "advanced" }))}
+        />
+      ) : (
       <Canvas
         layout={layout}
         page={pg}
@@ -307,6 +337,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         onResize={(id, w, h, transient) => updateElements(id, (element) => ({ ...element, frame: { ...element.frame, w: Math.round(w * 2) / 2, h: Math.round(h * 2) / 2 } }), transient)}
         toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
+      )}
       <Inspector
         layout={layout}
         page={pg}

@@ -37,3 +37,24 @@ export function selectTopChunks(chunks, config) {
     .sort((left, right) => right.retrievalScore - left.retrievalScore)
     .slice(0, chunkTarget);
 }
+
+/**
+ * Picks the chunks an agent run will actually read. Everything fits when the material is small;
+ * otherwise the best-scoring chunks up to `charBudget` are kept, then put back in document order
+ * so summaries and explanations read coherently. Chunks are never truncated.
+ */
+export function selectChunksWithinBudget(chunks, config, charBudget = 48000) {
+  const total = chunks.reduce((sum, chunk) => sum + String(chunk.content || "").length, 0);
+  const order = (list) => [...list].sort((a, b) => (a.documentName || "").localeCompare(b.documentName || "") || (a.chunkIndex || 0) - (b.chunkIndex || 0));
+  if (total <= charBudget) return { chunks: order(chunks), truncated: false, totalChars: total };
+  const ranked = selectTopChunks(chunks, { ...config, questionCount: 1000 });
+  const picked = [];
+  let used = 0;
+  for (const chunk of ranked) {
+    const size = String(chunk.content || "").length;
+    if (used + size > charBudget) continue;
+    picked.push(chunk);
+    used += size;
+  }
+  return { chunks: order(picked), truncated: true, totalChars: total };
+}

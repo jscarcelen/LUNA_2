@@ -6,6 +6,8 @@ import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
 import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
+import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
+import { chargeRun, readCredits } from "../../../credits/credits";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const FIELD_FREQUENCY_LABELS = {
@@ -513,19 +515,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return <input className={fieldClass} value={answer || ""} onChange={(event) => setAnswer(question.id, event.target.value)} placeholder="Type your answer" />;
   }
 
-  async function handleGenerate() {
-    if (!agentConfig || generation.isGenerating) return;
-    setStatusMessage("");
-    setFlowStep(2);
-    setOutputTab("fields");
-    try {
-      const questionAnswers = questions.map((question) => ({ question: question.text, answer: answersByQuestionId[question.id] }));
-      const data = await generation.generate({
-        name: agentConfig.name,
+  const runConfig = useMemo(() => {
+    if (!agentConfig) return null;
+    return {
+      name: agentConfig.name,
         instructions: agentConfig.instructions || "",
         knowledgeText: agentConfig.knowledgeText || "",
         contextPrompt: knowledgeMode === "context" ? contextPromptDraft : "",
-        questionAnswers,
+        questionAnswers: questions.map((question) => ({ question: question.text, answer: answersByQuestionId[question.id] })),
         outputExample: agentConfig.outputExample || "",
         model: agentConfig.model,
         creativity: agentConfig.creativity,
@@ -540,7 +537,18 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           documentIds: [...(knowledgeMode === "workspace" ? referenceDocumentIds : []), ...((agentConfig.scope && agentConfig.scope.documentIds) || [])],
           styleDocumentIds
         }
-      });
+    };
+  }, [agentConfig, questions, answersByQuestionId, knowledgeMode, contextPromptDraft, fields, workspaceId, subjectId, referenceDocumentIds, styleDocumentIds]);
+  const { estimate: runEstimate, loading: estimating } = useRunEstimate(runConfig, Boolean(runConfig) && !generation.isGenerating);
+
+  async function handleGenerate() {
+    if (!runConfig || generation.isGenerating) return;
+    setStatusMessage("");
+    setFlowStep(2);
+    setOutputTab("fields");
+    try {
+      const data = await generation.generate(runConfig);
+      chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
       setOutput(data);
     } catch {
       // The hook exposes the error state to the preview pane.
@@ -714,9 +722,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           {flowStep === 1 ? (
             <div className="flex shrink-0 flex-col items-stretch gap-1.5 sm:items-end">
               <button type="button" onClick={handleGenerate} disabled={!canGenerate} className={primaryBtn}>{generation.isGenerating ? "Generating…" : hasOutput ? "Generate again" : "Generate"} <span aria-hidden>→</span></button>
-              <p className="m-0 text-center text-[11px] text-soft-ink sm:text-right">
-                {!knowledgeReady ? "Choose material first" : requiredUnanswered ? `${requiredUnanswered} question${requiredUnanswered === 1 ? "" : "s"} left` : "Uses 1 credit"}
-              </p>
+              {!knowledgeReady || requiredUnanswered ? (
+                <p className="m-0 text-center text-[11px] text-soft-ink sm:text-right">{!knowledgeReady ? "Choose material first" : `${requiredUnanswered} question${requiredUnanswered === 1 ? "" : "s"} left`}</p>
+              ) : (
+                <div className="text-center sm:text-right"><RunEstimateLine estimate={runEstimate} loading={estimating} balance={readCredits().balance} /></div>
+              )}
             </div>
           ) : null}
         </div>

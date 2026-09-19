@@ -6,7 +6,7 @@ import { normalizeConfig } from "../../../../../modules/ai-tools/pipeline/agentC
 // function idle timeout, and maxDuration raises the hard ceiling for the largest documents.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));

@@ -4,6 +4,8 @@ export function normalizeConfig(input = {}) {
     name: String(input.name || "").trim(),
     instructions: String(input.instructions || "").trim(),
     contextPrompt: String(input.contextPrompt || "").trim(),
+    // Creator-bundled knowledge (Agent Studio "agent knowledge" text slots) — style/level reference, never user material.
+    knowledgeText: String(input.knowledgeText || "").trim(),
     questionAnswers: Array.isArray(input.questionAnswers)
       ? input.questionAnswers
         .map((entry) => ({

@@ -458,3 +458,10 @@
 - Static text supports `{{n}}` — the 1-based index of the innermost repeated item — for question numbering without a schema field.
 - Add panel has two tabs: **Elements** (raw) and **Blocks** (categories + My blocks, colour presets, toggles, Insert). Floating toolbar: **Save as block**. My blocks: **Sell in Marketplace** (price, one-time/subscription/free) → listing `kind: "block"`.
 - Marketplace has an **Agents | Design blocks** switch; block listings install into the buyer's block library.
+
+## Agent runs: read material in full, cost estimate, lunas credit (2026-09-19)
+
+- **Material**: `selectChunksWithinBudget()` sends whole chunks (previously each chunk was cut to 1,800 chars and at most 12 were sent) — everything when the material fits ~48k chars, otherwise the best-scoring chunks within the budget, restored to document order. `normalizeConfig` now keeps `knowledgeText` (it was being dropped, so creator knowledge never reached the model). `buildUserMessage()` is the single place the prompt payload is assembled (instructions, output fields, creator knowledge, pasted context, question answers, example, refinement prompt, material, style samples).
+- **Estimate**: `POST /api/ai-tools/agent-builder/estimate` → `estimateAgentRun(config)` runs the same material preparation without a model call and returns tokens in/out, USD (list price in `MODEL_PRICING`), documents read and whether they were truncated. Shown under Generate in the Run flow and the Studio tester (`modules/credits/RunEstimate.js`).
+- **Lunas**: `modules/credits/credits.js` — local ledger (1 luna = 1 token, 1M starting grant), charged with the real `usage.total_tokens` after each run (estimate as fallback); `CreditsBadge` in the top bar with usage history and a demo top-up. Monetisation rules (tiers, overage, marketplace fees, transfers) to replace this ledger later.
+- Stream route `maxDuration` 120s; retry attempt capped at 3,000 output tokens so a looping first attempt cannot exhaust the function time.

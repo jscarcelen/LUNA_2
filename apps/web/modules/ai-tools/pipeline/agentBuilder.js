@@ -1,5 +1,5 @@
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
-import { selectTopChunks } from "./retrieval.js";
+import { selectChunksWithinBudget } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
 import { validateOutput } from "../../agent-studio/engine/validate";
 
@@ -70,12 +70,119 @@ function buildJsonSchemaFromFields(fields = []) {
   };
 }
 
-function buildChunksContext(chunks, maxChunks = 12) {
+/** Whole chunks — selection already happened within the material budget; truncating here would hide content. */
+function buildChunksContext(chunks, maxChunks = 40) {
   return chunks.slice(0, maxChunks).map((chunk) => ({
     documentName: chunk.documentName,
     chunkIndex: (chunk.chunkIndex || 0) + 1,
-    content: String(chunk.content || "").slice(0, 1800)
+    content: String(chunk.content || "")
   }));
+}
+
+/* ---------------------------------------------------------------- cost estimate */
+
+/** USD per 1M tokens (input, output). Kept here so the estimate and the credits ledger agree. */
+export const MODEL_PRICING = {
+  "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  "gpt-4o": { input: 2.5, output: 10 },
+  "gpt-4.1": { input: 2, output: 8 }
+};
+
+export function approxTokens(text) {
+  return Math.ceil(String(text || "").length / 4);
+}
+
+function buildUserMessage(config, chunks, styleChunks) {
+  return JSON.stringify({
+    task: "Generate agent output",
+    agentInstructions: config.instructions || "",
+    outputFields: (config.template?.fields || []).map((field) => ({ name: field.name, meaning: field.description || field.label || field.name })),
+    agentKnowledge: config.knowledgeText
+      ? { note: "Background notes and examples from the agent creator. Use them to understand the expected style and level; never copy their content or layout into the output, and always respect the output schema (one element per item).", text: String(config.knowledgeText) }
+      : null,
+    contextPrompt: config.contextPrompt || "",
+    questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
+    outputExample: config.outputExample || "",
+    refinementPrompt: config.refinementPrompt || "",
+    previousOutput: config.previousOutput || null,
+    referenceMaterial: buildChunksContext(chunks),
+    styleExamples: styleChunks.length
+      ? { note: "Imitate the format, tone and difficulty of these examples. Do not take content from them.", samples: buildChunksContext(styleChunks, 4) }
+      : null
+  });
+}
+
+/** Expected output size from the schema and the requested count (number inputs / count rules), in tokens. */
+function estimateOutputTokens(config) {
+  const fields = Array.isArray(config.template?.fields) ? config.template.fields : [];
+  const perItem = fields.filter((field) => field.repeatScope !== "once");
+  const once = fields.filter((field) => field.repeatScope === "once");
+  let count = 0;
+  for (const entry of config.questionAnswers || []) {
+    const n = Number(String(entry.answer || "").trim());
+    if (Number.isFinite(n) && n > 0 && n < 500 && /how many|number|count|cu[aá]nt|n[uú]mero/i.test(entry.question || "")) { count = n; break; }
+  }
+  if (!count) {
+    const match = /(\d{1,3})\s+(items|questions|bullets|cards|flashcards|words|points|key)/i.exec(config.instructions || "");
+    count = match ? Number(match[1]) : 5;
+  }
+  const richness = (field) => (/rich|paragraph|summary|explanation|text/i.test(`${field.type} ${field.name} ${field.description}`) ? 160 : 35);
+  const perItemTokens = perItem.reduce((sum, field) => sum + richness(field), 0) + 8;
+  const onceTokens = once.reduce((sum, field) => sum + richness(field), 0);
+  return Math.max(120, Math.round(count * perItemTokens + onceTokens + 30));
+}
+
+/** Loads, chunks and selects the material an agent run reads. Shared by the run and the estimate. */
+async function prepareMaterial(config, emit = () => {}) {
+  emit({ step: "scope", status: "start" });
+  const workspaces = await loadWorkspaceTreeForAi();
+  // Agent Studio specs use material only when explicitly selected (opt-in); legacy agents keep subject-wide scope.
+  const explicitOnly = Boolean(config.spec) && !(config.scope?.documentIds || []).length;
+  const scopedDocuments = explicitOnly ? [] : collectScopedDocuments(workspaces, config.scope || {});
+  const styleDocumentIds = Array.isArray(config.scope?.styleDocumentIds) ? config.scope.styleDocumentIds.filter(Boolean) : [];
+  const styleDocuments = styleDocumentIds.length
+    ? collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: styleDocumentIds })
+    : [];
+  emit({ step: "scope", status: "end", documentCount: scopedDocuments.length, styleDocumentCount: styleDocuments.length });
+
+  emit({ step: "chunk", status: "start" });
+  const chunking = { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS };
+  const chunks = scopedDocuments.length ? chunkDocuments(scopedDocuments, chunking) : [];
+  const styleChunks = styleDocuments.length ? chunkDocuments(styleDocuments, chunking).slice(0, 4) : [];
+  emit({ step: "chunk", status: "end", chunkCount: chunks.length });
+
+  emit({ step: "retrieve", status: "start" });
+  const selection = chunks.length
+    ? selectChunksWithinBudget(chunks, { topicPrompt: config.instructions, title: config.name, scope: config.scope || {} })
+    : { chunks: [], truncated: false, totalChars: 0 };
+  emit({ step: "retrieve", status: "end", chunkCount: selection.chunks.length, truncated: selection.truncated });
+  return { scopedDocuments, styleDocuments, chunks, rankedChunks: selection.chunks, styleChunks, truncated: selection.truncated };
+}
+
+/**
+ * Estimates what a run will cost before it happens: tokens in (instructions + material + answers),
+ * tokens out (from the schema and requested count) and USD at list price.
+ */
+export async function estimateAgentRun(config) {
+  const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
+  const material = await prepareMaterial(config);
+  const schema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
+  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const inputTokens = approxTokens(buildUserMessage(config, material.rankedChunks, material.styleChunks)) + approxTokens(JSON.stringify(schema)) + 120;
+  const outputTokens = estimateOutputTokens(config);
+  const price = MODEL_PRICING[model] || MODEL_PRICING["gpt-4o-mini"];
+  const costUsd = (inputTokens * price.input + outputTokens * price.output) / 1e6;
+  return {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: Number(costUsd.toFixed(5)),
+    documentCount: material.scopedDocuments.length,
+    chunkCount: material.rankedChunks.length,
+    truncated: material.truncated,
+    llmConfigured: isAgentLlmConfigured()
+  };
 }
 
 function creativityToTemperature(creativity = "medium") {
@@ -145,7 +252,7 @@ async function readOpenAiStream(response, onToken) {
   return { content, usage, finishReason };
 }
 
-async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = [] } = {}) {
+async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = [], maxTokens = 6000 } = {}) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing required environment variable: OPENAI_API_KEY");
@@ -162,7 +269,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
     body: JSON.stringify({
       model,
       temperature: creativityToTemperature(config.creativity),
-      max_tokens: 6000,
+      max_tokens: maxTokens,
       stream: streaming,
       ...(streaming ? { stream_options: { include_usage: true } } : {}),
       response_format: {
@@ -180,23 +287,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
         },
         {
           role: "user",
-          content: JSON.stringify({
-            task: "Generate agent output",
-            agentInstructions: config.instructions || "",
-            outputFields: (config.template?.fields || []).map((field) => ({ name: field.name, meaning: field.description || field.label || field.name })),
-            agentKnowledge: config.knowledgeText
-              ? { note: "Background notes and examples from the agent creator. Use them to understand the expected style and level; never copy their content or layout into the output, and always respect the output schema (one element per item).", text: String(config.knowledgeText) }
-              : null,
-            contextPrompt: config.contextPrompt || "",
-            questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
-            outputExample: config.outputExample || "",
-            refinementPrompt: config.refinementPrompt || "",
-            previousOutput: config.previousOutput || null,
-            referenceMaterial: buildChunksContext(chunks),
-            styleExamples: styleChunks.length
-              ? { note: "Imitate the format, tone and difficulty of these examples. Do not take content from them.", samples: buildChunksContext(styleChunks, 4) }
-              : null
-          })
+          content: buildUserMessage(config, chunks, styleChunks)
         }
       ]
     })
@@ -285,33 +376,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     throw new Error("Add at least one output field before generating output.");
   }
 
-  emit({ step: "scope", status: "start" });
-  const workspaces = await loadWorkspaceTreeForAi();
-  // Agent Studio specs use material only when explicitly selected (opt-in); legacy agents keep subject-wide scope.
-  const explicitOnly = Boolean(config.spec) && !(config.scope?.documentIds || []).length;
-  const scopedDocuments = explicitOnly ? [] : collectScopedDocuments(workspaces, config.scope || {});
-  const styleDocumentIds = Array.isArray(config.scope?.styleDocumentIds) ? config.scope.styleDocumentIds.filter(Boolean) : [];
-  const styleDocuments = styleDocumentIds.length
-    ? collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: styleDocumentIds })
-    : [];
-  emit({ step: "scope", status: "end", documentCount: scopedDocuments.length, styleDocumentCount: styleDocuments.length });
-
-  emit({ step: "chunk", status: "start" });
-  const chunking = { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS };
-  const chunks = scopedDocuments.length ? chunkDocuments(scopedDocuments, chunking) : [];
-  const styleChunks = styleDocuments.length ? chunkDocuments(styleDocuments, chunking).slice(0, 4) : [];
-  emit({ step: "chunk", status: "end", chunkCount: chunks.length });
-
-  emit({ step: "retrieve", status: "start" });
-  const rankedChunks = chunks.length
-    ? selectTopChunks(chunks, {
-      topicPrompt: config.instructions,
-      title: config.name,
-      questionCount: 6,
-      scope: config.scope || {}
-    })
-    : [];
-  emit({ step: "retrieve", status: "end", chunkCount: rankedChunks.length });
+  const { scopedDocuments, rankedChunks, styleChunks } = await prepareMaterial(config, emit);
 
   const schema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
 
@@ -331,7 +396,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       // occasionally loop or truncate structured output.
       emit({ step: "generate", status: "retry", reason: String(error.message || error) });
       try {
-        result = await callOpenAiAgent({ ...config, creativity: "low" }, rankedChunks, schema, { styleChunks });
+        result = await callOpenAiAgent({ ...config, creativity: "low" }, rankedChunks, schema, { styleChunks, maxTokens: 3000 });
       } catch (retryError) {
         fallbackReason = String(retryError.message || retryError);
       }

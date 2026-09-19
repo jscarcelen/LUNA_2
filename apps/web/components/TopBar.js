@@ -1,3 +1,5 @@
+import { CreditsBadge } from "../modules/credits/CreditsBadge";
+
 export function TopBar({ title, navItems, page, onPageChange }) {
   return (
     <header className="top-bar">
@@ -15,6 +17,7 @@ export function TopBar({ title, navItems, page, onPageChange }) {
           </button>
         ))}
       </nav>
+      <CreditsBadge />
     </header>
   );
 }

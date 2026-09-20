@@ -652,7 +652,7 @@ function mixedQuestions(): BlockDef {
 }
 
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), mixedQuestions(), examQuestion(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), mixedQuestions(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
 }
 
 /** Blocks grouped by family, in library order. */

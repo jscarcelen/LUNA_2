@@ -191,7 +191,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
       {state.mode === "design" ? <DesignMode store={store} sampleValues={sampleValues} onPublishBlock={setPublishBlock} /> : null}
       {publishBlock ? <PublishBlockDialog block={publishBlock} existing={existingBlockListing} onClose={() => setPublishBlock(null)} onConfirm={confirmPublishBlock} /> : null}
       {state.mode === "views" ? <ViewsMode store={store} template={template} sampleData={sampleData} /> : null}
-      {state.mode === "data" ? <DataMode template={template} agents={agents} onChangeTemplate={store.update} /> : null}
+      {state.mode === "data" ? <DataMode template={template} agents={agents} sampleValues={sampleValues} onChangeTemplate={store.update} /> : null}
       {state.mode === "preview" ? <PreviewMode template={template} layoutId={layout.id} viewId={view?.id || ""} sampleData={sampleData} sampleCount={sampleCount} onSampleCount={setSampleCount} compiled={compiled} /> : null}
       {state.mode === "export" ? <ExportMode layout={layout} view={view} compiled={compiled} sampleData={sampleData} layoutId={layout.id} viewId={view?.id || ""} name={template.name} dirty={state.dirty} onSave={save} busy={busy} /> : null}
     </section>

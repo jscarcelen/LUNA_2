@@ -31,14 +31,14 @@ function parentChainOf(elements: Element[], id: ID): GroupElement[] {
   return chain;
 }
 
-export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Store; sampleValues: Record<string, unknown>; onPublishBlock?: (block: BlockDef) => void }) {
+export function DesignMode({ store, sampleValues, onPublishBlock, composer = false }: { store: Store; sampleValues: Record<string, unknown>; onPublishBlock?: (block: BlockDef) => void; composer?: boolean }) {
   const { state, layout, view, page, selected, select, updatePage, updateLayout, update, updateElements, deleteElements } = store;
   const [dimBackground, setDimBackground] = useState(false);
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
   const [sequenceOpen, setSequenceOpen] = useState<false | { addTo: string }>(false);
   const template = state.template!;
-  const simple = (template.editorMode || "simple") === "simple";
+  const simple = composer || (template.editorMode || "simple") === "simple";
   const elements = page?.elements || [];
   // Simple mode keeps top-level blocks stacked inside the margins in visual order.
   useEffect(() => {
@@ -342,11 +342,11 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   const addHint = simple ? "Added at the end of the list." : selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
 
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
+    <div className={`grid items-start gap-3 ${composer ? "lg:grid-cols-[248px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)_320px]"}`}>
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
-        <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />
-        <LayersPanel
+        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} blocksOnly={composer} />
+        {composer ? null : <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />}
+        {composer ? null : <LayersPanel
           page={pg}
           selection={state.selection}
           viewId={view?.id || ""}
@@ -367,7 +367,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
             };
             return { ...current, elements: reorder(current.elements) };
           })}
-        />
+        />}
       </aside>
       {simple ? (
         <SimpleDesign
@@ -390,6 +390,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
           onExtractFromSet={extractFromSet}
           onAddToSet={(setId) => setSequenceOpen({ addTo: setId })}
           onAdvanced={() => update((current) => ({ ...current, editorMode: "advanced" }))}
+          composer={composer}
         />
       ) : (
       <Canvas
@@ -423,7 +424,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
       )}
-      <Inspector
+      {composer ? null : <Inspector
         layout={layout}
         page={pg}
         views={layout.views}
@@ -441,7 +442,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         onRenameField={renameField}
         onRetypeField={retypeField}
         onSetRepeat={setFieldRepeat}
-      />
+      />}
       {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
       {sequenceOpen ? <SequenceDialog onClose={() => setSequenceOpen(false)} onInsert={(block, choices) => { if (sequenceOpen.addTo) addToSet(sequenceOpen.addTo, choices); else addBlock(block, { accent: ACCENT_PRESETS[0], toggles: {} }); setSequenceOpen(false); }} /> : null}
     </div>

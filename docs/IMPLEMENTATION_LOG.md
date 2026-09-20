@@ -502,3 +502,9 @@
 - Advanced canvas: neutral dashed edges for repeating groups, labels and AI-field outlines only on selection/hover, quieter margins/background.
 - Simple list: each block has an **Order** control — "Fixed here" or "Let the agent decide →" (joins the neighbouring agent-ordered set or starts one). Set cards list their designs with Type values, ✕ takes a design back out as a fixed block, "＋ Add design" opens the design picker for that set. Groups carry `origin { blockId, typeValue }` so they can be rebuilt; type values are unique within a set.
 - Data tab regrouped **by component**: one collapsible card per block (sets show each design with its Type value), field rows highlight the matching element in a live **component preview** on the right (sample data, ElementView at 3×). The full editable field tree moved into an "All fields" disclosure; agent compatibility sits under the preview.
+
+## Agent output = template blocks; compatible agents (2026-09-20)
+
+- Agent Studio step 4 now defaults to **Blocks**: `steps/OutputComposer.tsx` embeds Template Studio's simple mode in `composer` mode (components only, no formatting) — the composition's fields become `outputSchema`; the composition is stored on the spec as `outputTemplate` (+ `outputTemplateId`). "Start from a saved template" loads a library template's structure; "Save as template" / "Update template" writes it to the library; "Format in Template Studio ↗" deep-links to it. "Fields (manual)" keeps the old builder.
+- Manual builder: per-element fields have a value type plus a "Many values (list)" flag instead of a separate list type.
+- `compatibleAgents()` (mapping.ts): agents whose output matches every field a template uses (score ≥ 0.6). Shown as ✦ chips on template cards in the Template Studio gallery and the AI Tools hub, and in the Data tab. Built-in tools expose their `agent` config for this.

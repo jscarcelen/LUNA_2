@@ -134,3 +134,16 @@ export function applyMapping(fields: FieldDef[], mapping: SchemaMapping, output:
   };
   return build(fields, output, "");
 }
+
+/**
+ * Which agents can fill this template: every list the template repeats over and every field it
+ * places must have a confident match in the agent's output. Used to label templates everywhere.
+ */
+export function compatibleAgents<T extends { id: string; name: string; fields: { name: string; label?: string; type?: string; repeatScope?: string; description?: string }[] }>(templateFields: FieldDef[], usedFieldIds: Set<string> | null, agents: T[]): T[] {
+  const needed = flattenFields(templateFields).filter((entry) => entry.field.type !== "object" && !entry.path.endsWith("[]") && (!usedFieldIds || usedFieldIds.has(entry.field.id)));
+  if (!needed.length) return [];
+  return agents.filter((agent) => {
+    const proposals = proposeMapping(templateFields, schemaFromAgentFields(agent.fields));
+    return needed.every((entry) => { const p = proposals.find((item) => item.fieldId === entry.field.id); return p && p.score >= 0.6; });
+  });
+}

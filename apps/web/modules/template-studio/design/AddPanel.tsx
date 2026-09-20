@@ -13,6 +13,8 @@ export interface AddPanelProps {
   onRemoveBlock?: (block: BlockDef) => void;
   hint: string;
   libraryVersion?: number;
+  /** Composer: only components (no raw elements / AI fields). */
+  blocksOnly?: boolean;
 }
 
 const BASIC_ORDER = ["text", "heading", "image", "rect", "line", "table"];
@@ -48,7 +50,7 @@ function Section({ title, children, badge }: { title: string; children: React.Re
 }
 
 /** Add: Basic · AI fields · Premium · Custom — one scrolling panel with search. */
-export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, onRemoveBlock, hint, libraryVersion = 0 }: AddPanelProps) {
+export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, onRemoveBlock, hint, libraryVersion = 0, blocksOnly = false }: AddPanelProps) {
   const [query, setQuery] = useState("");
   const [accentId, setAccentId] = useState(ACCENT_PRESETS[0].id);
   const [active, setActive] = useState<BlockDef | null>(null);
@@ -122,8 +124,8 @@ export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, on
       <input className={`${fieldBase} mt-2 w-full py-1.5 text-xs`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search elements…" />
       <p className="m-0 mt-1.5 px-1 text-[10.5px] text-soft-ink">{hint}</p>
       <div className="mt-3 grid max-h-[58vh] min-w-0 gap-4 overflow-y-auto overflow-x-hidden pr-0.5" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        {basic.length ? <Section title="Basic"><div className="grid grid-cols-3 gap-0.5">{basic.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} disabled={c.type === "table"} title={c.type === "table" ? "Coming soon" : undefined} onClick={() => onAdd(c.type)} />)}</div></Section> : null}
-        {ai.length ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes: a name, a type, and whether it repeats. A <strong>list</strong> is a field with many elements — a repeating block draws them one after another.</p></Section> : null}
+        {basic.length && !blocksOnly ? <Section title="Basic"><div className="grid grid-cols-3 gap-0.5">{basic.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} disabled={c.type === "table"} title={c.type === "table" ? "Coming soon" : undefined} onClick={() => onAdd(c.type)} />)}</div></Section> : null}
+        {ai.length && !blocksOnly ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes: a name, a type, and whether it repeats. A <strong>list</strong> is a field with many elements — a repeating block draws them one after another.</p></Section> : null}
         {onOpenSequence && (!q || "agent order content sequence".includes(q)) ? (
           <Section title="Agent order" badge="⇅">
             <button type="button" onClick={onOpenSequence} className="w-full rounded-xl border border-dashed border-[var(--accent)]/50 bg-[var(--accent-soft)]/50 px-3 py-2.5 text-left transition hover:bg-[var(--accent-soft)]">

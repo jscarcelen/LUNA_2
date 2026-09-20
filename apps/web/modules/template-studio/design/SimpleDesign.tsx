@@ -21,6 +21,8 @@ export interface SimpleDesignProps {
   onExtractFromSet: (setId: string, childId: string) => void;
   onAddToSet: (setId: string) => void;
   onAdvanced: () => void;
+  /** Agent Studio composer: structure only — no placement / formatting controls. */
+  composer?: boolean;
 }
 
 function elementName(element: Element): string {
@@ -60,7 +62,7 @@ function nestedRepeats(element: Element, fields: FieldDef[]): string[] {
  * Simple design: the template as an ordered list of blocks. Order = output order; each block says
  * whether it appears once or repeats. The same list flows into A4, Letter or slides.
  */
-export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onChangeElement, onAgentOrder, onExtractFromSet, onAddToSet, onAdvanced }: SimpleDesignProps) {
+export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onChangeElement, onAgentOrder, onExtractFromSet, onAddToSet, onAdvanced, composer = false }: SimpleDesignProps) {
   const ordered = simpleOrder(page.elements, layout);
   const ids = ordered.map((element) => element.id);
   const move = (id: string, direction: -1 | 1) => {
@@ -74,8 +76,8 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
   return (
     <div className={`${card} p-4`} style={{ minHeight: 640 }}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div><p className={kicker}>Blocks · output order</p><p className="m-0 mt-0.5 text-xs text-soft-ink">Top to bottom is the order in the document. Each block is either <strong>fixed here</strong> (you decide its place) or part of an <strong>agent-ordered set</strong> (the agent decides which design goes where). Blocks flow onto as many pages or slides as needed.</p></div>
-        <button type="button" className={ghostBtn} onClick={onAdvanced}>Open in Advanced ↗</button>
+        <div><p className={kicker}>{composer ? "What the agent returns · in this order" : "Blocks · output order"}</p><p className="m-0 mt-0.5 text-xs text-soft-ink">{composer ? "Add the components the agent should fill. Each one is either fixed here (you decide its place) or part of an agent-ordered set (the agent decides which design goes where). Formatting comes later, in Template Studio." : <>Top to bottom is the order in the document. Each block is either <strong>fixed here</strong> (you decide its place) or part of an <strong>agent-ordered set</strong> (the agent decides which design goes where). Blocks flow onto as many pages or slides as needed.</>}</p></div>
+        {composer ? null : <button type="button" className={ghostBtn} onClick={onAdvanced}>Open in Advanced ↗</button>}
       </div>
       <div className="grid gap-2">
         {ordered.map((element, index) => {
@@ -127,8 +129,8 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
                       </>
                     )}
                   </div>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Placement</span>
-                  <PlacementControl compact element={element} onChange={(updater) => onChangeElement(element.id, updater)} />
+                  {composer ? null : <><span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Placement</span>
+                  <PlacementControl compact element={element} onChange={(updater) => onChangeElement(elementId, updater)} /></>}
                 </div>
                 {isGroup && !isSet ? (
                   <div className="mt-2 flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>

@@ -4,6 +4,19 @@ import type { Element, Template } from "./engine/types";
 
 const GROUP = "#6d4de6";
 
+import { compatibleAgents } from "./engine/mapping";
+import { migrateToV3 } from "./engine/migrate";
+
+/** Names of agents whose output fills this saved template (structure match ≥ 60% on every field). */
+export function compatibleAgentNames(row: any, agents: { id: string; name: string; fields: any[] }[]): string[] {
+  try {
+    const template = migrateToV3(row);
+    return compatibleAgents(template.fields, null, agents).map((agent) => agent.name);
+  } catch {
+    return [];
+  }
+}
+
 export function templateFolderOf(row: any): string {
   const folder = String(row?.folderId || row?.meta?.folderId || "");
   // Legacy builder used opaque ids ("tpl-folder-…"); only human-named folders count.

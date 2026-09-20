@@ -19,18 +19,23 @@ function Mover({ onMove, first, last }: { onMove?: (direction: -1 | 1) => void; 
 }
 
 function FieldCard({ f, onChange, onRemove, onMove, first, last, tone = "once" }: { f: FieldDef; onChange: (next: FieldDef) => void; onRemove: () => void; onMove?: (direction: -1 | 1) => void; first?: boolean; last?: boolean; tone?: "once" | "item" }) {
-  // Per-item fields may hold a small list of values (e.g. answer options); once-fields are scalars.
-  const leafTypes = outputTypes.filter((t) => t.type !== "object" && (tone === "item" || t.type !== "array"));
+  // A field is a value type that may repeat ("many values") — the same idea as a list in Template Studio.
+  const leafTypes = outputTypes.filter((t) => t.type !== "object" && t.type !== "array");
+  const isList = f.type === "array";
+  const valueType = isList ? (f.children?.[0]?.type || "text") : f.type;
+  const setValueType = (type: FieldDef["type"]) => onChange(isList ? { ...f, children: [{ ...(f.children?.[0] || createField(`${f.name || "item"} value`, "text")), type }] } : { ...f, type });
+  const setList = (on: boolean) => onChange(on ? { ...f, type: "array", children: [createField(`${f.name || "item"} value`, valueType)] } : { ...f, type: valueType, children: undefined });
   return (
     <div className="rounded-xl border border-ink/10 bg-white p-3">
       <div className="grid gap-2 sm:grid-cols-[auto_1fr_150px]">
         <span className={`self-center rounded-md px-1.5 py-0.5 text-[10px] font-bold ${tone === "once" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "text-white"}`} style={tone === "item" ? { background: LIST_COLOR } : undefined}>{tone === "once" ? "once" : "per item"}</span>
         <input className={`${fieldBase} w-full`} value={f.name} onChange={(event) => onChange({ ...f, name: event.target.value })} placeholder={tone === "once" ? "Title" : "Front"} />
-        <select className={`${fieldBase} w-full`} value={f.type} onChange={(event) => { const type = event.target.value as FieldDef["type"]; onChange({ ...f, type, children: type === "array" ? [createField(`${f.name || "item"} value`, "text")] : undefined }); }}>{leafTypes.map((t) => <option key={t.type} value={t.type}>{t.type === "array" ? "List of values" : t.label}</option>)}</select>
+        <select className={`${fieldBase} w-full`} value={valueType} onChange={(event) => setValueType(event.target.value as FieldDef["type"])}>{leafTypes.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}</select>
       </div>
       <input className={`${fieldBase} mt-2 w-full text-xs`} value={f.description || ""} onChange={(event) => onChange({ ...f, description: event.target.value })} placeholder={tone === "once" ? "What is it? e.g. A title for the whole document" : "What is it? e.g. The word in the first language"} />
       <div className="mt-2 flex items-center gap-4 text-xs text-ink">
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={f.required !== false} onChange={(event) => onChange({ ...f, required: event.target.checked })} />Required</label>
+        {tone === "item" ? <label className="flex items-center gap-1.5" title="Several values of this type, e.g. answer options"><input type="checkbox" checked={isList} onChange={(event) => setList(event.target.checked)} />Many values (list)</label> : null}
         <span className="ml-auto flex items-center gap-2"><Mover onMove={onMove} first={first} last={last} /><button type="button" className="text-soft-ink hover:text-[var(--color-danger)]" onClick={onRemove}>Remove</button></span>
       </div>
     </div>

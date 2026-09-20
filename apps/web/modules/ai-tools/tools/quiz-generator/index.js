@@ -5,6 +5,7 @@ export const quizGeneratorTool = {
   id: "quiz-generator",
   name: QUIZ_AGENT.name,
   description: QUIZ_AGENT.tagline,
+  agent: QUIZ_AGENT,
   runLabel: "Open Quiz Generator",
   component: QuizGeneratorPage,
   pipelineConfig: {

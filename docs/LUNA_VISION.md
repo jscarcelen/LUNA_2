@@ -104,6 +104,15 @@ Consequences for the product:
 - In the block list, every block is marked **fixed here** (the user's order) or **agent decides** (part of an interchangeable set); the user chooses per block which is which.
 - Philosophy: Canva (visual) + Notion (blocks) + Google Docs (structure) + Luna (AI content), but much simpler than Canva; avoid too many buttons, nested menus, technical terms, separate editors per format, over-complex AI fields. Mental model: create template → name → view → add elements → design → add AI fields → define repeats → more views → preview → export.
 
+
+### 5.1b Agent output = template blocks (founder spec, 2026-09-20)
+
+- In the Agent Studio, the **output definition is a drag-and-drop ordering of the same elements and components that exist in Template Studio** — so the mapping between agent output and templates is automatic. The user either **selects a pre-defined template** or **creates one instantly** with the block composer.
+- In the agent generator this composition stays at the **simple block level** (structure only, no formatting). Any such structure can be **saved as a template**, and its format refined later in Template Studio.
+- **At all times a template is identified with the list of compatible AI agents.**
+- The agent output is always **one complete JSON** with all the information (title, subtitle, question tag, answer…); in Template Studio the user creates **views of the same template by hiding fields** — the blocks stay the same, just less crowded (with or without some information).
+- A **list is not a separate field type next to the value type**: a field is a text/number/… that may repeat (list of text), as Template Studio shows it (list Options → text Option).
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).
@@ -337,6 +346,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-20 — Added §5.1b: agent output defined with Template Studio blocks, templates list their compatible agents, views hide fields, list-as-flag on fields.
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.
 - 2026-09-19 — §5.1a: user-chosen agent-ordered sets, block placement options, clean advanced canvas.
 - 2026-09-19 — §5.1a: "one of" designs chosen by agent output, list-is-a-field clarity, single-iteration canvas + ×3 toggle, proportional group scaling.

@@ -1,12 +1,17 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import { TemplateThumbnail, templateFolderOf } from "./TemplateThumbnail";
+import { TemplateThumbnail, compatibleAgentNames, templateFolderOf } from "./TemplateThumbnail";
 import { card, kicker } from "./ui";
 
 export interface SavedTemplateRow { id: string; name: string; folderId?: string; templateV3?: unknown; docModel?: unknown; dataFields?: unknown[] }
 
-export function SourceChooser({ templates, busy, onBlank, onStarter, onUpload, onOpen, onMoveToFolder }: { templates: SavedTemplateRow[]; busy: boolean; onBlank: () => void; onStarter: (kind: "exam" | "flashcards") => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void }) {
+function AgentChips({ names }: { names: string[] }) {
+  if (!names.length) return <p className="m-0 mt-1 text-[10px] text-soft-ink">No compatible agent yet</p>;
+  return <p className="m-0 mt-1 flex flex-wrap gap-1">{names.slice(0, 3).map((name) => <span key={name} className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {name}</span>)}{names.length > 3 ? <span className="text-[10px] text-soft-ink">+{names.length - 3}</span> : null}</p>;
+}
+
+export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onOpen, onMoveToFolder }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: "exam" | "flashcards") => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [folder, setFolder] = useState<string>("");
@@ -61,7 +66,7 @@ export function SourceChooser({ templates, busy, onBlank, onStarter, onUpload, o
             <div className="mt-3 grid gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {shown.map((row) => (
                 <div key={row.id} className="group rounded-2xl border border-ink/10 bg-white p-2 transition hover:border-[var(--accent)]/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
-                  <button type="button" onClick={() => onOpen(row)} className="block w-full text-left"><TemplateThumbnail template={row} width={170} /><p className="m-0 mt-2 truncate text-sm font-semibold text-ink">{row.name}</p><p className="m-0 text-[11px] text-soft-ink">{row.templateV3 ? "v3" : row.docModel ? "v2" : "legacy"} · {(row.dataFields || []).length} fields{templateFolderOf(row) ? ` · ${templateFolderOf(row)}` : ""}</p></button>
+                  <button type="button" onClick={() => onOpen(row)} className="block w-full text-left"><TemplateThumbnail template={row} width={170} /><p className="m-0 mt-2 truncate text-sm font-semibold text-ink">{row.name}</p><p className="m-0 text-[11px] text-soft-ink">{row.templateV3 ? "v3" : row.docModel ? "v2" : "legacy"} · {(row.dataFields || []).length} fields{templateFolderOf(row) ? ` · ${templateFolderOf(row)}` : ""}</p><AgentChips names={compatibleAgentNames(row, agents)} /></button>
                   {onMoveToFolder ? <select className="mt-1 w-full rounded-lg border border-ink/10 px-2 py-1 text-[11px] text-soft-ink" value={templateFolderOf(row)} onChange={(event) => onMoveToFolder(row, event.target.value)}><option value="">Unfiled</option>{folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}</select> : null}
                 </div>
               ))}

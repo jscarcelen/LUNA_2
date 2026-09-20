@@ -56,6 +56,9 @@ export type ValidationRule =
   | { type: "answer_in_options"; arrayFieldId: ID; answerFieldId: ID; optionsFieldId: ID }
   | { type: "options_count"; arrayFieldId: ID; optionsFieldId: ID; count: number };
 
+/** Kept loose here to avoid a hard type dependency; the Template Studio `Template` is what is stored. */
+export type TemplateLike = Record<string, unknown>;
+
 export interface AgentSpec {
   id: ID;
   version: 1;
@@ -65,6 +68,10 @@ export interface AgentSpec {
   inputs: InputDef[];
   contextSlots: ContextSlot[];
   outputSchema: FieldDef[];
+  /** The block composition the output was designed with (Template Studio structure, no formatting). Its fields ARE the output schema. */
+  outputTemplate?: TemplateLike | null;
+  /** Saved template id when the composition came from / was saved to the library. */
+  outputTemplateId?: string;
   examples: ExampleDef[];
   validationRules: ValidationRule[];
   model: { model: string; creativity: "low" | "medium" | "high" };

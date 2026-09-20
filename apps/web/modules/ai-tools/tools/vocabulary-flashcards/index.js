@@ -10,6 +10,7 @@ function VocabularyFlashcardsPage({ toolContext }) {
 
 export const vocabularyFlashcardsTool = {
   id: "vocabulary-flashcards",
+  agent: FLASHCARDS_AGENT,
   name: "Vocabulary Flashcards",
   description: "Flashcards pairing words between two languages — from your material or general knowledge.",
   runLabel: "Open Vocabulary Flashcards",

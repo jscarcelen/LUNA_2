@@ -9,6 +9,7 @@ import { PurposeStep } from "./steps/PurposeStep";
 import { InputSchemaBuilder } from "./steps/InputSchemaBuilder";
 import { ContextBuilder } from "./steps/ContextBuilder";
 import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
+import { OutputComposer } from "./steps/OutputComposer";
 import { TestStep } from "./test/TestStep";
 import { AdvancedEditor } from "./AdvancedEditor";
 import { useAgentGenerationStream } from "../ai-tools/tools/agent-builder/useAgentGenerationStream";
@@ -21,6 +22,9 @@ interface ToolContext {
   selectedSubjectId?: string;
   onSaveGeneratedQuizDocument?: (payload: unknown) => Promise<{ id?: string } | null>;
   onUpdateGeneratedDocument?: (id: string, payload: unknown) => Promise<unknown>;
+  onListDocumentBlockTemplates?: () => Promise<any[]>;
+  onSaveDocumentBlockTemplate?: (payload: unknown) => Promise<any>;
+  onOpenTool?: (toolId: string) => void;
 }
 
 const MARKETPLACE_KEY = "luna.agentMarketplaceListings.v1";
@@ -98,6 +102,7 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
   const { state, dispatch, update } = useAgentStore();
   const generation = useAgentGenerationStream();
   const [advanced, setAdvanced] = useState(false);
+  const [outputMode, setOutputMode] = useState<"blocks" | "fields">("blocks");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [published, setPublished] = useState(false);
@@ -178,7 +183,16 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
           {step === 1 ? <PurposeStep spec={spec} onChange={update} /> : null}
           {step === 2 ? <InputSchemaBuilder spec={spec} onChange={update} /> : null}
           {step === 3 ? <ContextBuilder spec={spec} docs={docs} onChange={update} /> : null}
-          {step === 4 ? <OutputSchemaBuilder spec={spec} onChange={update} /> : null}
+          {step === 4 ? (
+            <div className="grid gap-3">
+              <div className="flex gap-1 self-start rounded-xl bg-[var(--surface-soft)] p-1">
+                {([["blocks", "Blocks (recommended)"], ["fields", "Fields (manual)"]] as const).map(([value, text]) => <button key={value} type="button" onClick={() => setOutputMode(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${outputMode === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
+              </div>
+              {outputMode === "blocks"
+                ? <OutputComposer spec={spec} onChange={update} listTemplates={contextRef.current?.onListDocumentBlockTemplates} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />
+                : <OutputSchemaBuilder spec={spec} onChange={update} />}
+            </div>
+          ) : null}
           {step === 5 ? <TestStep key={spec.inputs.map((i) => i.id).join(",")} spec={spec} docs={docs} workspaceId={workspaceId} subjectId={subjectId} generation={generation} lastRun={state.lastRun} lastChanges={state.lastChanges} onRun={(run) => dispatch({ type: "run", run })} onChange={update} onUndo={() => dispatch({ type: "undo" })} /> : null}
           <div className="flex items-center justify-between">
             <button type="button" className={ghostBtn} disabled={step === 1} onClick={() => dispatch({ type: "step", step: (step - 1) as Step })}>← Back</button>

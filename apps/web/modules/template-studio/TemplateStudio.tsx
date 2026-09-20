@@ -60,6 +60,9 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
     try { setRows(await list()); } catch { /* keep */ }
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
+  // The list handler can arrive after mount (AppShell wiring); retry once it exists or when the tab is shown again.
+  const hasList = typeof toolContext?.onListDocumentBlockTemplates === "function";
+  useEffect(() => { if (hasList && !rows.length) refresh(); }, [hasList, rows.length, refresh]);
 
   const template = state.template;
   const sampleData = useMemo(() => (template ? buildSampleData(template, sampleCount) : {}), [template, sampleCount]);
@@ -182,7 +185,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   }
 
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
+    return <SourceChooser templates={rows} busy={busy} agents={agents} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

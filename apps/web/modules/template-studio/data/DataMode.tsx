@@ -5,7 +5,7 @@ import type { Element, FieldDef, GroupElement, SchemaNode, Template } from "../e
 import { arrayItemFields, createField, fieldsFromAgentFields, findField, flattenFields, simpleOrder } from "../engine/model";
 import { isSequenceGroup, sequenceMembers } from "../engine/blocks";
 import { ElementView } from "../design/canvas/ElementView";
-import { flattenSchema, proposeMapping, schemaFromAgentFields } from "../engine/mapping";
+import { compatibleAgents, flattenSchema, proposeMapping, schemaFromAgentFields } from "../engine/mapping";
 import { card, field as fieldClass, fieldBase, ghostBtn, kicker, label, primaryBtn } from "../ui";
 
 export interface AgentOption { id: string; name: string; fields: { name: string; label?: string; type?: string; repeatScope?: string; description?: string }[] }
@@ -179,7 +179,9 @@ export function DataMode({ template, agents, sampleValues = {}, onChangeTemplate
         <p className="m-0 mt-2 text-[11px] text-soft-ink">Sample data shown. The highlighted element is the field under your cursor.</p>
       </section>
       <section className={`${card} p-5`}>
-        <p className={kicker}>Agent output (optional)</p>
+        <p className={kicker}>Compatible agents</p>
+        {(() => { const ok = compatibleAgents(template.fields, used, agents); return ok.length ? <p className="m-0 mt-2 flex flex-wrap gap-1">{ok.map((a) => <span key={a.id} className="rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-ink)]">✦ {a.name}</span>)}</p> : <p className="m-0 mt-2 text-xs text-soft-ink">No agent produces this structure yet — build one in Agent Studio from these blocks, or check an agent below.</p>; })()}
+        <p className={`${kicker} mt-4`}>Check an agent (optional)</p>
         <select className={`${fieldClass} mt-2`} value={agentId} onChange={(event) => setAgentId(event.target.value)}>
           <option value="">No agent — design freely</option>
           {agents.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}

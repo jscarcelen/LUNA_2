@@ -202,6 +202,8 @@ export interface GroupElement extends ElementBase {
    * "one of" — the agent's output decides which design appears.
    */
   condition?: { fieldId: ID; equals: string } | null;
+  /** Which library block this group came from (so it can be re-inserted or moved into an agent-ordered set). */
+  origin?: { blockId: string; typeValue?: string } | null;
 }
 
 export type Element = TextElement | ImageElement | ShapeElement | TableElement | GroupElement;

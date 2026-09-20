@@ -14,7 +14,7 @@ import { LayersPanel } from "./LayersPanel";
 import { PagesPanel } from "./PagesPanel";
 import { importPages } from "../pdfImport";
 import { fieldsInScope } from "./inspector/ContentTab";
-import { ACCENT_PRESETS, blockFromElements, instantiateBlock, removeBlockFromLibrary, saveBlockToLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
+import { ACCENT_PRESETS, blockFromElements, buildSequenceBlock, defaultTypeValue, findBlock, instantiateBlock, isSequenceGroup, removeBlockFromLibrary, saveBlockToLibrary, sequenceMembers, type AccentPreset, type BlockDef, type SequenceChoice } from "../engine/blocks";
 import { BlockDialog } from "./BlockDialog";
 import type { RepeatChoice } from "./inspector/AiFieldPanel";
 
@@ -36,7 +36,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   const [dimBackground, setDimBackground] = useState(false);
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
-  const [sequenceOpen, setSequenceOpen] = useState(false);
+  const [sequenceOpen, setSequenceOpen] = useState<false | { addTo: string }>(false);
   const template = state.template!;
   const simple = (template.editorMode || "simple") === "simple";
   const elements = page?.elements || [];
@@ -149,6 +149,70 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
     const group = createGroup({ name: `${itemField.name} (repeats)`, frame: { x: el.frame.x, y: el.frame.y, w: el.frame.w, h: el.frame.h + 2 }, layout: { mode: "vertical", gap: 3 }, repeat: { fieldId: list.id, mode }, children: [inner] });
     updatePage((current) => ({ ...current, elements: [...removeElements(current.elements, [el.id]), group] }));
     select([inner.id]);
+  }
+
+  /* ---------- agent-ordered sets (simple mode): fixed here ⇄ agent decides */
+  function listNameOf(set: GroupElement): string {
+    return (set.repeat && findField(template.fields, set.repeat.fieldId)?.name) || "Content";
+  }
+  /** Replaces a set (or a single block) with a rebuilt agent-ordered set made of `members`. */
+  function rebuildSet(targetId: string, members: SequenceChoice[], listName: string, extra: Element[] = []) {
+    const target = findElement(pg.elements, targetId).element;
+    if (!target) return;
+    const seq = buildSequenceBlock(members, listName);
+    const { fields, elements: created } = instantiateBlock(seq, template.fields);
+    const placed = created.map((element) => ({ ...element, frame: { ...element.frame, x: target.frame.x, y: target.frame.y, w: target.frame.w } }));
+    update((current) => ({
+      ...current,
+      fields,
+      layouts: current.layouts.map((item) => (item.id === layout!.id ? { ...item, pages: item.pages.map((p) => (p.id === pg.id ? { ...p, elements: p.elements.flatMap((element) => (element.id === targetId ? [...placed, ...extra] : [element])) } : p)) } : item))
+    }));
+    select([placed[0].id]);
+  }
+  function setAgentOrder(id: string, on: boolean) {
+    const el = findElement(pg.elements, id).element;
+    if (!el || el.type !== "group") return;
+    if (!on) return; // members leave a set through extractFromSet
+    const block = el.origin ? findBlock(el.origin.blockId) : null;
+    if (!block) return;
+    const ordered = simpleOrder(pg.elements, layout!);
+    const index = ordered.findIndex((item) => item.id === id);
+    const prev = ordered[index - 1];
+    const next = ordered[index + 1];
+    const neighbour = prev && isSequenceGroup(prev) ? prev : next && isSequenceGroup(next) ? next : null;
+    const me: SequenceChoice = { block, typeValue: defaultTypeValue(block) };
+    if (neighbour) {
+      const members = sequenceMembers(neighbour).filter((m) => m.block).map((m) => ({ block: m.block!, typeValue: m.typeValue }));
+      const merged = neighbour === prev ? [...members, me] : [me, ...members];
+      updatePage((current) => ({ ...current, elements: current.elements.filter((element) => element.id !== id) }));
+      rebuildSet(neighbour.id, merged, listNameOf(neighbour));
+      return;
+    }
+    rebuildSet(id, [me], "Content");
+  }
+  function extractFromSet(setId: string, childId: string) {
+    const set = findElement(pg.elements, setId).element;
+    if (!set || set.type !== "group") return;
+    const members = sequenceMembers(set);
+    const leaving = members.find((m) => m.child.id === childId);
+    const staying = members.filter((m) => m.child.id !== childId && m.block).map((m) => ({ block: m.block!, typeValue: m.typeValue }));
+    const back = leaving?.block ? instantiateBlock(leaving.block, template.fields) : null;
+    const extra = back ? back.elements.map((element) => ({ ...element, frame: { ...element.frame, x: set.frame.x, y: set.frame.y + set.frame.h + 4, w: set.frame.w } })) : [];
+    if (back) update((current) => ({ ...current, fields: back.fields }));
+    if (!staying.length) {
+      update((current) => ({
+        ...current,
+        layouts: current.layouts.map((item) => (item.id === layout!.id ? { ...item, pages: item.pages.map((p) => (p.id === pg.id ? { ...p, elements: p.elements.flatMap((element) => (element.id === setId ? extra : [element])) } : p)) } : item))
+      }));
+      return;
+    }
+    rebuildSet(setId, staying, listNameOf(set), extra);
+  }
+  function addToSet(setId: string, chosen: SequenceChoice[]) {
+    const set = findElement(pg.elements, setId).element;
+    if (!set || set.type !== "group") return;
+    const members = sequenceMembers(set).filter((m) => m.block).map((m) => ({ block: m.block!, typeValue: m.typeValue }));
+    rebuildSet(setId, [...members, ...chosen], listNameOf(set));
   }
 
   /* ---------- blocks (pre-made objects) */
@@ -280,7 +344,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen(true)} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
+        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} />
         <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />
         <LayersPanel
           page={pg}
@@ -322,6 +386,9 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
             return { ...group, repeat: { fieldId: list, mode, columns: mode === "grid" ? group.repeat?.columns || 2 : undefined }, layout: mode === "grid" ? { ...group.layout, mode: "grid", columns: group.repeat?.columns || 2 } : group.layout } as Element;
           })}
           onChangeElement={(id, updater) => updateElements(id, updater)}
+          onAgentOrder={setAgentOrder}
+          onExtractFromSet={extractFromSet}
+          onAddToSet={(setId) => setSequenceOpen({ addTo: setId })}
           onAdvanced={() => update((current) => ({ ...current, editorMode: "advanced" }))}
         />
       ) : (
@@ -376,7 +443,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock }: { store: Sto
         onSetRepeat={setFieldRepeat}
       />
       {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
-      {sequenceOpen ? <SequenceDialog onClose={() => setSequenceOpen(false)} onInsert={(block) => { addBlock(block, { accent: ACCENT_PRESETS[0], toggles: {} }); setSequenceOpen(false); }} /> : null}
+      {sequenceOpen ? <SequenceDialog onClose={() => setSequenceOpen(false)} onInsert={(block, choices) => { if (sequenceOpen.addTo) addToSet(sequenceOpen.addTo, choices); else addBlock(block, { accent: ACCENT_PRESETS[0], toggles: {} }); setSequenceOpen(false); }} /> : null}
     </div>
   );
 }

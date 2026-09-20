@@ -751,7 +751,10 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
         return next;
       });
 
-  return { fields, elements: remapElements(elements) };
+  const instantiated = remapElements(elements);
+  // Remember the source block on the top-level group so the simple editor can rebuild or regroup it.
+  for (const element of instantiated) if (element.type === "group" && !element.origin) element.origin = { blockId: block.id };
+  return { fields, elements: instantiated };
 }
 
 /* ---------------------------------------------------------------- save a selection as a block */
@@ -844,7 +847,15 @@ function blockItemFields(block: BlockDef): FieldDef[] {
  * chosen design is shown only for its type value. The agent decides the order — the user only
  * decides which designs are allowed and how they look.
  */
-export function buildSequenceBlock(choices: SequenceChoice[], listName = "Content"): BlockDef {
+export function buildSequenceBlock(input: SequenceChoice[], listName = "Content"): BlockDef {
+  // Type values must be unique within a set: a second copy of the same design becomes "…_2".
+  const seen = new Map<string, number>();
+  const choices = input.map((choice) => {
+    const base = choice.typeValue || "design";
+    const count = (seen.get(base) || 0) + 1;
+    seen.set(base, count);
+    return { ...choice, typeValue: count === 1 ? base : `${base}_${count}` };
+  });
   const typeField = createField("Type", "text", { description: `Which design this element uses: ${choices.map((c) => c.typeValue).join(", ")}`, options: choices.map((c) => c.typeValue) });
   const itemFields: FieldDef[] = [typeField];
   const elements: Element[] = [];
@@ -857,6 +868,7 @@ export function buildSequenceBlock(choices: SequenceChoice[], listName = "Conten
       : createGroup({ name: block.name, frame: { x: 0, y: 0, w: source.frame.w, h: source.frame.h }, layout: { mode: "free", gap: 0 }, repeat: null, children: [{ ...source, frame: { ...source.frame, x: 0, y: 0 } }] });
     inner.name = block.variant ? `${block.family || block.name} · ${block.variant}` : block.name;
     inner.condition = { fieldId: typeField.id, equals: typeValue };
+    inner.origin = { blockId: block.id, typeValue };
     elements.push(inner);
     maxH = Math.max(maxH, inner.frame.h);
   }
@@ -883,4 +895,26 @@ export function buildSequenceBlock(choices: SequenceChoice[], listName = "Conten
 
 export function typeValueFor(block: BlockDef): string {
   return (block.variant && block.family ? `${block.family} ${block.variant}` : block.name).toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 32);
+}
+
+/** Finds a block by id in the built-in library or the user's saved blocks. */
+export function findBlock(blockId: string): BlockDef | null {
+  return builtInBlocks().find((b) => b.id === blockId) || readBlockLibrary().find((b) => b.id === blockId) || null;
+}
+
+/** Default Type value for a block inside an agent-ordered set: the variant when the family has several, else the family. */
+export function defaultTypeValue(block: BlockDef): string {
+  const slugify = (text: string) => text.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "").slice(0, 32);
+  const family = blockFamilies(builtInBlocks()).find((f) => f.variants.some((v) => v.id === block.id));
+  if (!family) return slugify(block.name);
+  return family.variants.length > 1 ? slugify((block.variant || block.name).split(",")[0].split(" — ")[0]) : slugify(family.family);
+}
+
+/** The members of an agent-ordered set (a sequence group), in order. */
+export function sequenceMembers(group: GroupElement): { child: GroupElement; block: BlockDef | null; typeValue: string }[] {
+  return group.children.filter((child): child is GroupElement => child.type === "group" && Boolean(child.condition?.fieldId)).map((child) => ({ child, block: child.origin ? findBlock(child.origin.blockId) : null, typeValue: child.condition!.equals }));
+}
+
+export function isSequenceGroup(element: Element): element is GroupElement {
+  return element.type === "group" && Boolean(element.repeat) && element.children.some((child) => child.type === "group" && Boolean(child.condition?.fieldId));
 }

@@ -2,6 +2,7 @@
 
 import type { Element, FieldDef, GroupElement, Layout, Page } from "../engine/types";
 import { findField, isPinned, simpleOrder } from "../engine/model";
+import { isSequenceGroup, sequenceMembers } from "../engine/blocks";
 import { GROUP_COLOR, card, ghostBtn, kicker } from "../ui";
 import { PlacementControl } from "./PlacementControl";
 
@@ -16,6 +17,9 @@ export interface SimpleDesignProps {
   onDelete: (id: string) => void;
   onSetRepeat: (id: string, mode: "none" | "flow" | "page" | "grid") => void;
   onChangeElement: (id: string, updater: (element: Element) => Element) => void;
+  onAgentOrder: (id: string, on: boolean) => void;
+  onExtractFromSet: (setId: string, childId: string) => void;
+  onAddToSet: (setId: string) => void;
   onAdvanced: () => void;
 }
 
@@ -56,7 +60,7 @@ function nestedRepeats(element: Element, fields: FieldDef[]): string[] {
  * Simple design: the template as an ordered list of blocks. Order = output order; each block says
  * whether it appears once or repeats. The same list flows into A4, Letter or slides.
  */
-export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onChangeElement, onAdvanced }: SimpleDesignProps) {
+export function SimpleDesign({ layout, page, fields, selection, onSelect, onReorder, onDuplicate, onDelete, onSetRepeat, onChangeElement, onAgentOrder, onExtractFromSet, onAddToSet, onAdvanced }: SimpleDesignProps) {
   const ordered = simpleOrder(page.elements, layout);
   const ids = ordered.map((element) => element.id);
   const move = (id: string, direction: -1 | 1) => {
@@ -70,7 +74,7 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
   return (
     <div className={`${card} p-4`} style={{ minHeight: 640 }}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div><p className={kicker}>Blocks · output order</p><p className="m-0 mt-0.5 text-xs text-soft-ink">Top to bottom is the order in the document. Blocks flow onto as many pages or slides as needed — switch to Advanced for exact positions.</p></div>
+        <div><p className={kicker}>Blocks · output order</p><p className="m-0 mt-0.5 text-xs text-soft-ink">Top to bottom is the order in the document. Each block is either <strong>fixed here</strong> (you decide its place) or part of an <strong>agent-ordered set</strong> (the agent decides which design goes where). Blocks flow onto as many pages or slides as needed.</p></div>
         <button type="button" className={ghostBtn} onClick={onAdvanced}>Open in Advanced ↗</button>
       </div>
       <div className="grid gap-2">
@@ -81,6 +85,9 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
           const nested = nestedRepeats(element, fields);
           const pinned = isPinned(element, layout);
           const isGroup = element.type === "group";
+          const isSet = isSequenceGroup(element);
+          const setMembers = isSet ? sequenceMembers(element as GroupElement) : [];
+          const elementId = element.id;
           const accent = isGroup && element.style.fill ? element.style.fill : isGroup && element.style.stroke ? element.style.stroke : "var(--surface-soft)";
           return (
             <div key={element.id} role="button" tabIndex={0} onClick={() => onSelect([element.id])} onKeyDown={(event) => event.key === "Enter" && onSelect([element.id])} className={`grid cursor-pointer grid-cols-[auto_1fr_auto] items-start gap-3 rounded-2xl border p-3 transition ${selected ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/10 hover:border-ink/25"}`}>
@@ -91,17 +98,43 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
                   <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${repeat.tone === "once" ? "bg-[var(--surface-soft)] text-soft-ink" : "text-white"}`} style={repeat.tone === "once" ? undefined : { background: GROUP_COLOR }}>{repeat.label}</span>
                   {pinned ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">pinned to bottom</span> : null}
                 </p>
-                {fieldIds.length ? <p className="m-0 mt-1 flex flex-wrap gap-1">{fieldIds.slice(0, 8).map((id) => { const f = findField(fields, id); return f ? <span key={id} className="rounded-md bg-[var(--accent-soft)] px-1.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {f.name}</span> : null; })}</p> : <p className="m-0 mt-1 text-[11px] text-soft-ink">Fixed content</p>}
-                {nested.map((line) => <p key={line} className="m-0 mt-1 text-[11px] text-soft-ink">↳ {line}</p>)}
+                {isSet ? (
+                  <div className="mt-2 rounded-xl border border-dashed p-2" style={{ borderColor: `${GROUP_COLOR}66`, background: `${GROUP_COLOR}08` }} onClick={(event) => event.stopPropagation()}>
+                    <p className="m-0 text-[10.5px] font-semibold text-soft-ink">Designs the agent can use — it decides the order and which one goes where:</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {setMembers.map((member) => (
+                        <span key={member.child.id} className="inline-flex items-center gap-1.5 rounded-full border border-ink/10 bg-white py-0.5 pl-2.5 pr-1 text-[11px] font-semibold text-ink">
+                          {member.block ? (member.block.variant ? `${member.block.family} · ${member.block.variant}` : member.block.name) : member.child.name}
+                          <span className="rounded bg-[var(--surface-soft)] px-1 font-mono text-[9px] text-soft-ink">{member.typeValue}</span>
+                          <button type="button" title="Take out of the set (fixed here)" className="grid size-4 place-items-center rounded-full text-soft-ink hover:bg-[var(--surface-soft)] hover:text-[var(--color-danger)]" onClick={() => onExtractFromSet(elementId, member.child.id)}>✕</button>
+                        </span>
+                      ))}
+                      <button type="button" className="rounded-full border border-dashed border-[var(--accent)]/50 px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent-ink)] hover:bg-[var(--accent-soft)]" onClick={() => onAddToSet(elementId)}>＋ Add design</button>
+                    </div>
+                  </div>
+                ) : null}
+                {fieldIds.length && !isSet ? <p className="m-0 mt-1 flex flex-wrap gap-1">{fieldIds.slice(0, 8).map((id) => { const f = findField(fields, id); return f ? <span key={id} className="rounded-md bg-[var(--accent-soft)] px-1.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {f.name}</span> : null; })}</p> : <p className="m-0 mt-1 text-[11px] text-soft-ink">Fixed content</p>}
+                {!isSet ? nested.map((line) => <p key={line} className="m-0 mt-1 text-[11px] text-soft-ink">↳ {line}</p>) : null}
                 <div className="mt-2 grid gap-1.5 sm:grid-cols-[auto_1fr] sm:items-center" onClick={(event) => event.stopPropagation()}>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Order</span>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {isSet ? (
+                      <span className="rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold text-white" style={{ background: GROUP_COLOR }}>Agent decides (set of {setMembers.length})</span>
+                    ) : (
+                      <>
+                        <span className="rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[10.5px] font-semibold text-[var(--accent-ink)]">Fixed here</span>
+                        {isGroup && (element as GroupElement).origin ? <button type="button" className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[10.5px] font-semibold text-soft-ink hover:text-ink" title="Let the agent decide where this design appears (joins the neighbouring set, or starts one)" onClick={() => onAgentOrder(elementId, true)}>Let the agent decide →</button> : null}
+                      </>
+                    )}
+                  </div>
                   <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Placement</span>
                   <PlacementControl compact element={element} onChange={(updater) => onChangeElement(element.id, updater)} />
                 </div>
-                {isGroup ? (
+                {isGroup && !isSet ? (
                   <div className="mt-2 flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
                     {([["none", "Once"], ["flow", "Repeat per item"], ["page", "One per page / slide"], ["grid", "Grid"]] as const).map(([mode, text]) => {
                       const current = (element as GroupElement).repeat?.mode || "none";
-                      return <button key={mode} type="button" onClick={() => onSetRepeat(element.id, mode)} className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${current === mode ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/10 text-soft-ink hover:text-ink"}`}>{text}</button>;
+                      return <button key={mode} type="button" onClick={() => onSetRepeat(elementId, mode)} className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${current === mode ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/10 text-soft-ink hover:text-ink"}`}>{text}</button>;
                     })}
                   </div>
                 ) : null}

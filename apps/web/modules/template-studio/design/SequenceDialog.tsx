@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { blockFamilies, buildSequenceBlock, builtInBlocks, readBlockLibrary, typeValueFor, type BlockDef } from "../engine/blocks";
+import { blockFamilies, buildSequenceBlock, builtInBlocks, readBlockLibrary, typeValueFor, type BlockDef, type SequenceChoice } from "../engine/blocks";
 import { fieldBase, ghostBtn, label, primaryBtn } from "../ui";
 
 /**
  * "Content in the agent's order": tick the designs that may appear; each gets a Type value the
  * agent will use. The result is one block — the agent's list decides which design goes where.
  */
-export function SequenceDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (block: BlockDef) => void }) {
+export function SequenceDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (block: BlockDef, choices: SequenceChoice[]) => void }) {
   const library = [...builtInBlocks().filter((b) => b.id !== "block-question-mixed" && b.id !== "block-section-questions" && !b.id.startsWith("block-footer") && !b.id.startsWith("block-header")), ...readBlockLibrary()];
   const families = blockFamilies(library);
   const [listName, setListName] = useState("Content");
@@ -57,7 +57,7 @@ export function SequenceDialog({ onClose, onInsert }: { onClose: () => void; onI
           <p className="m-0 text-xs text-soft-ink">{chosen.length ? `Agent output: ${listName || "Content"}[] with Type ∈ { ${chosen.map((b) => picked[b.id]).join(", ")} }` : "Pick at least one design."}</p>
           <div className="flex gap-2">
             <button type="button" className={ghostBtn} onClick={onClose}>Cancel</button>
-            <button type="button" className={primaryBtn} disabled={!chosen.length} onClick={() => onInsert(buildSequenceBlock(chosen.map((block) => ({ block, typeValue: picked[block.id] || typeValueFor(block) })), listName.trim() || "Content"))}>Insert block</button>
+            <button type="button" className={primaryBtn} disabled={!chosen.length} onClick={() => { const choices = chosen.map((block) => ({ block, typeValue: picked[block.id] || typeValueFor(block) })); onInsert(buildSequenceBlock(choices, listName.trim() || "Content"), choices); }}>Insert block</button>
           </div>
         </div>
       </div>

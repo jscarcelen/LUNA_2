@@ -101,6 +101,7 @@ Consequences for the product:
 - **Agent-ordered sets, chosen visually by the user**: the user picks which components may appear (cards, titles, callouts…) and their styles; the agent decides the order and which one goes where. The user must not be forced into a fixed combination.
 - **Block placement options**: shown once on every page (header/footer) · generated from the agent output · starts at a fixed position (the previous block is clipped/reduced to the space before it) · starts after the previous block · starts on a new page (respecting every-page elements).
 - Advanced canvas must stay **clean**: few colours and lines; show groups, repetition, format and space.
+- In the block list, every block is marked **fixed here** (the user's order) or **agent decides** (part of an interchangeable set); the user chooses per block which is which.
 - Philosophy: Canva (visual) + Notion (blocks) + Google Docs (structure) + Luna (AI content), but much simpler than Canva; avoid too many buttons, nested menus, technical terms, separate editors per format, over-complex AI fields. Mental model: create template → name → view → add elements → design → add AI fields → define repeats → more views → preview → export.
 
 ### 5.2 Performance tracking (different UIs)

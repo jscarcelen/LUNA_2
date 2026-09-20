@@ -13,8 +13,10 @@ export interface AddPanelProps {
   onRemoveBlock?: (block: BlockDef) => void;
   hint: string;
   libraryVersion?: number;
-  /** Composer: only components (no raw elements / AI fields). */
+  /** Composer: components + AI fields + document data (no static elements). */
   blocksOnly?: boolean;
+  /** Composer: add a once field filled from a user input (date, topic…). */
+  onAddDataField?: (name: string) => void;
 }
 
 const BASIC_ORDER = ["text", "heading", "image", "rect", "line", "table"];
@@ -50,7 +52,8 @@ function Section({ title, children, badge }: { title: string; children: React.Re
 }
 
 /** Add: Basic · AI fields · Premium · Custom — one scrolling panel with search. */
-export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, onRemoveBlock, hint, libraryVersion = 0, blocksOnly = false }: AddPanelProps) {
+export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, onRemoveBlock, hint, libraryVersion = 0, blocksOnly = false, onAddDataField }: AddPanelProps) {
+  const [customData, setCustomData] = useState("");
   const [query, setQuery] = useState("");
   const [accentId, setAccentId] = useState(ACCENT_PRESETS[0].id);
   const [active, setActive] = useState<BlockDef | null>(null);
@@ -125,7 +128,19 @@ export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, on
       <p className="m-0 mt-1.5 px-1 text-[10.5px] text-soft-ink">{hint}</p>
       <div className="mt-3 grid max-h-[58vh] min-w-0 gap-4 overflow-y-auto overflow-x-hidden pr-0.5" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
         {basic.length && !blocksOnly ? <Section title="Basic"><div className="grid grid-cols-3 gap-0.5">{basic.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} disabled={c.type === "table"} title={c.type === "table" ? "Coming soon" : undefined} onClick={() => onAdd(c.type)} />)}</div></Section> : null}
-        {ai.length && !blocksOnly ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes: a name, a type, and whether it repeats. A <strong>list</strong> is a field with many elements — a repeating block draws them one after another.</p></Section> : null}
+        {onAddDataField && (!q || "document data date topic course teacher class".includes(q)) ? (
+          <Section title="Document data" badge="user">
+            <p className="m-0 mb-1 px-1 text-[10.5px] text-soft-ink">Values the user types when running the agent (not generated) — reused wherever the template needs them.</p>
+            <div className="flex flex-wrap gap-1 px-1">
+              {["Date", "Topic", "Course", "Teacher", "Class"].map((name) => <button key={name} type="button" className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[11px] font-semibold text-ink hover:bg-[var(--surface-soft)]" onClick={() => onAddDataField(name)}>＋ {name}</button>)}
+            </div>
+            <div className="mt-1.5 flex gap-1 px-1">
+              <input className={`${fieldBase} min-w-0 flex-1 py-1 text-xs`} value={customData} onChange={(event) => setCustomData(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && customData.trim()) { onAddDataField(customData.trim()); setCustomData(""); } }} placeholder="Other, e.g. School" />
+              <button type="button" className="rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40" disabled={!customData.trim()} onClick={() => { onAddDataField(customData.trim()); setCustomData(""); }}>Add</button>
+            </div>
+          </Section>
+        ) : null}
+        {ai.length ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes: a name, a type, and whether it repeats. A <strong>list</strong> is a field with many elements — a repeating block draws them one after another.</p></Section> : null}
         {onOpenSequence && (!q || "agent order content sequence".includes(q)) ? (
           <Section title="Agent order" badge="⇅">
             <button type="button" onClick={onOpenSequence} className="w-full rounded-xl border border-dashed border-[var(--accent)]/50 bg-[var(--accent-soft)]/50 px-3 py-2.5 text-left transition hover:bg-[var(--accent-soft)]">

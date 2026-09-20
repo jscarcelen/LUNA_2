@@ -5,6 +5,7 @@ import type { Element, FieldDef, GroupElement, SchemaNode, Template } from "../e
 import { arrayItemFields, createField, fieldsFromAgentFields, findField, flattenFields, simpleOrder } from "../engine/model";
 import { isSequenceGroup, sequenceMembers } from "../engine/blocks";
 import { ElementView } from "../design/canvas/ElementView";
+import { bindingsOf, componentName } from "../design/ComponentPreview";
 import { compatibleAgents, flattenSchema, proposeMapping, schemaFromAgentFields } from "../engine/mapping";
 import { card, field as fieldClass, fieldBase, ghostBtn, kicker, label, primaryBtn } from "../ui";
 
@@ -34,34 +35,6 @@ function FieldTree({ fields, depth, onRename, onRemove, onAddChild }: { fields: 
  * agent schema on the right with proposed mappings to confirm. A template can be designed and
  * published before any agent exists.
  */
-/** Fields an element (and its children) binds, with the binding element's id — in visual order. */
-function bindingsOf(element: Element, fields: FieldDef[]): { field: FieldDef; elementId: string; list?: FieldDef }[] {
-  const out: { field: FieldDef; elementId: string; list?: FieldDef }[] = [];
-  const seen = new Set<string>();
-  const walk = (list: Element[], listField?: FieldDef) => {
-    for (const item of [...list].sort((a, b) => a.frame.y - b.frame.y || a.frame.x - b.frame.x)) {
-      if ((item.type === "text" || item.type === "image") && item.source.type === "field") {
-        const field = findField(fields, item.source.fieldId);
-        if (field && !seen.has(field.id)) { seen.add(field.id); out.push({ field, elementId: item.id, list: listField }); }
-      }
-      if (item.type === "group") {
-        const repeatList = item.repeat ? findField(fields, item.repeat.fieldId) || undefined : undefined;
-        if (repeatList && !seen.has(repeatList.id)) { seen.add(repeatList.id); out.push({ field: repeatList, elementId: item.id, list: listField }); }
-        walk(item.children, repeatList || listField);
-      }
-    }
-  };
-  walk(element.type === "group" ? element.children : [element], element.type === "group" && element.repeat ? findField(fields, element.repeat.fieldId) || undefined : undefined);
-  if (element.type === "group" && element.repeat) { const list = findField(fields, element.repeat.fieldId); if (list && !seen.has(list.id)) out.unshift({ field: list, elementId: element.id }); }
-  return out;
-}
-
-function componentName(element: Element): string {
-  if (element.name) return element.name;
-  if (element.type === "text") return element.source.type === "static" ? element.source.value.slice(0, 32) || "Text" : "AI text";
-  return element.type === "image" ? "Image" : element.type;
-}
-
 export function DataMode({ template, agents, sampleValues = {}, onChangeTemplate }: { template: Template; agents: AgentOption[]; sampleValues?: Record<string, unknown>; onChangeTemplate: (updater: (template: Template) => Template) => void }) {
   const [agentId, setAgentId] = useState<string>("");
   const [selectedComponent, setSelectedComponent] = useState<string>("");

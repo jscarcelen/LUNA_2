@@ -10,6 +10,9 @@ import { compileForSave } from "../../template-studio/adapters/agentTemplate";
 import { useTemplateStore } from "../../template-studio/state/useTemplateStore";
 import { DesignMode } from "../../template-studio/design/DesignMode";
 import { outputSkeleton } from "../engine/schema";
+import { createInput } from "../engine/model";
+import { simpleOrder } from "../../template-studio/engine/model";
+import { bindingsOf } from "../../template-studio/design/ComponentPreview";
 import { card, fieldBase, ghostBtn, kicker, primaryBtn } from "../ui";
 import "../../template-studio/components";
 
@@ -72,7 +75,13 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     const key = JSON.stringify(template.fields) + template.updatedAt;
     if (key === lastSynced.current) return;
     lastSynced.current = key;
-    onChange((current) => ({ ...current, outputTemplate: template as unknown as AgentSpec["outputTemplate"], outputSchema: template.fields }));
+    // JSON order follows the blocks: fields in the order the components use them, unused ones last.
+    const layout = template.layouts[0];
+    const order: string[] = [];
+    for (const element of simpleOrder(layout?.pages[0]?.elements || [], layout)) for (const b of bindingsOf(element, template.fields)) if (!order.includes(b.field.id)) order.push(b.field.id);
+    const rank = (id: string) => { const index = order.indexOf(id); return index < 0 ? Number.MAX_SAFE_INTEGER : index; };
+    const ordered = [...template.fields].sort((a, b) => rank(a.id) - rank(b.id));
+    onChange((current) => ({ ...current, outputTemplate: template as unknown as AgentSpec["outputTemplate"], outputSchema: ordered }));
   }, [template, onChange]);
 
   const sampleValues = useMemo(() => (template ? sampleValuesFor(template) : {}), [template]);
@@ -105,6 +114,15 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     }
   }
 
+  /** Document data: make sure an agent input with this name exists; the field is filled from it at run time. */
+  function ensureInput(name: string): string {
+    const existing = spec.inputs.find((input) => input.name.toLowerCase() === name.toLowerCase());
+    if (existing) return existing.id;
+    const input = createInput(name, "text", { required: false, description: `${name} shown in the document` });
+    onChange((current) => ({ ...current, inputs: [...current.inputs, input] }));
+    return input.id;
+  }
+
   if (!template) return null;
   return (
     <div className="grid gap-3">
@@ -124,7 +142,7 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
       </div>
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
       <div className="tw-scope">
-        <DesignMode store={store} sampleValues={sampleValues} composer />
+        <DesignMode store={store} sampleValues={sampleValues} composer onDataField={ensureInput} />
       </div>
       <details className={`${card} p-4`}>
         <summary className="cursor-pointer text-xs font-semibold text-soft-ink">JSON the agent will return (derived from the blocks)</summary>

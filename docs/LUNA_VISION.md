@@ -113,6 +113,10 @@ Consequences for the product:
 - The agent output is always **one complete JSON** with all the information (title, subtitle, question tag, answer…); in Template Studio the user creates **views of the same template by hiding fields** — the blocks stay the same, just less crowded (with or without some information).
 - A **list is not a separate field type next to the value type**: a field is a text/number/… that may repeat (list of text), as Template Studio shows it (list Options → text Option).
 
+- The agent composer also offers **plain text/image fields** and shows a **preview of each component on the right** (what it looks like, which fields it fills).
+- The **JSON order follows the block order** (once components, agent-ordered sets, etc.) and keys are **MECE**, e.g. `component_field` (`header_title`).
+- Some values are **document data** (date, topic, course…) filled in **by the user**, not generated, and reused wherever the template needs them.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

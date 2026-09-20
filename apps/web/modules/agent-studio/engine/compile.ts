@@ -13,7 +13,7 @@ function formatValue(input: InputDef, value: unknown): string {
 /** Plain-language rendering of the output contract, one line per field. */
 export function describeOutput(spec: AgentSpec): string {
   const lists = spec.outputSchema.filter((f) => f.type === "array");
-  const once = spec.outputSchema.filter((f) => f.type !== "array");
+  const once = spec.outputSchema.filter((f) => f.type !== "array" && !f.fromInputId);
   const lines: string[] = ["Return ONE JSON object with exactly this structure:", outputSkeleton(spec.outputSchema)];
   if (once.length) lines.push(`Fields that appear once (top level): ${once.map((f) => `"${slug(f.name)}"`).join(", ")}.`);
   for (const list of lists) {

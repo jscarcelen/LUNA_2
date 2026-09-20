@@ -40,6 +40,7 @@ export function outputJsonSchema(outputSchema: FieldDef[]): JsonSchema {
   const primary = outputSchema.find((field) => field.type === "array");
   const properties: Record<string, JsonSchema> = {};
   for (const field of outputSchema) {
+    if (field.fromInputId) continue; // document data comes from the user's choices, not the model
     if (field === primary) properties.items = { ...fieldToJsonSchema(primary), minItems: 1 };
     else properties[slug(field.name)] = fieldToJsonSchema(field);
   }
@@ -57,7 +58,7 @@ export function outputKey(outputSchema: FieldDef[], field: FieldDef): string {
  * structure is unambiguous: which keys appear once, which are lists, and what each value holds.
  */
 export function outputSkeleton(outputSchema: FieldDef[]): string {
-  const hint = (field: FieldDef): string => `"<${field.type}${field.required === false ? ", optional" : ""}: ${field.description || field.name}>"`;
+  const hint = (field: FieldDef): string => (field.fromInputId ? `"<copied from the user's choice: ${field.name}>"` : `"<${field.type}${field.required === false ? ", optional" : ""}: ${field.description || field.name}>"`);
   const render = (field: FieldDef, indent: string): string => {
     if (field.type === "array") {
       const item = field.children?.[0];

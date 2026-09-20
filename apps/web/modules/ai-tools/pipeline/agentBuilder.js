@@ -411,6 +411,21 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   }
   emit({ step: "generate", status: "end", model: result.model, itemCount: result.items.length, fallbackReason });
 
+  // Document data (date, topic…) is copied from the user's choices, never generated.
+  if (config.spec && Array.isArray(config.spec.outputSchema)) {
+    result.root = { ...(result.root || {}) };
+    const slugify = (name) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+    const inputs = Array.isArray(config.spec.inputs) ? config.spec.inputs : [];
+    for (const field of config.spec.outputSchema) {
+      if (!field.fromInputId) continue;
+      const input = inputs.find((item) => item.id === field.fromInputId);
+      const answered = config.inputValues?.[field.fromInputId];
+      const fromQuestions = input ? (config.questionAnswers || []).find((entry) => entry.question === input.name)?.answer : undefined;
+      const value = answered !== undefined && answered !== "" ? answered : fromQuestions !== undefined && fromQuestions !== "" ? fromQuestions : input?.default;
+      result.root[slugify(field.name)] = value === undefined || value === null ? "" : Array.isArray(value) ? value.join(", ") : value;
+    }
+  }
+
   // Agent Studio specs carry validation rules — structural checks the creator can rely on.
   let checks = [];
   if (config.spec) {

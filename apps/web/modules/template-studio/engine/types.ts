@@ -25,6 +25,8 @@ export interface FieldDef {
   required?: boolean;
   /** Allowed values for text fields (e.g. a question "Type": multiple_choice | true_false | open). */
   options?: string[];
+  /** Document data: filled from the user's answer to this agent input (date, topic…) instead of being generated. */
+  fromInputId?: string;
 }
 
 /* ---------------------------------------------------------------- template → layout → view */

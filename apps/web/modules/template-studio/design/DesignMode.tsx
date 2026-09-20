@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Element, FieldDef, GroupElement, ID } from "../engine/types";
-import { arrayItemFields, cloneElement, createField, createGroup, findElement, findField, removeElements, simpleOrder, stackElements, updateElement } from "../engine/model";
+import { arrayItemFields, cloneElement, createField, createGroup, createText, defaultStyle, findElement, findField, removeElements, simpleOrder, stackElements, updateElement } from "../engine/model";
 import { SimpleDesign } from "./SimpleDesign";
 import { SequenceDialog } from "./SequenceDialog";
+import { ComponentPreview } from "./ComponentPreview";
 import { getComponent } from "../engine/registry";
 import type { Store } from "../state/useTemplateStore";
 import { AddPanel } from "./AddPanel";
@@ -31,12 +32,13 @@ function parentChainOf(elements: Element[], id: ID): GroupElement[] {
   return chain;
 }
 
-export function DesignMode({ store, sampleValues, onPublishBlock, composer = false }: { store: Store; sampleValues: Record<string, unknown>; onPublishBlock?: (block: BlockDef) => void; composer?: boolean }) {
+export function DesignMode({ store, sampleValues, onPublishBlock, composer = false, onDataField }: { store: Store; sampleValues: Record<string, unknown>; onPublishBlock?: (block: BlockDef) => void; composer?: boolean; onDataField?: (name: string) => string }) {
   const { state, layout, view, page, selected, select, updatePage, updateLayout, update, updateElements, deleteElements } = store;
   const [dimBackground, setDimBackground] = useState(false);
   const [libraryVersion, setLibraryVersion] = useState(0);
   const [blockDialog, setBlockDialog] = useState<{ elements: Element[] } | null>(null);
   const [sequenceOpen, setSequenceOpen] = useState<false | { addTo: string }>(false);
+  const [hoveredField, setHoveredField] = useState("");
   const template = state.template!;
   const simple = composer || (template.editorMode || "simple") === "simple";
   const elements = page?.elements || [];
@@ -86,10 +88,16 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
     if (type === "field_image") element.frame = { ...element.frame, w: Math.min(60, contentWidth), h: 40 };
     if ((type === "field" && element.type === "text") || (type === "field_image" && element.type === "image")) {
       const { scope } = fieldsInScope(target ? [...parentChain, target] : parentChain, template.fields);
-      const unused = scope.find((item) => !usesField(pg.elements, item.id)) || scope[0];
+      // Composer: every AI field added is a new, named output field (rename it in the preview on the right).
+      const unused = composer ? undefined : scope.find((item) => !usesField(pg.elements, item.id)) || scope[0];
       element.source = { type: "field", fieldId: unused?.id || "" };
       if (!unused) {
-        const created = createField(type === "field_image" ? "Image" : "New field", type === "field_image" ? "image" : "text");
+        const taken = new Set(template.fields.map((item) => item.name.toLowerCase()));
+        let base = type === "field_image" ? "Image" : "Text";
+        let n = 1;
+        while (taken.has(`${base}${n > 1 ? ` ${n}` : ""}`.toLowerCase())) n += 1;
+        base = `${base}${n > 1 ? ` ${n}` : ""}`;
+        const created = createField(base, type === "field_image" ? "image" : "text");
         addField(created, target?.repeat ? findField(template.fields, target.repeat.fieldId)?.id || null : null);
         element.source = { type: "field", fieldId: created.id };
       }
@@ -215,9 +223,32 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
     rebuildSet(setId, [...members, ...chosen], listNameOf(set));
   }
 
+  /* ---------- document data (composer): a once field fed by a user input */
+  function addDataField(name: string) {
+    if (!onDataField) return;
+    const existing = template.fields.find((field) => field.type !== "array" && field.name.toLowerCase() === name.toLowerCase());
+    const inputId = onDataField(name);
+    const field = existing ? { ...existing, fromInputId: existing.fromInputId || inputId } : createField(name, "text", { description: `${name} — typed by the user`, fromInputId: inputId });
+    const lastBottom = Math.max(margins.top, ...pg.elements.map((item) => item.frame.y + item.frame.h));
+    const element = createText({ type: "field", fieldId: field.id }, { name: `${name} (user data)`, placeholder: name, frame: { x: margins.left, y: Math.min(lastBottom + 4, canvas.height - margins.bottom - 12), w: contentWidth, h: 7 }, style: defaultStyle({ fontSize: 10, color: "#6e6e73" }) });
+    update((current) => ({
+      ...current,
+      fields: existing ? current.fields.map((item) => (item.id === existing.id ? field : item)) : [...current.fields, field],
+      layouts: current.layouts.map((item) => (item.id === layout!.id ? { ...item, pages: item.pages.map((p) => (p.id === pg.id ? { ...p, elements: [...p.elements, element] } : p)) } : item))
+    }));
+    select([element.id]);
+  }
+
   /* ---------- blocks (pre-made objects) */
   function addBlock(block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }) {
-    const { fields, elements: created } = instantiateBlock(block, template.fields, options);
+    const instantiated = instantiateBlock(block, template.fields, options);
+    // Composer: once-per-document fields are named "<Component> <Field>" (→ header_title) so the JSON is unambiguous.
+    const before = new Set(template.fields.map((field) => field.id));
+    const prefix = (block.family || block.name).replace(/\s*\(.*?\)\s*/g, "").trim();
+    const fields = composer
+      ? instantiated.fields.map((field) => (!before.has(field.id) && field.type !== "array" && field.type !== "object" && !field.name.toLowerCase().startsWith(prefix.toLowerCase()) ? { ...field, name: `${prefix} ${field.name}` } : field))
+      : instantiated.fields;
+    const created = instantiated.elements;
     const lastBottom = Math.max(margins.top, ...pg.elements.map((item) => item.frame.y + item.frame.h));
     const placed = created.map((element, index) => ({ ...element, frame: { ...element.frame, x: margins.left, y: Math.min(lastBottom + 4 + index * 4, canvas.height - margins.bottom - 12), w: contentWidth } }));
     update((current) => ({
@@ -342,9 +373,9 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
   const addHint = simple ? "Added at the end of the list." : selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
 
   return (
-    <div className={`grid items-start gap-3 ${composer ? "lg:grid-cols-[248px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)_320px]"}`}>
+    <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} blocksOnly={composer} />
+        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} blocksOnly={composer} onAddDataField={composer && onDataField ? addDataField : undefined} />
         {composer ? null : <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />}
         {composer ? null : <LayersPanel
           page={pg}
@@ -424,7 +455,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
         toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
       )}
-      {composer ? null : <Inspector
+      {composer ? <ComponentPreview element={selected.element || simpleOrder(pg.elements, layout)[0] || null} fields={template.fields} sampleValues={sampleValues} hovered={hoveredField} onHover={setHoveredField} onRename={renameField} /> : <Inspector
         layout={layout}
         page={pg}
         views={layout.views}

@@ -265,8 +265,8 @@ describe("tarsia derivation", () => {
     const template = createTemplate("P");
     const { fields, elements } = instantiateBlock(byName("Square puzzle"), template.fields);
     template.fields = fields; template.layouts[0].pages[0].elements = elements;
-    const data = buildSampleData(template, 4) as Record<string, unknown>;
-    expect(data.tiles).toBeUndefined();
+    const data = buildSampleData(template, 4);
+    expect((data as Record<string, unknown>).tiles).toBeUndefined();
     expect((data.pairs as unknown[]).length).toBe(24);
     const result = layoutDocument(template, data);
     expect(result.itemCounts[(elements[0] as { children: { id: string }[] }).children[2].id]).toBe(16);

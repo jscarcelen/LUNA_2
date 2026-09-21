@@ -272,3 +272,15 @@ describe("tarsia derivation", () => {
     expect(result.itemCounts[(elements[0] as { children: { id: string }[] }).children[2].id]).toBe(16);
   });
 });
+
+describe("fit to box", () => {
+  it("shrinks the font so long content fits the designed box instead of overflowing", async () => {
+    const { createText, createTemplate: ct } = await import("../../modules/template-studio/engine/model");
+    const template = ct("T");
+    template.layouts[0].pages[0].elements = [createText({ type: "static", value: "Supercalifragilisticexpialidocious" }, { frame: { x: 12, y: 12, w: 30, h: 6 }, style: { fontSize: 12, fontWeight: "bold" } })];
+    const result = layoutDocument(template, {});
+    const item = result.pages[0].items.find((i) => i.type === "text") as { style: { fontSize: number }; lines: string[]; h: number };
+    expect(item.style.fontSize).toBeLessThan(12);
+    expect(item.lines).toHaveLength(1);
+  });
+});

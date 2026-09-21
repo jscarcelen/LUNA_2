@@ -48,13 +48,37 @@ interface Ctx {
 
 interface Laid { items: LaidOutItem[]; bottom: number; right: number; height: number }
 
+/**
+ * Fit-to-box: AI content can be longer than the designer planned. The font shrinks (down to 60 %
+ * of the designed size) until the longest word fits the width and the wrapped text fits the
+ * designed height; only then does the box grow.
+ */
+function fitFont(paragraphs: string[], style: LaidOutTextItem["style"], widthMm: number, heightMm: number): { fontSize: number; lines: string[] } {
+  const designed = style.fontSize;
+  const bold = style.fontWeight === "bold";
+  const floor = Math.max(5, designed * 0.6);
+  let fontSize = designed;
+  const longest = Math.max(0, ...paragraphs.flatMap((line) => line.split(/\s+/)).map((word) => word.length));
+  while (fontSize > floor) {
+    const avgCharMm = fontSize * MM_PER_PT * (bold ? 0.55 : 0.5);
+    const lines = paragraphs.flatMap((line) => wrapText(line, widthMm, fontSize, bold));
+    const wordFits = longest * avgCharMm <= widthMm + 0.01;
+    const heightFits = heightMm <= 0 || lines.length * lineHeightMm({ ...style, fontSize }) <= Math.max(heightMm, lineHeightMm({ ...style, fontSize })) + 0.6;
+    if (wordFits && heightFits) return { fontSize, lines };
+    fontSize = Math.round((fontSize - 0.5) * 10) / 10;
+  }
+  return { fontSize, lines: paragraphs.flatMap((line) => wrapText(line, widthMm, fontSize, bold)) };
+}
+
 function textItem(element: TextElement, x: number, y: number, scopes: Scope[], ctx: Ctx): Laid {
   const { value, isField } = resolveSource(ctx.fields, element.source, scopes);
-  const style = { fontFamily: "sans", fontSize: 11, fontWeight: "normal", color: "#1d1d1f", align: "left", lineHeight: 1.35, ...element.style } as LaidOutTextItem["style"];
+  const designedStyle = { fontFamily: "sans", fontSize: 11, fontWeight: "normal", color: "#1d1d1f", align: "left", lineHeight: 1.35, ...element.style } as LaidOutTextItem["style"];
   const hasValue = !isField || value !== undefined;
   const raw = isField && value === undefined ? (element.placeholder ? element.placeholder : `{${fieldName(ctx.fields, element)}}`) : valueToText(value);
   const paragraphs = element.format === "rich" ? richTextToLines(raw) : raw.split(/\r?\n/);
-  const lines = paragraphs.flatMap((line) => wrapText(line, element.frame.w, style.fontSize, style.fontWeight === "bold"));
+  const fitted = fitFont(paragraphs, designedStyle, element.frame.w, element.frame.h);
+  const style = { ...designedStyle, fontSize: fitted.fontSize };
+  const lines = fitted.lines;
   const height = Math.max(element.frame.h, lines.length * lineHeightMm(style) + 1);
   const item: LaidOutTextItem = { type: "text", x, y, w: element.frame.w, h: height, style, lines, isField, fieldId: element.source.type === "field" ? element.source.fieldId : undefined, hasValue, elementId: element.id };
   return { items: [item], bottom: y + height, right: x + element.frame.w, height };

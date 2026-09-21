@@ -35,8 +35,15 @@ export function renderDocHtml(template, data = {}, { showFieldMarkers = false, p
       if (item.type === "image") return item.src ? `<img src="${escapeHtml(item.src)}" alt="" style="${base}height:${item.h}mm;object-fit:contain;" />` : `<div style="${base}height:${item.h}mm;border:0.3mm dashed #c7c7cc;border-radius:1mm;"></div>`;
       const marker = showFieldMarkers && item.isField ? `<span style="position:absolute;top:-3.2mm;left:0;font-size:6pt;color:#0060c0;background:#eef2ff;padding:0 1mm;border-radius:1mm;">AI · ${escapeHtml(item.path)}</span>` : "";
       const fieldStyle = item.isField && !item.hasValue ? "color:#0060c0;background:rgba(0,113,227,0.06);border-radius:1mm;" : "";
-      const rotate = Number(item.style.rotate) ? `transform:rotate(${Number(item.style.rotate)}deg);transform-origin:center center;` : "";
-      return `<div style="${base}${rotate}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.lines.map(escapeHtml).join("\n")}</div>`;
+      const deg = Number(item.style.rotate) || 0;
+      if (deg) {
+        // Rotated label: a vertical box (the unrotated frame turned about its centre) written top→bottom (-90) or bottom→top (90).
+        const left = item.x + item.w / 2 - item.h / 2;
+        const top = item.y + item.h / 2 - item.w / 2;
+        const mode = deg < 0 ? "writing-mode:vertical-rl;" : "writing-mode:vertical-rl;transform:rotate(180deg);";
+        return `<div style="position:absolute;left:${left}mm;top:${top}mm;width:${item.h}mm;height:${item.w}mm;${mode}display:flex;align-items:center;justify-content:${item.style.align === "center" ? "center" : item.style.align === "right" ? "flex-end" : "flex-start"};font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};line-height:${item.style.lineHeight};white-space:nowrap;overflow:hidden;">${item.lines.map(escapeHtml).join(" ")}</div>`;
+      }
+      return `<div style="${base}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.lines.map(escapeHtml).join("\n")}</div>`;
     }).join("\n");
     return `<section class="doc-page" style="position:relative;width:${page.width}mm;height:${page.height}mm;background:${pageColor};overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.12);margin:0 auto 10mm;page-break-after:always;">${bg}${items}</section>`;
   }).join("\n");

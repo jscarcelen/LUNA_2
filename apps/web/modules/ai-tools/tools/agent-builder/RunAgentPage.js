@@ -8,6 +8,9 @@ import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPl
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
 import { chargeRun, readCredits } from "../../../credits/credits";
+import { buildActivity } from "../../../activities/engine/activity";
+import { renderActivityHtml } from "../../../activities/engine/html";
+import { ActivityPlayer } from "../../../activities/ActivityPlayer";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const FIELD_FREQUENCY_LABELS = {
@@ -202,6 +205,13 @@ function DocumentPicker({ documents, selectedIds, onChange, emptyText }) {
   );
 }
 
+/** Legacy run-config fields → the FieldDef tree the activity engine expects (items[] + once fields). */
+function legacyToFieldDefs(fields = []) {
+  const perItem = fields.filter((field) => field.repeatScope !== "once").map((field) => ({ id: `lf_${field.name}`, name: field.name, type: field.type === "array" ? "array" : field.type === "number" ? "number" : "text", children: field.type === "array" ? [{ id: `lf_${field.name}_item`, name: field.name, type: "text" }] : undefined }));
+  const once = fields.filter((field) => field.repeatScope === "once").map((field) => ({ id: `lf_${field.name}`, name: field.name, type: field.type === "number" ? "number" : "text" }));
+  return [...once, { id: "lf_items", name: "items", type: "array", children: [{ id: "lf_items_item", name: "item", type: "object", children: perItem }] }];
+}
+
 /**
  * Shared 3-step agent flow (Configure questions → Configure output → Export).
  * Renders a saved agent (`agentDocumentId`) or a built-in one (`builtinAgent`, e.g. the Quiz
@@ -242,6 +252,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [outputTab, setOutputTab] = useState("fields");
 
   const [output, setOutput] = useState(null);
+  const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
@@ -611,6 +622,51 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return { html: wrap(fragment, { header: !activeTemplate }), textContent };
   }
 
+  /** Interactive activity derived from the agent's output structure and this run's data. */
+  const activity = useMemo(() => {
+    if (!output || typeof output !== "object") return null;
+    const schemaFields = Array.isArray(agentConfig?.spec?.outputSchema) && agentConfig.spec.outputSchema.length ? agentConfig.spec.outputSchema : legacyToFieldDefs(fields);
+    const data = { ...(output.data || {}), items: Array.isArray(output.items) ? output.items : [] };
+    try { return buildActivity(schemaFields, data, { title: customization.brand?.title || agentConfig?.name, agentId: agentDocument?.id || "", agentName: agentConfig?.name }); } catch { return null; }
+  }, [output, agentConfig, fields, customization.brand?.title, agentDocument?.id]);
+
+  async function handleDoOnLuna() {
+    if (!activity || !activity.questions.length) return;
+    let documentId = "";
+    if (onSaveGeneratedQuizDocument) {
+      setIsSavingDocument(true);
+      try {
+        const content = JSON.stringify({ kind: "activity", activity, data: { ...(output.data || {}), items: output.items || [] }, agentName: agentConfig?.name, createdAt: new Date().toISOString() }, null, 2);
+        const saved = await onSaveGeneratedQuizDocument({ folderIds: saveFolderId ? [saveFolderId] : [], tags: ["activity"], file: { name: `${activity.title}.activity.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } });
+        documentId = saved?.id || "";
+        setStatusMessage(`"${activity.title}" saved as an activity — find it under Workspaces → Activities.`);
+      } catch (error) {
+        setStatusMessage(String(error.message || error));
+      } finally {
+        setIsSavingDocument(false);
+      }
+    }
+    setPlaying({ activity, documentId });
+  }
+  function handleDownloadInteractive() {
+    if (!activity) return;
+    const html = renderActivityHtml(activity);
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${activity.title}.interactive.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+  async function handleAttempt(attempt) {
+    if (!onSaveGeneratedQuizDocument) return;
+    try {
+      const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: playing?.documentId || "", activityId: attempt.activityId }, null, 2);
+      await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
+    } catch { /* attempt stays local */ }
+  }
+
   async function handleSaveAsDocument() {
     if (!onSaveGeneratedQuizDocument || !Array.isArray(output?.items)) return;
     if (!mappingReady) {
@@ -893,8 +949,18 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {flowStep === 3 ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
+            {activity && activity.questions.length ? (
+              <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
+                <p className={kicker}>Do it on Luna · recommended</p>
+                <p className="m-0 mt-2 text-sm text-soft-ink">{activity.questions.length} question{activity.questions.length === 1 ? "" : "s"} the student can answer online. Every attempt is recorded, mistakes included, so progress is tracked.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className={primaryBtn} disabled={isSavingDocument} onClick={handleDoOnLuna}>{isSavingDocument ? "Saving…" : "Save as activity & open"}</button>
+                  <button type="button" className={ghostBtn} onClick={handleDownloadInteractive}>Interactive HTML</button>
+                </div>
+              </section>
+            ) : null}
             <section className={cardClass}>
-              <p className={kicker}>Download</p>
+              <p className={kicker}>{activity && activity.questions.length ? "Download as a file" : "Download"}</p>
               <div className="mt-3 grid gap-2">
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handlePrint}><span>PDF</span><span className="text-xs font-normal text-soft-ink">via print dialog</span></button>
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handleDownloadHtml}><span>HTML</span><span className="text-xs font-normal text-soft-ink">opens in any browser</span></button>
@@ -914,7 +980,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             </section>
             <section className={cardClass}>
               <p className={kicker}>Share with students</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">Assigning to a class and answering online arrives with student accounts. For now, download or save and share the file.</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">Saved activities appear under Workspaces → Activities, where students do them and results are tracked. Assigning to a class arrives with student accounts.</p>
             </section>
             <button type="button" className={ghostBtn} onClick={() => setFlowStep(2)}>← Back to output</button>
           </div>
@@ -922,6 +988,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
 
+      {playing ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
+          <ActivityPlayer activity={playing.activity} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />
+        </div>
+      ) : null}
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}
       {Array.isArray(output?.checks) && output.checks.some((check) => !check.ok) ? (
         <div className="rounded-xl border border-[rgba(215,0,21,0.25)] bg-[rgba(215,0,21,0.06)] px-3 py-2">

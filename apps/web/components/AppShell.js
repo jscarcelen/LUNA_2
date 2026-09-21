@@ -7,6 +7,7 @@ import { navByRole, pageTitles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
+import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
@@ -105,6 +106,20 @@ export function AppShell() {
 
   const content = useMemo(() => {
     if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
+    if (page === "activities") {
+      return (
+        <ActivitiesPage
+          role={role}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onRemoveDocument={handleRemoveDocument}
+          onOpenTool={(target) => setPage(target)}
+        />
+      );
+    }
     if (page === "workspaces") {
       return (
         <WorkspacePage

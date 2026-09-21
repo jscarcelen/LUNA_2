@@ -185,3 +185,27 @@ describe("migration of stored compositions", () => {
     expect(back.fields.map((f) => f.name)).toEqual(fields.map((f) => f.name));
   });
 });
+
+describe("activities", () => {
+  it("derives questions from generated data and grades an attempt", async () => {
+    const { buildActivity, gradeActivity } = await import("../../modules/activities/engine/activity");
+    const template = createTemplate("Quiz");
+    const seq = instantiateBlock(byName("Multiple choice (kids)"), template.fields);
+    const blanks = instantiateBlock(byName("Fill in the blanks"), seq.fields);
+    const pairs = instantiateBlock(byName("Match the pairs"), blanks.fields);
+    const data = {
+      title: "Animals",
+      questions: [{ question: "Which animal says moo?", options: ["Cow", "Cat"], answer: "Cow" }, { question: "Which flies?", options: ["Dog", "Bird"], answer: "B" }],
+      sentences: [{ sentence: "The ____ is shining.", answer: "sun" }],
+      pairs: [{ left: "Apple", right: "Manzana" }, { left: "Dog", right: "Perro" }]
+    } as unknown as Record<string, unknown>;
+    const activity = buildActivity(pairs.fields, data);
+    expect(activity.title).toBe("Animals");
+    expect(activity.questions.map((q) => q.kind)).toEqual(["choice", "choice", "text", "match"]);
+    expect(activity.questions[1].answer).toBe("Bird");
+    const attempt = gradeActivity(activity, { questions_1: "Cow", questions_2: "Dog", sentences_1: " Sun ", pairs_match: { Apple: "Manzana", Dog: "Perro" } });
+    expect(attempt.score).toBe(3);
+    expect(attempt.total).toBe(4);
+    expect(attempt.results[1].correct).toBe(false);
+  });
+});

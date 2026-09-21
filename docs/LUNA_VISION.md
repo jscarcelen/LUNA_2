@@ -120,6 +120,14 @@ Consequences for the product:
 - Template galleries show the **rendered first page** (A4 preferred, else slide size). Templates must be **easy to delete**.
 - A **hidden parallel agent (metaprompt generator)** improves the prompts the creator writes in the agent generator, so the agent's output matches what the user wants and the prompt quality is ensured — never disclosed to the user as a prompt.
 
+
+### 5.1c Worksheets, interactive activities and the activity layer (founder spec, 2026-09-20)
+
+- Template Studio gets **kids/worksheet components**: match the pairs, word search, tracing, fill in the blanks, multiple choice, cut and paste, colour by code, maze, math practice sets, pair puzzle grids… — be creative, more are welcome.
+- A **chatbot lets the user describe a component in words and get it created** (future premium feature).
+- Components that imply **answers from students** must have an **interactive HTML version** as the **default output** — exams, quizzes, puzzles, pairs, flashcards are done **on the platform** so errors are tracked; exporting to PDF/Word/PPT is the second option.
+- Workspaces gain a layer of **to-do's / activities / courses** with a **folder structure** that is the repository of activities and study resources for the kids — and, ultimately, what Luna uses to **track performance at a very granular level**.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).
@@ -353,6 +361,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-20 — Added §5.1c: worksheet components, component chatbot, interactive activities as default, activity layer in workspaces.
 - 2026-09-20 — Added §5.1b: agent output defined with Template Studio blocks, templates list their compatible agents, views hide fields, list-as-flag on fields.
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.
 - 2026-09-19 — §5.1a: user-chosen agent-ordered sets, block placement options, clean advanced canvas.

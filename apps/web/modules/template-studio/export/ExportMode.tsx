@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import type { Layout, View } from "../engine/types";
+import type { FieldDef, Layout, View } from "../engine/types";
+import { buildActivity } from "../../activities/engine/activity";
+import { renderActivityHtml } from "../../activities/engine/html";
 import { EXPORTS_BY_CLASS } from "../engine/types";
 import { card, kicker, primaryBtn } from "../ui";
 
 const LABELS: Record<string, [string, string]> = { pdf: ["PDF", "Print-ready"], docx: ["Word", "Editable text"], html_print: ["HTML", "Paged, any browser"], png: ["PNG", "Images (coming soon)"], pptx: ["PowerPoint", "One slide per page"], html_slideshow: ["HTML slideshow", "Coming soon"] };
 
-export function ExportMode({ layout, view, compiled, sampleData, layoutId, viewId, name, dirty, onSave, busy }: { layout: Layout; view: View | null; compiled: unknown; sampleData: unknown; layoutId: string; viewId: string; name: string; dirty: boolean; onSave: () => void; busy: boolean }) {
+export function ExportMode({ layout, view, compiled, sampleData, layoutId, viewId, name, dirty, onSave, busy, fields = [] }: { layout: Layout; view: View | null; compiled: unknown; fields?: FieldDef[]; sampleData: unknown; layoutId: string; viewId: string; name: string; dirty: boolean; onSave: () => void; busy: boolean }) {
   const [working, setWorking] = useState("");
   const [error, setError] = useState("");
   async function exportAs(format: string) {
@@ -32,8 +34,26 @@ export function ExportMode({ layout, view, compiled, sampleData, layoutId, viewI
     }
   }
   const formats = EXPORTS_BY_CLASS[layout.class].filter((format) => !view?.exports || view.exports.includes(format));
+  const activity = (() => { try { return buildActivity(fields, (sampleData || {}) as Record<string, unknown>, { title: name }); } catch { return null; } })();
+  function exportInteractive() {
+    if (!activity) return;
+    const blob = new Blob([renderActivityHtml(activity)], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${name || "activity"}.interactive.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
   return (
     <div className="grid items-start gap-3 lg:grid-cols-2">
+      {activity && activity.questions.length ? (
+        <section className={`${card} border-2 border-[var(--accent)]/30 p-5 lg:col-span-2`}>
+          <p className={kicker}>Interactive · default for activities</p>
+          <p className="m-0 mt-1 text-sm text-soft-ink">This template has {activity.questions.length} answerable question{activity.questions.length === 1 ? "" : "s"} (sample data). Documents made from it with an agent can be done on Luna — answers are checked and tracked. Files below are the printable alternative.</p>
+          <button type="button" className={`${primaryBtn} mt-3`} onClick={exportInteractive}>Download interactive HTML (sample)</button>
+        </section>
+      ) : null}
       <section className={`${card} p-5`}>
         <p className={kicker}>{view?.name || layout.name} · {layout.class === "slides" ? "Slides" : "Paged document"}</p>
         <p className="m-0 mt-1 text-xs text-soft-ink">Formats chosen for this view (change them under Views → Settings).</p>

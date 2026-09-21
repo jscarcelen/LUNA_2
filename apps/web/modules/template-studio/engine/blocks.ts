@@ -10,7 +10,7 @@
 import type { Element, FieldDef, GroupElement, ID, TextElement } from "./types";
 import { createField, createGroup, createId, createShape, createText, defaultStyle, walkElements } from "./model";
 
-export type BlockCategory = "questions" | "cards" | "structure" | "custom";
+export type BlockCategory = "questions" | "cards" | "structure" | "kids" | "custom";
 
 export interface BlockOptionDef {
   key: string;
@@ -651,8 +651,222 @@ function mixedQuestions(): BlockDef {
   return { id: "block-question-mixed", family: "Question card", variant: "Mixed — design chosen by question Type", name: "Question (any type)", description: "One spot, three designs: multiple choice, true/false or open — the agent's Type field decides, in its order.", category: "questions", icon: "❶⁄", fields: [questions], elements: [group], options: [{ key: "number", label: "Question number", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
 }
 
+
+/* ---------------------------------------------------------------- kids learning & worksheets */
+
+const KID = { main: "#5b5bd6", tint: "#eef0ff", pink: "#ffe4ec", blue: "#e3f1ff", green: "#e6f7ea", yellow: "#fff5d6", lilac: "#efe6ff" };
+
+function matchPairs(): BlockDef {
+  const left = createField("Left", "text", { description: "Word or picture on the left" });
+  const right = createField("Right", "text", { description: "Its match on the right (shown shuffled)" });
+  const pairs = createField("Pairs", "array", { description: "Matching pairs (left ↔ right)", children: [createField("item", "object", { children: [left, right] })] });
+  const title = createField("Title", "text", { description: "Activity title" });
+  const instruction = createField("Instruction", "text", { description: "One-line instruction for the child" });
+  const group = createGroup({
+    name: "Match the pairs",
+    frame: { x: 12, y: 12, w: 186, h: 34 },
+    layout: { mode: "vertical", gap: 2 },
+    repeat: null,
+    children: [
+      tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      tx(instruction.id, "Draw a line to connect each pair.", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 10, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
+      createGroup({
+        name: "Pair row",
+        frame: { x: 0, y: 20, w: 186, h: 14 },
+        layout: { mode: "free", gap: 0 },
+        repeat: { fieldId: pairs.id, mode: "flow" },
+        children: [
+          createShape("rect", { frame: { x: 8, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.pink, stroke: "#f4c6d3", strokeWidth: 0.3, radius: 3 }) }),
+          tx(left.id, "Apple", { x: 12, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" }),
+          createShape("ellipse", { frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
+          createShape("ellipse", { frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
+          createShape("rect", { frame: { x: 112, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.blue, stroke: "#bcd9f5", strokeWidth: 0.3, radius: 3 }) }),
+          tx(right.id, "Manzana", { x: 122, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" })
+        ]
+      })
+    ]
+  });
+  return { id: "block-match-pairs", family: "Match the pairs", variant: "Two columns with dots", name: "Match the pairs", description: "Two columns to connect with a line — words, translations, pictures. Interactive: the child picks each match.", category: "kids", icon: "⋯", fields: [title, instruction, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction line", default: true }], accent: A, builtIn: true };
+}
+
+function fillBlanks(): BlockDef {
+  const sentence = createField("Sentence", "text", { description: "The sentence with ____ where the missing word goes" });
+  const answer = createField("Answer", "text", { description: "The missing word" });
+  const hint = createField("Hint", "text", { description: "Optional hint, e.g. first letter", required: false });
+  const items = createField("Sentences", "array", { children: [createField("item", "object", { children: [sentence, answer, hint] })] });
+  const group = createGroup({
+    name: "Fill in the blanks",
+    frame: { x: 12, y: 12, w: 186, h: 13 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: items.id, mode: "flow" },
+    style: defaultStyle({ fill: KID.yellow, stroke: "", radius: 2.5 }),
+    children: [
+      st("{{n}}.", { x: 4, y: 3.5, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: KID.main }, { name: "opt:number|Number" }),
+      tx(sentence.id, "The ____ is shining in the sky.", { x: 13, y: 3.5, w: 130, h: 6 }, { fontSize: 11 }),
+      tx(hint.id, "(s...)", { x: 146, y: 3.5, w: 36, h: 6 }, { fontSize: 9, color: "#8e8e93", align: "right" }, { name: "opt:hint|Hint" }),
+      tx(answer.id, "sun", { x: 13, y: 9.5, w: 60, h: 3 }, { fontSize: 6.5, color: KID.main }, { name: "opt:answer|Answer" })
+    ]
+  });
+  return { id: "block-fill-blanks", family: "Fill in the blanks", variant: "Sentence + hint", name: "Fill in the blanks", description: "Sentences with a missing word. Interactive: the child types the word; checked automatically.", category: "kids", icon: "Aa", fields: [items], elements: [group], options: [{ key: "number", label: "Numbers", default: true }, { key: "hint", label: "Hint", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+}
+
+function mathPractice(): BlockDef {
+  const problem = createField("Problem", "formula", { description: "The operation, e.g. 24 + 18 =" });
+  const answer = createField("Answer", "number", { description: "The result" });
+  const problems = createField("Problems", "array", { children: [createField("item", "object", { children: [problem, answer] })] });
+  const title = createField("Title", "text", { description: "Worksheet title, e.g. Math Practice · Level 3" });
+  const cell = createGroup({
+    name: "Problem",
+    frame: { x: 0, y: 0, w: 90, h: 22 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    children: [
+      st("{{n}}.", { x: 0, y: 1, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: "#1f2a6b" }),
+      tx(problem.id, "24 + 18 =", { x: 9, y: 1, w: 70, h: 7 }, { fontSize: 13, color: "#1f2a6b" }),
+      createShape("rect", { frame: { x: 9, y: 9, w: 56, h: 11 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c9d4ff", strokeWidth: 0.4, radius: 2 }) }),
+      createShape("rect", { frame: { x: 68, y: 9, w: 14, h: 11 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c9d4ff", strokeWidth: 0.4, radius: 2 }) }),
+      tx(answer.id, "42", { x: 70, y: 12, w: 10, h: 6 }, { fontSize: 8, color: KID.main, align: "center" }, { name: "opt:answer|Answer" })
+    ]
+  });
+  const group = createGroup({
+    name: "Math practice set",
+    frame: { x: 12, y: 12, w: 186, h: 40 },
+    layout: { mode: "vertical", gap: 3 },
+    repeat: null,
+    children: [
+      tx(title.id, "Math Practice · Level 3", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 20, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      st("Name ______________________     Date ____________", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 9, color: "#6e6e73" }, { name: "opt:namedate|Name / Date" }),
+      createGroup({ name: "Problems", frame: { x: 0, y: 20, w: 186, h: 22 }, layout: { mode: "grid", gap: 6, columns: 2 }, repeat: { fieldId: problems.id, mode: "grid", columns: 2 }, children: [cell] })
+    ]
+  });
+  return { id: "block-math-practice", family: "Math practice set", variant: "Two columns with answer boxes", name: "Math practice set", description: "Numbered operations in two columns with a working box and an answer box. Interactive: the child types results.", category: "kids", icon: "±", fields: [title, problems], elements: [group], options: [{ key: "namedate", label: "Name / Date", default: true }, { key: "answer", label: "Show answers", default: false }], accent: A, builtIn: true };
+}
+
+function pairPuzzleGrid(): BlockDef {
+  const left = createField("Left", "text", { description: "Word on the left half of the tile" });
+  const right = createField("Right", "text", { description: "Its pair on the right half" });
+  const pairs = createField("Pairs", "array", { children: [createField("item", "object", { children: [left, right] })] });
+  const title = createField("Title", "text");
+  const tile = createGroup({
+    name: "Tile",
+    frame: { x: 0, y: 0, w: 43, h: 30 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    style: defaultStyle({ fill: KID.lilac, stroke: "#9e9e9e", strokeWidth: 0.3, radius: 2 }),
+    children: [
+      createShape("line", { frame: { x: 21.5, y: 3, w: 0.3, h: 24 }, style: defaultStyle({ stroke: "#9e9e9e", strokeWidth: 0.3 }) }),
+      tx(left.id, "CAT", { x: 1.5, y: 12, w: 19, h: 7 }, { fontSize: 10, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      tx(right.id, "GATO", { x: 22.5, y: 12, w: 19, h: 7 }, { fontSize: 10, fontWeight: "bold", align: "center", color: "#1f2a6b" })
+    ]
+  });
+  const group = createGroup({
+    name: "Pair puzzle grid",
+    frame: { x: 12, y: 12, w: 186, h: 52 },
+    layout: { mode: "vertical", gap: 3 },
+    repeat: null,
+    children: [
+      tx(title.id, "English · Spanish Pair Puzzle", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 18, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      st("Cut the tiles. Match each pair.", { x: 0, y: 11, w: 186, h: 6 }, { fontSize: 9.5, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
+      createGroup({ name: "Tiles", frame: { x: 0, y: 19, w: 186, h: 30 }, layout: { mode: "grid", gap: 4.5, columns: 4 }, repeat: { fieldId: pairs.id, mode: "grid", columns: 4 }, children: [tile] })
+    ]
+  });
+  return { id: "block-pair-puzzle", family: "Pair puzzle grid", variant: "Cut-apart tiles 4 per row", name: "Pair puzzle grid", description: "Cut-apart tiles, each split in two halves (word ↔ pair). Interactive: pairs become a matching game.", category: "kids", icon: "▦", fields: [title, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction", default: true }], accent: A, builtIn: true };
+}
+
+function wordSearch(): BlockDef {
+  const gridField = createField("Grid", "rich_text", { description: "The letter grid: one row per line, letters separated by spaces, e.g. 12 rows × 12 letters" });
+  const word = createField("Word", "text");
+  const words = createField("Words", "array", { children: [word] });
+  const title = createField("Title", "text");
+  const group = createGroup({
+    name: "Word search",
+    frame: { x: 12, y: 12, w: 186, h: 70 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    children: [
+      tx(title.id, "Find the animals", { x: 0, y: 0, w: 186, h: 10 }, { fontSize: 18, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      createShape("rect", { frame: { x: 0, y: 12, w: 120, h: 56 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c9d4ff", strokeWidth: 0.4, radius: 2 }) }),
+      tx(gridField.id, "C A T D O G X Q\nL I O N B E A R\nF R O G Z P I G\nH E N S W O L F\nD U C K M O L E", { x: 4, y: 15, w: 112, h: 50 }, { fontSize: 11, fontFamily: "mono", lineHeight: 1.7, color: "#1f2a6b" }, { format: "plain" }),
+      st("Find these words:", { x: 126, y: 13, w: 60, h: 6 }, { fontSize: 9.5, fontWeight: "bold", color: KID.main }),
+      createGroup({ name: "Word list", frame: { x: 126, y: 20, w: 60, h: 40 }, layout: { mode: "vertical", gap: 1 }, repeat: { fieldId: words.id, mode: "flow" }, children: [tx(word.id, "• Lion", { x: 0, y: 0, w: 60, h: 5 }, { fontSize: 9.5, color: "#1f2a6b" })] })
+    ]
+  });
+  return { id: "block-word-search", family: "Word search", variant: "Grid + word list", name: "Word search", description: "Letter grid with the words to find. The agent generates the grid.", category: "kids", icon: "▩", fields: [title, gridField, words], elements: [group], accent: A, builtIn: true };
+}
+
+function tracing(): BlockDef {
+  const word = createField("Word", "text", { description: "Word or letter to trace" });
+  const words = createField("Words", "array", { children: [word] });
+  const group = createGroup({
+    name: "Tracing",
+    frame: { x: 12, y: 12, w: 186, h: 22 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: words.id, mode: "flow" },
+    children: [
+      createShape("line", { frame: { x: 0, y: 3, w: 186, h: 0.3 }, style: defaultStyle({ stroke: "#c7c7cc", strokeWidth: 0.3 }) }),
+      createShape("line", { frame: { x: 0, y: 11, w: 186, h: 0.3 }, style: defaultStyle({ stroke: "#e5e5ea", strokeWidth: 0.3 }) }),
+      createShape("line", { frame: { x: 0, y: 19, w: 186, h: 0.3 }, style: defaultStyle({ stroke: "#c7c7cc", strokeWidth: 0.3 }) }),
+      tx(word.id, "apple", { x: 4, y: 2, w: 178, h: 17 }, { fontSize: 34, fontWeight: "bold", color: "#d1d1d6", fontFamily: "sans" })
+    ]
+  });
+  return { id: "block-tracing", family: "Tracing", variant: "Big grey letters on lines", name: "Tracing", description: "Large light letters between writing lines for the child to trace.", category: "kids", icon: "✎", fields: [words], elements: [group], accent: A, builtIn: true };
+}
+
+function cutAndPaste(): BlockDef {
+  const label = createField("Label", "text", { description: "Category or slot label" });
+  const slots = createField("Slots", "array", { children: [label] });
+  const piece = createField("Piece", "text", { description: "Word to cut out and paste in the right slot" });
+  const pieces = createField("Pieces", "array", { children: [piece] });
+  const title = createField("Title", "text");
+  const group = createGroup({
+    name: "Cut and paste",
+    frame: { x: 12, y: 12, w: 186, h: 60 },
+    layout: { mode: "vertical", gap: 3 },
+    repeat: null,
+    children: [
+      tx(title.id, "Sort the words", { x: 0, y: 0, w: 186, h: 10 }, { fontSize: 18, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      createGroup({ name: "Slots", frame: { x: 0, y: 12, w: 186, h: 22 }, layout: { mode: "grid", gap: 4, columns: 3 }, repeat: { fieldId: slots.id, mode: "grid", columns: 3 }, children: [
+        createGroup({ name: "Slot", frame: { x: 0, y: 0, w: 59, h: 22 }, layout: { mode: "free", gap: 0 }, repeat: null, style: defaultStyle({ fill: KID.green, stroke: "#9fd6ad", strokeWidth: 0.3, radius: 3 }), children: [tx(label.id, "Fruits", { x: 2, y: 2, w: 55, h: 6 }, { fontSize: 10, fontWeight: "bold", align: "center", color: "#1f2a6b" })] })
+      ] }),
+      st("✂ Cut out and paste", { x: 0, y: 38, w: 186, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }),
+      createGroup({ name: "Pieces", frame: { x: 0, y: 44, w: 186, h: 12 }, layout: { mode: "grid", gap: 3, columns: 5 }, repeat: { fieldId: pieces.id, mode: "grid", columns: 5 }, children: [
+        createGroup({ name: "Piece", frame: { x: 0, y: 0, w: 34, h: 10 }, layout: { mode: "free", gap: 0 }, repeat: null, style: defaultStyle({ fill: "#ffffff", stroke: "#9e9e9e", strokeWidth: 0.3, radius: 1.5 }), children: [tx(piece.id, "apple", { x: 1, y: 2.5, w: 32, h: 5 }, { fontSize: 9.5, align: "center", color: "#1f2a6b" })] })
+      ] })
+    ]
+  });
+  return { id: "block-cut-paste", family: "Cut and paste", variant: "Slots + pieces", name: "Cut and paste", description: "Category boxes and a strip of words to cut out and paste (or drag, interactively).", category: "kids", icon: "✂", fields: [title, slots, pieces], elements: [group], accent: A, builtIn: true };
+}
+
+function kidsMultipleChoice(): BlockDef {
+  const question = createField("Question", "rich_text");
+  const option = createField("Option", "text");
+  const options = createField("Options", "array", { children: [option] });
+  const answer = createField("Answer", "text", { description: "The correct option" });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
+  const group = createGroup({
+    name: "Multiple choice (kids)",
+    frame: { x: 12, y: 12, w: 186, h: 30 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: questions.id, mode: "flow" },
+    style: defaultStyle({ fill: KID.blue, stroke: "", radius: 4 }),
+    children: [
+      createShape("ellipse", { frame: { x: 4, y: 4, w: 9, h: 9 }, style: defaultStyle({ fill: KID.main, stroke: "" }) }),
+      st("{{n}}", { x: 4, y: 5.6, w: 9, h: 6 }, { fontSize: 9, fontWeight: "bold", color: "#ffffff", align: "center" }),
+      tx(question.id, "Which animal says “moo”?", { x: 17, y: 5, w: 160, h: 8 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" }, { format: "rich" }),
+      createGroup({ name: "Options", frame: { x: 17, y: 15, w: 165, h: 12 }, layout: { mode: "grid", gap: 3, columns: 2 }, repeat: { fieldId: options.id, mode: "grid", columns: 2 }, children: [
+        createGroup({ name: "Option", frame: { x: 0, y: 0, w: 80, h: 8 }, layout: { mode: "free", gap: 0 }, repeat: null, style: defaultStyle({ fill: "#ffffff", stroke: "#bcd9f5", strokeWidth: 0.3, radius: 4 }), children: [
+          createShape("ellipse", { frame: { x: 2.5, y: 2, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.4 }) }),
+          tx(option.id, "Cow", { x: 9, y: 1.5, w: 68, h: 5.5 }, { fontSize: 10.5, color: "#1f2a6b" })
+        ] })
+      ] }),
+      tx(answer.id, "Cow", { x: 17, y: 27, w: 80, h: 3 }, { fontSize: 6.5, color: KID.main }, { name: "opt:answer|Answer" })
+    ]
+  });
+  return { id: "block-mc-kids", family: "Question card", variant: "Kids — big options in two columns", name: "Multiple choice (kids)", description: "Playful question card with two-column option pills. Interactive: tap to answer.", category: "kids", icon: "❶", fields: [questions], elements: [group], options: [{ key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+}
+
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), mixedQuestions(), compactQuestion(), openQuestion(), trueFalse(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), footer()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), mixedQuestions(), compactQuestion(), openQuestion(), trueFalse(), kidsMultipleChoice(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), matchPairs(), fillBlanks(), mathPractice(), pairPuzzleGrid(), wordSearch(), tracing(), cutAndPaste(), footer()];
 }
 
 /** Blocks grouped by family, in library order. */
@@ -666,7 +880,7 @@ export function blockFamilies(blocks: BlockDef[]): { family: string; variants: B
   return out;
 }
 
-export const BLOCK_CATEGORY_LABELS: Record<BlockCategory, string> = { questions: "Questions", cards: "Cards & tables", structure: "Document structure", custom: "My blocks" };
+export const BLOCK_CATEGORY_LABELS: Record<BlockCategory, string> = { questions: "Questions", cards: "Cards & tables", structure: "Document structure", kids: "Kids learning & worksheets", custom: "My blocks" };
 
 /* ---------------------------------------------------------------- insertion */
 

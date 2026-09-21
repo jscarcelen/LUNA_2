@@ -4,12 +4,14 @@ export const navByRole = {
   student: [
     { key: "dashboard", label: "Home" },
     { key: "workspaces", label: "Workspaces" },
+    { key: "activities", label: "Activities" },
     { key: "ai-tools", label: "AI Tools" },
     { key: "marketplace", label: "Marketplace" }
   ],
   teacher: [
     { key: "dashboard", label: "Classes" },
     { key: "workspaces", label: "Workspaces" },
+    { key: "activities", label: "Activities" },
     { key: "ai-tools", label: "AI Tools" },
     { key: "ai-tool:template-builder", label: "Templates" },
     { key: "marketplace", label: "Marketplace" }
@@ -17,6 +19,7 @@ export const navByRole = {
   parent: [
     { key: "dashboard", label: "Children" },
     { key: "workspaces", label: "Workspaces" },
+    { key: "activities", label: "Activities" },
     { key: "marketplace", label: "Marketplace" }
   ]
 };
@@ -30,6 +33,7 @@ export const roleProfiles = {
 export const pageTitles = {
   dashboard: "Home",
   workspaces: "Workspaces",
+  activities: "Activities",
   "ai-tools": "AI Tools",
   "ai-tool-quiz": "Quiz Generator",
   "ai-tool-tutor": "AI Tutor",

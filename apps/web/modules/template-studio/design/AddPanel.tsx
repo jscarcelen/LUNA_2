@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listComponents } from "../engine/registry";
 import { ACCENT_PRESETS, blockFamilies, builtInBlocks, readBlockLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { card, fieldBase, kicker } from "../ui";
+import { ComponentChat } from "./ComponentChat";
 
 export interface AddPanelProps {
   onAdd: (type: string) => void;
@@ -150,7 +151,7 @@ export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, on
           </Section>
         ) : null}
         {premium.length ? <Section title="Premium" badge="★"><div className="grid gap-1">{premium.map(familyRow)}</div></Section> : null}
-        <Section title="Custom"><div className="grid gap-1">{custom.map((b) => blockRow(b))}{!custom.length ? <p className="m-0 px-1 text-[10.5px] text-soft-ink">Select elements on the canvas → <strong>Save as block</strong> to reuse them here.</p> : null}</div></Section>
+        <Section title="Custom"><div className="grid gap-1"><ComponentChat onBuilt={(block) => { setLibrary(readBlockLibrary()); pick(block); }} />{custom.map((b) => blockRow(b))}{!custom.length ? <p className="m-0 px-1 text-[10.5px] text-soft-ink">Select elements on the canvas → <strong>Save as block</strong> to reuse them here.</p> : null}</div></Section>
       </div>
     </div>
   );

@@ -81,7 +81,10 @@ export function blockFromDsl(dsl: DslComponent): BlockDef {
       itemChildren.push(createGroup({ name: n.name, frame: { x: 0, y: top, w: 186, h: Math.max(...bound.map((b) => b.frame.y + b.frame.h)) - top + 6 }, layout: { mode: "vertical", gap: 1.2 }, repeat: { fieldId: n.id, mode: "flow" }, children: bound.map((b) => ({ ...b, frame: { ...b.frame, y: 0 } })) }));
     }
     const columns = Math.max(1, Number(dsl.list.columns) || 1);
-    children.push(createGroup({ name: dsl.list.name, frame: { x: 0, y: headerH, w: 186, h: itemH }, layout: { mode: columns > 1 ? "grid" : "free", gap: 3, columns: columns > 1 ? columns : undefined }, repeat: { fieldId: listField.id, mode: columns > 1 ? "grid" : "flow", columns: columns > 1 ? columns : undefined }, children: itemChildren.map((e) => ({ ...e, frame: { ...e.frame, w: columns > 1 ? Math.min(e.frame.w, 186 / columns - 3) : e.frame.w } })) }));
+    const cellW = columns > 1 ? Math.floor(186 / columns) - 3 : 186;
+    // One item = a free-layout group (so the grid places whole items, not their parts).
+    const item = createGroup({ name: `${dsl.list.name} item`, frame: { x: 0, y: 0, w: cellW, h: itemH }, layout: { mode: "free", gap: 0 }, repeat: null, children: itemChildren.map((e) => ({ ...e, frame: { ...e.frame, w: Math.min(e.frame.w, cellW - e.frame.x) } })) });
+    children.push(createGroup({ name: dsl.list.name, frame: { x: 0, y: headerH, w: 186, h: itemH }, layout: { mode: columns > 1 ? "grid" : "vertical", gap: 3, columns: columns > 1 ? columns : undefined }, repeat: { fieldId: listField.id, mode: columns > 1 ? "grid" : "flow", columns: columns > 1 ? columns : undefined }, children: [item] }));
   } else {
     children.push(...itemEls);
   }

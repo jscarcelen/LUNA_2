@@ -865,8 +865,44 @@ function kidsMultipleChoice(): BlockDef {
   return { id: "block-mc-kids", family: "Question card", variant: "Kids — big options in two columns", name: "Multiple choice (kids)", description: "Playful question card with two-column option pills. Interactive: tap to answer.", category: "kids", icon: "❶", fields: [questions], elements: [group], options: [{ key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
 }
 
+
+function squarePuzzle(): BlockDef {
+  const top = createField("Top", "text", { description: "Word on the top edge (matches a neighbour's bottom)" });
+  const right = createField("Right", "text", { description: "Word on the right edge" });
+  const bottom = createField("Bottom", "text", { description: "Word on the bottom edge" });
+  const left = createField("Left", "text", { description: "Word on the left edge" });
+  const tiles = createField("Tiles", "array", { description: "Square tiles; matching edge words go next to each other", children: [createField("item", "object", { children: [top, right, bottom, left] })] });
+  const title = createField("Title", "text");
+  const tile = createGroup({
+    name: "Tile",
+    frame: { x: 0, y: 0, w: 43, h: 43 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    style: defaultStyle({ fill: KID.pink, stroke: "#e39ab1", strokeWidth: 0.4, radius: 2 }),
+    children: [
+      tx(top.id, "perro", { x: 4, y: 2, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      tx(right.id, "cat", { x: 22, y: 18, w: 20, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "right", color: "#1f2a6b" }),
+      tx(bottom.id, "casa", { x: 4, y: 35, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      tx(left.id, "dog", { x: 1.5, y: 18, w: 20, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "left", color: "#1f2a6b" }),
+      createShape("line", { frame: { x: 4, y: 21.5, w: 35, h: 0.3 }, style: defaultStyle({ stroke: "#f0c2cf", strokeWidth: 0.3 }) })
+    ]
+  });
+  const group = createGroup({
+    name: "Square puzzle",
+    frame: { x: 12, y: 12, w: 186, h: 60 },
+    layout: { mode: "vertical", gap: 3 },
+    repeat: null,
+    children: [
+      tx(title.id, "Square Puzzle", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 20, fontWeight: "bold", align: "center", color: "#c2185b" }),
+      st("Cut the tiles and put matching edges together.", { x: 0, y: 11, w: 186, h: 6 }, { fontSize: 9.5, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
+      createGroup({ name: "Tiles", frame: { x: 0, y: 19, w: 186, h: 43 }, layout: { mode: "grid", gap: 3, columns: 4 }, repeat: { fieldId: tiles.id, mode: "grid", columns: 4 }, children: [tile] })
+    ]
+  });
+  return { id: "block-square-puzzle", family: "Square puzzle", variant: "Edge-matching tiles 4×4", name: "Square puzzle", description: "Cut-apart square tiles with a word on each edge; matching edges (word ↔ translation/definition) go side by side.", category: "kids", icon: "▦", fields: [title, tiles], elements: [group], options: [{ key: "instruction", label: "Instruction", default: true }], accent: A, builtIn: true };
+}
+
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), mixedQuestions(), compactQuestion(), openQuestion(), trueFalse(), kidsMultipleChoice(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), matchPairs(), fillBlanks(), mathPractice(), pairPuzzleGrid(), wordSearch(), tracing(), cutAndPaste(), footer()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), mixedQuestions(), compactQuestion(), openQuestion(), trueFalse(), kidsMultipleChoice(), answerBox(), flashcard(), flashcardSingle(), vocabularyRow(), callout(), documentStructure(), keyPoints(), matchPairs(), fillBlanks(), mathPractice(), pairPuzzleGrid(), squarePuzzle(), wordSearch(), tracing(), cutAndPaste(), footer()];
 }
 
 /** Blocks grouped by family, in library order. */

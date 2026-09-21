@@ -115,7 +115,8 @@ export function isShown(element: Element, scopes: Scope[], ctx: Ctx): boolean {
 /** Lays out the children of ONE instance at (x, y). Stacks by mode; nested repeats expand and push siblings. */
 function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope[], ctx: Ctx, limitBottom: number): Laid {
   const items: LaidOutItem[] = [];
-  const mode = group.layout.mode;
+  // A grid REPEAT already places one instance per cell; inside the instance children keep their own frames.
+  const mode = group.repeat?.mode === "grid" && group.layout.mode === "grid" ? "free" : group.layout.mode;
   const gap = group.layout.gap ?? 0;
   const children = mode === "free" ? group.children : [...group.children].sort((a, b) => (mode === "horizontal" ? a.frame.x - b.frame.x : a.frame.y - b.frame.y));
   let cursorX = 0;

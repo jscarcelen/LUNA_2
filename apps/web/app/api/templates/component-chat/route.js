@@ -63,6 +63,7 @@ const REVIEW_SCHEMA = { ...DSL_SCHEMA, properties: { ...DSL_SCHEMA.properties, i
 
 const DESIGN_RULES = `Design language: soft pastel fills (#ffe4ec #e3f1ff #e6f7ea #fff5d6 #efe6ff), accent #5b5bd6, dark text #1f2a6b, radius 2–4 mm, titles 16–22 pt bold centred, body 9–13 pt, generous padding (≥3 mm inside boxes).
 Geometry: the block is 186 mm wide; the item is ONE cell of the grid: width = 186/columns − 3 (columns 1 → 186). All item elements must sit inside 0..cellW × 0..cellH. Text elements must be wide enough for their text: at least 0.55 mm per character at 10 pt (e.g. a 12-letter word ≈ 7 mm tall, ≥ 26 mm wide). A box behind text must fully contain it with padding. Never overlap two texts. Item height is the height of ONE item (10–60 mm), never the whole grid.
+Known patterns: "square puzzle / tarsia" = square tiles (columns 4, cell ≈ 43×43 mm) with a word on each EDGE (item fields Top, Right, Bottom, Left) so matching edges sit side by side; "match the pairs" = two columns (Left, Right) connected by lines; "pair puzzle tiles" = split tiles (Left | Right); "bingo" = grid of cells with one Word; "flashcards" = Front / Back.
 Fields: content that changes per document is a field or a list, never fixed text. Every item field must have a field element. For answerable designs use the names Question/Options/Answer, Statement/Answer, Sentence/Answer, Problem/Answer, Left/Right, Front/Back so Luna can check answers; the Answer element is small (6.5 pt, accent colour) so it can be hidden.`;
 
 /** Deterministic geometry clean-up: keep every element inside its cell, give text room, add a background box to grid items. */
@@ -97,6 +98,18 @@ function normalise(dsl) {
     missing.forEach((f, index) => dsl.elements.push({ kind: "field", field: f.name, text: f.name, x: 3, y: 4 + index * 8, w: cellW - 6, h: 7, size: 11, bold: index === 0, align: columns > 1 ? "center" : "left" }));
     if (columns > 1 && !dsl.elements.some((e) => e.kind === "box" && e.w >= cellW * 0.8)) dsl.elements.unshift({ kind: "box", x: 0, y: 0, w: cellW, h: cellH, fill: "#e3f1ff", stroke: "#bcd9f5", radius: 3 });
   }
+  // De-overlap texts deterministically: a text that collides with an earlier one moves below it.
+  const texts = dsl.elements.filter((e) => e.kind === "text" || e.kind === "field");
+  for (let i = 1; i < texts.length; i += 1) {
+    for (let j = 0; j < i; j += 1) {
+      const a = texts[j], b = texts[i];
+      const overlaps = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      if (overlaps) { b.y = a.y + a.h + 1; }
+    }
+  }
+  const maxBottom = Math.max(cellH, ...texts.map((e) => e.y + e.h + 2));
+  cellH = Math.min(columns > 1 ? 70 : 140, maxBottom);
+  dsl.elements = dsl.elements.map((e) => (e.kind === "box" && e.w >= cellW * 0.8 && e.h >= cellH * 0.6 ? { ...e, h: cellH } : e));
   dsl.height = cellH;
   dsl.header = dsl.header.map((el) => ({ ...el, x: Math.max(0, Number(el.x) || 0), y: Math.max(0, Number(el.y) || 0), w: Math.min(186, Math.max(2, Number(el.w) || 100)), h: Math.max(0.3, Number(el.h) || 8) }));
   dsl.headerHeight = dsl.header.length ? Math.max(Number(dsl.headerHeight) || 0, ...dsl.header.map((e) => e.y + e.h)) + 2 : 0;

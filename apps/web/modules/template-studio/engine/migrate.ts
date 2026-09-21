@@ -3,6 +3,8 @@ import { createField, createGroup, createLayout, createShape, createTemplate, cr
 
 /** Any template row from the database → v3. Returns null for rows that have nothing usable. */
 export function migrateToV3(saved: any): Template {
+  // Already a v3 template object (e.g. an agent's stored output composition).
+  if (saved?.version === 3 && Array.isArray(saved.layouts)) return saved as Template;
   if (saved?.templateV3?.version === 3) return { ...saved.templateV3, name: saved.name || saved.templateV3.name };
   if (saved?.docModel) return fromDocModelV2(saved);
   return fromLegacy(saved);

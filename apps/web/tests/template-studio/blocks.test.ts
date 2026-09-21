@@ -172,3 +172,16 @@ describe("agent-ordered content + placement", () => {
     expect(result2.pages.length).toBe(2);
   });
 });
+
+describe("migration of stored compositions", () => {
+  it("keeps a v3 template object intact (agent output compositions round-trip)", async () => {
+    const { migrateToV3, normalizeTemplate } = await import("../../modules/template-studio/engine/migrate");
+    const template = createTemplate("Summary generator");
+    const { fields, elements } = instantiateBlock(byName("Header"), template.fields);
+    template.fields = fields;
+    template.layouts[0].pages[0].elements = elements;
+    const back = normalizeTemplate(migrateToV3(JSON.parse(JSON.stringify(template))));
+    expect(back.layouts[0].pages[0].elements.map((e) => e.name)).toEqual(["Header"]);
+    expect(back.fields.map((f) => f.name)).toEqual(fields.map((f) => f.name));
+  });
+});

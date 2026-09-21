@@ -209,3 +209,27 @@ describe("activities", () => {
     expect(attempt.results[1].correct).toBe(false);
   });
 });
+
+describe("component DSL", () => {
+  it("converts a chatbot component into a repeating grid block with visible fields", async () => {
+    const { blockFromDsl } = await import("../../modules/template-studio/engine/componentDsl");
+    const block = blockFromDsl({
+      name: "Word pairs 3×3", description: "match pairs", fields: [{ name: "Title", type: "text" }],
+      list: { name: "WordPairs", itemFields: [{ name: "Word", type: "text" }, { name: "Match", type: "text" }, { name: "Answer", type: "text" }], columns: 3 },
+      header: [{ kind: "text", text: "Match the pairs", x: 0, y: 0, w: 186, h: 10, size: 18, bold: true, align: "center" }, { kind: "field", field: "Title", x: 0, y: 10, w: 186, h: 6 }],
+      elements: [{ kind: "box", x: 0, y: 0, w: 59, h: 30, fill: "#e3f1ff", radius: 3 }, { kind: "field", field: "Word", x: 3, y: 3, w: 53, h: 10, size: 12, bold: true }, { kind: "field", field: "Match", x: 3, y: 16, w: 53, h: 10, size: 12 }, { kind: "field", field: "Answer", x: 3, y: 27, w: 53, h: 4, size: 6.5 }],
+      height: 32, headerHeight: 18
+    });
+    expect(block.fields.map((f) => f.name)).toEqual(["Title", "WordPairs"]);
+    const template = createTemplate("T");
+    const { fields, elements } = instantiateBlock(block, template.fields);
+    template.fields = fields;
+    template.layouts[0].pages[0].elements = elements;
+    const result = layoutDocument(template, buildSampleData(template, 6));
+    const texts = result.pages[0].items.filter((i) => i.type === "text").map((i) => (i as { lines: string[] }).lines.join(" "));
+    expect(texts.filter((t) => /^Word( \(\d\))?$/.test(t))).toHaveLength(6);
+    const rects = result.pages[0].items.filter((i) => i.type === "rect");
+    expect(rects.length).toBeGreaterThanOrEqual(6);
+    expect(Math.max(...rects.map((r) => r.x + r.w))).toBeLessThanOrEqual(198.5);
+  });
+});

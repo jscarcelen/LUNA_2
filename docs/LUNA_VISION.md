@@ -128,6 +128,8 @@ Consequences for the product:
 - Components that imply **answers from students** must have an **interactive HTML version** as the **default output** — exams, quizzes, puzzles, pairs, flashcards are done **on the platform** so errors are tracked; exporting to PDF/Word/PPT is the second option.
 - Workspaces gain a layer of **to-do's / activities / courses** with a **folder structure** that is the repository of activities and study resources for the kids — and, ultimately, what Luna uses to **track performance at a very granular level**.
 
+- An **internal design agent** improves custom component requests before building them (plan the exact layout, build, review) so the visual result is excellent — e.g. a 3×3 grid puzzle of word pairs must come out as a clean tile grid.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

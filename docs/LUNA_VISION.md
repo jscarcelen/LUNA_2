@@ -132,6 +132,8 @@ Consequences for the product:
 
 - The component design agent must **expand simple requests like an expert** (a 4×4 grid = 16 tiles; only touching edges carry word pairs, outer edges empty; edge words aligned with their edge; the interactive version lets the child move tiles to rebuild the grid, the printable lets the teacher cut them).
 
+- Component design rules the founder pointed out (to be applied automatically): no double borders (the tile's box is the cut line); for matching puzzles name the content as numbered pairs (1a/1b, 2a/2b…) so matching edges are guaranteed by construction; the chatbot should accept **reference images** (a worksheet, a drawing) to copy format and shapes for complex components.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

@@ -5,6 +5,7 @@
  * performance can be tracked per question, topic and activity.
  */
 import type { FieldDef } from "../../template-studio/engine/types";
+import { deriveData } from "../../template-studio/engine/derive";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
@@ -117,13 +118,15 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
 }
 
 /** Builds the interactive activity from a template/agent field tree and its data. */
-export function buildActivity(fields: FieldDef[], data: Row, meta: Partial<Activity["meta"]> & { title?: string } = {}): Activity {
+export function buildActivity(fields: FieldDef[], rawData: Row, meta: Partial<Activity["meta"]> & { title?: string } = {}): Activity {
+  const data = deriveData(fields, rawData as never) as Row;
   const questions: ActivityQuestion[] = [];
   const rootText = (names: string[]) => { for (const f of fields) if (f.type !== "array" && names.includes(slug(f.name).replace(/^[a-z_]+?_(title|subtitle)$/, "$1"))) { const v = data[slug(f.name)]; if (v) return text(v); } return ""; };
   const title = meta.title || rootText(["title", "header_title", "document_title"]) || text(pick(data, "title")) || "Activity";
   const subtitle = rootText(["subtitle", "header_subtitle"]) || text(pick(data, "subtitle")) || undefined;
+  const derivedSources = new Set(fields.filter((f) => f.derive).map((f) => slug(f.derive!.from)));
   for (const field of fields) {
-    if (field.type !== "array") continue;
+    if (field.type !== "array" || derivedSources.has(slug(field.name))) continue;
     const key = Object.keys(data).find((k) => slug(k) === slug(field.name)) || (field === fields.find((f) => f.type === "array") ? "items" : undefined);
     const rows = key ? data[key] : undefined;
     if (!Array.isArray(rows)) continue;

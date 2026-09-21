@@ -29,6 +29,11 @@ export interface FieldDef {
   fromInputId?: string;
   /** Lists: how many elements previews/sample data should show (e.g. 16 for a 4×4 puzzle). */
   sampleCount?: number;
+  /**
+   * Derived lists are computed from another list instead of being generated: e.g. square-puzzle
+   * tiles (Top/Right/Bottom/Left) computed from word pairs so matching edges are guaranteed.
+   */
+  derive?: { kind: "tarsia"; from: string; size?: number };
 }
 
 /* ---------------------------------------------------------------- template → layout → view */

@@ -16,6 +16,7 @@ export function ComponentChat({ onBuilt }: { onBuilt: (block: BlockDef) => void 
   const [busy, setBusy] = useState(false);
   const [messages, setMessages] = useState<{ role: "user" | "luna"; text: string }[]>([]);
   const [last, setLast] = useState<DslComponent | null>(null);
+  const [image, setImage] = useState<string>("");
 
   async function send() {
     const text = prompt.trim();
@@ -24,12 +25,13 @@ export function ComponentChat({ onBuilt }: { onBuilt: (block: BlockDef) => void 
     setPrompt("");
     setBusy(true);
     try {
-      const response = await fetch("/api/templates/component-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, previous: last }) });
+      const response = await fetch("/api/templates/component-chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prompt: text, previous: last, image }) });
       const data = await response.json();
       if (!response.ok || !data.dsl) throw new Error(data.error || "Could not build the component");
       const block = blockFromDsl(data.dsl as DslComponent);
       saveBlockToLibrary(block);
       setLast(data.dsl);
+      setImage("");
       setMessages((m) => [...m, { role: "luna", text: `${data.reply || "Done."} It is in My blocks — insert it, or tell me what to change.` }]);
       onBuilt(block);
     } catch (error) {
@@ -49,7 +51,14 @@ export function ComponentChat({ onBuilt }: { onBuilt: (block: BlockDef) => void 
         <div className="mt-2 grid gap-1.5">
           {messages.length ? <div className="grid max-h-40 gap-1 overflow-y-auto">{messages.map((m, i) => <p key={i} className={`m-0 rounded-lg px-2 py-1 text-[10.5px] ${m.role === "user" ? "bg-white text-ink" : "bg-[var(--accent)] text-white"}`}>{m.text}</p>)}</div> : null}
           <textarea className={`${fieldBase} min-h-14 w-full text-xs`} value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); send(); } }} placeholder={last ? "Change something… e.g. make the boxes bigger, add a hint" : "What do you need? e.g. a word bank with 8 boxes and a picture space"} />
-          <button type="button" className="rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold text-white disabled:opacity-50" disabled={busy || !prompt.trim()} onClick={send}>{busy ? "Designing…" : last ? "Refine" : "Create component"}</button>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button type="button" className="rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold text-white disabled:opacity-50" disabled={busy || !prompt.trim()} onClick={send}>{busy ? "Designing…" : last ? "Refine" : "Create component"}</button>
+            <label className="cursor-pointer rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink hover:bg-white" title="Attach a picture of the layout you want (a worksheet, a drawing, a screenshot)">
+              {image ? "📎 Image attached" : "📎 Reference image"}
+              <input type="file" accept="image/*" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader(); reader.onload = () => setImage(String(reader.result || "")); reader.readAsDataURL(file); event.target.value = ""; }} />
+            </label>
+            {image ? <button type="button" className="text-[11px] text-soft-ink hover:text-[var(--color-danger)]" onClick={() => setImage("")}>✕</button> : null}
+          </div>
         </div>
       ) : null}
     </div>

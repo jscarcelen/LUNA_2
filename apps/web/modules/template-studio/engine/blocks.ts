@@ -867,11 +867,15 @@ function kidsMultipleChoice(): BlockDef {
 
 
 function squarePuzzle(): BlockDef {
-  const top = createField("Top", "text", { description: "Word on the top edge; empty when the tile is on the top row of the solved grid", required: false });
-  const right = createField("Right", "text", { description: "Word on the right edge; empty on the rightmost column", required: false });
-  const bottom = createField("Bottom", "text", { description: "Word on the bottom edge; empty on the bottom row", required: false });
-  const left = createField("Left", "text", { description: "Word on the left edge; empty on the leftmost column", required: false });
-  const tiles = createField("Tiles", "array", { description: "Exactly 16 tiles listed in solved order (row by row, 4 per row). Touching edges carry a matching pair: a tile's Right equals the translation/definition of the next tile's Left, and its Bottom pairs with the tile below's Top. Outer edges of the grid stay empty.", sampleCount: 16, children: [createField("item", "object", { children: [top, right, bottom, left] })] });
+  // The agent produces PAIRS; the tiles (and which edge carries which word) are computed, so matching edges are guaranteed.
+  const wordA = createField("Word A", "text", { description: "First half of the pair, e.g. the English word" });
+  const wordB = createField("Word B", "text", { description: "Its match, e.g. the Spanish translation or the definition" });
+  const pairs = createField("Pairs", "array", { description: "Exactly 24 matching pairs (a 4×4 puzzle has 24 touching edges). Pair k is placed on one edge: Word A on one tile, Word B on the neighbouring tile. Use distinct pairs.", sampleCount: 24, children: [createField("item", "object", { children: [wordA, wordB] })] });
+  const top = createField("Top", "text", { required: false });
+  const right = createField("Right", "text", { required: false });
+  const bottom = createField("Bottom", "text", { required: false });
+  const left = createField("Left", "text", { required: false });
+  const tiles = createField("Tiles", "array", { description: "Computed from Pairs: 16 tiles in solved order with the word on each edge", sampleCount: 16, derive: { kind: "tarsia", from: "Pairs", size: 4 }, children: [createField("item", "object", { children: [top, right, bottom, left] })] });
   const title = createField("Title", "text");
   const tile = createGroup({
     name: "Tile",
@@ -882,11 +886,8 @@ function squarePuzzle(): BlockDef {
     children: [
       tx(top.id, "perro", { x: 4, y: 1.5, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
       tx(bottom.id, "casa", { x: 4, y: 35.5, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
-      // Side words run along their edge (rotated ±90°): the frame is the unrotated box centred on the edge.
       tx(left.id, "dog", { x: -13, y: 18.5, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b", rotate: -90 }),
-      tx(right.id, "cat", { x: 21, y: 18.5, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b", rotate: 90 }),
-      createShape("line", { frame: { x: 4, y: 21.5, w: 35, h: 0.3 }, style: defaultStyle({ stroke: "#f0c2cf", strokeWidth: 0.3 }) }),
-      createShape("line", { frame: { x: 21.5, y: 4, w: 0.3, h: 35 }, style: defaultStyle({ stroke: "#f0c2cf", strokeWidth: 0.3 }) })
+      tx(right.id, "cat", { x: 21, y: 18.5, w: 35, h: 6 }, { fontSize: 8.5, fontWeight: "bold", align: "center", color: "#1f2a6b", rotate: 90 })
     ]
   });
   const group = createGroup({
@@ -900,7 +901,7 @@ function squarePuzzle(): BlockDef {
       createGroup({ name: "Tiles", frame: { x: 0, y: 19, w: 186, h: 43 }, layout: { mode: "grid", gap: 3, columns: 4 }, repeat: { fieldId: tiles.id, mode: "grid", columns: 4 }, children: [tile] })
     ]
   });
-  return { id: "block-square-puzzle", family: "Square puzzle", variant: "Edge-matching tiles 4×4", name: "Square puzzle", description: "16 cut-apart square tiles with words along their edges; matching edges (word ↔ translation/definition) go side by side. Interactive: the child rebuilds the grid.", category: "kids", icon: "▦", fields: [title, tiles], elements: [group], options: [{ key: "instruction", label: "Instruction", default: true }], accent: A, builtIn: true };
+  return { id: "block-square-puzzle", family: "Square puzzle", variant: "Edge-matching tiles 4×4", name: "Square puzzle", description: "16 cut-apart tiles built from 24 word pairs; each pair sits on one shared edge, so the solved grid always matches. Interactive: the child rebuilds the grid.", category: "kids", icon: "▦", fields: [title, pairs, tiles], elements: [group], options: [{ key: "instruction", label: "Instruction", default: true }], accent: A, builtIn: true };
 }
 
 export function builtInBlocks(): BlockDef[] {

@@ -48,6 +48,6 @@ function sampleFor(field: FieldDef, index: number, hints: Record<string, string>
 export function buildSampleData(template: Template, itemCount = 3): DataObject {
   const hints = placeholders(template);
   const data: DataObject = {};
-  for (const field of template.fields) data[slug(field.name)] = sampleFor(field, 0, hints, itemCount);
+  for (const field of template.fields) if (!field.derive) data[slug(field.name)] = sampleFor(field, 0, hints, itemCount);
   return data;
 }

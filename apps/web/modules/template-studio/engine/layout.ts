@@ -4,6 +4,7 @@ import type {
 } from "./types";
 import { findField } from "./model";
 import { resolveFieldValue, resolveSource, resolveView, richTextToLines, valueToText, type Scope } from "./resolve";
+import { deriveData } from "./derive";
 
 const MM_PER_PT = 0.352778;
 
@@ -345,7 +346,8 @@ function continuationTop(page: Page, group: GroupElement, layout: Layout): numbe
  * Lays out a whole layout/view against data. Pages with a page-repeat group emit one page per item.
  * Page scopes "first"/"last" are resolved after all pages exist.
  */
-export function layoutDocument(template: Template, data: DataObject, options: { layoutId?: ID; viewId?: ID | null } = {}): LayoutResult {
+export function layoutDocument(template: Template, rawData: DataObject, options: { layoutId?: ID; viewId?: ID | null } = {}): LayoutResult {
+  const data = deriveData(template.fields, rawData);
   const layout = template.layouts.find((item) => item.id === options.layoutId) || template.layouts[0];
   const ctx: Ctx = { fields: template.fields, overflows: [], itemCounts: {}, pageIndex: () => 0 };
   const out: LaidOutPage[] = [];

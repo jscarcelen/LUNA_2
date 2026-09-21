@@ -24,7 +24,7 @@ export interface DslComponent {
   /** Fields once per document. */
   fields: DslField[];
   /** Name of the repeating list and the fields of each of its items (omit for a once-only block). */
-  list?: { name: string; itemFields: DslField[]; description?: string; columns?: number; sampleCount?: number } | null;
+  list?: { name: string; itemFields: DslField[]; description?: string; columns?: number; sampleCount?: number; derive?: "" | "tarsia" } | null;
   /** Elements of one item (or of the block when there is no list). */
   elements: DslElement[];
   /** Elements drawn once above the repeating part (title etc.). */
@@ -64,6 +64,14 @@ export function blockFromDsl(dsl: DslComponent): BlockDef {
     const itemFields = (dsl.list.itemFields || []).map(fieldDef);
     itemFields.forEach((f) => byName.set(f.name.toLowerCase(), f));
     listField = createField(dsl.list.name, "array", { description: dsl.list.description, sampleCount: dsl.list.sampleCount || undefined, children: [createField("item", "object", { children: itemFields })] });
+    if (dsl.list.derive === "tarsia") {
+      // Tiles are computed from pairs: the agent only produces the pairs, so matching edges are guaranteed.
+      const n = Math.max(2, Math.round(Math.sqrt(dsl.list.sampleCount || 16)));
+      const pairsField = createField("Pairs", "array", { description: `Exactly ${2 * n * (n - 1)} matching pairs (a ${n}×${n} puzzle has that many touching edges). Word A on one tile, Word B on the neighbouring tile. Distinct pairs.`, sampleCount: 2 * n * (n - 1), children: [createField("item", "object", { children: [createField("Word A", "text", { description: "First half of the pair" }), createField("Word B", "text", { description: "Its match (translation / definition)" })] })] });
+      listField.derive = { kind: "tarsia", from: "Pairs", size: n };
+      listField.sampleCount = n * n;
+      once.push(pairsField);
+    }
   }
   const headerEls = (dsl.header || []).map((el) => elementFrom(el, byName)).filter((el): el is Element => Boolean(el));
   const itemEls = (dsl.elements || []).map((el) => elementFrom(el, byName)).filter((el): el is Element => Boolean(el));

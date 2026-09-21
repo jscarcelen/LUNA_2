@@ -40,7 +40,7 @@ export function outputJsonSchema(outputSchema: FieldDef[]): JsonSchema {
   const primary = outputSchema.find((field) => field.type === "array");
   const properties: Record<string, JsonSchema> = {};
   for (const field of outputSchema) {
-    if (field.fromInputId) continue; // document data comes from the user's choices, not the model
+    if (field.fromInputId || field.derive) continue; // user data / derived lists are not generated
     if (field === primary) properties.items = { ...fieldToJsonSchema(primary), minItems: 1 };
     else properties[slug(field.name)] = fieldToJsonSchema(field);
   }
@@ -70,6 +70,7 @@ export function outputSkeleton(outputSchema: FieldDef[]): string {
     if (field.type === "object") return `{\n${(field.children || []).map((child) => `${indent}  "${slug(child.name)}": ${render(child, `${indent}  `)}`).join(",\n")}\n${indent}}`;
     return hint(field);
   };
+  outputSchema = outputSchema.filter((field) => !field.derive);
   const lines = outputSchema.map((field, index) => `  "${outputKey(outputSchema, field)}": ${render(field, "  ")}${index < outputSchema.length - 1 ? "," : ""}${field.type !== "array" ? "   // once per document" : ""}`);
   return `{\n${lines.join("\n")}\n}`;
 }

@@ -247,3 +247,28 @@ describe("tile puzzle activity", () => {
     expect(gradeActivity(activity, { tiles_tiles: [1, 0, 2, 3] }).score).toBe(0);
   });
 });
+
+describe("tarsia derivation", () => {
+  it("computes 16 tiles from 24 pairs with matching edges and empty outer edges", async () => {
+    const { tilesFromPairs, tarsiaPairCount } = await import("../../modules/template-studio/engine/derive");
+    expect(tarsiaPairCount(4)).toBe(24);
+    const pairs = Array.from({ length: 24 }, (_, k) => ({ word_a: `${k + 1}a`, word_b: `${k + 1}b` }));
+    const tiles = tilesFromPairs(pairs, 4);
+    expect(tiles).toHaveLength(16);
+    for (let r = 0; r < 4; r += 1) for (let c = 0; c < 4; c += 1) {
+      const t = tiles[r * 4 + c];
+      if (r === 0) expect(t.top).toBe(""); if (r === 3) expect(t.bottom).toBe(""); if (c === 0) expect(t.left).toBe(""); if (c === 3) expect(t.right).toBe("");
+      if (c < 3) expect(String(t.right).replace("a", "")).toBe(String(tiles[r * 4 + c + 1].left).replace("b", ""));
+      if (r < 3) expect(String(t.bottom).replace("a", "")).toBe(String(tiles[(r + 1) * 4 + c].top).replace("b", ""));
+    }
+    // The built-in block: sample data has pairs only; layout derives the tiles.
+    const template = createTemplate("P");
+    const { fields, elements } = instantiateBlock(byName("Square puzzle"), template.fields);
+    template.fields = fields; template.layouts[0].pages[0].elements = elements;
+    const data = buildSampleData(template, 4) as Record<string, unknown>;
+    expect(data.tiles).toBeUndefined();
+    expect((data.pairs as unknown[]).length).toBe(24);
+    const result = layoutDocument(template, data);
+    expect(result.itemCounts[(elements[0] as { children: { id: string }[] }).children[2].id]).toBe(16);
+  });
+});

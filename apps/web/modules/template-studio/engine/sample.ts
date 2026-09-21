@@ -22,7 +22,18 @@ function sampleFor(field: FieldDef, index: number, hints: Record<string, string>
       const item = field.children?.[0];
       if (!item) return [];
       const count = field.sampleCount || (item.type === "object" ? itemCount : 3);
-      return Array.from({ length: count }, (_, i) => (item.type === "object" ? sampleFor(item, i, hints, itemCount) : hint ? `${hint} ${i + 1}` : `${field.name} ${i + 1}`));
+      const rows = Array.from({ length: count }, (_, i) => (item.type === "object" ? sampleFor(item, i, hints, itemCount) : hint ? `${hint} ${i + 1}` : `${field.name} ${i + 1}`));
+      // Edge-matching tiles: the grid's outer edges carry no word, like a real solved puzzle.
+      const side = Math.round(Math.sqrt(count));
+      const edgeKeys = ["top", "right", "bottom", "left"];
+      if (item.type === "object" && side * side === count && side > 1 && edgeKeys.every((k) => (item.children || []).some((c) => slug(c.name) === k))) {
+        rows.forEach((row, i) => {
+          const r = row as Record<string, DataValue>;
+          const col = i % side; const line = Math.floor(i / side);
+          if (line === 0) r.top = ""; if (line === side - 1) r.bottom = ""; if (col === 0) r.left = ""; if (col === side - 1) r.right = "";
+        });
+      }
+      return rows;
     }
     default: {
       if (field.options && field.options.length) return field.options[index % field.options.length];

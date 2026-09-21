@@ -99,6 +99,18 @@ function normalise(dsl) {
     return e;
   });
   if (dsl.list) {
+    // Bind every field element to a real field name (exact, then fuzzy); static labels that just repeat a field name become that field.
+    const names = [...(dsl.list.itemFields || []), ...(dsl.fields || [])].map((f) => f.name);
+    const resolve = (raw) => {
+      const key = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (!key) return "";
+      return names.find((n) => n.toLowerCase().replace(/[^a-z0-9]/g, "") === key) || names.find((n) => key.includes(n.toLowerCase().replace(/[^a-z0-9]/g, "")) || n.toLowerCase().replace(/[^a-z0-9]/g, "").includes(key)) || "";
+    };
+    dsl.elements = dsl.elements.map((e) => {
+      if (e.kind === "field") { const name = resolve(e.field); return name ? { ...e, field: name } : { ...e, kind: "text", text: e.text || e.field || "" }; }
+      if (e.kind === "text") { const name = resolve(e.text); return name && String(e.text || "").trim().length <= name.length + 2 ? { ...e, kind: "field", field: name } : e; }
+      return e;
+    });
     const shown = new Set(dsl.elements.filter((e) => e.kind === "field").map((e) => String(e.field || "").toLowerCase()));
     const missing = (dsl.list.itemFields || []).filter((f) => !shown.has(String(f.name).toLowerCase()));
     missing.forEach((f, index) => dsl.elements.push({ kind: "field", field: f.name, text: f.name, x: 3, y: 4 + index * 8, w: cellW - 6, h: 7, size: 11, bold: index === 0, align: columns > 1 ? "center" : "left" }));

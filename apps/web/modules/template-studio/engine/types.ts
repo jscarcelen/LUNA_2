@@ -27,6 +27,8 @@ export interface FieldDef {
   options?: string[];
   /** Document data: filled from the user's answer to this agent input (date, topic…) instead of being generated. */
   fromInputId?: string;
+  /** Lists: how many elements previews/sample data should show (e.g. 16 for a 4×4 puzzle). */
+  sampleCount?: number;
 }
 
 /* ---------------------------------------------------------------- template → layout → view */
@@ -125,6 +127,8 @@ export interface Style {
   strokeWidth?: number;
   radius?: number;
   opacity?: number;
+  /** Text rotation in degrees about the element centre (90 reads bottom→top, -90 top→bottom). */
+  rotate?: number;
 }
 
 export type ContentSource =

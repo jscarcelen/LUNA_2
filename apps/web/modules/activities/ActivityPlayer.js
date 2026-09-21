@@ -24,9 +24,10 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
   const [answers, setAnswers] = useState({});
   const [attempt, setAttempt] = useState(null);
   const [flipped, setFlipped] = useState({});
+  const [pickedTile, setPickedTile] = useState(null);
   const [startedAt] = useState(() => Date.now());
   const set = (id, value) => setAnswers((prev) => ({ ...prev, [id]: value }));
-  const answered = activity.questions.filter((q) => { const v = answers[q.id]; return q.kind === "match" ? v && Object.keys(v).length === (q.pairs || []).length : v !== undefined && v !== ""; }).length;
+  const answered = activity.questions.filter((q) => { const v = answers[q.id]; return q.kind === "match" ? v && Object.keys(v).length === (q.pairs || []).length : q.kind === "tiles" ? Array.isArray(v) && !v.includes(null) : v !== undefined && v !== ""; }).length;
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
   function check() {
@@ -66,7 +67,7 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-sm font-bold text-white">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 {q.group ? <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{q.group}</p> : null}
-                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? "Match each pair" : q.prompt}</p>
+                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? "Match each pair" : q.kind === "tiles" ? "Rebuild the grid — matching edges together" : q.prompt}</p>
 
                 {q.kind === "choice" ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -108,6 +109,54 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
                     })}
                   </div>
                 ) : null}
+
+                {q.kind === "tiles" ? (() => {
+                  const tiles = q.tiles || [];
+                  const cols = q.columns || 4;
+                  const order = answers[q.id] || shuffle(tiles.map((_, i) => i), tiles.length * 7);
+                  const placement = Array.isArray(answers[q.id]) ? answers[q.id] : null; // slot → tile index
+                  const slots = placement || Array(tiles.length).fill(null);
+                  const tray = tiles.map((_, i) => i).filter((i) => !slots.includes(i));
+                  const put = (slot) => {
+                    if (pickedTile === null || locked) return;
+                    const next = [...slots];
+                    const from = next.indexOf(pickedTile);
+                    if (from >= 0) next[from] = next[slot];
+                    next[slot] = pickedTile;
+                    set(q.id, next);
+                    setPickedTile(null);
+                  };
+                  const Tile = ({ t, i, small }) => (
+                    <div className={`relative grid place-items-center rounded-lg border text-[10px] font-semibold text-[#1f2a6b] ${pickedTile === i ? "border-[var(--accent)] ring-2 ring-[var(--accent-soft)]" : "border-[#e39ab1]"}`} style={{ background: "#ffe4ec", width: small ? 64 : 84, height: small ? 64 : 84 }}>
+                      <span className="absolute top-0.5 left-1 right-1 truncate text-center">{t.top}</span>
+                      <span className="absolute bottom-0.5 left-1 right-1 truncate text-center">{t.bottom}</span>
+                      <span className="absolute left-0 top-1/2 origin-center -translate-y-1/2 -rotate-90 whitespace-nowrap" style={{ transform: "translate(-30%,-50%) rotate(-90deg)" }}>{t.left}</span>
+                      <span className="absolute right-0 top-1/2 whitespace-nowrap" style={{ transform: "translate(30%,-50%) rotate(90deg)" }}>{t.right}</span>
+                    </div>
+                  );
+                  void order;
+                  return (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[auto_1fr]">
+                      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cols}, 84px)` }}>
+                        {slots.map((tileIndex, slot) => {
+                          const good = result ? tileIndex === slot : null;
+                          return (
+                            <button key={slot} type="button" disabled={locked} onClick={() => (tileIndex !== null && pickedTile === null ? setPickedTile(tileIndex) : put(slot))} className={`grid place-items-center rounded-lg border-2 border-dashed ${good === true ? "border-[rgba(52,199,89,0.7)]" : good === false ? "border-[rgba(255,59,48,0.6)]" : "border-ink/15"}`} style={{ width: 88, height: 88 }}>
+                              {tileIndex !== null ? <Tile t={tiles[tileIndex]} i={tileIndex} /> : <span className="text-[10px] text-soft-ink">{slot + 1}</span>}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div>
+                        <p className="m-0 text-xs text-soft-ink">Tap a tile, then tap a slot. Touching edges must match (word ↔ translation).</p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {tray.map((i) => <button key={i} type="button" disabled={locked} onClick={() => setPickedTile(pickedTile === i ? null : i)}><Tile t={tiles[i]} i={i} small /></button>)}
+                          {!tray.length ? <span className="text-xs text-soft-ink">All tiles placed — tap two placed tiles to swap them.</span> : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })() : null}
 
                 {q.kind === "flashcard" ? (
                   <div className="mt-3 grid gap-2">

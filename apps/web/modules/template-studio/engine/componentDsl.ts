@@ -15,7 +15,8 @@ export interface DslElement {
   x: number; y: number; w: number; h: number;
   size?: number; bold?: boolean; color?: string; align?: "left" | "center" | "right";
   fill?: string; stroke?: string; radius?: number;
-  /** Optional: this element belongs to the repeating item (default when the block repeats). */
+  /** Text rotation: 90 (reads bottom→top) or -90 (top→bottom); frame = the unrotated box centred where the text goes. */
+  rotate?: number;
 }
 export interface DslComponent {
   name: string;
@@ -23,7 +24,7 @@ export interface DslComponent {
   /** Fields once per document. */
   fields: DslField[];
   /** Name of the repeating list and the fields of each of its items (omit for a once-only block). */
-  list?: { name: string; itemFields: DslField[]; description?: string; columns?: number } | null;
+  list?: { name: string; itemFields: DslField[]; description?: string; columns?: number; sampleCount?: number } | null;
   /** Elements of one item (or of the block when there is no list). */
   elements: DslElement[];
   /** Elements drawn once above the repeating part (title etc.). */
@@ -40,7 +41,7 @@ const fieldDef = (f: DslField): FieldDef => {
 
 function elementFrom(el: DslElement, byName: Map<string, FieldDef>): Element | null {
   const frame = { x: Number(el.x) || 0, y: Number(el.y) || 0, w: Math.max(1, Number(el.w) || 10), h: Math.max(0.3, Number(el.h) || 6) };
-  const style = defaultStyle({ fontSize: el.size || 10, fontWeight: el.bold ? "bold" : "normal", color: el.color || "#1d1d1f", align: el.align || "left", fill: el.fill, stroke: el.stroke, strokeWidth: el.stroke ? 0.35 : undefined, radius: el.radius });
+  const style = defaultStyle({ fontSize: el.size || 10, fontWeight: el.bold ? "bold" : "normal", color: el.color || "#1d1d1f", align: el.align || "left", fill: el.fill, stroke: el.stroke, strokeWidth: el.stroke ? 0.35 : undefined, radius: el.radius, rotate: el.rotate || undefined });
   if (el.kind === "text") return createText({ type: "static", value: String(el.text || "") }, { frame, style });
   if (el.kind === "field") {
     const field = byName.get(String(el.field || "").toLowerCase());
@@ -62,7 +63,7 @@ export function blockFromDsl(dsl: DslComponent): BlockDef {
   if (dsl.list && dsl.list.name) {
     const itemFields = (dsl.list.itemFields || []).map(fieldDef);
     itemFields.forEach((f) => byName.set(f.name.toLowerCase(), f));
-    listField = createField(dsl.list.name, "array", { description: dsl.list.description, children: [createField("item", "object", { children: itemFields })] });
+    listField = createField(dsl.list.name, "array", { description: dsl.list.description, sampleCount: dsl.list.sampleCount || undefined, children: [createField("item", "object", { children: itemFields })] });
   }
   const headerEls = (dsl.header || []).map((el) => elementFrom(el, byName)).filter((el): el is Element => Boolean(el));
   const itemEls = (dsl.elements || []).map((el) => elementFrom(el, byName)).filter((el): el is Element => Boolean(el));

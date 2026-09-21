@@ -130,6 +130,8 @@ Consequences for the product:
 
 - An **internal design agent** improves custom component requests before building them (plan the exact layout, build, review) so the visual result is excellent — e.g. a 3×3 grid puzzle of word pairs must come out as a clean tile grid.
 
+- The component design agent must **expand simple requests like an expert** (a 4×4 grid = 16 tiles; only touching edges carry word pairs, outer edges empty; edge words aligned with their edge; the interactive version lets the child move tiles to rebuild the grid, the printable lets the teacher cut them).
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

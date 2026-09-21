@@ -233,3 +233,17 @@ describe("component DSL", () => {
     expect(Math.max(...rects.map((r) => r.x + r.w))).toBeLessThanOrEqual(198.5);
   });
 });
+
+describe("tile puzzle activity", () => {
+  it("turns edge tiles into one rebuild-the-grid question and grades placement", async () => {
+    const { buildActivity, gradeActivity } = await import("../../modules/activities/engine/activity");
+    const template = createTemplate("P");
+    const { fields } = instantiateBlock(byName("Square puzzle"), template.fields);
+    const tiles = Array.from({ length: 4 }, (_, i) => ({ top: i < 2 ? "" : `t${i}`, right: i % 2 === 0 ? `r${i}` : "", bottom: i < 2 ? `b${i}` : "", left: i % 2 === 1 ? `l${i}` : "" }));
+    const activity = buildActivity(fields, { title: "Puzzle", tiles } as unknown as Record<string, unknown>);
+    expect(activity.questions.map((q) => q.kind)).toEqual(["tiles"]);
+    expect(activity.questions[0].columns).toBe(2);
+    expect(gradeActivity(activity, { tiles_tiles: [0, 1, 2, 3] }).score).toBe(1);
+    expect(gradeActivity(activity, { tiles_tiles: [1, 0, 2, 3] }).score).toBe(0);
+  });
+});

@@ -6,7 +6,7 @@
  */
 import type { FieldDef } from "../../template-studio/engine/types";
 
-export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard";
+export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
 export interface ActivityQuestion {
   id: string;
@@ -24,6 +24,9 @@ export interface ActivityQuestion {
   topic?: string;
   /** Flashcard back side. */
   back?: string;
+  /** Tile puzzle: tiles in solved order (row-major) with their edge words; `columns` per row. */
+  tiles?: { top: string; right: string; bottom: string; left: string }[];
+  columns?: number;
 }
 
 export interface Activity {
@@ -61,6 +64,14 @@ function pick(row: Row, ...names: string[]): unknown {
 
 /** Questions derived from one list of items. */
 function questionsFromList(items: Row[], listName: string, group: string | undefined, out: ActivityQuestion[]): void {
+  // Edge-matching tiles (square puzzle): one question — rebuild the grid.
+  const isTiles = items.length > 1 && items.every((item) => (pick(item, "top") !== undefined || pick(item, "bottom") !== undefined) && (pick(item, "left") !== undefined || pick(item, "right") !== undefined) && pick(item, "question") === undefined) && items.some((item) => pick(item, "top") !== undefined || pick(item, "bottom") !== undefined);
+  if (isTiles) {
+    const tiles = items.map((item) => ({ top: text(pick(item, "top")), right: text(pick(item, "right")), bottom: text(pick(item, "bottom")), left: text(pick(item, "left")) }));
+    const columns = Math.max(2, Math.round(Math.sqrt(tiles.length)));
+    out.push({ id: `${slug(listName)}_tiles`, kind: "tiles", prompt: group || "Rebuild the grid so that touching edges match", group, tiles, columns, answer: tiles.map((_, index) => String(index)).join(",") });
+    return;
+  }
   // Matching lists (left ↔ right) become ONE matching question.
   const isPairs = items.length > 1 && items.every((item) => pick(item, "left") !== undefined && pick(item, "right") !== undefined);
   if (isPairs) {
@@ -131,7 +142,14 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
     const given = answers[question.id];
     let correct: boolean | null = null;
     let expected = "";
-    if (question.kind === "match") {
+    if (question.kind === "tiles") {
+      // given = tile index per slot, row-major. Correct when every slot holds the tile that was there in the solved grid.
+      const placed = Array.isArray(given) ? (given as (number | null)[]) : [];
+      const total = (question.tiles || []).length;
+      const right = placed.filter((tileIndex, slot) => tileIndex === slot).length;
+      correct = total > 0 && right === total;
+      expected = `${right} of ${total} tiles in place`;
+    } else if (question.kind === "match") {
       const map = question.answer as Record<string, string>;
       const g = (given || {}) as Record<string, string>;
       correct = Object.entries(map).every(([left, right]) => norm(g[left]) === norm(right));
@@ -148,7 +166,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
       correct = given === undefined || given === "" ? false : norm(given) === norm(question.answer);
       expected = String(question.answer);
     }
-    return { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, correct, given: typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
+    return { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
   });
   const graded = results.filter((r) => r.correct !== null);
   return { activityId: activity.id, activityTitle: activity.title, at: new Date().toISOString(), score: graded.filter((r) => r.correct).length, total: graded.length, durationMs: startedAt ? Date.now() - startedAt : undefined, results };

@@ -123,7 +123,7 @@ export function ElementView(props: ElementViewProps) {
         data-element-id={ghost ? undefined : element.id}
         onPointerDown={ghost ? undefined : (event) => onPointerDown(event, element)}
         className={`absolute select-none ${ghost ? "" : element.locked ? "cursor-default" : "cursor-move"} ${selected ? "z-20" : "z-10"} ${selected ? "" : hoverClass}`}
-        style={{ left: px(x), top: px(y), width: px(w), minHeight: px(Math.max(h, 1)), height: isGroup ? px(stackedHeight) : undefined, outline, outlineOffset: 1, ...groupBox }}
+        style={{ left: px(x), top: px(y), width: px(w), minHeight: px(Math.max(h, 1)), height: isGroup ? px(stackedHeight) : undefined, outline, outlineOffset: 1, ...groupBox, ...(style.rotate ? { transform: `rotate(${style.rotate}deg)`, transformOrigin: "center center" } : {}) }}
       >
         {group ? (
           <>

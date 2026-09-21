@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
 import { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } from "docx";
 import { layoutDocument, lineHeightMm } from "./docModel.js";
 
@@ -35,7 +35,8 @@ export function renderDocHtml(template, data = {}, { showFieldMarkers = false, p
       if (item.type === "image") return item.src ? `<img src="${escapeHtml(item.src)}" alt="" style="${base}height:${item.h}mm;object-fit:contain;" />` : `<div style="${base}height:${item.h}mm;border:0.3mm dashed #c7c7cc;border-radius:1mm;"></div>`;
       const marker = showFieldMarkers && item.isField ? `<span style="position:absolute;top:-3.2mm;left:0;font-size:6pt;color:#0060c0;background:#eef2ff;padding:0 1mm;border-radius:1mm;">AI · ${escapeHtml(item.path)}</span>` : "";
       const fieldStyle = item.isField && !item.hasValue ? "color:#0060c0;background:rgba(0,113,227,0.06);border-radius:1mm;" : "";
-      return `<div style="${base}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.lines.map(escapeHtml).join("\n")}</div>`;
+      const rotate = Number(item.style.rotate) ? `transform:rotate(${Number(item.style.rotate)}deg);transform-origin:center center;` : "";
+      return `<div style="${base}${rotate}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.lines.map(escapeHtml).join("\n")}</div>`;
     }).join("\n");
     return `<section class="doc-page" style="position:relative;width:${page.width}mm;height:${page.height}mm;background:${pageColor};overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.12);margin:0 auto 10mm;page-break-after:always;">${bg}${items}</section>`;
   }).join("\n");
@@ -129,7 +130,17 @@ export async function renderDocPdfBuffer(template, data = {}, { prelaid = null }
         const flush = () => {
           const textWidth = font.widthOfTextAtSize(line, fontSize);
           const offset = item.style.align === "center" ? (w - textWidth) / 2 : item.style.align === "right" ? w - textWidth : 0;
-          pdfPage.drawText(line, { x: x + Math.max(0, offset), y: cursorY, size: fontSize, font, color: rgb(color.r, color.g, color.b) });
+          const deg = Number(item.style.rotate) || 0;
+          if (deg) {
+            // Rotate about the box centre: the text runs along the box's long side, turned ±90°.
+            const cx = x + w / 2;
+            const cy = pageH - top - h / 2;
+            const half = textWidth / 2;
+            if (deg > 0) pdfPage.drawText(line, { x: cx + fontSize * 0.35, y: cy - half, size: fontSize, font, color: rgb(color.r, color.g, color.b), rotate: degrees(90) });
+            else pdfPage.drawText(line, { x: cx - fontSize * 0.35, y: cy + half, size: fontSize, font, color: rgb(color.r, color.g, color.b), rotate: degrees(-90) });
+          } else {
+            pdfPage.drawText(line, { x: x + Math.max(0, offset), y: cursorY, size: fontSize, font, color: rgb(color.r, color.g, color.b) });
+          }
           cursorY -= lh;
           line = "";
         };
@@ -204,7 +215,7 @@ export async function renderDocPptxBuffer(template, data = {}, { prelaid = null 
         if (item.src) slide.addImage({ ...box, data: item.src.startsWith("data:") ? item.src : undefined, path: item.src.startsWith("data:") ? undefined : item.src, sizing: { type: "contain", w: box.w, h: box.h } });
         continue;
       }
-      slide.addText(item.lines.join("\n"), { ...box, fontSize: Number(item.style.fontSize) || 11, bold: item.style.fontWeight === "bold", color: String(item.style.color || "#1d1d1f").replace("#", ""), align: item.style.align || "left", valign: "top", fontFace: item.style.fontFamily === "serif" ? "Georgia" : item.style.fontFamily === "mono" ? "Courier New" : "Calibri", margin: 0 });
+      slide.addText(item.lines.join("\n"), { ...box, rotate: Number(item.style.rotate) ? (Number(item.style.rotate) > 0 ? 270 : 90) : 0, fontSize: Number(item.style.fontSize) || 11, bold: item.style.fontWeight === "bold", color: String(item.style.color || "#1d1d1f").replace("#", ""), align: item.style.align || "left", valign: "top", fontFace: item.style.fontFamily === "serif" ? "Georgia" : item.style.fontFamily === "mono" ? "Courier New" : "Calibri", margin: 0 });
     }
   }
   const output = await pptx.write({ outputType: "nodebuffer" });

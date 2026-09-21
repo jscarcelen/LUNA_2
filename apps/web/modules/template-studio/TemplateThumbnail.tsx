@@ -67,7 +67,7 @@ export function TemplateThumbnail({ template, width = 160 }: { template: any; wi
             const anchor = item.style.align === "center" ? "middle" : item.style.align === "right" ? "end" : "start";
             const tx = item.style.align === "center" ? x + iw / 2 : item.style.align === "right" ? x + iw : x;
             return (
-              <text key={`${item.elementId}-${index}`} fontSize={fs} fontWeight={item.style.fontWeight === "bold" ? 700 : 400} fill={item.style.color || "#1d1d1f"} fontFamily={item.style.fontFamily === "serif" ? "Georgia, serif" : item.style.fontFamily === "mono" ? "Menlo, monospace" : "-apple-system, Helvetica, Arial, sans-serif"} textAnchor={anchor}>
+              <text key={`${item.elementId}-${index}`} transform={item.style.rotate ? `rotate(${item.style.rotate} ${x + iw / 2} ${y + ih / 2})` : undefined} fontSize={fs} fontWeight={item.style.fontWeight === "bold" ? 700 : 400} fill={item.style.color || "#1d1d1f"} fontFamily={item.style.fontFamily === "serif" ? "Georgia, serif" : item.style.fontFamily === "mono" ? "Menlo, monospace" : "-apple-system, Helvetica, Arial, sans-serif"} textAnchor={anchor}>
                 {item.lines.slice(0, 40).map((line, lineIndex) => <tspan key={lineIndex} x={tx} y={y + fs * 0.95 + lineIndex * lineH}>{line}</tspan>)}
               </text>
             );

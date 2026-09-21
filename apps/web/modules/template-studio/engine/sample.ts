@@ -21,7 +21,7 @@ function sampleFor(field: FieldDef, index: number, hints: Record<string, string>
     case "array": {
       const item = field.children?.[0];
       if (!item) return [];
-      const count = item.type === "object" ? itemCount : 3;
+      const count = field.sampleCount || (item.type === "object" ? itemCount : 3);
       return Array.from({ length: count }, (_, i) => (item.type === "object" ? sampleFor(item, i, hints, itemCount) : hint ? `${hint} ${i + 1}` : `${field.name} ${i + 1}`));
     }
     default: {

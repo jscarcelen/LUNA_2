@@ -117,6 +117,9 @@ Consequences for the product:
 - The **JSON order follows the block order** (once components, agent-ordered sets, etc.) and keys are **MECE**, e.g. `component_field` (`header_title`).
 - Some values are **document data** (date, topic, course…) filled in **by the user**, not generated, and reused wherever the template needs them.
 
+- Template galleries show the **rendered first page** (A4 preferred, else slide size). Templates must be **easy to delete**.
+- A **hidden parallel agent (metaprompt generator)** improves the prompts the creator writes in the agent generator, so the agent's output matches what the user wants and the prompt quality is ensured — never disclosed to the user as a prompt.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

@@ -509,3 +509,9 @@
 - Manual builder: per-element fields have a value type plus a "Many values (list)" flag instead of a separate list type.
 - `compatibleAgents()` (mapping.ts): agents whose output matches every field a template uses (score ≥ 0.6). Shown as ✦ chips on template cards in the Template Studio gallery and the AI Tools hub, and in the Data tab. Built-in tools expose their `agent` config for this.
 - Composer: AI text / AI image fields (each a new named field), **Document data** section (Date, Topic, Course, Teacher, Class, custom) → creates an agent input and a once field with `fromInputId`; the runtime copies the user's answer into the output (excluded from the model schema). Component preview column on the right (`design/ComponentPreview.tsx`, shared with the Data tab) with inline field renaming. Once fields from blocks are prefixed with the component name (`header_title`); the output JSON is ordered by block order.
+
+## Rendered thumbnails, template delete, hidden metaprompt refiner (2026-09-20)
+
+- `TemplateThumbnail` renders the real first page (layout engine + sample data → SVG); prefers a paged layout; shows a page-count badge.
+- Template gallery/list: 🗑 delete with confirmation (`onDelete` → `onDeleteDocumentBlockTemplate`).
+- **Refined brief**: `POST /api/ai-tools/agent-builder/refine` (metaprompt agent) rewrites the creator's wording into a precise brief + implied rules + missing field descriptions; stored on the spec as `refined` with a `sourceHash` of intent/inputs/outputs (stale when the recipe changes). `compileAgent` uses it when current (union of user and refined rules; refined descriptions fill empty ones, also in the JSON schema). Triggered silently before the first test run ("Preparing…") and before saving; visible only under Advanced ("Refined brief", "Refine now", full prompt).

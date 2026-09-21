@@ -12,6 +12,7 @@ import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
 import { OutputComposer } from "./steps/OutputComposer";
 import { TestStep } from "./test/TestStep";
 import { AdvancedEditor } from "./AdvancedEditor";
+import { ensureRefined } from "./engine/refine";
 import { useAgentGenerationStream } from "../ai-tools/tools/agent-builder/useAgentGenerationStream";
 import { card, ghostBtn, primaryBtn, kicker, stepTitles } from "./ui";
 
@@ -131,7 +132,9 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
     if (!ctx?.onSaveGeneratedQuizDocument || !subjectId) { setStatus("Select a workspace and subject before saving."); return; }
     setBusy(true);
     try {
-      const content = JSON.stringify({ ...runConfigFromSpec(spec), savedOutput: state.lastRun?.output || null }, null, 2);
+      const ready = await ensureRefined(spec);
+      if (ready !== spec) update(() => ready);
+      const content = JSON.stringify({ ...runConfigFromSpec(ready), savedOutput: state.lastRun?.output || null }, null, 2);
       const file = { name: `${spec.name || "Untitled agent"}.agent.json`, content, sizeBytes: content.length };
       const saved = state.savedId && ctx.onUpdateGeneratedDocument ? await ctx.onUpdateGeneratedDocument(state.savedId, { file }) : await ctx.onSaveGeneratedQuizDocument({ folderIds: [], tags: ["ai-agent"], file });
       dispatch({ type: "saved", id: (saved as any)?.id || state.savedId });

@@ -11,7 +11,7 @@ function AgentChips({ names }: { names: string[] }) {
   return <p className="m-0 mt-1 flex flex-wrap gap-1">{names.slice(0, 3).map((name) => <span key={name} className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {name}</span>)}{names.length > 3 ? <span className="text-[10px] text-soft-ink">+{names.length - 3}</span> : null}</p>;
 }
 
-export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onOpen, onMoveToFolder }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: "exam" | "flashcards") => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void }) {
+export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onOpen, onMoveToFolder, onDelete }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: "exam" | "flashcards") => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void; onDelete?: (row: SavedTemplateRow) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [folder, setFolder] = useState<string>("");
@@ -67,7 +67,10 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
               {shown.map((row) => (
                 <div key={row.id} className="group rounded-2xl border border-ink/10 bg-white p-2 transition hover:border-[var(--accent)]/50 hover:shadow-[0_8px_24px_rgba(0,0,0,0.06)]">
                   <button type="button" onClick={() => onOpen(row)} className="block w-full text-left"><TemplateThumbnail template={row} width={170} /><p className="m-0 mt-2 truncate text-sm font-semibold text-ink">{row.name}</p><p className="m-0 text-[11px] text-soft-ink">{row.templateV3 ? "v3" : row.docModel ? "v2" : "legacy"} · {(row.dataFields || []).length} fields{templateFolderOf(row) ? ` · ${templateFolderOf(row)}` : ""}</p><AgentChips names={compatibleAgentNames(row, agents)} /></button>
-                  {onMoveToFolder ? <select className="mt-1 w-full rounded-lg border border-ink/10 px-2 py-1 text-[11px] text-soft-ink" value={templateFolderOf(row)} onChange={(event) => onMoveToFolder(row, event.target.value)}><option value="">Unfiled</option>{folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}</select> : null}
+                  <div className="mt-1 flex items-center gap-1">
+                    {onMoveToFolder ? <select className="min-w-0 flex-1 rounded-lg border border-ink/10 px-2 py-1 text-[11px] text-soft-ink" value={templateFolderOf(row)} onChange={(event) => onMoveToFolder(row, event.target.value)}><option value="">Unfiled</option>{folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}</select> : null}
+                    {onDelete ? <button type="button" title="Delete template" className="grid size-7 shrink-0 place-items-center rounded-lg border border-ink/10 text-xs text-soft-ink hover:border-[rgba(215,0,21,0.4)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete “${row.name}”? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
+                  </div>
                 </div>
               ))}
               {!shown.length ? <p className="m-0 text-sm text-soft-ink">No templates here yet.</p> : null}
@@ -75,10 +78,13 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
           ) : (
             <div className="mt-3 grid gap-1">
               {shown.map((row) => (
-                <button key={row.id} type="button" onClick={() => onOpen(row)} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-left transition hover:bg-[var(--surface-soft)]">
-                  <span className="truncate text-sm font-semibold text-ink">{row.name}{templateFolderOf(row) ? <span className="ml-2 text-xs font-normal text-soft-ink">📁 {templateFolderOf(row)}</span> : null}</span>
-                  <span className="shrink-0 text-xs text-soft-ink">{row.templateV3 ? "v3" : row.docModel ? "v2 · will upgrade" : "legacy · will upgrade"} · {(row.dataFields || []).length} fields</span>
-                </button>
+                <div key={row.id} className="flex items-center gap-2 rounded-xl px-3 py-2 transition hover:bg-[var(--surface-soft)]">
+                  <button type="button" onClick={() => onOpen(row)} className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left">
+                    <span className="truncate text-sm font-semibold text-ink">{row.name}{templateFolderOf(row) ? <span className="ml-2 text-xs font-normal text-soft-ink">📁 {templateFolderOf(row)}</span> : null}</span>
+                    <span className="shrink-0 text-xs text-soft-ink">{row.templateV3 ? "v3" : row.docModel ? "v2 · will upgrade" : "legacy · will upgrade"} · {(row.dataFields || []).length} fields</span>
+                  </button>
+                  {onDelete ? <button type="button" title="Delete template" className="grid size-7 shrink-0 place-items-center rounded-lg text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete “${row.name}”? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
+                </div>
               ))}
               {!shown.length ? <p className="m-0 text-sm text-soft-ink">No templates here yet.</p> : null}
             </div>

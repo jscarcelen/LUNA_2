@@ -73,6 +73,12 @@ export interface AgentSpec {
   /** Saved template id when the composition came from / was saved to the library. */
   outputTemplateId?: string;
   examples: ExampleDef[];
+  /**
+   * Invisible metaprompt pass: the creator's wording rewritten into a precise brief (same intent,
+   * ambiguities resolved, missing rules added, field descriptions completed). Recomputed when the
+   * creator changes the recipe (`sourceHash`); never shown outside Advanced.
+   */
+  refined?: { core: string; style?: string; constraints: string[]; fieldDescriptions: Record<string, string>; sourceHash: string; at: string; notes?: string } | null;
   validationRules: ValidationRule[];
   model: { model: string; creativity: "low" | "medium" | "high" };
   createdAt: string;

@@ -139,6 +139,11 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
       setBusy(false);
     }
   }
+  async function deleteRow(row: SavedTemplateRow) {
+    const deleteHandler = contextRef.current?.onDeleteDocumentBlockTemplate;
+    if (typeof deleteHandler !== "function") return;
+    try { const next = await deleteHandler(row.id); if (Array.isArray(next)) setRows(next); else refresh(); setStatus(`Deleted “${row.name}”.`); } catch (error) { setStatus(String((error as Error).message || error)); }
+  }
   async function remove() {
     const deleteHandler = contextRef.current?.onDeleteDocumentBlockTemplate;
     if (!state.savedId || typeof deleteHandler !== "function") return;
@@ -185,7 +190,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   }
 
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} agents={agents} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
+    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

@@ -1,5 +1,6 @@
 import type { AgentSpec, CompiledPrompt, InputDef } from "./types";
 import { outputJsonSchema, outputSkeleton } from "./schema";
+import { isRefined } from "./refine";
 import { collectionFields, primaryCollection } from "./model";
 import { flattenFields, slug } from "../../template-studio/engine/model";
 
@@ -12,6 +13,7 @@ function formatValue(input: InputDef, value: unknown): string {
 
 /** Plain-language rendering of the output contract, one line per field. */
 export function describeOutput(spec: AgentSpec): string {
+  spec = withRefinedDescriptions(spec);
   const lists = spec.outputSchema.filter((f) => f.type === "array");
   const once = spec.outputSchema.filter((f) => f.type !== "array" && !f.fromInputId);
   const lines: string[] = ["Return ONE JSON object with exactly this structure:", outputSkeleton(spec.outputSchema)];
@@ -28,14 +30,17 @@ export function describeOutput(spec: AgentSpec): string {
  * here is stored. Material (chunks) is attached by the runtime from the context slots.
  */
 export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): CompiledPrompt {
-  const constraints = spec.instructions.constraints.filter(Boolean);
+  const refined = isRefined(spec) ? spec.refined! : null;
+  const core = refined?.core?.trim() ? refined.core : spec.instructions.core;
+  const style = refined?.style || spec.instructions.style;
+  const constraints = [...new Set([...spec.instructions.constraints, ...(refined?.constraints || [])].map((c) => c.trim()).filter(Boolean))];
   const system = [
     `You are "${spec.name}", an AI agent that creates ${spec.purpose.headline || "structured educational content"}.`,
     spec.purpose.description,
     "",
     "INSTRUCTIONS",
-    spec.instructions.core,
-    spec.instructions.style ? `Style: ${spec.instructions.style}` : "",
+    core,
+    style ? `Style: ${style}` : "",
     constraints.length ? `Rules:\n${constraints.map((c) => `- ${c}`).join("\n")}` : "",
     "",
     "OUTPUT STRUCTURE",
@@ -54,7 +59,15 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
     examples ? `\nEXAMPLES OF GOOD OUTPUT\n${examples}` : ""
   ].filter(Boolean).join("\n");
 
-  return { system, user, schema: outputJsonSchema(spec.outputSchema), model: spec.model.model, creativity: spec.model.creativity };
+  return { system, user, schema: outputJsonSchema(withRefinedDescriptions(spec).outputSchema), model: spec.model.model, creativity: spec.model.creativity };
+}
+
+/** Output schema with empty field descriptions filled from the refined brief (ids unchanged). */
+export function withRefinedDescriptions(spec: AgentSpec): AgentSpec {
+  if (!isRefined(spec) || !spec.refined?.fieldDescriptions) return spec;
+  const descriptions = spec.refined.fieldDescriptions;
+  const fill = (list: AgentSpec["outputSchema"]): AgentSpec["outputSchema"] => list.map((f) => ({ ...f, description: f.description || descriptions[f.id] || "", children: f.children ? fill(f.children) : f.children }));
+  return { ...spec, outputSchema: fill(spec.outputSchema) };
 }
 
 function singular(name: string): string {

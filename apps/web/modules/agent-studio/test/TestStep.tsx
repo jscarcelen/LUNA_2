@@ -5,6 +5,7 @@ import type { AgentSpec, InputDef, SpecChange } from "../engine/types";
 import { LANGUAGES, QUICK_ACTIONS, collectionFields, primaryCollection } from "../engine/model";
 import { applyPatches, applyQuickAction } from "../engine/improve";
 import { runConfigFromSpec } from "../engine/migrate";
+import { ensureRefined, isRefined } from "../engine/refine";
 import { compileAgent } from "../engine/compile";
 import { slug } from "../../template-studio/engine/model";
 import { GenerationProgress } from "../../ai-tools/tools/agent-builder/GenerationProgress";
@@ -51,12 +52,26 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
   const { estimate, loading: estimating } = useRunEstimate(runConfig, !generation.isGenerating) as { estimate: { totalTokens: number } | null; loading: boolean };
   const balance = typeof window !== "undefined" ? readCredits().balance : undefined;
 
+  const [preparing, setPreparing] = useState(false);
   async function runTest() {
     try {
-      const data = await generation.generate(runConfig);
+      // Hidden metaprompt pass: the creator's wording becomes a precise brief before the first run.
+      let ready = spec;
+      if (!isRefined(spec)) {
+        setPreparing(true);
+        ready = await ensureRefined(spec);
+        setPreparing(false);
+        if (ready !== spec) onChange(() => ready, [{ path: "refined", before: "", after: "brief refined" }]);
+      }
+      const config = ready === spec ? runConfig : runConfigFromSpec(ready, {
+        questionAnswers: spec.inputs.map((input) => ({ question: input.name, answer: values[input.id] })),
+        inputValues: values,
+        scope: { workspaceId, subjectId, documentIds: [...materialIds, ...spec.contextSlots.flatMap((s) => (s.kind === "agent_knowledge" ? s.documentIds || [] : []))], styleDocumentIds: [] }
+      });
+      const data = await generation.generate(config);
       chargeRun({ agentName: spec.name, usage: data.usage, fallbackTokens: estimate?.totalTokens || 0, model: data.model });
       onRun({ inputValues: values, output: { ...(data.data || {}), items: data.items || [] }, checks: data.checks || [], model: data.model });
-    } catch { /* hook shows the error */ }
+    } catch { /* hook shows the error */ } finally { setPreparing(false); }
   }
   function quick(actionId: string) {
     const { spec: next, changes } = applyQuickAction(spec, actionId);
@@ -93,7 +108,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
             {!spec.inputs.length ? <p className="m-0 text-sm text-soft-ink">No customizations yet (step 2).</p> : null}
             {materialSlots.map((slot) => <div key={slot.id}><label className={label}>{slot.name}{slot.required ? "" : " (optional)"}</label><div className="grid max-h-40 gap-1 overflow-auto">{docs.map((doc) => { const on = materialIds.includes(doc.id); return <label key={doc.id} className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-xs ${on ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10"}`}><input type="checkbox" checked={on} onChange={() => setMaterialIds((c) => (on ? c.filter((id) => id !== doc.id) : slot.multiple ? [...c, doc.id] : [doc.id]))} />{doc.name}</label>; })}{!docs.length ? <p className="m-0 text-xs text-soft-ink">Upload documents to the subject to test with material.</p> : null}</div><p className="m-0 mt-1 text-[11px] text-soft-ink">{slot.description}</p></div>)}
           </div>
-          <button type="button" className={`${primaryBtn} mt-4 w-full`} disabled={generation.isGenerating || missingRequired.length > 0 || missingMaterial} onClick={runTest}>{generation.isGenerating ? "Generating…" : "Generate test →"}</button>
+          <button type="button" className={`${primaryBtn} mt-4 w-full`} disabled={generation.isGenerating || missingRequired.length > 0 || missingMaterial} onClick={runTest}>{preparing ? "Preparing…" : generation.isGenerating ? "Generating…" : "Generate test →"}</button>
           <div className="mt-2"><RunEstimateLine estimate={estimate} loading={estimating} balance={balance} /></div>
           {missingRequired.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">Fill in: {missingRequired.map((i) => i.name).join(", ")}</p> : missingMaterial ? <p className="m-0 mt-1 text-[11px] text-soft-ink">This agent requires material.</p> : null}
         </section>

@@ -689,7 +689,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   async function handleAttempt(attempt) {
     if (!onSaveGeneratedQuizDocument) return;
     try {
-      const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: playing?.documentId || "", activityId: attempt.activityId }, null, 2);
+      const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: playing?.documentId || "", activityId: attempt.activityId, learner: toolContext?.profileName || "" }, null, 2);
       await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
     } catch { /* attempt stays local */ }
   }

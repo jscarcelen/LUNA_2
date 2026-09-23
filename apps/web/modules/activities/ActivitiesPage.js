@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ActivityPlayer } from "./ActivityPlayer";
+import { defaultLearner } from "../performance/learners";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -25,7 +26,7 @@ function scoreTone(pct) {
  * subject, with due dates and results. Attempts are recorded per question so mistakes can be
  * reviewed and, later, fed into performance tracking.
  */
-export function ActivitiesPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool }) {
+export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const docs = subject?.documents || [];
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
@@ -53,7 +54,7 @@ export function ActivitiesPage({ role = "student", workspaces = [], selectedWork
 
   async function saveAttempt(attempt, documentId) {
     if (!onSaveGeneratedQuizDocument) return;
-    const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: documentId, activityId: attempt.activityId }, null, 2);
+    const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: documentId, activityId: attempt.activityId, learner: defaultLearner(role, profileName) }, null, 2);
     try { await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }); } catch { /* keep local */ }
   }
   async function setDue(row, date) {

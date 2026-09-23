@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { TemplateThumbnail } from "../template-studio/TemplateThumbnail";
 import { RESOURCE_TAG, isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "./resource";
 import { ResourceExports } from "./ResourceExports";
+import { addLearner, defaultLearner, readLearners } from "../performance/learners";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -22,7 +23,7 @@ function ResourceThumb({ template }) {
  * Resources — every generated document: filter and organise them, do them on Luna, download any
  * view/format of their template, regenerate or re-template them, move them between folders.
  */
-export function ResourcesPage({ workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRenameDocument, onRemoveDocument, onOpenResource }) {
+export function ResourcesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRemoveDocument, onCreateFolder, onOpenResource }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -33,6 +34,11 @@ export function ResourcesPage({ workspaces = [], selectedWorkspaceId, selectedSu
   const [playing, setPlaying] = useState(null);
   const [tab, setTab] = useState("do");
   const [status, setStatus] = useState("");
+  const [newFolder, setNewFolder] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [learner, setLearner] = useState("");
+  const [learners, setLearners] = useState([]);
+  useEffect(() => { setLearners(readLearners()); setLearner(defaultLearner(role, profileName)); }, [role, profileName]);
 
   const rows = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
   const templateById = useMemo(() => Object.fromEntries(templates.map((template) => [template.id, template])), [templates]);
@@ -56,6 +62,21 @@ export function ResourcesPage({ workspaces = [], selectedWorkspaceId, selectedSu
   const open = rows.find((row) => row.document.id === openId) || null;
   const openStats = open ? resourceStats(open.document.id, open.resource.activity?.id, documents) : null;
 
+  async function createFolder(parentFolderId = "") {
+    const name = newFolder.trim();
+    if (!onCreateFolder || !name) return;
+    setCreating(true);
+    try {
+      await onCreateFolder(name, parentFolderId);
+      setNewFolder("");
+      setStatus(`Folder “${name}” created.`);
+    } catch (error) {
+      setStatus(String(error.message || error));
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function setTags(row, next) {
     if (!onUpdateDocumentMeta) return;
     await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: next });
@@ -64,7 +85,7 @@ export function ResourcesPage({ workspaces = [], selectedWorkspaceId, selectedSu
   const moveTo = (row, folderId) => onUpdateDocumentMeta?.(row.document.id, { folderIds: folderId ? [folderId] : [], tags: row.document.tags || [] });
   async function saveAttempt(attempt, documentId) {
     if (!onSaveGeneratedQuizDocument) return;
-    const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: documentId, activityId: attempt.activityId }, null, 2);
+    const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: documentId, activityId: attempt.activityId, learner: learner || profileName || "" }, null, 2);
     try { await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }); } catch { /* keep local */ }
   }
 
@@ -90,6 +111,24 @@ export function ResourcesPage({ workspaces = [], selectedWorkspaceId, selectedSu
           {allTags.length ? <select className={field} value={filters.tag} onChange={(event) => setFilters({ ...filters, tag: event.target.value })}><option value="">Any tag</option>{allTags.map((t) => <option key={t} value={t}>{t}</option>)}</select> : null}
           <button type="button" onClick={() => setFilters({ ...filters, favourite: !filters.favourite })} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filters.favourite ? "bg-[#ffe9a8] text-[#8a5a00]" : "border border-ink/15 text-soft-ink"}`}>★ Favourites</button>
           {query || Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => { setQuery(""); setFilters({ agent: "", template: "", source: "", folder: "", tag: "", favourite: false }); }}>Clear</button> : null}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {onCreateFolder ? (
+            <>
+              <input className={`${field} w-44`} value={newFolder} onChange={(event) => setNewFolder(event.target.value)} onKeyDown={(event) => event.key === "Enter" && createFolder()} placeholder="New folder name" />
+              <button type="button" className={ghostBtn} disabled={creating || !newFolder.trim()} onClick={() => createFolder()}>{creating ? "Creating…" : "＋ Folder"}</button>
+              {filters.folder ? <button type="button" className={ghostBtn} disabled={creating || !newFolder.trim()} onClick={() => createFolder(filters.folder)} title="Create it inside the folder you are filtering by">＋ Subfolder of “{folders.find((f) => f.id === filters.folder)?.name}”</button> : null}
+            </>
+          ) : null}
+          {role !== "student" ? (
+            <label className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">Doing activities as
+              <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
+                <option value="">Unassigned</option>
+                {learners.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
+            </label>
+          ) : null}
         </div>
       </div>
 

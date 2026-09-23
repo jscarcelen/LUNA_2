@@ -143,6 +143,9 @@ Consequences for the product:
 - A **regenerate / edit generation** button reopens the agent with the saved request (prompt, choices, material, template, mapping) so anything can be changed and generated again; changing **only the template** is a matter of picking a new one, remapping fields and generating.
 - Resources can be **deleted and moved between folders**.
 
+- Resources need a **folder creation button** so a structure can be built.
+- A **performance dashboard**, easy to filter by workspace, folder, activity, source documents, activity type, resource type, number of iterations, frequency of errors on the same topic — and showing **how it aligns with study goals (exam dates, activities)**; the **planning tool is key** to track progress. Teachers and parents filter by child; the student interface is their own.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

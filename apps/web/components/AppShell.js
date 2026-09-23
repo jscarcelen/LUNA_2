@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
-import { navByRole, pageTitles } from "./data";
+import { navByRole, pageTitles, roleProfiles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
 import { ResourcesPage } from "../modules/resources/ResourcesPage";
+import { PerformancePage } from "../modules/performance/PerformancePage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
@@ -109,6 +110,20 @@ export function AppShell() {
 
   const content = useMemo(() => {
     if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
+    if (page === "performance") {
+      return (
+        <PerformancePage
+          role={role}
+          profileName={roleProfiles[role]?.name || ""}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onRemoveDocument={handleRemoveDocument}
+          onOpenPage={(target) => setPage(target)}
+        />
+      );
+    }
     if (page === "resources") {
       return (
         <ResourcesPage
@@ -116,9 +131,12 @@ export function AppShell() {
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
           templates={blockTemplates}
+          role={role}
+          profileName={roleProfiles[role]?.name || ""}
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onRemoveDocument={handleRemoveDocument}
+          onCreateFolder={handleCreateFolder}
           onOpenResource={(documentId) => {
             const resourceDocument = (workspaces.flatMap((w) => w.subjects || []).flatMap((s) => s.documents || [])).find((d) => d.id === documentId);
             let agentId = "";
@@ -132,6 +150,7 @@ export function AppShell() {
       return (
         <ActivitiesPage
           role={role}
+          profileName={roleProfiles[role]?.name || ""}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}

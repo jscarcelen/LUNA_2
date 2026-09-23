@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import "./components";
 import type { Template } from "./engine/types";
-import { CANVAS_PRESETS, createExamStarter, createFlashcardStarter, createPage, createTemplate } from "./engine/model";
+import { CANVAS_PRESETS, createPage, createTemplate } from "./engine/model";
+import { createStarter } from "./engine/starters";
 import { migrateToV3, normalizeTemplate } from "./engine/migrate";
 import { buildSampleData } from "./engine/sample";
 import { useTemplateStore } from "./state/useTemplateStore";
@@ -190,7 +191,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   }
 
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(kind === "exam" ? createExamStarter() : createFlashcardStarter())} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
+    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(createStarter(kind))} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

@@ -396,6 +396,21 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     () => fields.map((field) => ({ ...field, frequency: normalizeFrequency(field.repeatScope || "per-output") })),
     [fields]
   );
+  /**
+   * Templates often repeat the same slot (several question designs all needing "Question"). Map it
+   * once: identical name + frequency become one row, and the choice is written to every copy.
+   */
+  const mappingRows = useMemo(() => {
+    const byKey = new Map();
+    for (const field of templateFields) {
+      const key = `${field.name.toLowerCase()}|${field.frequency}`;
+      const entry = byKey.get(key) || { ...field, names: [], count: 0 };
+      entry.names.push(field.name);
+      entry.count += 1;
+      byKey.set(key, entry);
+    }
+    return [...byKey.values()];
+  }, [templateFields]);
   const requiredUnanswered = questions.filter((question) => {
     if (!question.required) return false;
     const answer = answersByQuestionId[question.id];
@@ -457,6 +472,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   }
 
   function setTemplateFieldMapping(templateFieldName, agentFieldName) {
+    // Every template slot with this name (any block) gets the same agent field.
     setFieldMappingByTemplateField((previous) => {
       const next = { ...previous };
       for (const [targetField, mappedAgentField] of Object.entries(next)) {
@@ -998,11 +1014,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                     <div>
                       <p className={kicker}>Map template fields to agent fields</p>
                       <p className="m-0 mt-1 text-xs text-soft-ink">Each slot in the template must be filled by one agent field. Matching names were pre-filled — check them and change any you want.</p>
-                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{templateFields.filter((field) => fieldMappingByTemplateField[field.name]).length} of {templateFields.length} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
+                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{mappingRows.filter((row) => fieldMappingByTemplateField[row.name]).length} of {mappingRows.length} slot{mappingRows.length === 1 ? "" : "s"} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
                       <div className="mt-2 grid gap-2">
-                        {templateFields.map((field) => (
+                        {mappingRows.map((field) => (
                           <div className="grid gap-1 sm:grid-cols-[1fr_1fr] sm:items-center" key={field.id || field.name}>
-                            <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">{field.label || field.name}<span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span></span>
+                            <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">{field.label || field.name}<span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>{field.count > 1 ? <span className={chipClass} title={`Used by ${field.count} blocks of the template — mapped once for all of them`}>×{field.count}</span> : null}</span>
                             <select className={fieldClass} value={fieldMappingByTemplateField[field.name] || ""} onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}>
                               <option value="">Choose…</option>
                               {[...agentFields].sort((a, b) => Number(b.frequency === field.frequency) - Number(a.frequency === field.frequency)).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}{agentField.frequency === field.frequency ? "" : agentField.frequency === "loop" ? " (per item)" : " (once)"}</option>)}

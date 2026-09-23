@@ -11,6 +11,8 @@ import { chargeRun, readCredits } from "../../../credits/credits";
 import { buildActivity } from "../../../activities/engine/activity";
 import { renderActivityHtml } from "../../../activities/engine/html";
 import { ActivityPlayer } from "../../../activities/ActivityPlayer";
+import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
+import { buildResource, parseResource } from "../../../resources/resource";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const FIELD_FREQUENCY_LABELS = {
@@ -253,12 +255,18 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
   const [output, setOutput] = useState(null);
   const [playing, setPlaying] = useState(null); // { activity, documentId }
+  const [saveOpen, setSaveOpen] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
   const [saveFolderId, setSaveFolderId] = useState("");
 
   const generation = useAgentGenerationStream();
+
+  // Regenerate: a saved resource carries the request that produced it (answers, material, template, mapping).
+  const resumeDocument = toolContext?.resumeResourceDocumentId ? (toolContext?.workspaces || []).flatMap((w) => w.subjects || []).flatMap((s) => s.documents || []).find((d) => d.id === toolContext.resumeResourceDocumentId) : null;
+  const resume = resumeDocument ? parseResource(resumeDocument) : null;
+  const resumedRef = useRef("");
 
   useEffect(() => {
     let parsed = null;
@@ -552,6 +560,25 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   }, [agentConfig, questions, answersByQuestionId, knowledgeMode, contextPromptDraft, fields, workspaceId, subjectId, referenceDocumentIds, styleDocumentIds]);
   const { estimate: runEstimate, loading: estimating } = useRunEstimate(runConfig, Boolean(runConfig) && !generation.isGenerating);
 
+  // Apply the saved request once the agent config is in place.
+  useEffect(() => {
+    if (!resume || !agentConfig || resumedRef.current === resumeDocument.id) return;
+    resumedRef.current = resumeDocument.id;
+    const request = resume.request || {};
+    if (request.answersByQuestionId) setAnswersByQuestionId(request.answersByQuestionId);
+    if (request.knowledgeMode) setKnowledgeMode(request.knowledgeMode);
+    if (typeof request.contextPromptDraft === "string") setContextPromptDraft(request.contextPromptDraft);
+    if (Array.isArray(request.referenceDocumentIds)) setReferenceDocumentIds(request.referenceDocumentIds);
+    if (Array.isArray(request.styleDocumentIds)) setStyleDocumentIds(request.styleDocumentIds);
+    if (request.templateId !== undefined) setTemplateId(request.templateId);
+    if (request.fieldMappingByTemplateField) setFieldMappingByTemplateField(request.fieldMappingByTemplateField);
+    if (request.fieldTypeByName) setFieldTypeByName(request.fieldTypeByName);
+    if (request.customization) setCustomization((current) => ({ ...current, ...request.customization }));
+    // Re-templating only: the previous output is kept so the user can just pick a new template and export.
+    if (resume.data) setOutput({ ...resume.data, items: resume.data.items || [], data: resume.data });
+    setFlowStep(2);
+  }, [resume, agentConfig, resumeDocument]);
+
   async function handleGenerate() {
     if (!runConfig || generation.isGenerating) return;
     setStatusMessage("");
@@ -667,6 +694,56 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     } catch { /* attempt stays local */ }
   }
 
+  function currentRequest() {
+    return {
+      answersByQuestionId,
+      knowledgeMode,
+      contextPromptDraft,
+      referenceDocumentIds,
+      styleDocumentIds,
+      templateId,
+      fieldMappingByTemplateField,
+      fieldTypeByName,
+      customization
+    };
+  }
+  async function saveResource({ name, folderId, tags, difficulty, favourite, openAfter }) {
+    if (!onSaveGeneratedQuizDocument) return;
+    setIsSavingDocument(true);
+    try {
+      const sourceNames = referenceDocumentIds.map((id) => documents.find((document) => document.id === id)?.name).filter(Boolean);
+      const payload = buildResource({
+        name,
+        activity: activity && activity.questions.length ? { ...activity, title: name } : null,
+        data: { ...(output?.data || {}), items: output?.items || [] },
+        request: currentRequest(),
+        meta: {
+          agentId: agentDocument?.id || "",
+          agentName: agentConfig?.name || "",
+          templateId,
+          templateName: activeTemplate?.name || "",
+          sourceDocumentIds: referenceDocumentIds,
+          sourceNames,
+          difficulty,
+          questionCount: activity?.questions.length || 0
+        }
+      });
+      const content = JSON.stringify(payload, null, 2);
+      const allTags = ["resource", ...(activity && activity.questions.length ? ["activity"] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
+      const saved = await onSaveGeneratedQuizDocument({ folderIds: folderId ? [folderId] : [], tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } });
+      setSaveOpen(false);
+      setStatusMessage(`Saved “${name}” to your resources.`);
+      if (openAfter) {
+        if (activity && activity.questions.length) setPlaying({ activity: payload.activity, documentId: saved?.id || "" });
+        else toolContext?.onOpenPage?.("resources");
+      }
+    } catch (error) {
+      setStatusMessage(String(error.message || error));
+    } finally {
+      setIsSavingDocument(false);
+    }
+  }
+
   async function handleSaveAsDocument() {
     if (!onSaveGeneratedQuizDocument || !Array.isArray(output?.items)) return;
     if (!mappingReady) {
@@ -775,7 +852,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             <h3 className="m-0 text-[26px] font-bold tracking-tight text-ink">{agentConfig.name || "Untitled Agent"}</h3>
             <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{agentConfig.description || agentConfig.tagline || agentConfig.instructions}</p>
           </div>
-          {flowStep === 1 ? (
+          {resume ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-4 py-2.5">
+          <p className="m-0 text-sm text-ink"><strong>Editing “{resume.name}”.</strong> Its material, choices, template and mapping are loaded. Change anything and <em>Generate again</em> — or just pick another template and save.</p>
+          <button type="button" className={ghostBtn} onClick={() => toolContext?.onOpenPage?.("resources")}>Back to resources</button>
+        </div>
+      ) : null}
+      {flowStep === 1 ? (
             <div className="flex shrink-0 flex-col items-stretch gap-1.5 sm:items-end">
               <button type="button" onClick={handleGenerate} disabled={!canGenerate} className={primaryBtn}>{generation.isGenerating ? "Generating…" : hasOutput ? "Generate again" : "Generate"} <span aria-hidden>→</span></button>
               {!knowledgeReady || requiredUnanswered ? (
@@ -949,9 +1032,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {flowStep === 3 ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
+            <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
+              <p className={kicker}>Save as a resource · recommended</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">Keep it in your library: give it a name, a folder and tags. From there you can do it on Luna, download every view of its template, or regenerate it.</p>
+              <button type="button" className={`${primaryBtn} mt-3`} disabled={!hasOutput} onClick={() => setSaveOpen(true)}>Save resource…</button>
+            </section>
             {activity && activity.questions.length ? (
-              <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
-                <p className={kicker}>Do it on Luna · recommended</p>
+              <section className={cardClass}>
+                <p className={kicker}>Do it on Luna</p>
                 <p className="m-0 mt-2 text-sm text-soft-ink">{activity.questions.length} question{activity.questions.length === 1 ? "" : "s"} the student can answer online. Every attempt is recorded, mistakes included, so progress is tracked.</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" className={primaryBtn} disabled={isSavingDocument} onClick={handleDoOnLuna}>{isSavingDocument ? "Saving…" : "Save as activity & open"}</button>
@@ -988,6 +1076,17 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
 
+      {saveOpen ? (
+        <SaveResourceDialog
+          defaultName={customization.brand?.title || agentConfig?.name || "Generated resource"}
+          folders={folders}
+          defaultFolderId={saveFolderId}
+          busy={isSavingDocument}
+          summary={`${activity?.questions.length ? `${activity.questions.length} questions · ` : ""}${activeTemplate ? activeTemplate.name : "no template"}${agentConfig?.name ? ` · ${agentConfig.name}` : ""}`}
+          onCancel={() => setSaveOpen(false)}
+          onSave={saveResource}
+        />
+      ) : null}
       {playing ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
           <ActivityPlayer activity={playing.activity} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />

@@ -134,6 +134,15 @@ Consequences for the product:
 
 - Component design rules the founder pointed out (to be applied automatically): no double borders (the tile's box is the cut line); for matching puzzles name the content as numbered pairs (1a/1b, 2a/2b…) so matching edges are guaranteed by construction; the chatbot should accept **reference images** (a worksheet, a drawing) to copy format and shapes for complex components.
 
+
+### 5.1d Generated resources library (founder spec, 2026-09-23)
+
+- Every AI-generated resource is **sourceable, filterable and organised in folders**: gallery and list views, filters by **source material, agent, name, tags (difficulty, number of errors, times done), date, template, folder/subfolder and favourites**.
+- Clicking a resource opens it in **activity mode** (do it on the platform) and shows a **repository of all export options** of its template and views (PDF, Word, PPT, with/without answers…).
+- Generating a resource ends with a **save view** (name, folder, tags…).
+- A **regenerate / edit generation** button reopens the agent with the saved request (prompt, choices, material, template, mapping) so anything can be changed and generated again; changing **only the template** is a matter of picking a new one, remapping fields and generating.
+- Resources can be **deleted and moved between folders**.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).
@@ -367,6 +376,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-23 — Added §5.1d: generated resources library (gallery/list, filters, folders, activity mode, export repository, save view, regenerate/edit, delete/move).
 - 2026-09-20 — Added §5.1c: worksheet components, component chatbot, interactive activities as default, activity layer in workspaces.
 - 2026-09-20 — Added §5.1b: agent output defined with Template Studio blocks, templates list their compatible agents, views hide fields, list-as-flag on fields.
 - 2026-09-19 — Created from the founder's notes plus the standing rules from earlier sessions.

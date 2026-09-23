@@ -5,6 +5,7 @@ export const navByRole = {
     { key: "dashboard", label: "Home" },
     { key: "workspaces", label: "Workspaces" },
     { key: "activities", label: "Activities" },
+    { key: "resources", label: "Resources" },
     { key: "ai-tools", label: "AI Tools" },
     { key: "marketplace", label: "Marketplace" }
   ],
@@ -12,6 +13,7 @@ export const navByRole = {
     { key: "dashboard", label: "Classes" },
     { key: "workspaces", label: "Workspaces" },
     { key: "activities", label: "Activities" },
+    { key: "resources", label: "Resources" },
     { key: "ai-tools", label: "AI Tools" },
     { key: "ai-tool:template-builder", label: "Templates" },
     { key: "marketplace", label: "Marketplace" }
@@ -20,6 +22,7 @@ export const navByRole = {
     { key: "dashboard", label: "Children" },
     { key: "workspaces", label: "Workspaces" },
     { key: "activities", label: "Activities" },
+    { key: "resources", label: "Resources" },
     { key: "marketplace", label: "Marketplace" }
   ]
 };
@@ -34,6 +37,7 @@ export const pageTitles = {
   dashboard: "Home",
   workspaces: "Workspaces",
   activities: "Activities",
+  resources: "Resources",
   "ai-tools": "AI Tools",
   "ai-tool-quiz": "Quiz Generator",
   "ai-tool-tutor": "AI Tutor",

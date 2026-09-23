@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SideNav } from "./SideNav";
 import { TopBar } from "./TopBar";
 import { navByRole, pageTitles } from "./data";
@@ -8,6 +8,7 @@ import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
+import { ResourcesPage } from "../modules/resources/ResourcesPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
@@ -22,10 +23,12 @@ export function AppShell() {
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [statusMessage, setStatusMessage] = useState("Loading workspaces...");
   const [isWorking, setIsWorking] = useState(false);
+  const [blockTemplates, setBlockTemplates] = useState([]);
 
   const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "").split("?")[0] : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
-  const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "") : "";
+  const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "").split("?")[0] : "";
+  const resumeResourceDocumentId = page.includes("?resource=") ? page.split("?resource=")[1] : "";
   const editAgentDocumentId = page.startsWith("agent-edit:") ? page.replace("agent-edit:", "") : "";
   const openTemplateId = page.startsWith("ai-tool:template-builder?open=") ? page.split("?open=")[1] : "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
@@ -106,6 +109,25 @@ export function AppShell() {
 
   const content = useMemo(() => {
     if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
+    if (page === "resources") {
+      return (
+        <ResourcesPage
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+          templates={blockTemplates}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onRemoveDocument={handleRemoveDocument}
+          onOpenResource={(documentId) => {
+            const resourceDocument = (workspaces.flatMap((w) => w.subjects || []).flatMap((s) => s.documents || [])).find((d) => d.id === documentId);
+            let agentId = "";
+            try { agentId = JSON.parse(String(resourceDocument?.content || "{}"))?.meta?.agentId || ""; } catch { agentId = ""; }
+            setPage(agentId ? `custom-agent:${agentId}?resource=${documentId}` : "ai-tools");
+          }}
+        />
+      );
+    }
     if (page === "activities") {
       return (
         <ActivitiesPage
@@ -210,6 +232,8 @@ export function AppShell() {
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
               onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
+              resumeResourceDocumentId,
+              onOpenPage: (target) => setPage(target),
               onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`)
             }}
           />
@@ -539,6 +563,13 @@ export function AppShell() {
     });
     return result?.reprocessed || null;
   }
+
+  const templatesLoadedRef = useRef(false);
+  useEffect(() => {
+    if (page !== "resources" || templatesLoadedRef.current) return;
+    templatesLoadedRef.current = true;
+    handleListDocumentBlockTemplates().then(setBlockTemplates).catch(() => setBlockTemplates([]));
+  });
 
   async function handleListDocumentBlockTemplates() {
     const result = await postWorkspaceAction("listDocumentBlockTemplates", {});

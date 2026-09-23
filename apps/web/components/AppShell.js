@@ -134,6 +134,7 @@ export function AppShell() {
           role={role}
           profileName={roleProfiles[role]?.name || ""}
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onRemoveDocument={handleRemoveDocument}
           onCreateFolder={handleCreateFolder}

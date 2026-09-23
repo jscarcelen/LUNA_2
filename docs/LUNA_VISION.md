@@ -146,6 +146,10 @@ Consequences for the product:
 - Resources need a **folder creation button** so a structure can be built.
 - A **performance dashboard**, easy to filter by workspace, folder, activity, source documents, activity type, resource type, number of iterations, frequency of errors on the same topic — and showing **how it aligns with study goals (exam dates, activities)**; the **planning tool is key** to track progress. Teachers and parents filter by child; the student interface is their own.
 
+- Each activity's questions carry a **classification of what they test** (pre-set categories — concept, definition, vocabulary, calculation, problem solving, application, comprehension, recall, analysis — editable by the resource creator) and a **difficulty**, both feeding error metrics.
+- **Time per question**, per activity and per activity type is tracked: useful to know whether there is enough time in an exam and what takes longer.
+- Resources with answers or content **link back to where the answer is** — which material, where, and a short extract.
+
 ### 5.2 Performance tracking (different UIs)
 **Views / UI / layout**
 - **Teacher** — class tracking (many children).

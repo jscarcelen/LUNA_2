@@ -52,7 +52,9 @@ export function summarise(attempts = []) {
   const errors = attempts.reduce((sum, attempt) => sum + (attempt.results || []).filter((result) => result.correct === false).length, 0);
   const questions = attempts.reduce((sum, attempt) => sum + (attempt.results || []).length, 0);
   const minutes = attempts.reduce((sum, attempt) => sum + (attempt.durationMs || 0), 0) / 60000;
-  return { done, score: graded.length ? score : 0, errors, questions, minutes: Math.round(minutes), resources: new Set(attempts.map((a) => a.resourceId || a.activityId)).size };
+  const timed = attempts.flatMap((attempt) => (attempt.results || []).filter((result) => result.ms > 0));
+  const perQuestion = timed.length ? timed.reduce((sum, result) => sum + result.ms, 0) / timed.length / 1000 : 0;
+  return { done, score: graded.length ? score : 0, errors, questions, minutes: Math.round(minutes), perQuestion: Math.round(perQuestion), resources: new Set(attempts.map((a) => a.resourceId || a.activityId)).size };
 }
 
 /** Errors grouped by topic (or the question's section), most frequent first. */
@@ -107,4 +109,58 @@ export function timeline(attempts = [], days = 30) {
 
 export function activityKindLabel(kind) {
   return { choice: "Multiple choice", boolean: "True / false", text: "Written", number: "Numeric", match: "Matching", flashcard: "Flashcards", tiles: "Puzzle" }[kind] || kind;
+}
+
+/** What the questions test: mistakes and time by skill category (concept, calculation, vocabulary…). */
+export function bySkill(attempts = []) {
+  const map = new Map();
+  for (const attempt of attempts) for (const result of attempt.results || []) {
+    const key = result.skill || "unclassified";
+    const entry = map.get(key) || { skill: key, asked: 0, errors: 0, ms: 0, timed: 0 };
+    entry.asked += 1;
+    if (result.correct === false) entry.errors += 1;
+    if (result.ms > 0) { entry.ms += result.ms; entry.timed += 1; }
+    map.set(key, entry);
+  }
+  return [...map.values()]
+    .map((entry) => ({ ...entry, rate: entry.asked ? entry.errors / entry.asked : 0, seconds: entry.timed ? Math.round(entry.ms / entry.timed / 1000) : 0 }))
+    .sort((a, b) => b.errors - a.errors || b.asked - a.asked);
+}
+
+/** Seconds per question by activity type, plus how long a full activity of that type takes. */
+export function timeByKind(attempts = []) {
+  const map = new Map();
+  for (const attempt of attempts) for (const result of attempt.results || []) {
+    if (!result.ms) continue;
+    const entry = map.get(result.kind) || { kind: result.kind, ms: 0, count: 0 };
+    entry.ms += result.ms;
+    entry.count += 1;
+    map.set(result.kind, entry);
+  }
+  return [...map.values()].map((entry) => ({ ...entry, seconds: Math.round(entry.ms / entry.count / 1000) })).sort((a, b) => b.seconds - a.seconds);
+}
+
+/** Difficulty view: are the mistakes on the hard ones, and how much longer do they take? */
+export function byDifficulty(attempts = []) {
+  const order = ["easy", "medium", "hard", "unrated"];
+  const map = new Map();
+  for (const attempt of attempts) for (const result of attempt.results || []) {
+    const key = result.difficulty || "unrated";
+    const entry = map.get(key) || { difficulty: key, asked: 0, errors: 0, ms: 0, timed: 0 };
+    entry.asked += 1;
+    if (result.correct === false) entry.errors += 1;
+    if (result.ms > 0) { entry.ms += result.ms; entry.timed += 1; }
+    map.set(key, entry);
+  }
+  return [...map.values()]
+    .map((entry) => ({ ...entry, rate: entry.asked ? entry.errors / entry.asked : 0, seconds: entry.timed ? Math.round(entry.ms / entry.timed / 1000) : 0 }))
+    .sort((a, b) => order.indexOf(a.difficulty) - order.indexOf(b.difficulty));
+}
+
+/** How long an exam of `questionCount` questions would take at this learner's pace. */
+export function estimateExamMinutes(attempts = [], questionCount = 20) {
+  const timed = attempts.flatMap((attempt) => (attempt.results || []).filter((result) => result.ms > 0));
+  if (!timed.length) return null;
+  const perQuestion = timed.reduce((sum, result) => sum + result.ms, 0) / timed.length;
+  return Math.max(1, Math.round((perQuestion * questionCount) / 60000));
 }

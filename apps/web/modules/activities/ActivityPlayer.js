@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -26,12 +26,26 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
   const [flipped, setFlipped] = useState({});
   const [pickedTile, setPickedTile] = useState(null);
   const [startedAt] = useState(() => Date.now());
-  const set = (id, value) => setAnswers((prev) => ({ ...prev, [id]: value }));
+  // Time per question: the clock runs on whichever question the child is interacting with.
+  const timing = useRef({ durations: {}, current: "", since: Date.now() });
+  const touch = (id) => {
+    const state = timing.current;
+    const now = Date.now();
+    if (state.current) state.durations[state.current] = (state.durations[state.current] || 0) + (now - state.since);
+    state.current = id;
+    state.since = now;
+  };
+  const closeTiming = () => {
+    const state = timing.current;
+    if (state.current) { state.durations[state.current] = (state.durations[state.current] || 0) + (Date.now() - state.since); state.current = ""; }
+    return state.durations;
+  };
+  const set = (id, value) => { touch(id); setAnswers((prev) => ({ ...prev, [id]: value })); };
   const answered = activity.questions.filter((q) => { const v = answers[q.id]; return q.kind === "match" ? v && Object.keys(v).length === (q.pairs || []).length : q.kind === "tiles" ? Array.isArray(v) && !v.includes(null) : v !== undefined && v !== ""; }).length;
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
   function check() {
-    const graded = gradeActivity(activity, answers, startedAt);
+    const graded = gradeActivity(activity, answers, startedAt, closeTiming());
     setAttempt(graded);
     if (typeof onSubmit === "function") onSubmit(graded);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -47,7 +61,7 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
         {attempt ? (
           <div className="mt-4 rounded-2xl bg-[var(--accent-soft)] p-4">
             <p className="m-0 text-3xl font-bold text-ink">{attempt.score} / {attempt.total}</p>
-            <p className="m-0 text-sm text-soft-ink">{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}</p>
+            <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}</p>
           </div>
         ) : (
           <div className="mt-3 flex items-center gap-3">
@@ -166,6 +180,8 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
                 ) : null}
 
                 {result && result.correct === false && q.kind !== "match" ? <p className="m-0 mt-2 text-sm text-[var(--color-danger)]">Correct answer: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
+                {result && q.source?.extract ? <p className="m-0 mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">📖 {q.source.documentName ? <strong className="text-ink">{q.source.documentName}</strong> : null}{q.source.locator ? ` · ${q.source.locator}` : ""}: “{q.source.extract}”</p> : null}
+                {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 text-xs text-soft-ink">{q.explanation}</p> : null}
               </div>
             </div>

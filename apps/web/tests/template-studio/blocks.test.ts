@@ -284,3 +284,29 @@ describe("fit to box", () => {
     expect(item.lines).toHaveLength(1);
   });
 });
+
+describe("classification, timing and sources", () => {
+  it("records skill, difficulty and per-question time, and cites the source passage", async () => {
+    const { buildActivity, gradeActivity, attachSources } = await import("../../modules/activities/engine/activity");
+    const { bySkill, timeByKind, estimateExamMinutes, byDifficulty } = await import("../../modules/performance/metrics");
+    const { createField: cf } = await import("../../modules/template-studio/engine/model");
+    const fields = [cf("Questions", "array", { children: [cf("item", "object", { children: [cf("Question", "text"), cf("Options", "array", { children: [cf("Option", "text")] }), cf("Answer", "text"), cf("Skill", "text"), cf("Difficulty", "text")] })] })];
+    const data = { questions: [
+      { question: "What is the median?", options: ["middle value", "average"], answer: "middle value", skill: "definition", difficulty: "easy" },
+      { question: "Compute 24 + 18", options: ["42", "40"], answer: "42", skill: "calculation", difficulty: "hard" }
+    ] } as unknown as Record<string, unknown>;
+    let activity = buildActivity(fields, data);
+    expect(activity.questions[0].skill).toBe("definition");
+    activity = attachSources(activity, [{ documentName: "Statistics.docx", chunkIndex: 2, content: "The median is the middle value of an ordered sample. It resists outliers better than the mean." }]);
+    expect(activity.questions[0].source?.documentName).toBe("Statistics.docx");
+    expect(activity.questions[0].source?.extract).toContain("median is the middle value");
+    const attempt = gradeActivity(activity, { questions_1: "middle value", questions_2: "40" }, Date.now() - 60000, { questions_1: 8000, questions_2: 32000 });
+    expect(attempt.results[1].ms).toBe(32000);
+    const skills = bySkill([attempt]);
+    expect(skills.find((s) => s.skill === "calculation")?.errors).toBe(1);
+    expect(skills.find((s) => s.skill === "calculation")?.seconds).toBe(32);
+    expect(byDifficulty([attempt]).map((d) => d.difficulty)).toEqual(["easy", "hard"]);
+    expect(timeByKind([attempt])[0].seconds).toBe(20);
+    expect(estimateExamMinutes([attempt], 20)).toBe(7);
+  });
+});

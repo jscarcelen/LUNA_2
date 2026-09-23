@@ -8,7 +8,7 @@ import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPl
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
 import { chargeRun, readCredits } from "../../../credits/credits";
-import { buildActivity } from "../../../activities/engine/activity";
+import { attachSources, buildActivity } from "../../../activities/engine/activity";
 import { renderActivityHtml } from "../../../activities/engine/html";
 import { ActivityPlayer } from "../../../activities/ActivityPlayer";
 import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
@@ -654,7 +654,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!output || typeof output !== "object") return null;
     const schemaFields = Array.isArray(agentConfig?.spec?.outputSchema) && agentConfig.spec.outputSchema.length ? agentConfig.spec.outputSchema : legacyToFieldDefs(fields);
     const data = { ...(output.data || {}), items: Array.isArray(output.items) ? output.items : [] };
-    try { return buildActivity(schemaFields, data, { title: customization.brand?.title || agentConfig?.name, agentId: agentDocument?.id || "", agentName: agentConfig?.name }); } catch { return null; }
+    try {
+      const built = buildActivity(schemaFields, data, { title: customization.brand?.title || agentConfig?.name, agentId: agentDocument?.id || "", agentName: agentConfig?.name });
+      // Link each question to the passage its answer came from.
+      return attachSources(built, Array.isArray(output.sources) ? output.sources : []);
+    } catch { return null; }
   }, [output, agentConfig, fields, customization.brand?.title, agentDocument?.id]);
 
   async function handleDoOnLuna() {

@@ -542,3 +542,11 @@
 - `modules/performance/`: `metrics.js` (joins attempts with their resource → folder, agent, template, material, tags, question kinds; `summarise`, `errorsByTopic`, `byResource` with iteration delta, `timeline`), `learners.js` (learner names per browser; attempts now store `learner`), `plan.js` (study goals tagged `study-goal`: title, date, target score, linked resources, `goalProgress`), `PerformancePage.js`.
 - Dashboard (nav for all roles, role-aware copy): learner selector for teacher/parent (whole class / all children), date range, filters by folder · resource · activity type · agent · template · source material; KPIs (activities done, average score, mistakes, repeated & improved, time on task); activity timeline; mistakes by topic with rate and examples; per-resource table with times done and improvement; study plan with exam dates, progress bar, "next" resources and per-type scores.
 - Resources page: **＋ Folder** (and ＋ Subfolder of the filtered folder) plus "Doing activities as" learner picker for teacher/parent.
+
+## Question classification, timing and source citations (2026-09-23)
+
+- `ActivityQuestion` gained `skill` (pre-set `SKILLS`, editable) and `source { documentName, locator, extract }`; attempts store `durations` (ms per question) and results carry `skill` + `ms`.
+- The runtime returns the retrieved `sources` (document, passage, text); `attachSources()` links each question to the passage with the most shared terms and quotes the best sentence. Agent-provided `source`/`quote` fields win. Exam-question blocks now include optional `Skill`, `Difficulty` and `Source` fields so agents classify as they generate.
+- Player: per-question timer (clock follows the question being answered); after checking it shows the source extract, the skill/difficulty chips and the seconds spent; the header shows total minutes.
+- Resources → open → **Questions & sources**: edit each question's skill (list or custom), difficulty and topic, or set them in bulk; the matched source extract is shown under each question.
+- Performance: filters by skill and difficulty; KPI shows seconds per question and an estimated duration for a 20-question exam; new sections "What the mistakes are about" (per skill: asked, seconds, wrong, rate), "By difficulty" and "Time per question" by activity type.

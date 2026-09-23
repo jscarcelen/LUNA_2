@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { TemplateThumbnail } from "../template-studio/TemplateThumbnail";
 import { RESOURCE_TAG, isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "./resource";
+import { SKILLS } from "../activities/engine/activity";
 import { ResourceExports } from "./ResourceExports";
 import { addLearner, defaultLearner, readLearners } from "../performance/learners";
 
@@ -23,7 +24,7 @@ function ResourceThumb({ template }) {
  * Resources — every generated document: filter and organise them, do them on Luna, download any
  * view/format of their template, regenerate or re-template them, move them between folders.
  */
-export function ResourcesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRemoveDocument, onCreateFolder, onOpenResource }) {
+export function ResourcesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onCreateFolder, onOpenResource }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -61,6 +62,28 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
 
   const open = rows.find((row) => row.document.id === openId) || null;
   const openStats = open ? resourceStats(open.document.id, open.resource.activity?.id, documents) : null;
+
+  async function persistResource(row, nextResource) {
+    if (!onUpdateGeneratedDocument) return;
+    const content = JSON.stringify(nextResource, null, 2);
+    try {
+      await onUpdateGeneratedDocument(row.document.id, { file: { name: row.document.name, content, sizeBytes: content.length } });
+      setStatus("Classification saved.");
+    } catch (error) {
+      setStatus(String(error.message || error));
+    }
+  }
+  function classify(row, questionId, patch) {
+    const activity = row.resource.activity;
+    if (!activity) return;
+    const next = { ...row.resource, activity: { ...activity, questions: activity.questions.map((question) => (question.id === questionId ? { ...question, ...patch } : question)) } };
+    persistResource(row, next);
+  }
+  function bulkClassify(row, patch) {
+    const activity = row.resource.activity;
+    if (!activity) return;
+    persistResource(row, { ...row.resource, activity: { ...activity, questions: activity.questions.map((question) => ({ ...question, ...patch })) } });
+  }
 
   async function createFolder(parentFolderId = "") {
     const name = newFolder.trim();
@@ -205,12 +228,46 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
               </div>
             </header>
             <div className="flex gap-1 self-start rounded-xl bg-[var(--surface-soft)] p-1">
-              {[["do", "Do it on Luna"], ["export", "Downloads"], ["results", "Results"]].map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
+              {[["do", "Do it on Luna"], ["questions", "Questions & sources"], ["export", "Downloads"], ["results", "Results"]].map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
             </div>
             {tab === "do" ? (
               open.resource.activity?.questions.length
                 ? <section className={`${card} p-5`}><p className="m-0 text-sm text-soft-ink">{open.resource.activity.questions.length} questions. Answers are checked and every attempt is recorded.</p><button type="button" className={`${primaryBtn} mt-3`} onClick={() => setPlaying(open)}>{openStats?.times ? "Do it again" : "Start"}</button></section>
                 : <section className={`${card} p-5`}><p className="m-0 text-sm text-soft-ink">This resource has nothing to answer — it is a reading document. Use Downloads.</p></section>
+            ) : null}
+            {tab === "questions" ? (
+              <section className={`${card} p-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div><p className={kicker}>What each question tests</p><p className="m-0 mt-1 text-xs text-soft-ink">Classify the questions so mistakes can be measured by skill and difficulty. Where the answer comes from is shown underneath.</p></div>
+                  {open.resource.activity?.questions.length ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <select className={field} value="" onChange={(event) => event.target.value && bulkClassify(open, { skill: event.target.value })}><option value="">Set all skills…</option>{SKILLS.map((skill) => <option key={skill} value={skill}>{skill}</option>)}</select>
+                      <select className={field} value="" onChange={(event) => event.target.value && bulkClassify(open, { difficulty: event.target.value })}><option value="">Set all difficulty…</option>{["easy", "medium", "hard"].map((level) => <option key={level} value={level}>{level}</option>)}</select>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {(open.resource.activity?.questions || []).map((question, index) => (
+                    <div key={question.id} className="rounded-xl border border-ink/10 p-3">
+                      <p className="m-0 text-sm font-semibold text-ink"><span className="mr-2 text-soft-ink">{index + 1}.</span>{question.prompt}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <select className={field} value={question.skill || ""} onChange={(event) => classify(open, question.id, { skill: event.target.value })}>
+                          <option value="">What does it test…</option>
+                          {[...new Set([...SKILLS, ...(question.skill ? [question.skill] : [])])].map((skill) => <option key={skill} value={skill}>{skill}</option>)}
+                        </select>
+                        <select className={field} value={question.difficulty || ""} onChange={(event) => classify(open, question.id, { difficulty: event.target.value })}>
+                          <option value="">Difficulty…</option>
+                          {["easy", "medium", "hard"].map((level) => <option key={level} value={level}>{level}</option>)}
+                        </select>
+                        <input className={`${field} w-40`} defaultValue={question.topic || ""} placeholder="Topic" onBlur={(event) => event.target.value !== (question.topic || "") && classify(open, question.id, { topic: event.target.value })} />
+                        <button type="button" className="rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-soft-ink hover:text-ink" onClick={() => { const skill = window.prompt("Custom category", question.skill || ""); if (skill !== null) classify(open, question.id, { skill: skill.trim() }); }}>Custom…</button>
+                      </div>
+                      {question.source?.extract ? <p className="m-0 mt-2 rounded-lg bg-[var(--surface-soft)] px-2.5 py-1.5 text-[11px] text-soft-ink">📖 {question.source.documentName ? <strong className="text-ink">{question.source.documentName}</strong> : "Material"}{question.source.locator ? ` · ${question.source.locator}` : ""}: “{question.source.extract}”</p> : <p className="m-0 mt-2 text-[11px] text-soft-ink">No source passage matched this question.</p>}
+                    </div>
+                  ))}
+                  {!open.resource.activity?.questions.length ? <p className="m-0 text-sm text-soft-ink">This resource has no questions.</p> : null}
+                </div>
+              </section>
             ) : null}
             {tab === "export" ? <section className={`${card} p-5`}><p className={kicker}>Every view of its template</p><div className="mt-3"><ResourceExports resource={open.resource} template={templateById[open.resource.meta.templateId]} onStatus={setStatus} /></div></section> : null}
             {tab === "results" ? (

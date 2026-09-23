@@ -76,7 +76,11 @@ function examQuestion(): BlockDef {
   const options = createField("Options", "array", { children: [option] });
   const answer = createField("Answer", "text", { description: "The correct option." });
   const points = createField("Points", "number");
-  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer, points] })] });
+  // Classification: used by the platform to measure mistakes by skill and difficulty (never printed).
+  const skill = createField("Skill", "text", { description: "What this question tests: concept, definition, vocabulary, calculation, problem solving, application, comprehension, recall or analysis", options: ["concept", "definition", "vocabulary", "calculation", "problem solving", "application", "comprehension", "recall", "analysis"], required: false });
+  const difficulty = createField("Difficulty", "text", { description: "easy, medium or hard", options: ["easy", "medium", "hard"], required: false });
+  const source = createField("Source", "text", { description: "Short quote from the material where the answer is found", required: false });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer, points, skill, difficulty, source] })] });
   const group = createGroup({
     name: "Exam question",
     frame: { x: 12, y: 12, w: 186, h: 44 },

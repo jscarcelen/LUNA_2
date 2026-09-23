@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { activityKindLabel, byResource, errorsByTopic, joinAttempts, readResources, summarise, timeline } from "./metrics";
+import { activityKindLabel, byDifficulty, byResource, bySkill, errorsByTopic, estimateExamMinutes, joinAttempts, readResources, summarise, timeByKind, timeline } from "./metrics";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
 
@@ -52,7 +52,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const [learners, setLearners] = useState([]);
   const [learner, setLearner] = useState("");
   const [range, setRange] = useState(30);
-  const [filters, setFilters] = useState({ folder: "", agent: "", template: "", source: "", kind: "", resource: "" });
+  const [filters, setFilters] = useState({ folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "" });
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState({ title: "", date: "", targetScore: 80, resourceIds: [] });
   const [busy, setBusy] = useState(false);
@@ -73,6 +73,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     if (filters.source && !(attempt.sourceNames || []).includes(filters.source)) return false;
     if (filters.kind && !(attempt.kinds || []).includes(filters.kind)) return false;
     if (filters.resource && attempt.resourceId !== filters.resource) return false;
+    if (filters.skill && !(attempt.results || []).some((result) => (result.skill || "unclassified") === filters.skill)) return false;
+    if (filters.difficulty && !(attempt.results || []).some((result) => (result.difficulty || "unrated") === filters.difficulty)) return false;
     return true;
   });
 
@@ -84,6 +86,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const usedTemplates = [...new Set(all.map((a) => a.templateName).filter(Boolean))];
   const sources = [...new Set(all.flatMap((a) => a.sourceNames || []))];
   const kinds = [...new Set(all.flatMap((a) => a.kinds || []))];
+  const skills = bySkill(attempts);
+  const difficulties = byDifficulty(attempts);
+  const times = timeByKind(attempts);
+  const examMinutes = estimateExamMinutes(attempts, 20);
+  const allSkills = [...new Set(all.flatMap((a) => (a.results || []).map((r) => r.skill || "unclassified")))];
+  const allDifficulties = [...new Set(all.flatMap((a) => (a.results || []).map((r) => r.difficulty || "unrated")))];
   const repeated = rows.filter((row) => row.times > 1);
   const improving = repeated.filter((row) => row.delta > 0.05).length;
 
@@ -132,10 +140,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}</select>
           <select className={field} value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })}><option value="">Any resource</option>{resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}</select>
           <select className={field} value={filters.kind} onChange={(event) => setFilters({ ...filters, kind: event.target.value })}><option value="">Any activity type</option>{kinds.map((k) => <option key={k} value={k}>{activityKindLabel(k)}</option>)}</select>
+          <select className={field} value={filters.skill} onChange={(event) => setFilters({ ...filters, skill: event.target.value })}><option value="">Any skill</option>{allSkills.map((s2) => <option key={s2} value={s2}>{s2}</option>)}</select>
+          <select className={field} value={filters.difficulty} onChange={(event) => setFilters({ ...filters, difficulty: event.target.value })}><option value="">Any difficulty</option>{allDifficulties.map((d) => <option key={d} value={d}>{d}</option>)}</select>
           <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{agents.map((a) => <option key={a} value={a}>{a}</option>)}</select>
           <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{usedTemplates.map((t) => <option key={t} value={t}>{t}</option>)}</select>
           <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}</select>
-          {Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => setFilters({ folder: "", agent: "", template: "", source: "", kind: "", resource: "" })}>Clear</button> : null}
+          {Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => setFilters({ folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "" })}>Clear</button> : null}
         </div>
       </div>
 
@@ -144,7 +154,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <Kpi label="Average score" value={percent(stats.score)} accent={tone(stats.score)} hint={`${stats.questions} questions answered`} />
         <Kpi label="Mistakes" value={stats.errors} accent={stats.errors ? "text-[var(--color-danger)]" : "text-ink"} hint={stats.questions ? `${percent(stats.errors / stats.questions)} of answers` : ""} />
         <Kpi label="Repeated" value={repeated.length} hint={`${improving} improved on the retry`} />
-        <Kpi label="Time on task" value={`${stats.minutes} min`} hint={range ? `last ${range} days` : "all time"} />
+        <Kpi label="Time on task" value={`${stats.minutes} min`} hint={stats.perQuestion ? `${stats.perQuestion}s per question${examMinutes ? ` · a 20-question exam ≈ ${examMinutes} min` : ""}` : range ? `last ${range} days` : "all time"} />
       </div>
 
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
@@ -225,6 +235,41 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
               );
             })}
             {!goals.length ? <p className="m-0 text-sm text-soft-ink">No dates yet. Add an exam or a deadline and tick the resources that prepare for it — the bar shows whether the work is on track.</p> : null}
+          </div>
+
+          <p className={`${kicker} mt-5`}>What the mistakes are about</p>
+          <div className="mt-2 grid gap-1">
+            {skills.map((entry) => (
+              <div key={entry.skill} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-ink">{entry.skill}</span>
+                <span className="text-[11px] text-soft-ink">{entry.asked} q{entry.seconds ? ` · ${entry.seconds}s` : ""}</span>
+                <span className={`w-20 text-right text-[11px] font-semibold ${entry.rate > 0.4 ? "text-[var(--color-danger)]" : entry.rate > 0.15 ? "text-[#b25e00]" : "text-[#2f9e5b]"}`}>{entry.errors} wrong · {percent(entry.rate)}</span>
+              </div>
+            ))}
+            {!skills.length ? <p className="m-0 text-sm text-soft-ink">Classify the questions of a resource (Resources → open → Questions &amp; sources) to see this.</p> : null}
+          </div>
+
+          <p className={`${kicker} mt-5`}>By difficulty</p>
+          <div className="mt-2 grid gap-1">
+            {difficulties.map((entry) => (
+              <div key={entry.difficulty} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate capitalize text-ink">{entry.difficulty}</span>
+                <span className="text-[11px] text-soft-ink">{entry.asked} q{entry.seconds ? ` · ${entry.seconds}s` : ""}</span>
+                <span className={`w-16 text-right text-[11px] font-semibold ${tone(1 - entry.rate)}`}>{percent(1 - entry.rate)}</span>
+              </div>
+            ))}
+          </div>
+
+          <p className={`${kicker} mt-5`}>Time per question</p>
+          <div className="mt-2 grid gap-1">
+            {times.map((entry) => (
+              <div key={entry.kind} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-ink">{activityKindLabel(entry.kind)}</span>
+                <span className="text-[11px] text-soft-ink">{entry.count} answered</span>
+                <span className="w-14 text-right font-semibold text-ink">{entry.seconds}s</span>
+              </div>
+            ))}
+            {!times.length ? <p className="m-0 text-sm text-soft-ink">Timing is recorded from now on, each time an activity is done on Luna.</p> : null}
           </div>
 
           <p className={`${kicker} mt-5`}>By activity type</p>

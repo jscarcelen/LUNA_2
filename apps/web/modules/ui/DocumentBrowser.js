@@ -19,13 +19,45 @@ export function DocumentBrowser({
   onMove,
   onCopy,
   onDelete,
+  onDownload,
   renderCard,
   renderMeta,
+  renderActions,
+  marquee = false,
   emptyText = "Nothing here yet."
 }) {
   const [clipboard, setClipboard] = useState([]);
+  const [band, setBand] = useState(null);
   const lastIndex = useRef(-1);
+  const areaRef = useRef(null);
   const selected = new Set(selectedIds);
+
+  /**
+   * Rubber-band selection: dragging across empty space selects everything the rectangle touches,
+   * the way a file manager does. Additive with ⌘/Ctrl or ⇧.
+   */
+  function bandStart(event) {
+    if (!marquee || event.button !== 0) return;
+    if (event.target.closest("[data-doc-row]") || event.target.closest("button") || event.target.closest("select") || event.target.closest("input")) return;
+    const rect = areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const additive = event.metaKey || event.ctrlKey || event.shiftKey;
+    const origin = { x: event.clientX, y: event.clientY };
+    const base = additive ? selectedIds : [];
+    if (!additive) onSelectionChange?.([]);
+    setBand({ ...origin, x2: origin.x, y2: origin.y });
+    const onMove = (moveEvent) => {
+      setBand({ x: origin.x, y: origin.y, x2: moveEvent.clientX, y2: moveEvent.clientY });
+      const box = { left: Math.min(origin.x, moveEvent.clientX), right: Math.max(origin.x, moveEvent.clientX), top: Math.min(origin.y, moveEvent.clientY), bottom: Math.max(origin.y, moveEvent.clientY) };
+      const hit = [...(areaRef.current?.querySelectorAll("[data-doc-row]") || [])]
+        .filter((node) => { const item = node.getBoundingClientRect(); return item.left < box.right && item.right > box.left && item.top < box.bottom && item.bottom > box.top; })
+        .map((node) => node.getAttribute("data-doc-row"));
+      onSelectionChange?.([...new Set([...base, ...hit])]);
+    };
+    const onUp = () => { setBand(null); window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   function click(event, document, index) {
     const ids = new Set(selectedIds);
@@ -87,15 +119,18 @@ export function DocumentBrowser({
           ) : null}
           {onCopy ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => setClipboard(selectedIds)}>Copy</button> : null}
           {onCopy && clipboard.length ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onCopy(clipboard)}>Paste {clipboard.length} here</button> : null}
+          {onDownload ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onDownload(selectedIds)}>⤓ Download</button> : null}
           {onDelete ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete ${selectedIds.length} item${selectedIds.length === 1 ? "" : "s"}?`)) onDelete(selectedIds); }}>Delete</button> : null}
           <button type="button" className="ml-auto text-soft-ink hover:underline" onClick={() => onSelectionChange?.([])}>Clear</button>
         </div>
       ) : null}
 
-      <div className={view === "grid" ? "grid gap-2 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-1"}>
+      <div ref={areaRef} onMouseDown={bandStart} className={`relative ${view === "grid" ? "grid gap-2 sm:grid-cols-2 xl:grid-cols-3" : "grid gap-1"} ${marquee ? "min-h-24 select-none" : ""}`}>
+        {band ? <div className="pointer-events-none fixed z-30 rounded border border-[var(--accent)] bg-[var(--accent)]/10" style={{ left: Math.min(band.x, band.x2), top: Math.min(band.y, band.y2), width: Math.abs(band.x2 - band.x), height: Math.abs(band.y2 - band.y) }} /> : null}
         {documents.map((document, index) => {
           const isSelected = selected.has(document.id);
           const common = {
+            "data-doc-row": document.id,
             draggable: true,
             onDragStart: (event) => dragStart(event, document),
             onClick: (event) => click(event, document, index),
@@ -108,6 +143,7 @@ export function DocumentBrowser({
                   <>
                     <p className="m-0 truncate text-sm font-semibold text-ink">{document.name}</p>
                     {renderMeta ? <div className="mt-1">{renderMeta(document)}</div> : <p className="m-0 mt-1 line-clamp-2 text-xs text-soft-ink">{document.preview || ""}</p>}
+                    {renderActions ? <div className="mt-2">{renderActions(document)}</div> : null}
                   </>
                 )}
               </article>
@@ -120,12 +156,12 @@ export function DocumentBrowser({
                 <span className="block truncate text-sm font-medium text-ink">{document.name}</span>
                 {renderMeta ? renderMeta(document) : <span className="block truncate text-[11px] text-soft-ink">{document.preview || ""}</span>}
               </span>
-              {onOpen ? <button type="button" className="shrink-0 rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink" onClick={(event) => { event.stopPropagation(); onOpen(document); }}>Open</button> : null}
+              {renderActions ? renderActions(document) : (onOpen ? <button type="button" className="shrink-0 rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink" onClick={(event) => { event.stopPropagation(); onOpen(document); }}>Open</button> : null)}
             </div>
           );
         })}
       </div>
-      <p className="m-0 text-[11px] text-soft-ink">Click to select · ⇧ click for a range · ⌘ click to add · drag onto a folder to move · ⌘C / ⌘V to copy into another folder</p>
+      <p className="m-0 text-[11px] text-soft-ink">Click to select · ⇧ click for a range · ⌘ click to add{marquee ? " · drag across empty space to select many" : ""} · drag onto a folder to move · ⌘C / ⌘V to copy into another folder</p>
     </div>
   );
 }

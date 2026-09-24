@@ -8,7 +8,6 @@ import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { AgentMarketplacePage } from "../modules/agent-marketplace";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
-import { ResourcesPage } from "../modules/resources/ResourcesPage";
 import { PerformancePage } from "../modules/performance/PerformancePage";
 import { PlansPage } from "../modules/plans/PlansPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
@@ -126,32 +125,10 @@ export function AppShell() {
         />
       );
     }
+    // Generated resources live in the workspace folders now; old links land there.
     if (page === "resources") {
-      return (
-        <ResourcesPage
-          onSelectWorkspace={handleSelectWorkspace}
-          onSelectSubject={handleSelectSubject}
-          onRenameFolder={handleRenameFolder}
-          onRemoveFolder={handleRemoveFolder}
-          workspaces={workspaces}
-          selectedWorkspaceId={selectedWorkspaceId}
-          selectedSubjectId={selectedSubjectId}
-          templates={blockTemplates}
-          role={role}
-          profileName={roleProfiles[role]?.name || ""}
-          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
-          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
-          onUpdateDocumentMeta={handleUpdateDocumentMeta}
-          onRemoveDocument={handleRemoveDocument}
-          onCreateFolder={handleCreateFolder}
-          onOpenResource={(documentId) => {
-            const resourceDocument = (workspaces.flatMap((w) => w.subjects || []).flatMap((s) => s.documents || [])).find((d) => d.id === documentId);
-            let agentId = "";
-            try { agentId = JSON.parse(String(resourceDocument?.content || "{}"))?.meta?.agentId || ""; } catch { agentId = ""; }
-            setPage(agentId ? `custom-agent:${agentId}?resource=${documentId}` : "ai-tools");
-          }}
-        />
-      );
+      setTimeout(() => setPage("workspaces"), 0);
+      return null;
     }
     if (page === "activities") {
       return (
@@ -171,6 +148,18 @@ export function AppShell() {
     if (page === "workspaces") {
       return (
         <WorkspacePage
+          templates={blockTemplates}
+          onDownloadDocument={handleDownloadDocument}
+          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onCreateWorkspaceFolder={handleCreateSubject}
+          onRegenerateResource={(documentId) => {
+            const resourceDocument = (workspaces.flatMap((w) => w.subjects || []).flatMap((s) => s.documents || [])).find((d) => d.id === documentId);
+            let agentId = "";
+            try { agentId = JSON.parse(String(resourceDocument?.content || "{}"))?.meta?.agentId || ""; } catch { agentId = ""; }
+            setPage(agentId ? `custom-agent:${agentId}?resource=${documentId}` : "ai-tools");
+          }}
+          onSelectFolder={(node) => { if (node?.subjectId && node.subjectId !== selectedSubjectId) setSelectedSubjectId(node.subjectId); }}
           role={role}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
@@ -428,11 +417,12 @@ export function AppShell() {
     }
   }
 
-  async function handleCreateFolder(name, parentFolderId) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return;
+  // `subjectId` lets the folder browser act on any top-level folder, not only the selected one.
+  async function handleCreateFolder(name, parentFolderId, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
     const result = await runWorkspaceAction("createFolder", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       name,
       parentFolderId: parentFolderId || ""
     });
@@ -448,21 +438,21 @@ export function AppShell() {
     });
   }
 
-  async function handleRenameFolder(folderId, nextName) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return;
+  async function handleRenameFolder(folderId, nextName, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
     await runWorkspaceAction("renameFolder", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       folderId,
       nextName
     });
   }
 
-  async function handleRemoveFolder(folderId) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return;
+  async function handleRemoveFolder(folderId, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
     await runWorkspaceAction("removeFolder", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       folderId
     });
   }
@@ -523,7 +513,7 @@ export function AppShell() {
     const documents = await Promise.all(readFiles);
     const uploadResult = await postWorkspaceAction("uploadDocuments", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: options?.subjectId || selectedSubjectId,
       folderIds: Array.isArray(options?.folderIds) ? options.folderIds : [],
       tags: options?.tags || [],
       quality: options?.quality || {},
@@ -540,30 +530,39 @@ export function AppShell() {
     return uploadResult.data;
   }
 
-  async function handleRenameDocument(documentId, nextName) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return;
+  /** The original file for uploaded material, or the stored file for a generated document. */
+  async function handleDownloadDocument(documentDescriptor) {
+    const documentId = typeof documentDescriptor === "string" ? documentDescriptor : documentDescriptor?.id;
+    if (!documentId) return null;
+    const generated = typeof documentDescriptor === "object" && documentDescriptor?.sourceType === "generated";
+    const result = await postWorkspaceAction(generated ? "downloadGeneratedDocument" : "downloadUploadedDocument", { documentId });
+    return result.ok ? result.data?.download || null : null;
+  }
+
+  async function handleRenameDocument(documentId, nextName, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
     await runWorkspaceAction("renameDocument", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       documentId,
       nextName
     });
   }
 
-  async function handleRemoveDocument(documentId) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return;
+  async function handleRemoveDocument(documentId, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
     await runWorkspaceAction("removeDocument", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       documentId
     });
   }
 
-  async function handleUpdateDocumentMeta(documentId, options = {}) {
-    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return;
+  async function handleUpdateDocumentMeta(documentId, options = {}, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId) || !documentId) return;
     await runWorkspaceAction("updateDocumentMeta", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       documentId,
       folderIds: Array.isArray(options.folderIds) ? options.folderIds : [],
       tags: Array.isArray(options.tags) ? options.tags : []
@@ -628,7 +627,7 @@ export function AppShell() {
 
   const templatesLoadedRef = useRef(false);
   useEffect(() => {
-    if (page !== "resources" || templatesLoadedRef.current) return;
+    if (!["resources", "workspaces"].includes(page) || templatesLoadedRef.current) return;
     templatesLoadedRef.current = true;
     handleListDocumentBlockTemplates().then(setBlockTemplates).catch(() => setBlockTemplates([]));
   });
@@ -660,11 +659,11 @@ export function AppShell() {
     return Array.isArray(result.data?.templates) ? result.data.templates : [];
   }
 
-  async function handleSaveGeneratedQuizDocument(payload) {
-    if (!selectedWorkspaceId || !selectedSubjectId) return null;
+  async function handleSaveGeneratedQuizDocument(payload, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return null;
     const result = await runWorkspaceAction("saveGeneratedQuizDocument", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       folderIds: Array.isArray(payload?.folderIds) ? payload.folderIds : [],
       tags: Array.isArray(payload?.tags) ? payload.tags : [],
       file: payload?.file || {},
@@ -674,11 +673,11 @@ export function AppShell() {
     return result?.savedDocument || null;
   }
 
-  async function handleUpdateGeneratedDocument(documentId, payload) {
-    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return null;
+  async function handleUpdateGeneratedDocument(documentId, payload, subjectId) {
+    if (!selectedWorkspaceId || !(subjectId || selectedSubjectId) || !documentId) return null;
     const result = await runWorkspaceAction("updateGeneratedDocument", {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: subjectId || selectedSubjectId,
       documentId,
       file: payload?.file || {}
     });

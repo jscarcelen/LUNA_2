@@ -8,6 +8,8 @@ import { SKILLS } from "../activities/engine/activity";
 import { ResourceExports } from "./ResourceExports";
 import { addLearner, defaultLearner, readLearners } from "../performance/learners";
 import { PhoneCollapse } from "../ui/PhoneCollapse";
+import { FolderTree } from "../ui/FolderTree";
+import { AddToPlanDialog } from "../plans/AddToPlanDialog";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -25,7 +27,7 @@ function ResourceThumb({ template }) {
  * Resources — every generated document: filter and organise them, do them on Luna, download any
  * view/format of their template, regenerate or re-template them, move them between folders.
  */
-export function ResourcesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onCreateFolder, onOpenResource }) {
+export function ResourcesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, templates = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onCreateFolder, onRenameFolder, onRemoveFolder, onSelectWorkspace, onSelectSubject, onOpenResource, onAddToPlan }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -38,11 +40,21 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
   const [status, setStatus] = useState("");
   const [newFolder, setNewFolder] = useState("");
   const [creating, setCreating] = useState(false);
+  const [planningRow, setPlanningRow] = useState(null);
   const [learner, setLearner] = useState("");
   const [learners, setLearners] = useState([]);
   useEffect(() => { setLearners(readLearners()); setLearner(defaultLearner(role, profileName)); }, [role, profileName]);
 
+  const workspace = workspaces.find((w) => w.id === selectedWorkspaceId) || null;
   const rows = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
+  /** Moving resources between folders from the tree — the same folders the workspace shows. */
+  const moveDocuments = (ids, folderId) => {
+    for (const id of ids) {
+      const target = documents.find((item) => item.id === id);
+      if (target) onUpdateDocumentMeta?.(id, { folderIds: folderId ? [folderId] : [], tags: target.tags || [] });
+    }
+    setStatus(folderId ? `Moved ${ids.length} resource${ids.length === 1 ? "" : "s"} into “${folders.find((f) => f.id === folderId)?.name || "folder"}”.` : `Moved ${ids.length} resource${ids.length === 1 ? "" : "s"} out of their folder.`);
+  };
   const templateById = useMemo(() => Object.fromEntries(templates.map((template) => [template.id, template])), [templates]);
   const agents = [...new Set(rows.map((row) => row.resource.meta.agentName).filter(Boolean))];
   const usedTemplates = [...new Set(rows.map((row) => row.resource.meta.templateName).filter(Boolean))];
@@ -55,7 +67,8 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
     if (filters.agent && resource.meta.agentName !== filters.agent) return false;
     if (filters.template && resource.meta.templateName !== filters.template) return false;
     if (filters.source && !(resource.meta.sourceNames || []).includes(filters.source)) return false;
-    if (filters.folder && !(document.folderIds || []).includes(filters.folder)) return false;
+    if (filters.folder === "__unfiled" && (document.folderIds || []).length) return false;
+    if (filters.folder && filters.folder !== "__unfiled" && !(document.folderIds || []).includes(filters.folder)) return false;
     if (filters.tag && !resourceTags(document).includes(filters.tag)) return false;
     if (filters.favourite && !isFavourite(document)) return false;
     return true;
@@ -116,7 +129,45 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
   if (!subject) return <section className="tw-scope"><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see its resources.</p></section>;
 
   return (
-    <section className="tw-scope grid gap-4">
+    <section className="tw-scope grid items-start gap-4 lg:grid-cols-[236px_minmax(0,1fr)]">
+      {/* The library is filed exactly like the workspace: same workspace, same subject, same folders. */}
+      <aside className={`${card} grid gap-3 p-4 lg:sticky lg:top-4`}>
+        <div className="grid gap-1.5">
+          <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Workspace
+            <select className={field} value={selectedWorkspaceId || ""} onChange={(event) => onSelectWorkspace?.(event.target.value)} disabled={!onSelectWorkspace}>
+              {workspaces.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+          <label className="grid gap-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Space
+            <select className={field} value={selectedSubjectId || ""} onChange={(event) => onSelectSubject?.(event.target.value)} disabled={!onSelectSubject}>
+              {(workspace?.subjects || []).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+          </label>
+        </div>
+        <FolderTree
+          folders={folders}
+          documents={rows.map((row) => row.document)}
+          selectedId={filters.folder}
+          countLabel="resource"
+          onSelect={(folderId) => setFilters({ ...filters, folder: folderId })}
+          onCreateFolder={onCreateFolder ? (name, parentId) => onCreateFolder(name, parentId) : undefined}
+          onRenameFolder={onRenameFolder}
+          onRemoveFolder={onRemoveFolder}
+          onDropDocuments={moveDocuments}
+        />
+        {allTags.length ? (
+          <div>
+            <p className={kicker}>Tags</p>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {allTags.map((tag) => (
+                <button key={tag} type="button" onClick={() => setFilters({ ...filters, tag: filters.tag === tag ? "" : tag })} className={`${chip} ${filters.tag === tag ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{tag}</button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </aside>
+
+      <div className="grid gap-4">
       <div className={`${card} grid gap-3 p-5`}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -132,20 +183,12 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
           <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{agents.map((a) => <option key={a} value={a}>{a}</option>)}</select>
           <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{usedTemplates.map((t) => <option key={t} value={t}>{t}</option>)}</select>
           <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}</select>
-          <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}</select>
           {allTags.length ? <select className={field} value={filters.tag} onChange={(event) => setFilters({ ...filters, tag: event.target.value })}><option value="">Any tag</option>{allTags.map((t) => <option key={t} value={t}>{t}</option>)}</select> : null}
           <button type="button" onClick={() => setFilters({ ...filters, favourite: !filters.favourite })} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filters.favourite ? "bg-[#ffe9a8] text-[#8a5a00]" : "border border-ink/15 text-soft-ink"}`}>★ Favourites</button>
           {query || Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => { setQuery(""); setFilters({ agent: "", template: "", source: "", folder: "", tag: "", favourite: false }); }}>Clear</button> : null}
         </div>
         </PhoneCollapse>
         <div className="flex flex-wrap items-center gap-2">
-          {onCreateFolder ? (
-            <>
-              <input className={`${field} w-44`} value={newFolder} onChange={(event) => setNewFolder(event.target.value)} onKeyDown={(event) => event.key === "Enter" && createFolder()} placeholder="New folder name" />
-              <button type="button" className={ghostBtn} disabled={creating || !newFolder.trim()} onClick={() => createFolder()}>{creating ? "Creating…" : "＋ Folder"}</button>
-              {filters.folder ? <button type="button" className={ghostBtn} disabled={creating || !newFolder.trim()} onClick={() => createFolder(filters.folder)} title="Create it inside the folder you are filtering by">＋ Subfolder of “{folders.find((f) => f.id === filters.folder)?.name}”</button> : null}
-            </>
-          ) : null}
           {role !== "student" ? (
             <label className="ml-auto flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">Doing activities as
               <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
@@ -166,7 +209,12 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
             const stats = resourceStats(row.document.id, row.resource.activity?.id, documents);
             const template = templateById[row.resource.meta.templateId];
             return (
-              <article key={row.document.id} className={`${card} flex flex-col gap-2 p-4`}>
+              <article
+                key={row.document.id}
+                draggable
+                onDragStart={(event) => event.dataTransfer.setData("text/luna-documents", row.document.id)}
+                className={`${card} flex cursor-grab flex-col gap-2 p-4 active:cursor-grabbing`}
+              >
                 <div className="flex justify-center"><ResourceThumb template={template} /></div>
                 <div className="flex items-start justify-between gap-2">
                   <h4 className="m-0 truncate text-sm font-bold text-ink">{row.resource.name}</h4>
@@ -183,6 +231,7 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
                 <div className="mt-auto flex flex-wrap gap-1.5 pt-1">
                   <button type="button" className={`${primaryBtn} flex-1 py-1.5 text-xs`} onClick={() => { setOpenId(row.document.id); setTab(row.resource.activity?.questions.length ? "do" : "export"); }}>Open</button>
                   <button type="button" className={ghostBtn} onClick={() => onOpenResource?.(row.document.id)}>Regenerate</button>
+                  <button type="button" className={ghostBtn} title="Schedule it in a study plan" onClick={() => setPlanningRow(row)}>＋ Add as activity</button>
                 </div>
               </article>
             );
@@ -285,6 +334,21 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
             ) : null}
           </div>
         </div>
+      ) : null}
+
+      </div>
+
+      {planningRow ? (
+        <AddToPlanDialog
+          documents={documents}
+          resourceId={planningRow.document.id}
+          resourceName={planningRow.resource.name}
+          isActivity={Boolean(planningRow.resource.activity?.questions?.length)}
+          onCancel={() => setPlanningRow(null)}
+          onDone={(message) => { setPlanningRow(null); setStatus(message); }}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+        />
       ) : null}
 
       {playing ? (

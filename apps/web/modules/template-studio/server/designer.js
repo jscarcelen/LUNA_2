@@ -69,6 +69,8 @@ const PLAN_SCHEMA = {
 const REVIEW_SCHEMA = { ...DSL_SCHEMA, properties: { ...DSL_SCHEMA.properties, issuesFixed: { type: "array", items: { type: "string" } } }, required: [...DSL_SCHEMA.required, "issuesFixed"] };
 
 const DESIGN_RULES = `Design language: soft pastel fills (#ffe4ec #e3f1ff #e6f7ea #fff5d6 #efe6ff), accent #5b5bd6, dark text #1f2a6b, radius 2–4 mm, titles 16–22 pt bold centred, body 9–13 pt, generous padding (≥3 mm inside boxes).
+Everything is a CARD, never bare text on white. Each item sits on its own rounded filled box (kind "box", radius 3–4, a pastel fill with a slightly darker stroke) that covers the whole item, with 4–5 mm of padding inside it: no element may touch the card's edge. Give the item a coloured strip or a filled circle badge at the top-left holding its number or icon, put the heading inside the card in bold, and set answer lines or writing space as a lighter inset box (fill #ffffff on the pastel card). Vary the pastel between neighbouring sections so the page looks designed, and keep one accent colour for every heading and badge.
+For children, be playful: bigger type (12–16 pt for the question), rounder corners (radius 4), a friendly emoji in the title or badge, generous space to write, and a light dotted or dashed inset box where the answer goes. Never leave a field as plain text floating on the page — it belongs inside a card, next to its label.
 Geometry: the block is 186 mm wide; the item is ONE cell of the grid: width = 186/columns − 3 (columns 1 → 186). All item elements must sit inside 0..cellW × 0..cellH. Text elements must be wide enough for their text: at least 0.55 mm per character at 10 pt (e.g. a 12-letter word ≈ 7 mm tall, ≥ 26 mm wide). A box behind text must fully contain it with padding. Never overlap two texts. Item height is the height of ONE item (10–60 mm), never the whole grid.
 Expand simple requests like an expert: infer the full count (a 4×4 grid = 16 elements → sampleCount 16), what is fixed and what the agent fills, how answers are checked, and any content rule the agent must follow (write it in contentRules / the list description).
 Known patterns: "square puzzle / tarsia / N×N grid puzzle with word pairs" = N×N cut-apart square tiles (columns N, cell ≈ 43×43 mm, sampleCount N×N) with item fields Top, Right, Bottom, Left = the word on each EDGE, and derive = "tarsia": the agent produces numbered PAIRS (Word A / Word B — pair 1a/1b, 2a/2b…) and the platform computes which tile edge carries which word, so matching is guaranteed and the grid's OUTER edges stay empty. Never ask the agent to fill tile edges directly.
@@ -76,7 +78,7 @@ Borders: the tile's box IS the cut line — never draw extra lines along the box
 Fields: content that changes per document is a field or a list, never fixed text. Every item field must have a field element. For answerable designs use the names Question/Options/Answer, Statement/Answer, Sentence/Answer, Problem/Answer, Left/Right, Front/Back so Luna can check answers; the Answer element is small (6.5 pt, accent colour) so it can be hidden.`;
 
 /** Deterministic geometry clean-up: keep every element inside its cell, give text room, add a background box to grid items. */
-function normalise(dsl) {
+function normalise(dsl, maxHeight = 120) {
   const NUMERIC = new Set(["x", "y", "w", "h", "size", "radius", "rotate"]);
   const clean = (list) => (list || []).map((el) => Object.fromEntries(Object.entries(el).filter(([k, v]) => (NUMERIC.has(k) ? true : v !== "" && v !== false && v !== null))));
   dsl.header = clean(dsl.header);
@@ -88,8 +90,9 @@ function normalise(dsl) {
   const cellW = columns > 1 ? Math.floor(186 / columns) - 3 : 186;
   let cellH = Number(dsl.height) || 0;
   const contentBottom = Math.max(...dsl.elements.filter((e) => e.kind !== "box" && e.kind !== "line" && !Number(e.rotate)).map((e) => (Number(e.y) || 0) + (Number(e.h) || 6)), 12) + 2;
-  if (!cellH || cellH > (columns > 1 ? 70 : 120)) cellH = Math.min(columns > 1 ? 60 : 120, contentBottom + 1);
-  else if (contentBottom > cellH && contentBottom <= (columns > 1 ? 70 : 120)) cellH = contentBottom;
+  const roof = columns > 1 ? Math.min(70, maxHeight) : maxHeight;
+  if (!cellH || cellH > roof) cellH = Math.min(columns > 1 ? Math.min(60, maxHeight) : maxHeight, contentBottom + 1);
+  else if (contentBottom > cellH && contentBottom <= roof) cellH = contentBottom;
   const minTextW = (el) => Math.min(cellW - 4, Math.max(20, ((el.text || el.field || "").length || 8) * (el.size || 10) * 0.06));
   dsl.elements = dsl.elements.map((el) => {
     const rotated = Number(el.rotate) ? true : false;
@@ -136,7 +139,16 @@ function normalise(dsl) {
     const shown = new Set(dsl.elements.filter((e) => e.kind === "field").map((e) => String(e.field || "").toLowerCase()));
     const missing = (dsl.list.itemFields || []).filter((f) => !shown.has(String(f.name).toLowerCase()));
     missing.forEach((f, index) => dsl.elements.push({ kind: "field", field: f.name, text: f.name, x: 3, y: 4 + index * 8, w: cellW - 6, h: 7, size: 11, bold: index === 0, align: columns > 1 ? "center" : "left" }));
-    if (columns > 1 && !dsl.elements.some((e) => e.kind === "box" && e.w >= cellW * 0.8)) dsl.elements.unshift({ kind: "box", x: 0, y: 0, w: cellW, h: cellH, fill: "#e3f1ff", stroke: "#bcd9f5", radius: 3 });
+    // Every item gets a card behind it, whatever the column count, with its content inset from the edge.
+    if (!dsl.elements.some((e) => e.kind === "box" && e.w >= cellW * 0.8 && e.h >= cellH * 0.6)) {
+      const pad = 4;
+      const needsInset = dsl.elements.some((e) => (e.kind === "text" || e.kind === "field") && !Number(e.rotate) && ((Number(e.x) || 0) < pad || (Number(e.y) || 0) < 2));
+      if (needsInset) {
+        dsl.elements = dsl.elements.map((e) => (Number(e.rotate) ? e : { ...e, x: Math.max(pad, Number(e.x) || 0), y: Math.max(3, Number(e.y) || 0), w: Math.min(Number(e.w) || 10, cellW - pad * 2) }));
+        cellH += 5;
+      }
+      dsl.elements.unshift({ kind: "box", x: 0, y: 0, w: cellW, h: cellH, fill: "#e3f1ff", stroke: "#bcd9f5", radius: 3.5 });
+    }
   }
   // De-overlap texts deterministically: a text that collides with an earlier one moves below it.
   const texts = dsl.elements.filter((e) => (e.kind === "text" || e.kind === "field") && !Number(e.rotate));
@@ -148,7 +160,7 @@ function normalise(dsl) {
     }
   }
   const maxBottom = Math.max(...texts.map((e) => e.y + e.h + 2), 12);
-  cellH = Math.min(columns > 1 ? 70 : 140, Math.max(maxBottom, Math.min(cellH, maxBottom + 8)));
+  cellH = Math.min(columns > 1 ? Math.min(70, maxHeight) : maxHeight, Math.max(maxBottom, Math.min(cellH, maxBottom + 8)));
   dsl.elements = dsl.elements.map((e) => (e.kind === "line" ? { ...e, h: Math.min(e.h, e.w > e.h ? 0.3 : e.h), w: e.w > e.h ? e.w : Math.min(e.w, 0.3) } : e));
   // A line hugging the item's border duplicates the box outline — drop it.
   dsl.elements = dsl.elements.filter((e) => !(e.kind === "line" && ((e.w >= e.h && (e.y <= 1.2 || e.y >= cellH - 1.2)) || (e.h > e.w && (e.x <= 1.2 || e.x >= cellW - 1.2)))));
@@ -176,7 +188,7 @@ function geometryIssues(dsl) {
 
 
 /** One component, designed end to end. `previous` refines an earlier design. */
-export async function designComponent({ apiKey, prompt, previous = null, image = "", context = "" }) {
+export async function designComponent({ apiKey, prompt, previous = null, image = "", context = "", maxHeight = 120 }) {
   const plan = await chat(apiKey, {
     name: "component_plan", schema: PLAN_SCHEMA, temperature: 0.2,
     system: `You are a senior worksheet designer for an education platform. Turn the user's request into an exact component specification that a builder can draw without guessing. Resolve ambiguity with sensible assumptions and state them. Decide what repeats (the list and its item fields) and what appears once. Compute the grid: columns, cell width = 186/columns − 3 mm, cell height that comfortably fits the content, coordinates for every element. ${DESIGN_RULES}`,
@@ -197,7 +209,7 @@ export async function designComponent({ apiKey, prompt, previous = null, image =
   if (built.list && !built.list.sampleCount && plan.sampleCount) built.list.sampleCount = plan.sampleCount;
   if (built.list && plan.derive && !built.list.derive) built.list.derive = plan.derive;
   if (built.list && plan.contentRules && !String(built.list.description || "").includes(plan.contentRules.slice(0, 40))) built.list.description = `${built.list.description || ""} ${plan.contentRules}`.trim();
-  let dsl = normalise({ ...built, name: built.name || plan.name });
+  let dsl = normalise({ ...built, name: built.name || plan.name }, maxHeight);
 
   const issues = geometryIssues(dsl);
   if (issues.length) {
@@ -206,7 +218,7 @@ export async function designComponent({ apiKey, prompt, previous = null, image =
       system: `You are the design reviewer. Return the corrected DSL (same shape, all keys present) fixing every listed issue while keeping the plan's intent. ${DESIGN_RULES}`,
       messages: [{ role: "user", content: `PLAN:\n${JSON.stringify(plan)}\n\nDSL:\n${JSON.stringify(dsl)}\n\nISSUES:\n- ${issues.join("\n- ")}` }]
     });
-    dsl = normalise({ ...fixed, name: fixed.name || dsl.name });
+    dsl = normalise({ ...fixed, name: fixed.name || dsl.name }, maxHeight);
   }
   return { dsl, plan, reply: built.reply || "Here is your component." };
 }

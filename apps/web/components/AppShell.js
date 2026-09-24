@@ -128,6 +128,10 @@ export function AppShell() {
     if (page === "resources") {
       return (
         <ResourcesPage
+          onSelectWorkspace={handleSelectWorkspace}
+          onSelectSubject={handleSelectSubject}
+          onRenameFolder={handleRenameFolder}
+          onRemoveFolder={handleRemoveFolder}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -253,6 +257,7 @@ export function AppShell() {
               onReviewDocumentExtraction: handleReviewDocumentExtraction,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
+              onCreateFolder: handleCreateFolder,
                   onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
                   onSaveDocumentBlockTemplate: handleSaveDocumentBlockTemplate,
                   onDeleteDocumentBlockTemplate: handleDeleteDocumentBlockTemplate
@@ -273,6 +278,7 @@ export function AppShell() {
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
               onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
+              onCreateFolder: handleCreateFolder,
               resumeResourceDocumentId,
               onOpenPage: (target) => setPage(target),
               onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`)

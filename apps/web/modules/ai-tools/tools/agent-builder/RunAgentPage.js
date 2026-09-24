@@ -1236,6 +1236,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           defaultName={customization.brand?.title || agentConfig?.name || "Generated resource"}
           folders={folders}
           defaultFolderId={saveFolderId}
+          onCreateFolder={toolContext?.onCreateFolder}
           busy={isSavingDocument}
           summary={`${activity?.questions.length ? `${activity.questions.length} questions · ` : ""}${activeTemplate ? activeTemplate.name : "no template"}${agentConfig?.name ? ` · ${agentConfig.name}` : ""}`}
           onCancel={() => setSaveOpen(false)}

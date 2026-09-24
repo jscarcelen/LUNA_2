@@ -218,6 +218,25 @@ Consequences for the product:
   own mapping; the configuration is stored on the agent, so adjusting fields is only needed when a
   new template is linked, and the set of pairings tells which templates are viable for that agent.
 
+### 5.1g Navigation, filing and study plans (founder spec, 2026-09-24)
+
+- **One navigation rail.** The left column is only navigation: the Luna mark and the sections,
+  collapsible. The account — credit in lunas, storage left, profile — sits at the top right.
+- **Templates are their own section**, not an AI tool; the AI section lists agents only, and agents
+  can be deleted.
+- **Everything generated has a clear place to live.** Saving a resource always asks for a name and a
+  folder (creating one if needed). The workspace is the complete folder of a space — uploaded and
+  generated alike — and the Resources library is the same structure showing only what the agents
+  produced; a change in one is a change in the other.
+- **The workspace behaves like a file browser**: folders as a tree or a grid, indentation,
+  collapsing, multi-selection, copy and paste, drag and drop, moving.
+- **Generated resources can become activities**: a due date, inside a study plan.
+- **Study plans** are first-class and visual: several at a time, each with its deadline, its goals,
+  the material it is based on and the activities that get the student there. Doing an activity on
+  Luna advances its plan by itself.
+- **Generated templates must look designed**: cards with background colours, badges and space to
+  write — never bare text on white — and playful when the audience is children.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -420,6 +439,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1g: navigation rail + account cluster, Templates as a section, agent deletion, filing of generated resources, workspace file browser, resources as activities, study plans, cuter generated templates.
 - 2026-09-23 — Added §5.1f: LaTeX in every export, phone layout, template generated from the agent's output fields, field importance and template fit, whole-template generation from a description, saved agent↔template pairings.
 - 2026-09-23 — Added §5.1e: add output fields from the run flow, merged mapping slots, field highlighting in the agent preview, interchangeable designs shown in the template preview.
 - 2026-09-23 — Added §5.1d: generated resources library (gallery/list, filters, folders, activity mode, export repository, save view, regenerate/edit, delete/move).

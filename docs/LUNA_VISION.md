@@ -181,6 +181,22 @@ Consequences for the product:
   - **By way of studying** — which educational resource types work best for you, which you use most,
     how helpful you rate them for the final exam, etc.
 
+### 5.1e Mapping and previews (founder spec, 2026-09-23)
+
+- **Any generated agent can gain output fields.** When a template needs something simple the agent
+  does not produce — a title, a question number, a topic — the user adds that field to the agent
+  from the run flow itself, without going back to Agent Studio. Anything complex still belongs in
+  the recipe.
+- **One slot, one mapping.** A template that offers four question designs repeats the same field
+  names; "Questions" (the list) and "Question" (the slot in each design) are the same thing to the
+  person mapping. Slots that mean the same thing are merged into a single row, mapped once, and the
+  choice is written to every place behind it.
+- **Selecting a field shows where it goes.** In the agent's preview, as in Template Studio, picking
+  a field outlines every place in the template that it fills.
+- **A set of designs is shown as a set.** Wherever a component can be one of several designs chosen
+  by the agent, the template preview shows every possibility side by side with an example of each,
+  instead of only the one the sample data happened to pick.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -383,6 +399,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-23 — Added §5.1e: add output fields from the run flow, merged mapping slots, field highlighting in the agent preview, interchangeable designs shown in the template preview.
 - 2026-09-23 — Added §5.1d: generated resources library (gallery/list, filters, folders, activity mode, export repository, save view, regenerate/edit, delete/move).
 - 2026-09-20 — Added §5.1c: worksheet components, component chatbot, interactive activities as default, activity layer in workspaces.
 - 2026-09-20 — Added §5.1b: agent output defined with Template Studio blocks, templates list their compatible agents, views hide fields, list-as-flag on fields.

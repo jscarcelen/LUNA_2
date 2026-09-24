@@ -5,11 +5,13 @@ import type { DataObject, Template } from "../engine/types";
 import { layoutDocument } from "../engine/layout";
 import { card, fieldBase, kicker } from "../ui";
 import { Segmented } from "../design/inspector/Segmented";
+import { VariantGallery, variantSets } from "./VariantGallery";
 
-export function PreviewMode({ template, layoutId, viewId, sampleData, sampleCount, onSampleCount, compiled }: { template: Template; layoutId: string; viewId: string; sampleData: DataObject; sampleCount: number; onSampleCount: (n: number) => void; compiled: unknown }) {
+export function PreviewMode({ template, layoutId, viewId, sampleData, sampleValues = {}, sampleCount, onSampleCount, compiled }: { template: Template; layoutId: string; viewId: string; sampleData: DataObject; sampleValues?: Record<string, unknown>; sampleCount: number; onSampleCount: (n: number) => void; compiled: unknown }) {
   const [source, setSource] = useState<"sample" | "agent">("sample");
   const [html, setHtml] = useState("");
   const result = useMemo(() => layoutDocument(template, sampleData, { layoutId, viewId }), [template, sampleData, layoutId, viewId]);
+  const sets = useMemo(() => variantSets(template), [template]);
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       const response = await fetch("/api/templates/render-preview", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ template: compiled, sampleData, format: "html", layoutId, viewId }) });
@@ -34,7 +36,10 @@ export function PreviewMode({ template, layoutId, viewId, sampleData, sampleCoun
           {result.overflows.length ? <p className="m-0 mt-3 rounded-xl border border-[var(--color-warn)]/40 bg-[rgba(178,94,0,0.08)] px-3 py-2 text-xs text-[var(--color-warn)]">⚠ {result.overflows.length} element{result.overflows.length === 1 ? "" : "s"} exceed the page bounds (page {result.overflows[0].pageIndex + 1}). Use a flow group or shrink the content.</p> : <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">✓ Everything fits.</p>}
         </section>
       </div>
-      <div className={`${card} overflow-hidden`}><iframe title="Preview" sandbox="" srcDoc={html} className="h-[760px] w-full border-0" /></div>
+      <div className="grid gap-3">
+        <VariantGallery sets={sets} fields={template.fields} sampleValues={sampleValues} itemsShown={sampleCount} onShowAll={onSampleCount} />
+        <div className={`${card} overflow-hidden`}><iframe title="Preview" sandbox="" srcDoc={html} className="h-[760px] w-full border-0" /></div>
+      </div>
     </div>
   );
 }

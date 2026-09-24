@@ -13,7 +13,8 @@ export function compileForSave(template: Template, savedId: string) {
     const perItem = entry.parents.some((parent) => parent.type === "array");
     return { id: entry.field.id, name: slug(entry.field.name), label: entry.field.name, dataType: entry.field.type === "array" ? "array" : entry.field.type === "number" ? "number" : "string", repeatScope: perItem ? "per-output" : "once", description: entry.field.description || "" };
   }).filter((entry) => entry.name !== "items");
-  const hasItems = template.fields.some((field) => field.type === "array");
+  // The list the agent's items fill: the template's own list name, so the layout engine finds it.
+  const collection = template.fields.find((field) => field.type === "array");
   const primary = template.layouts[0];
   return {
     id: savedId || template.id,
@@ -29,7 +30,7 @@ export function compileForSave(template: Template, savedId: string) {
     pageLayouts: [],
     dataBindings: {},
     dataFields,
-    repeatCollectionField: hasItems ? "items" : "",
+    repeatCollectionField: collection ? slug(collection.name) : "",
     renderVariants: [],
     formatSets: [],
     docModel: null,

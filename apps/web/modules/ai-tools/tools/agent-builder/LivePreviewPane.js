@@ -33,6 +33,21 @@ function downloadBase64(fileBase64, mimeType, filename) {
  * Builds the data object the template renderer expects from raw agent items + the user's mapping.
  * Exported so the save path in RunAgentPage produces exactly what the preview showed.
  */
+const slugKey = (name) => String(name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+
+/**
+ * Where the repeated items go. A Template Studio v3 template names its own list ("Questions",
+ * "Cards"…), and the layout engine looks the list up under that name — so the items must be
+ * published there, not only under the legacy "items" key.
+ */
+export function collectionKeys(template) {
+  const keys = new Set();
+  const fields = Array.isArray(template?.templateV3?.fields) ? template.templateV3.fields : [];
+  for (const field of fields) if (field.type === "array") keys.add(slugKey(field.name));
+  if (template?.repeatCollectionField) keys.add(template.repeatCollectionField);
+  return [...keys].filter(Boolean);
+}
+
 export function buildTemplateData(items, templateFields, fieldMappingByTemplateField, template, rootData = {}) {
   const itemFields = templateFields.filter((field) => field.frequency !== "once");
   const onceFields = templateFields.filter((field) => field.frequency === "once");
@@ -47,7 +62,9 @@ export function buildTemplateData(items, templateFields, fieldMappingByTemplateF
     mapped[field.name] = rootData[sourceName] ?? rootData[field.name] ?? items[0]?.[sourceName] ?? items[0]?.[field.name];
     return mapped;
   }, {});
-  return template?.repeatCollectionField ? { ...root, [template.repeatCollectionField]: mappedItems } : { ...root, ...(mappedItems[0] || {}) };
+  const keys = collectionKeys(template);
+  if (!keys.length) return { ...root, ...(mappedItems[0] || {}) };
+  return keys.reduce((data, key) => ({ ...data, [key]: mappedItems }), { ...root });
 }
 
 /**
@@ -64,6 +81,7 @@ export function LivePreviewPane({
   template,
   templateFields,
   fieldMappingByTemplateField,
+  highlightFields = [],
   mappingReady,
   generation,
   onCancelGeneration,
@@ -85,6 +103,8 @@ export function LivePreviewPane({
     [template, visible.items, templateFields, fieldMappingByTemplateField, rootData]
   );
   const debouncedTemplateData = useDebouncedValue(templateData, 300);
+  // Outlining a field must not wait for the data debounce — it is a direct answer to a click.
+  const highlightKey = highlightFields.join("|");
 
   useEffect(() => {
     if (!template || !debouncedTemplateData || !visible.items.length || !mappingReady) {
@@ -97,7 +117,7 @@ export function LivePreviewPane({
     fetch("/api/templates/render-preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ template, sampleData: debouncedTemplateData, format: "html" })
+      body: JSON.stringify({ template, sampleData: debouncedTemplateData, format: "html", highlightFields: highlightKey ? highlightKey.split("|") : [] })
     })
       .then(async (response) => {
         const payload = await response.json();
@@ -116,7 +136,8 @@ export function LivePreviewPane({
     return () => {
       cancelled = true;
     };
-  }, [template, debouncedTemplateData, visible.items.length, mappingReady]);
+    // highlightKey stands in for highlightFields: the render re-runs when the outlined slot changes.
+  }, [template, debouncedTemplateData, visible.items.length, mappingReady, highlightKey]);
 
   const fragment = template && templateHtml
     ? templateHtml
@@ -225,6 +246,7 @@ export function LivePreviewPane({
                 className="h-full min-h-[480px] w-full border-0"
               />
             </div>
+            {highlightFields.length && template ? <p className="mt-2 text-xs text-accent">Showing where “{highlightFields[0]}” appears{highlightFields.length > 1 ? ` (${highlightFields.length} slots)` : ""} — outlined in blue.</p> : null}
             {templateError ? <p className="mt-2 text-xs text-danger">{templateError}</p> : null}
             {template && !mappingReady ? <p className="mt-2 text-xs text-warn">Finish mapping the template fields to see the templated preview. Showing the plain layout meanwhile.</p> : null}
           </div>

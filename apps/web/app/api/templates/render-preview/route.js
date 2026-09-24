@@ -47,7 +47,7 @@ export async function POST(request) {
     // Template Studio v3: one layout engine for every format; layout/view selectable.
     if (template.templateV3 && typeof template.templateV3 === "object") {
       const doc = normalizeTemplate(template.templateV3);
-      const options = { layoutId: body?.layoutId || undefined, viewId: body?.viewId || null, showFieldMarkers: Boolean(body?.showFieldMarkers) };
+      const options = { layoutId: body?.layoutId || undefined, viewId: body?.viewId || null, showFieldMarkers: Boolean(body?.showFieldMarkers), highlightFields: Array.isArray(body?.highlightFields) ? body.highlightFields : [] };
       if (format === "html") {
         const rendered = renderV3Html(doc, sampleData, options);
         return NextResponse.json({ html: rendered.html, pageCount: rendered.pageCount, overflows: rendered.overflows });
@@ -62,7 +62,7 @@ export async function POST(request) {
     if (template.docModel && typeof template.docModel === "object") {
       const doc = template.docModel;
       const showFieldMarkers = Boolean(body?.showFieldMarkers);
-      if (format === "html") return NextResponse.json({ html: renderDocHtml(doc, sampleData, { showFieldMarkers }) });
+      if (format === "html") return NextResponse.json({ html: renderDocHtml(doc, sampleData, { showFieldMarkers, highlight: Array.isArray(body?.highlightFields) ? body.highlightFields : [] }) });
       if (format === "pdf") return NextResponse.json({ fileBase64: (await renderDocPdfBuffer(doc, sampleData)).toString("base64"), mimeType: "application/pdf" });
       if (format === "docx") return NextResponse.json({ fileBase64: (await renderDocDocxBuffer(doc, sampleData)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
       if (format === "pptx") return NextResponse.json({ fileBase64: (await renderDocPptxBuffer(doc, sampleData)).toString("base64"), mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });

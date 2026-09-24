@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
+import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
 import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
@@ -105,6 +106,41 @@ const chipClass = "inline-flex items-center rounded-full bg-[var(--surface-soft)
 const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-full bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#0077ed] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
+
+/**
+ * Adds a simple output field to the agent so it can fill a template slot it was not built for —
+ * a title, a question number, a topic. Complex structures still belong in Agent Studio.
+ */
+function AddOutputField({ onAdd, existing = [] }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState("text");
+  const [frequency, setFrequency] = useState("loop");
+  const taken = existing.some((field) => String(field.name).toLowerCase() === name.trim().toLowerCase());
+  if (!open) {
+    return <button type="button" className="justify-self-start text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpen(true)}>＋ Add an output field to this agent</button>;
+  }
+  return (
+    <div className="grid gap-2 rounded-xl border border-ink/12 bg-[var(--surface-soft)]/60 p-3">
+      <p className="m-0 text-xs text-soft-ink">Something the template needs and the agent does not produce yet — a title, a question number, a topic.</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="min-w-36 flex-1"><input className={fieldClass} value={name} placeholder="e.g. Title" onChange={(event) => setName(event.target.value)} /></div>
+        <select className={`${fieldClass} w-auto`} value={type} onChange={(event) => setType(event.target.value)}>
+          <option value="text">Text</option>
+          <option value="number">Number</option>
+          <option value="list">List of values</option>
+        </select>
+        <select className={`${fieldClass} w-auto`} value={frequency} onChange={(event) => setFrequency(event.target.value)}>
+          <option value="loop">Per item</option>
+          <option value="once">Once for the document</option>
+        </select>
+        <button type="button" className={primaryBtn} disabled={!name.trim() || taken} onClick={() => { onAdd({ name: name.trim(), type, frequency }); setName(""); setOpen(false); }}>Add</button>
+        <button type="button" className={ghostBtn} onClick={() => { setOpen(false); setName(""); }}>Cancel</button>
+      </div>
+      {taken ? <p className="m-0 text-xs text-[var(--color-warn)]">This agent already has a field with that name.</p> : null}
+    </div>
+  );
+}
 
 const FLOW_STEPS = [
   { id: 1, title: "Configure questions", text: "Material and a few choices" },
@@ -397,20 +433,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     [fields]
   );
   /**
-   * Templates often repeat the same slot (several question designs all needing "Question"). Map it
-   * once: identical name + frequency become one row, and the choice is written to every copy.
+   * Templates repeat the same slot (four question designs all needing "Question", plus the list
+   * "Questions" that holds them). They mean one thing, so they are one row: the choice is written
+   * to every slot behind it.
    */
-  const mappingRows = useMemo(() => {
-    const byKey = new Map();
-    for (const field of templateFields) {
-      const key = `${field.name.toLowerCase()}|${field.frequency}`;
-      const entry = byKey.get(key) || { ...field, names: [], count: 0 };
-      entry.names.push(field.name);
-      entry.count += 1;
-      byKey.set(key, entry);
-    }
-    return [...byKey.values()];
-  }, [templateFields]);
+  const mappingRows = useMemo(() => buildMappingRows(templateFields), [templateFields]);
+  /** The agent field a row is mapped to — any of the slots behind it answers for all of them. */
+  const rowMapping = useCallback((row) => (row?.names || [row?.name]).map((name) => fieldMappingByTemplateField[name]).find(Boolean) || "", [fieldMappingByTemplateField]);
   const requiredUnanswered = questions.filter((question) => {
     if (!question.required) return false;
     const answer = answersByQuestionId[question.id];
@@ -420,8 +449,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!activeTemplate) return [];
     const issues = [];
     const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
-    for (const templateField of templateFields) {
-      const mappedAgentFieldName = fieldMappingByTemplateField[templateField.name] || "";
+    for (const templateField of mappingRows) {
+      const mappedAgentFieldName = rowMapping(templateField);
       if (!mappedAgentFieldName) {
         issues.push(`Map template field "${templateField.label || templateField.name}".`);
         continue;
@@ -433,17 +462,23 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       }
     }
     return issues;
-  }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
+  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
   const mappingWarnings = useMemo(() => {
     if (!activeTemplate) return [];
     const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
-    return templateFields.flatMap((templateField) => {
-      const mapped = agentFieldsByName[fieldMappingByTemplateField[templateField.name]];
+    return mappingRows.flatMap((templateField) => {
+      const mapped = agentFieldsByName[rowMapping(templateField)];
       if (!mapped || mapped.frequency === templateField.frequency) return [];
       return [`"${templateField.label || templateField.name}" appears ${templateField.frequency === "loop" ? "per item" : "once"} in the template but "${mapped.label || mapped.name}" is ${mapped.frequency === "loop" ? "per item — only the first item will show there" : "once — it will repeat the same value"}.`];
     });
-  }, [activeTemplate, agentFields, templateFields, fieldMappingByTemplateField]);
+  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
   const mappingReady = !activeTemplate || (templateFields.length > 0 && mappingIssues.length === 0);
+  // Field the user is inspecting: every place it fills is outlined in the preview.
+  const [highlightRowKey, setHighlightRowKey] = useState("");
+  const highlightFields = useMemo(() => {
+    const row = mappingRows.find((item) => item.name === highlightRowKey);
+    return row ? row.names : [];
+  }, [mappingRows, highlightRowKey]);
 
   // When the template changes: drop mappings that don't belong to it and auto-map by name
   // (matching frequency preferred, any frequency accepted) so the preview refreshes immediately.
@@ -453,35 +488,51 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const next = {};
       for (const templateField of templateFields) if (previous[templateField.name]) next[templateField.name] = previous[templateField.name];
       const used = new Set(Object.values(next));
-      const norm = (value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
-      for (const templateField of templateFields) {
-        if (next[templateField.name]) continue;
-        const candidates = agentFields.filter((agentField) => !used.has(agentField.name) && [agentField.name, agentField.label].map(norm).includes(norm(templateField.name)));
-        const match = candidates.find((agentField) => agentField.frequency === templateField.frequency) || candidates[0];
+      for (const row of mappingRows) {
+        const already = row.names.map((name) => next[name]).find(Boolean);
+        if (already) {
+          for (const name of row.names) next[name] = already;
+          continue;
+        }
+        const candidates = agentFields.filter((agentField) => !used.has(agentField.name) && [agentField.name, agentField.label].map(mergeKey).includes(mergeKey(row.name)));
+        const match = candidates.find((agentField) => agentField.frequency === row.frequency) || candidates[0];
         if (match) {
-          next[templateField.name] = match.name;
+          for (const name of row.names) next[name] = match.name;
           used.add(match.name);
         }
       }
       return next;
     });
-  }, [templateId, templateFieldKey, agentFields, templateFields]);
+  }, [templateId, templateFieldKey, agentFields, templateFields, mappingRows]);
 
   function setFieldType(name, type) {
     setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
   }
 
-  function setTemplateFieldMapping(templateFieldName, agentFieldName) {
-    // Every template slot with this name (any block) gets the same agent field.
+  function setTemplateFieldMapping(row, agentFieldName) {
+    // A row stands for every slot that means the same thing — they all take the same agent field.
+    const names = Array.isArray(row?.names) && row.names.length ? row.names : [String(row?.name ?? row)];
     setFieldMappingByTemplateField((previous) => {
       const next = { ...previous };
       for (const [targetField, mappedAgentField] of Object.entries(next)) {
-        if (targetField !== templateFieldName && mappedAgentField === agentFieldName) delete next[targetField];
+        if (!names.includes(targetField) && mappedAgentField === agentFieldName) delete next[targetField];
       }
-      if (!agentFieldName) delete next[templateFieldName];
-      else next[templateFieldName] = agentFieldName;
+      for (const name of names) {
+        if (!agentFieldName) delete next[name];
+        else next[name] = agentFieldName;
+      }
       return next;
     });
+  }
+
+  /** Template asks for something the agent does not produce — add it to the agent and map it. */
+  function addFieldToAgent(row) {
+    const name = String(row?.label || row?.name || "").trim();
+    if (!name) return;
+    const type = row?.dataType === "number" ? "number" : row?.dataType === "list" || row?.dataType === "array" ? "list" : "text";
+    setAgentConfig((current) => addOutputField(current, { name, type, frequency: row.frequency === "once" ? "once" : "loop", description: `Fills the "${name}" slot of the template.` }));
+    setTemplateFieldMapping(row, name);
+    setStatusMessage(`Added “${name}” to this agent's output. Generate again to fill it — “Save as my default” keeps it for next time.`);
   }
 
   function setAnswer(questionId, value) {
@@ -850,6 +901,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       template={activeTemplate}
       templateFields={templateFields}
       fieldMappingByTemplateField={fieldMappingByTemplateField}
+      highlightFields={highlightFields}
       mappingReady={mappingReady}
       generation={generation}
       onCancelGeneration={generation.cancel}
@@ -972,8 +1024,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                     <p className="m-0 mt-1 text-xs text-soft-ink">Each item the agent returns has these fields. They are fixed for this agent and are the names a template must use.</p>
                   </div>
                   <ul className="m-0 grid list-none gap-1.5 p-0">
-                    {agentFields.map((field) => (
-                      <li key={field.name} className="rounded-xl border border-ink/8 bg-white px-3 py-2">
+                    {agentFields.map((field) => {
+                      const slots = mappingRows.filter((row) => rowMapping(row) === field.name);
+                      const active = slots.some((row) => row.name === highlightRowKey);
+                      return (
+                      <li key={field.name} className={`rounded-xl border bg-white px-3 py-2 transition ${active ? "border-[var(--accent)]/50 bg-[var(--accent-soft)]/50" : "border-ink/8"}`} onMouseEnter={() => slots[0] && setHighlightRowKey(slots[0].name)} onMouseLeave={() => setHighlightRowKey("")}>
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-xs text-[var(--accent-ink)]">{field.name}</span>
                           <span className="text-sm font-semibold text-ink">{field.label || field.name}</span>
@@ -981,9 +1036,12 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                           <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
                         </div>
                         {field.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{field.description}</p> : null}
+                        {activeTemplate && slots.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">Fills {slots.map((row) => `“${row.label || row.name}”`).join(", ")} in {activeTemplate.name}{slots.some((row) => row.count > 1) ? " — every design that uses it" : ""}.</p> : null}
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
+                  <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added “${draft.name}” to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
                   <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setOutputTab("layout")}>Choose a template →</button>
                 </div>
               ) : null}
@@ -1014,17 +1072,28 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                     <div>
                       <p className={kicker}>Map template fields to agent fields</p>
                       <p className="m-0 mt-1 text-xs text-soft-ink">Each slot in the template must be filled by one agent field. Matching names were pre-filled — check them and change any you want.</p>
-                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{mappingRows.filter((row) => fieldMappingByTemplateField[row.name]).length} of {mappingRows.length} slot{mappingRows.length === 1 ? "" : "s"} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
+                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{mappingRows.filter((row) => rowMapping(row)).length} of {mappingRows.length} slot{mappingRows.length === 1 ? "" : "s"} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
                       <div className="mt-2 grid gap-2">
-                        {mappingRows.map((field) => (
-                          <div className="grid gap-1 sm:grid-cols-[1fr_1fr] sm:items-center" key={field.id || field.name}>
-                            <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">{field.label || field.name}<span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>{field.count > 1 ? <span className={chipClass} title={`Used by ${field.count} blocks of the template — mapped once for all of them`}>×{field.count}</span> : null}</span>
-                            <select className={fieldClass} value={fieldMappingByTemplateField[field.name] || ""} onChange={(event) => setTemplateFieldMapping(field.name, event.target.value)}>
-                              <option value="">Choose…</option>
-                              {[...agentFields].sort((a, b) => Number(b.frequency === field.frequency) - Number(a.frequency === field.frequency)).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}{agentField.frequency === field.frequency ? "" : agentField.frequency === "loop" ? " (per item)" : " (once)"}</option>)}
-                            </select>
-                          </div>
-                        ))}
+                        {mappingRows.map((field) => {
+                          const active = highlightRowKey === field.name;
+                          return (
+                            <div className={`grid gap-1 rounded-xl px-2 py-1 transition sm:grid-cols-[1fr_1fr] sm:items-center ${active ? "bg-[var(--accent-soft)]" : ""}`} key={field.id || field.name} onMouseEnter={() => setHighlightRowKey(field.name)} onMouseLeave={() => setHighlightRowKey((current) => (current === field.name ? "" : current))}>
+                              <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">
+                                <button type="button" className={`text-left ${active ? "font-semibold text-[var(--accent-ink)]" : ""}`} onClick={() => setHighlightRowKey(active ? "" : field.name)} title="Show where this appears in the template">{field.label || field.name}</button>
+                                <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
+                                {field.count > 1 ? <span className={chipClass} title={`${field.names.join(", ")} — one choice fills all of them`}>×{field.count}</span> : null}
+                              </span>
+                              <span className="flex items-center gap-1.5">
+                                <select className={fieldClass} value={rowMapping(field)} onChange={(event) => setTemplateFieldMapping(field, event.target.value)}>
+                                  <option value="">Choose…</option>
+                                  {[...agentFields].sort((a, b) => Number(b.frequency === field.frequency) - Number(a.frequency === field.frequency)).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}{agentField.frequency === field.frequency ? "" : agentField.frequency === "loop" ? " (per item)" : " (once)"}</option>)}
+                                </select>
+                                {rowMapping(field) ? null : <button type="button" className="shrink-0 whitespace-nowrap rounded-full border border-[var(--accent)]/40 px-2.5 py-1.5 text-xs font-semibold text-[var(--accent-ink)] transition hover:bg-[var(--accent-soft)]" title={`Add "${field.label || field.name}" to this agent's output`} onClick={() => addFieldToAgent(field)}>＋ Add to agent</button>}
+                              </span>
+                            </div>
+                          );
+                        })}
+                        <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added “${draft.name}” to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
                         {!templateFields.length ? <p className="m-0 text-xs text-[var(--color-danger)]">This template has no field tags yet. Open it in the Template Builder and tag its blocks.</p> : null}
                         {mappingIssues.length ? <p className="m-0 text-xs text-[var(--color-warn)]">{mappingIssues[0]}</p> : null}
                         {mappingWarnings.map((warning) => <p key={warning} className="m-0 text-xs text-soft-ink">⚠ {warning}</p>)}

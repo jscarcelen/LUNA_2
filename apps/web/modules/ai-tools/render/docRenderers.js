@@ -23,8 +23,11 @@ function hexToRgb(hex = "#1d1d1f") {
 
 /* ------------------------------------------------------------------------------ HTML */
 
-export function renderDocHtml(template, data = {}, { showFieldMarkers = false, prelaid = null } = {}) {
+export function renderDocHtml(template, data = {}, { showFieldMarkers = false, prelaid = null, highlight = [] } = {}) {
   const { pages } = prelaid || layoutDocument(template, data);
+  // Fields the user is inspecting: every place they fill is outlined, wherever it appears.
+  const highlighted = new Set(highlight.map((value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "")).filter(Boolean));
+  const isHighlighted = (item) => highlighted.size > 0 && item.isField && [item.path, item.fieldId].some((value) => value && highlighted.has(String(value).toLowerCase().replace(/[^a-z0-9]+/g, "")));
   const pageHtml = pages.map((page) => {
     const bg = page.background?.src ? `<img src="${escapeHtml(page.background.src)}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none;opacity:${page.background.opacity ?? 1};" />` : "";
     const pageColor = page.background?.color || "#fff";
@@ -34,7 +37,7 @@ export function renderDocHtml(template, data = {}, { showFieldMarkers = false, p
       if (item.type === "line") return `<div style="${base}height:0;border-top:${Math.max(0.3, item.h)}mm solid ${item.style.stroke || "#d2d2d7"};"></div>`;
       if (item.type === "image") return item.src ? `<img src="${escapeHtml(item.src)}" alt="" style="${base}height:${item.h}mm;object-fit:contain;" />` : `<div style="${base}height:${item.h}mm;border:0.3mm dashed #c7c7cc;border-radius:1mm;"></div>`;
       const marker = showFieldMarkers && item.isField ? `<span style="position:absolute;top:-3.2mm;left:0;font-size:6pt;color:#0060c0;background:#eef2ff;padding:0 1mm;border-radius:1mm;">AI · ${escapeHtml(item.path)}</span>` : "";
-      const fieldStyle = item.isField && !item.hasValue ? "color:#0060c0;background:rgba(0,113,227,0.06);border-radius:1mm;" : "";
+      const fieldStyle = `${item.isField && !item.hasValue ? "color:#0060c0;background:rgba(0,113,227,0.06);border-radius:1mm;" : ""}${isHighlighted(item) ? "box-shadow:0 0 0 0.6mm rgba(0,113,227,0.85);background:rgba(0,113,227,0.12);border-radius:1mm;" : ""}`;
       const deg = Number(item.style.rotate) || 0;
       if (deg) {
         // Rotated label: a vertical box (the unrotated frame turned about its centre) written top→bottom (-90) or bottom→top (90).

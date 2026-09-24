@@ -8,7 +8,7 @@
 import type { Element, FieldDef, GroupElement, Template, View } from "./types";
 import { createLayout, createPage, createTemplate, createView, flattenFields } from "./model";
 import { blockFromDsl, type DslComponent } from "./componentDsl";
-import { instantiateBlock } from "./blocks";
+import { builtInBlocks, instantiateBlock, readBlockLibrary } from "./blocks";
 
 export interface DesignedSection {
   title: string;
@@ -16,7 +16,10 @@ export interface DesignedSection {
   repeats: boolean;
   placement: "flow" | "fixed" | "new_page";
   pageScope: "page" | "first" | "every" | "last";
-  dsl: DslComponent;
+  /** Either a component from the library (preferred) or one drawn for this document. */
+  blockName?: string;
+  blockOptions?: string[];
+  dsl?: DslComponent | null;
 }
 
 export interface TemplateBrief {
@@ -41,9 +44,18 @@ export function assembleTemplate(brief: TemplateBrief, sections: DesignedSection
   const elements: Element[] = [];
   let cursor = layout.margins.top;
 
+  const library = [...builtInBlocks(), ...readBlockLibrary()];
   for (const section of sections) {
-    const block = blockFromDsl({ ...section.dsl, name: section.dsl.name || section.title });
-    const { fields, elements: blockElements } = instantiateBlock(block, template.fields, brief.accent ? { accent: { id: "brief", label: "Brief", main: brief.accent, tint: `${brief.accent}22` } } : {});
+    // House component first: it is already designed, so the document inherits a consistent style.
+    const fromLibrary = section.blockName ? library.find((entry) => entry.name.toLowerCase() === section.blockName!.toLowerCase()) : null;
+    const block = fromLibrary || blockFromDsl({ ...(section.dsl as DslComponent), name: section.dsl?.name || section.title });
+    const toggles = fromLibrary
+      ? Object.fromEntries((fromLibrary.options || []).map((option) => [option.key, (section.blockOptions || []).includes(option.key) || (!section.blockOptions?.length && option.default !== false)]))
+      : {};
+    const { fields, elements: blockElements } = instantiateBlock(block, template.fields, {
+      ...(brief.accent ? { accent: { id: "brief", label: "Brief", main: brief.accent, tint: `${brief.accent}22` } } : {}),
+      toggles
+    });
     template.fields = fields;
     let group = blockElements[0] as GroupElement | undefined;
     if (!group) continue;

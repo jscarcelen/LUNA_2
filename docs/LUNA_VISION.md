@@ -258,6 +258,18 @@ Consequences for the product:
   agent schedules the work over time — and it is fed the learner's performance, so the plan is
   fitted to the results and improves as more is known about the learner.
 
+### 5.1i Generate from the components, and judge the result (founder spec, 2026-09-24)
+
+- **The template chatbot must build from Luna's own components** — the question cards, headers,
+  flashcards and puzzles already designed — rather than drawing everything from scratch. Composed
+  documents look better and stay consistent; drawing from scratch is the exception.
+- **The visual quality is the product.** Take inspiration from marketplaces such as Teachers Pay
+  Teachers: cards, colour, badges, space to write. Every generated preview is checked and iterated
+  on until it looks right, by an agent whose job is the look of the output, not the intent.
+- **Performance must be exhaustive and readable per study plan**: the results of one plan on their
+  own (schedule, goals, what is left), plus concept mastery, questions that keep going wrong,
+  whether repeating helped, the trend, the streak and the daily rhythm.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -460,6 +472,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1i: templates generated from the component catalogue, a design critic that reviews and repairs every generated preview, per-plan and deeper performance.
 - 2026-09-24 — Added §5.1h: folders only, one workspace screen, resources inside it, concepts per resource, plan goals/deadlines/sub-plans, calendar and alerts, automatic plan generation from performance.
 - 2026-09-24 — Added §5.1g: navigation rail + account cluster, Templates as a section, agent deletion, filing of generated resources, workspace file browser, resources as activities, study plans, cuter generated templates.
 - 2026-09-23 — Added §5.1f: LaTeX in every export, phone layout, template generated from the agent's output fields, field importance and template fit, whole-template generation from a description, saved agent↔template pairings.

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { activityKindLabel, byDifficulty, byResource, bySkill, errorsByTopic, estimateExamMinutes, joinAttempts, readResources, summarise, timeByKind, timeline } from "./metrics";
+import { activityKindLabel, byConcept, byDifficulty, byResource, bySkill, dailyActivity, errorsByTopic, estimateExamMinutes, forPlan, joinAttempts, readResources, repeatedMistakes, retryGains, streak, summarise, timeByKind, timeline, trend } from "./metrics";
+import { parsePlan, planProgress, dueLabel } from "../plans/plan";
+import { parseResource } from "../resources/resource";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
 import { PhoneCollapse } from "../ui/PhoneCollapse";
@@ -54,6 +56,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const [learner, setLearner] = useState("");
   const [range, setRange] = useState(30);
   const [filters, setFilters] = useState({ folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "" });
+  const [planId, setPlanId] = useState("");
   const [goalOpen, setGoalOpen] = useState(false);
   const [goalDraft, setGoalDraft] = useState({ title: "", date: "", targetScore: 80, resourceIds: [] });
   const [busy, setBusy] = useState(false);
@@ -62,9 +65,18 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const resources = useMemo(() => readResources(documents), [documents]);
   const all = useMemo(() => joinAttempts(documents), [documents]);
   const goals = useMemo(() => documents.map(parseGoal).filter(Boolean), [documents]);
+  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
+  /** Concepts come from the resources, so mastery can be read per learning goal, not per file. */
+  const resourceByDocumentId = useMemo(() => {
+    const map = new Map();
+    for (const document of documents) { const resource = parseResource(document); if (resource) map.set(document.id, resource); }
+    return map;
+  }, [documents]);
 
   const since = Date.now() - range * 86400000;
-  const attempts = all.filter((attempt) => {
+  const activePlan = plans.find((row) => row.document.id === planId) || null;
+  const planScoped = activePlan ? forPlan(all, activePlan.plan) : all;
+  const attempts = planScoped.filter((attempt) => {
     if (range && new Date(attempt.at).getTime() < since) return false;
     if (isOwn ? false : learner && attempt.learner !== learner) return false;
     if (isOwn && attempt.learner && profileName && attempt.learner !== profileName) return false;
@@ -95,6 +107,13 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const allDifficulties = [...new Set(all.flatMap((a) => (a.results || []).map((r) => r.difficulty || "unrated")))];
   const repeated = rows.filter((row) => row.times > 1);
   const improving = repeated.filter((row) => row.delta > 0.05).length;
+  const concepts = byConcept(attempts, resourceByDocumentId);
+  const rhythm = dailyActivity(attempts, Math.min(range || 30, 45));
+  const runStreak = streak(all);
+  const movement = trend(attempts);
+  const stuck = repeatedMistakes(attempts);
+  const retries = retryGains(attempts);
+  const planStats = activePlan ? planProgress(activePlan.plan, all) : null;
 
   async function saveGoal() {
     if (!onSaveGeneratedQuizDocument || !goalDraft.title.trim() || !goalDraft.date) return;
@@ -148,6 +167,11 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{usedTemplates.map((t) => <option key={t} value={t}>{t}</option>)}</select>
           <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           {Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => setFilters({ folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "" })}>Clear</button> : null}
+          {/* Reading the results through one plan answers "is this plan working?" rather than "how is it going overall?". */}
+          <select className={field} value={planId} onChange={(event) => setPlanId(event.target.value)}>
+            <option value="">All activity</option>
+            {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
+          </select>
         </div>
         </PhoneCollapse>
       </div>
@@ -158,7 +182,59 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <Kpi label="Mistakes" value={stats.errors} accent={stats.errors ? "text-[var(--color-danger)]" : "text-ink"} hint={stats.questions ? `${percent(stats.errors / stats.questions)} of answers` : ""} />
         <Kpi label="Repeated" value={repeated.length} hint={`${improving} improved on the retry`} />
         <Kpi label="Time on task" value={`${stats.minutes} min`} hint={stats.perQuestion ? `${stats.perQuestion}s per question${examMinutes ? ` · a 20-question exam ≈ ${examMinutes} min` : ""}` : range ? `last ${range} days` : "all time"} />
+        <Kpi label="Trend" value={movement.enough ? (movement.direction === "up" ? `▲ ${percent(Math.abs(movement.change))}` : movement.direction === "down" ? `▼ ${percent(Math.abs(movement.change))}` : "steady") : "—"} accent={movement.direction === "up" ? "text-[#2f9e5b]" : movement.direction === "down" ? "text-[var(--color-danger)]" : "text-ink"} hint={movement.enough ? `${percent(movement.before)} → ${percent(movement.after)} across this period` : "a few more activities and the trend shows"} />
+        <Kpi label="Day streak" value={runStreak} hint={runStreak ? "consecutive days with an activity" : "do one today to start a streak"} />
+        <Kpi label="Concepts mastered" value={`${concepts.filter((concept) => concept.mastered).length}/${concepts.length}`} hint={concepts.length ? `weakest: ${concepts[0].concept}` : "resources need their concepts listed"} />
+        <Kpi label="Stuck questions" value={stuck.length} accent={stuck.length ? "text-[var(--color-danger)]" : "text-ink"} hint={stuck.length ? "wrong more than once" : "nothing repeats as a mistake"} />
       </div>
+
+      {activePlan && planStats ? (
+        <section className={`${card} p-5`} style={{ borderTop: `4px solid ${activePlan.plan.colour}` }}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className={kicker}>This plan · {activePlan.plan.name}</p>
+              <p className="m-0 mt-1 text-sm text-soft-ink">
+                {planStats.deadline ? `${planStats.deadline.title}: ${dueLabel(planStats.deadline.date)}` : "No deadline"}
+                {` · ${planStats.done} of ${planStats.total} steps done`}
+                {planStats.late.length ? ` · ${planStats.late.length} late` : ""}
+                {planStats.average ? ` · averaging ${percent(planStats.average)} on what was done` : ""}
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <div><p className={kicker}>Schedule</p><p className={`m-0 text-xl font-bold ${planStats.late.length ? "text-[var(--color-danger)]" : "text-[#2f9e5b]"}`}>{planStats.late.length ? "behind" : "on track"}</p></div>
+              {planStats.days !== null ? <div><p className={kicker}>Days left</p><p className="m-0 text-xl font-bold text-ink">{planStats.days}</p></div> : null}
+              <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("plans")}>Open the plan</button>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            <div>
+              <p className={kicker}>Goals</p>
+              <div className="mt-2 grid gap-1.5">
+                {planStats.goals.map((goal) => (
+                  <div key={goal.id} className="rounded-xl border border-ink/10 p-2.5">
+                    <p className="m-0 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-ink"><span>{goal.title}</span><span className={tone(goal.average || 0)}>{goal.done}/{goal.total} done{goal.average ? ` · ${percent(goal.average)}` : ""}</span></p>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${goal.total ? (goal.done / goal.total) * 100 : 0}%`, background: goal.met ? "#2f9e5b" : activePlan.plan.colour }} /></div>
+                    {(goal.concepts || []).length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">{goal.concepts.slice(0, 4).join(" · ")}</p> : null}
+                  </div>
+                ))}
+                {!planStats.goals.length ? <p className="m-0 text-sm text-soft-ink">This plan has no goals yet.</p> : null}
+              </div>
+            </div>
+            <div>
+              <p className={kicker}>Still to do</p>
+              <div className="mt-2 grid gap-1">
+                {planStats.next.slice(0, 6).map((item) => (
+                  <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm hover:bg-[var(--surface-soft)]">
+                    <span className="min-w-0 flex-1 truncate text-ink">{item.title}</span>
+                    <span className={`shrink-0 text-[11px] ${dueLabel(item.dueDate).includes("late") ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(item.dueDate)}</span>
+                  </div>
+                ))}
+                {!planStats.next.length ? <p className="m-0 text-sm text-[#2f9e5b]">Everything in this plan is done.</p> : null}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section className={`${card} p-5`}>
@@ -190,6 +266,52 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
             ))}
             {!rows.length ? <p className="m-0 text-sm text-soft-ink">Nothing done yet — open a resource and do it on Luna.</p> : null}
           </div>
+
+          <p className={`${kicker} mt-5`}>Concepts</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">What the resources say they teach, scored across every activity that touched them — weakest first.</p>
+          <div className="mt-2 grid gap-1">
+            {concepts.slice(0, 10).map((concept) => (
+              <div key={concept.concept} className="flex flex-wrap items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm hover:bg-[var(--surface-soft)]">
+                <span className="min-w-0 flex-1 truncate text-ink">{concept.mastered ? "✓ " : ""}{concept.concept}</span>
+                <span className="text-[11px] text-soft-ink">{concept.attempts} attempt{concept.attempts === 1 ? "" : "s"} · {concept.resources} resource{concept.resources === 1 ? "" : "s"}</span>
+                <span className={`w-12 text-right font-semibold ${tone(concept.average)}`}>{percent(concept.average)}</span>
+              </div>
+            ))}
+            {!concepts.length ? <p className="m-0 text-sm text-soft-ink">No concepts recorded yet — open a resource and let Luna list what it teaches.</p> : null}
+          </div>
+
+          <p className={`${kicker} mt-5`}>Questions that keep going wrong</p>
+          <div className="mt-2 grid gap-1.5">
+            {stuck.slice(0, 6).map((entry, index) => (
+              <div key={index} className="rounded-xl border border-ink/10 p-2.5">
+                <p className="m-0 text-sm text-ink">✗ {entry.prompt}</p>
+                <p className="m-0 mt-1 text-[11px] text-soft-ink">Wrong {entry.times}× · across {entry.resources} resource{entry.resources === 1 ? "" : "s"}{entry.topic ? ` · ${entry.topic}` : ""} · answer: <span className="text-ink">{entry.expected}</span></p>
+              </div>
+            ))}
+            {!stuck.length ? <p className="m-0 text-sm text-soft-ink">Nothing is being missed repeatedly.</p> : null}
+          </div>
+
+          <p className={`${kicker} mt-5`}>Did repeating help?</p>
+          <div className="mt-2 grid gap-1">
+            {retries.slice(0, 6).map((entry) => (
+              <div key={entry.resourceId} className="flex flex-wrap items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm hover:bg-[var(--surface-soft)]">
+                <span className="min-w-0 flex-1 truncate text-ink">{entry.name}</span>
+                <span className="text-[11px] text-soft-ink">{entry.times}× · {percent(entry.first)} → {percent(entry.best)}</span>
+                <span className={`w-12 text-right font-semibold ${entry.gain > 0 ? "text-[#2f9e5b]" : entry.gain < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{entry.gain > 0 ? "+" : ""}{percent(entry.gain)}</span>
+              </div>
+            ))}
+            {!retries.length ? <p className="m-0 text-sm text-soft-ink">Nothing has been done twice yet.</p> : null}
+          </div>
+
+          <p className={`${kicker} mt-5`}>Daily rhythm</p>
+          <div className="mt-2 flex h-16 items-end gap-[3px]">
+            {rhythm.map((day) => (
+              <div key={day.date} className="flex-1" title={`${day.date}: ${day.attempts} activit${day.attempts === 1 ? "y" : "ies"} · ${day.minutes} min${day.average === null ? "" : ` · ${percent(day.average)}`}`}>
+                <div className="w-full rounded-t-[2px]" style={{ height: `${Math.min(100, (day.minutes / 60) * 100)}%`, minHeight: day.attempts ? 3 : 0, background: day.average === null ? "#d2d2d7" : day.average >= 0.8 ? "#34c759" : day.average >= 0.5 ? "#ff9f0a" : "#ff3b30" }} />
+              </div>
+            ))}
+          </div>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Bar height = minutes worked that day (an hour fills the bar).</p>
         </section>
 
         <section className={`${card} p-5`}>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { Template } from "../engine/types";
 import { assembleTemplate, type DesignedSection } from "../engine/assemble";
+import { polishTemplate } from "../engine/critique";
 import { builtInBlocks, readBlockLibrary } from "../engine/blocks";
 import { card, fieldBase, kicker } from "../ui";
 
@@ -40,11 +41,19 @@ export function TemplateChat({ templateNames = [], onBuilt }: TemplateChatProps)
       if (!response.ok) throw new Error(data.error || "Could not design the template");
       const sections = (data.sections || []) as DesignedSection[];
       if (!sections.length) throw new Error("No section could be designed — try describing the document differently.");
-      const template = assembleTemplate(data.brief, sections);
+      setStatus("Checking how it actually looks…");
+      // The generator cannot see its own output, so the critic reads the laid-out pages and
+      // repairs what it can before the template is ever shown.
+      const polished = polishTemplate(assembleTemplate(data.brief, sections));
+      const note = [
+        data.reply || "Here is your template.",
+        polished.fixed ? `Luna reviewed the preview and fixed ${polished.fixed} layout problem${polished.fixed === 1 ? "" : "s"}.` : "",
+        polished.after.length ? `Still worth a look: ${polished.after[0].message}` : ""
+      ].filter(Boolean).join(" ");
       setStatus("");
       setImage("");
       setPrompt("");
-      onBuilt(template, data.reply || "Here is your template.");
+      onBuilt(polished.template, note);
     } catch (error) {
       setStatus(String((error as Error).message || error));
     } finally {

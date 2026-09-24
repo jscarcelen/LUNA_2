@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { chat, designComponent, DESIGN_RULES } from "../../../../modules/template-studio/server/designer";
+import { builtInBlocks } from "../../../../modules/template-studio/engine/blocks";
+import { flattenFields } from "../../../../modules/template-studio/engine/model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +13,8 @@ export const maxDuration = 300;
  * exist — so the sections that follow are designed against one coherent plan instead of each
  * model call guessing again.
  */
-const BRIEF_SCHEMA = {
+function briefSchema(blockNames) {
+  return {
   type: "object", additionalProperties: false,
   properties: {
     name: { type: "string", description: "Short template name, e.g. \"Year 7 vocabulary worksheet\"." },
@@ -33,9 +36,10 @@ const BRIEF_SCHEMA = {
           repeats: { type: "boolean", description: "True when this section repeats once per generated item." },
           placement: { type: "string", enum: ["flow", "fixed", "new_page"] },
           pageScope: { type: "string", enum: ["page", "first", "every", "last"] },
-          reuseBlock: { type: "string", description: "Name of an existing block/component of the user's library to reuse instead of designing a new one, or empty." }
+          reuseBlock: { type: "string", enum: ["", ...blockNames], description: "The catalogue component this section uses — always prefer one; \"\" (draw from scratch) only when nothing in the catalogue can do the job." },
+          blockOptions: { type: "array", items: { type: "string" }, description: "Option keys of that block to switch ON (the catalogue lists them), e.g. number, points, answer." }
         },
-        required: ["title", "role", "request", "repeats", "placement", "pageScope", "reuseBlock"]
+        required: ["title", "role", "request", "repeats", "placement", "pageScope", "reuseBlock", "blockOptions"]
       }
     },
     views: {
@@ -51,7 +55,8 @@ const BRIEF_SCHEMA = {
     notes: { type: "string", description: "One friendly sentence for the user about what was built." }
   },
   required: ["name", "improvedPrompt", "canvas", "accent", "audience", "styleNotes", "reuseTemplateName", "sections", "views", "images", "notes"]
-};
+  };
+}
 
 /**
  * Whole-template generator: the user describes the document they want (optionally with a reference
@@ -69,26 +74,44 @@ export async function POST(request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "No model configured." }, { status: 500 });
 
+    // The house components, described well enough for the planner to pick them by name.
+    const catalogue = builtInBlocks().map((block) => {
+      const fields = flattenFields(block.fields).filter((entry) => entry.field.type !== "object").map((entry) => entry.field.name);
+      const repeats = block.fields.some((field) => field.type === "array");
+      const options = (block.options || []).map((option) => option.key);
+      return `- "${block.name}"${block.variant ? ` (${block.family} · ${block.variant})` : ""}: ${block.description} ${repeats ? "Repeats per item." : "Appears once."} Fields: ${fields.slice(0, 8).join(", ")}.${options.length ? ` Options: ${options.join(", ")}.` : ""}`;
+    }).join("\n");
     const library = [
       templates.length ? `Templates the user already has: ${templates.map((row) => `"${row.name}"`).join(", ")}.` : "",
-      blocks.length ? `Blocks available to reuse: ${blocks.join(", ")}.` : ""
+      blocks.length ? `Blocks the user saved: ${blocks.join(", ")}.` : ""
     ].filter(Boolean).join(" ");
 
     // 1. Improve the request into a complete brief for the document.
     const brief = await chat(apiKey, {
-      name: "template_brief", schema: BRIEF_SCHEMA, temperature: 0.2,
-      system: `You are the lead document designer of an education platform. A teacher describes the printable they want; you rewrite it as an exact brief and split the document into sections a component designer can draw one by one.
+      name: "template_brief", schema: briefSchema(builtInBlocks().map((block) => block.name)), temperature: 0.2,
+      system: `You are the lead document designer of an education platform. A teacher describes the printable they want; you rewrite it as an exact brief and split the document into sections.
+Use the house components wherever they fit — they are already designed, consistent and tested, and a document built from them looks better than one drawn from scratch. For each section, name the catalogue block in reuseBlock and switch on the options it needs; only leave reuseBlock empty when the catalogue genuinely has nothing for that section, and then write a full design request for it.
+CATALOGUE OF COMPONENTS:
+${catalogue}
+
 Design every section as a CARD, not as lines of text: say in each request which pastel fill and stroke the card uses, its radius, the badge or strip that carries the number or icon, the padding, and where the student writes. Decide the palette once in styleNotes and make the sections use it consistently (a different pastel per section, one accent for headings and badges). For children, make it playful: bigger type, rounder cards, a friendly emoji, plenty of writing space.
 Rules: exactly one section has repeats=true (the generated content) unless the document genuinely repeats nothing. A header is pageScope "first" (or "every" for slides), a footer is pageScope "every" and placement "fixed". Keep it to the fewest sections that do the job. Anything the AI writes is a field, never fixed text; anything the teacher writes every time is also a field. Give answer-bearing documents a second view that hides the answer fields. ${library}
 ${DESIGN_RULES}`,
-      messages: [image
-        ? { role: "user", content: [{ type: "text", text: `${prompt}\n\nUse the attached image as the visual reference for structure, proportions and colour feel.` }, { type: "image_url", image_url: { url: image, detail: "high" } }] }
-        : { role: "user", content: prompt }]
+      messages: [
+        { role: "user", content: `Components you can use (choose by exact name in reuseBlock):\n${catalogue}` },
+        image
+          ? { role: "user", content: [{ type: "text", text: `${prompt}\n\nUse the attached image as the visual reference for structure, proportions and colour feel.` }, { type: "image_url", image_url: { url: image, detail: "high" } }] }
+          : { role: "user", content: prompt }
+      ]
     });
 
     // 2. Design each section with the same agent that draws single components.
     const sections = (brief.sections || []).slice(0, 5);
+    const byName = new Map(builtInBlocks().map((block) => [block.name.toLowerCase(), block]));
     const designed = await Promise.all(sections.map(async (section) => {
+      // A section that names a house component needs no design pass at all.
+      const reused = byName.get(String(section.reuseBlock || "").toLowerCase().trim());
+      if (reused) return { ...section, blockName: reused.name, blockOptions: Array.isArray(section.blockOptions) ? section.blockOptions : [], dsl: null };
       const context = `This component is the "${section.title}" (${section.role}) of a document: ${brief.improvedPrompt}. Accent colour ${brief.accent || "#5b5bd6"}. Audience: ${brief.audience || "teenagers"}. Visual direction for the whole document (follow it exactly): ${brief.styleNotes || "soft pastel cards with one accent colour"}. ${section.repeats ? "It repeats once per generated item." : "It appears once."}`;
       try {
         // A repeating item must leave room for its neighbours; a header or footer is a band.
@@ -103,11 +126,11 @@ ${DESIGN_RULES}`,
       }
     }));
 
-    const failed = designed.filter((section) => !section.dsl);
+    const failed = designed.filter((section) => !section.dsl && !section.blockName);
     return NextResponse.json({
       brief: { name: brief.name, canvas: brief.canvas, accent: brief.accent, audience: brief.audience, styleNotes: brief.styleNotes, views: brief.views, improvedPrompt: brief.improvedPrompt, reuseTemplateName: brief.reuseTemplateName, images: brief.images, notes: brief.notes },
-      sections: designed.filter((section) => section.dsl),
-      reply: `${brief.notes || "Here is your template."}${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
+      sections: designed.filter((section) => section.dsl || section.blockName),
+      reply: `${brief.notes || "Here is your template."} ${designed.filter((section) => section.blockName).length} section${designed.filter((section) => section.blockName).length === 1 ? "" : "s"} built from Luna's own components.${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
     });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });

@@ -237,6 +237,27 @@ Consequences for the product:
 - **Generated templates must look designed**: cards with background colours, badges and space to
   write — never bare text on white — and playful when the audience is children.
 
+### 5.1h Folders, and plans that think (founder spec, 2026-09-24)
+
+- **Only folders.** Workspaces, subjects and folders were three names for one idea: there are
+  folders and subfolders, and anything — a resource, a calendar, a plan — is linked to a folder and
+  therefore to everything under it.
+- **One workspace screen.** Browsing and managing are the same thing: rename, delete, preview and
+  download from the item itself, upload files or whole folders, download a folder or a selection,
+  and select with the mouse.
+- **No separate Resources tab.** Generated resources live in the folders with every action they
+  had: open and do on Luna, regenerate, download, favourite, tags.
+- **Resources say what they teach.** When a resource is created, an agent proposes its context and
+  a granular list of learning goals, which the user edits. Several resources may teach the same
+  concept; the finer the concepts, the better the planning.
+- **Study plans**: goals link to the resources (and concepts) that serve them; a plan can hold
+  several goals, deadlines and exams; plans nest, so a June maths exam is made of sub-plans; a
+  calendar view spaces the work and shows overlapping plans so the workload is visible; and an
+  alert panel says what is due next.
+- **Luna can build the plan.** Given material, a deadline and the kinds of practice wanted, the
+  agent schedules the work over time — and it is fed the learner's performance, so the plan is
+  fitted to the results and improves as more is known about the learner.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -439,6 +460,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1h: folders only, one workspace screen, resources inside it, concepts per resource, plan goals/deadlines/sub-plans, calendar and alerts, automatic plan generation from performance.
 - 2026-09-24 — Added §5.1g: navigation rail + account cluster, Templates as a section, agent deletion, filing of generated resources, workspace file browser, resources as activities, study plans, cuter generated templates.
 - 2026-09-23 — Added §5.1f: LaTeX in every export, phone layout, template generated from the agent's output fields, field importance and template fit, whole-template generation from a description, saved agent↔template pairings.
 - 2026-09-23 — Added §5.1e: add output fields from the run flow, merged mapping slots, field highlighting in the agent preview, interchangeable designs shown in the template preview.

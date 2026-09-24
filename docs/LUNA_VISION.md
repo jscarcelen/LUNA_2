@@ -197,6 +197,27 @@ Consequences for the product:
   by the agent, the template preview shows every possibility side by side with an example of each,
   instead of only the one the sample data happened to pick.
 
+### 5.1f Generated documents, field importance and saved pairings (founder spec, 2026-09-23)
+
+- **Maths is shown as maths.** Formulas arrive embedded in the text as LaTeX; every output — HTML,
+  PDF, Word, PowerPoint and the on-platform activity — must render them readably, never as source.
+- **The phone gets its own view.** The computer layout stays as it is; on a phone the app collapses
+  (menu sheet, one scrollable site map, stacked panels, folded filter bars) so the page is clean.
+- **Defining the output produces a document.** In the agent generator, the fields the creator
+  describes are laid out automatically into a good-looking template with every format (interactive
+  activity on the platform, HTML, PDF, Word, PowerPoint). The user can edit it, replace it with
+  another template, or save it into Template Studio.
+- **Fields have importance.** Some fields carry the point of the document (the questions of an exam)
+  and some are incidental (the topic tag). The creator marks this, and it decides template fit: a
+  template that drops an essential field does not fit the agent, while missing extras never block a
+  run — the user can keep editing the template and run it meanwhile.
+- **A template can be described in words.** Template Studio takes a description of the whole
+  document (including pictures and references to existing templates and components) and designs it,
+  with a hidden agent improving the description first so the result matches what was asked.
+- **Agent ↔ template pairings are saved.** An agent is used with several templates, each with its
+  own mapping; the configuration is stored on the agent, so adjusting fields is only needed when a
+  new template is linked, and the set of pairings tells which templates are viable for that agent.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -399,6 +420,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-23 — Added §5.1f: LaTeX in every export, phone layout, template generated from the agent's output fields, field importance and template fit, whole-template generation from a description, saved agent↔template pairings.
 - 2026-09-23 — Added §5.1e: add output fields from the run flow, merged mapping slots, field highlighting in the agent preview, interchangeable designs shown in the template preview.
 - 2026-09-23 — Added §5.1d: generated resources library (gallery/list, filters, folders, activity mode, export repository, save view, regenerate/edit, delete/move).
 - 2026-09-20 — Added §5.1c: worksheet components, component chatbot, interactive activities as default, activity layer in workspaces.

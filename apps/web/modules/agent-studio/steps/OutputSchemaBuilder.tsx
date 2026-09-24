@@ -4,6 +4,7 @@ import type { AgentSpec, FieldDef } from "../engine/types";
 import { createCollection, createField } from "../engine/model";
 import { outputSkeleton } from "../engine/schema";
 import { outputTypes } from "../registry";
+import { importanceOf } from "../../template-studio/engine/fit";
 import { card, fieldBase, ghostBtn, kicker } from "../ui";
 
 const LIST_COLOR = "#6d4de6";
@@ -33,8 +34,17 @@ function FieldCard({ f, onChange, onRemove, onMove, first, last, tone = "once" }
         <select className={`${fieldBase} w-full`} value={valueType} onChange={(event) => setValueType(event.target.value as FieldDef["type"])}>{leafTypes.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}</select>
       </div>
       <input className={`${fieldBase} mt-2 w-full text-xs`} value={f.description || ""} onChange={(event) => onChange({ ...f, description: event.target.value })} placeholder={tone === "once" ? "What is it? e.g. A title for the whole document" : "What is it? e.g. The word in the first language"} />
-      <div className="mt-2 flex items-center gap-4 text-xs text-ink">
+      <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-ink">
         <label className="flex items-center gap-1.5"><input type="checkbox" checked={f.required !== false} onChange={(event) => onChange({ ...f, required: event.target.checked })} />Required</label>
+        {/* How much the field matters decides which templates really fit this agent. */}
+        <label className="flex items-center gap-1.5" title="Essential fields carry the point of the document; a template that leaves one out does not fit this agent.">
+          Importance
+          <select className={`${fieldBase} py-0.5 text-xs`} value={importanceOf(f)} onChange={(event) => onChange({ ...f, importance: event.target.value as FieldDef["importance"] })}>
+            <option value="essential">Essential</option>
+            <option value="useful">Useful</option>
+            <option value="extra">Nice to have</option>
+          </select>
+        </label>
         {tone === "item" ? <label className="flex items-center gap-1.5" title="Several values of this type, e.g. answer options"><input type="checkbox" checked={isList} onChange={(event) => setList(event.target.checked)} />Many values (list)</label> : null}
         <span className="ml-auto flex items-center gap-2"><Mover onMove={onMove} first={first} last={last} /><button type="button" className="text-soft-ink hover:text-[var(--color-danger)]" onClick={onRemove}>Remove</button></span>
       </div>

@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { TemplateThumbnail, compatibleAgentNames, templateFolderOf } from "./TemplateThumbnail";
 import { STARTER_TEMPLATES } from "./engine/starters";
+import { TemplateChat } from "./design/TemplateChat";
 import { card, kicker } from "./ui";
 
 export interface SavedTemplateRow { id: string; name: string; folderId?: string; templateV3?: unknown; docModel?: unknown; dataFields?: unknown[] }
@@ -12,7 +13,7 @@ function AgentChips({ names }: { names: string[] }) {
   return <p className="m-0 mt-1 flex flex-wrap gap-1">{names.slice(0, 3).map((name) => <span key={name} className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {name}</span>)}{names.length > 3 ? <span className="text-[10px] text-soft-ink">+{names.length - 3}</span> : null}</p>;
 }
 
-export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onOpen, onMoveToFolder, onDelete }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: string) => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void; onDelete?: (row: SavedTemplateRow) => void }) {
+export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onGenerated, onOpen, onMoveToFolder, onDelete }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: string) => void; onGenerated?: (template: any, note: string) => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void; onDelete?: (row: SavedTemplateRow) => void }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [folder, setFolder] = useState<string>("");
@@ -43,6 +44,7 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
         <input ref={fileRef} type="file" accept="application/pdf,image/png,image/jpeg" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.target.value = ""; }} />
         {busy ? <p className="m-0 mt-3 text-xs text-[var(--accent-ink)]">Preparing your pages…</p> : null}
       </div>
+      {onGenerated ? <TemplateChat templateNames={templates.map((row) => row.name)} onBuilt={onGenerated} /> : null}
       <div className="grid gap-3 lg:grid-cols-2">
         <div className={`${card} p-5 lg:col-span-2`}>
           <p className={kicker}>Start from an example</p>

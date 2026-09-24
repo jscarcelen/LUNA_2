@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
 import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
+import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
 import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
@@ -270,6 +271,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const folders = selectedSubject?.folders || [];
 
   const [agentConfig, setAgentConfig] = useState(null);
+  /** Saved configuration per template: { [templateId]: { fieldMappingByTemplateField, fieldTypeByName, customization } }. */
+  const [templateLinks, setTemplateLinks] = useState({});
   const [loadError, setLoadError] = useState("");
   const [flowStep, setFlowStep] = useState(1);
   const [howOpen, setHowOpen] = useState(true);
@@ -336,6 +339,9 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       }
     }
     setAgentConfig(parsed);
+    // An agent is used with several templates; each one keeps its own mapping and styling, so
+    // linking a template is a one-off job (`outputMappings`), while `outputMapping` is the last used.
+    setTemplateLinks(parsed.outputMappings && typeof parsed.outputMappings === "object" ? parsed.outputMappings : {});
     setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
     setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
     setTemplateId(String(parsed.outputMapping?.templateId || ""));
@@ -429,7 +435,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     }));
   }, [activeTemplate, templateFieldFrequencyByName]);
   const agentFields = useMemo(
-    () => fields.map((field) => ({ ...field, frequency: normalizeFrequency(field.repeatScope || "per-output") })),
+    () => fields.map((field) => ({ ...field, frequency: normalizeFrequency(field.repeatScope || "per-output"), importance: importanceOf(field) })),
     [fields]
   );
   /**
@@ -449,12 +455,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!activeTemplate) return [];
     const issues = [];
     const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
+    // An empty slot is not a reason to stop: the user may be adapting the template. Only a mapping
+    // that points at a field this agent does not have is genuinely broken.
     for (const templateField of mappingRows) {
       const mappedAgentFieldName = rowMapping(templateField);
-      if (!mappedAgentFieldName) {
-        issues.push(`Map template field "${templateField.label || templateField.name}".`);
-        continue;
-      }
+      if (!mappedAgentFieldName) continue;
       const mappedAgentField = agentFieldsByName[mappedAgentFieldName];
       if (!mappedAgentField) {
         issues.push(`"${mappedAgentFieldName}" does not exist in this agent.`);
@@ -473,6 +478,24 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     });
   }, [activeTemplate, agentFields, mappingRows, rowMapping]);
   const mappingReady = !activeTemplate || (templateFields.length > 0 && mappingIssues.length === 0);
+  /** What this template does with what the agent produces — essential fields decide the verdict. */
+  const fit = useMemo(() => {
+    if (!activeTemplate) return null;
+    const mapped = mappingRows.map((row) => rowMapping(row)).filter(Boolean);
+    const empty = mappingRows.filter((row) => !rowMapping(row)).map((row) => row.label || row.name);
+    return templateFit(agentFields, mapped, empty);
+  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
+  const fitByTemplateId = useMemo(() => {
+    // Every template in the list judged against this agent, so the choice is informed.
+    const out = {};
+    for (const template of templates) {
+      const names = Object.keys(inferTemplateFieldFrequencies(template));
+      const slots = (Array.isArray(template.dataFields) && template.dataFields.length ? template.dataFields.map((f) => f.name) : names);
+      const keys = new Set(slots.map(mergeKey));
+      out[template.id] = templateFit(agentFields, agentFields.filter((field) => keys.has(mergeKey(field.name)) || keys.has(mergeKey(field.label || field.name))).map((field) => field.name));
+    }
+    return out;
+  }, [templates, agentFields]);
   // Field the user is inspecting: every place it fills is outlined in the preview.
   const [highlightRowKey, setHighlightRowKey] = useState("");
   const highlightFields = useMemo(() => {
@@ -483,6 +506,17 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   // When the template changes: drop mappings that don't belong to it and auto-map by name
   // (matching frequency preferred, any frequency accepted) so the preview refreshes immediately.
   const templateFieldKey = templateFields.map((field) => field.name).join("|");
+  // A template that was configured before comes back exactly as it was left.
+  const restoredRef = useRef("");
+  useEffect(() => {
+    if (!templateId || restoredRef.current === templateId) return;
+    const link = templateLinks[templateId];
+    restoredRef.current = templateId;
+    if (!link) return;
+    if (link.fieldMappingByTemplateField) setFieldMappingByTemplateField(link.fieldMappingByTemplateField);
+    if (link.fieldTypeByName) setFieldTypeByName(link.fieldTypeByName);
+    if (link.customization) setCustomization((current) => ({ ...current, ...link.customization, brand: { ...current.brand, ...(link.customization.brand || {}) } }));
+  }, [templateId, templateLinks]);
   useEffect(() => {
     setFieldMappingByTemplateField((previous) => {
       const next = {};
@@ -504,6 +538,38 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       return next;
     });
   }, [templateId, templateFieldKey, agentFields, templateFields, mappingRows]);
+
+  /**
+   * Remembers how this agent is wired to this template. Kept on the agent so the pairing survives:
+   * the next run with the same template needs no mapping at all, and the set of linked templates
+   * is what makes a template "viable" for the agent.
+   */
+  const rememberLink = useCallback(() => {
+    if (!templateId) return templateLinks;
+    const link = { fieldMappingByTemplateField, fieldTypeByName, customization, at: new Date().toISOString() };
+    const next = { ...templateLinks, [templateId]: link };
+    setTemplateLinks(next);
+    return next;
+  }, [templateId, templateLinks, fieldMappingByTemplateField, fieldTypeByName, customization]);
+
+  /** Writes the agent document so its template links (and any added output field) survive the session. */
+  const persistAgent = useCallback(async (extra = {}) => {
+    if (!agentDocument || typeof onUpdateGeneratedDocument !== "function") return;
+    const links = rememberLink();
+    const nextConfig = {
+      ...agentConfig,
+      ...extra,
+      outputMappings: links,
+      outputMapping: { templateId, fieldTypeByName, fieldMappingByTemplateField, customization }
+    };
+    const textContent = JSON.stringify(nextConfig, null, 2);
+    try {
+      await onUpdateGeneratedDocument(agentDocument.id, { file: { name: agentDocument.name, content: textContent, sizeBytes: textContent.length } });
+      setAgentConfig(nextConfig);
+    } catch {
+      // Saving the pairing is a convenience; a failure must not interrupt the run.
+    }
+  }, [agentDocument, onUpdateGeneratedDocument, rememberLink, agentConfig, templateId, fieldTypeByName, fieldMappingByTemplateField, customization]);
 
   function setFieldType(name, type) {
     setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
@@ -665,14 +731,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     setIsSavingPreset(true);
     setStatusMessage("");
     try {
-      const nextConfig = {
-        ...agentConfig,
-        scope: { ...(agentConfig.scope || {}), documentIds: referenceDocumentIds, styleDocumentIds },
-        outputMapping: { templateId, fieldTypeByName, fieldMappingByTemplateField, customization }
-      };
-      const textContent = JSON.stringify(nextConfig, null, 2);
-      await onUpdateGeneratedDocument(agentDocument.id, { file: { name: agentDocument.name, content: textContent, sizeBytes: textContent.length } });
-      setAgentConfig(nextConfig);
+      await persistAgent({ scope: { ...(agentConfig.scope || {}), documentIds: referenceDocumentIds, styleDocumentIds } });
       setStatusMessage("Saved as the default for next time.");
     } catch (error) {
       setStatusMessage(String(error.message || error));
@@ -1059,7 +1118,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                         <label key={template.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${templateId === template.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
                           <input className="sr-only" type="radio" name="template" checked={templateId === template.id} onChange={() => setTemplateId(template.id)} />
                           <span className="grid size-9 place-items-center rounded-lg bg-white text-base shadow-[0_1px_2px_rgba(0,0,0,0.08)]">▦</span>
-                          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{template.name}</span><span className="block text-xs text-soft-ink">{(template.dataFields || []).length || Object.keys(inferTemplateFieldFrequencies(template)).length} fields · {template.pageFormat || "A4"}</span></span>
+                          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{template.name}</span><span className="block text-xs text-soft-ink">{templateLinks[template.id] ? "✓ Set up for this agent" : fitByTemplateId[template.id]?.verdict === "fits" ? "Fits this agent" : fitByTemplateId[template.id]?.missingEssential.length ? `⚠ ${fitByTemplateId[template.id].summary}` : "Fits with minor gaps"} · {template.pageFormat || "A4"}</span></span>
                         </label>
                       ))}
                     </div>
@@ -1071,7 +1130,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                   {activeTemplate ? (
                     <div>
                       <p className={kicker}>Map template fields to agent fields</p>
-                      <p className="m-0 mt-1 text-xs text-soft-ink">Each slot in the template must be filled by one agent field. Matching names were pre-filled — check them and change any you want.</p>
+                      <p className="m-0 mt-1 text-xs text-soft-ink">Each slot is filled by one agent field. Matching names were pre-filled — change any you want. You can run with slots still empty: they simply stay blank.</p>
+                      {templateLinks[templateId] ? <p className="m-0 mt-1 text-xs text-[var(--accent-ink)]">Saved setup for this template restored — nothing to redo.</p> : null}
+                      {fit ? (
+                        <div className={`mt-2 rounded-xl px-3 py-2 text-xs ${fit.verdict === "fits" ? "bg-[var(--surface-soft)] text-soft-ink" : fit.missingEssential.length ? "bg-[rgba(178,94,0,0.08)] text-[var(--color-warn)]" : "bg-[var(--accent-soft)] text-[var(--accent-ink)]"}`}>
+                          <span className="font-semibold">Template fit: {fit.verdict === "fits" ? "complete" : fit.verdict === "partial" ? "partial" : "poor"}</span> · {fit.summary}.
+                          {fit.missing.length ? <span className="mt-1 block">Not shown anywhere: {fit.missing.map((field) => `${field.label || field.name} (${IMPORTANCE_LABEL[field.importance || "useful"].toLowerCase()})`).join(", ")}.</span> : null}
+                        </div>
+                      ) : null}
                       <p className="m-0 mt-1 text-xs font-semibold text-ink">{mappingRows.filter((row) => rowMapping(row)).length} of {mappingRows.length} slot{mappingRows.length === 1 ? "" : "s"} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
                       <div className="mt-2 grid gap-2">
                         {mappingRows.map((field) => {
@@ -1108,7 +1174,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               )}
               <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-ink/8 pt-4">
                 {agentDocument ? <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button> : <span />}
-                <button type="button" onClick={() => setFlowStep(3)} disabled={!hasOutput || !mappingReady} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
+                <button type="button" onClick={() => { rememberLink(); persistAgent(); setFlowStep(3); }} disabled={!hasOutput || !mappingReady} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
             </section>

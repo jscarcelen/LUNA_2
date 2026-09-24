@@ -25,6 +25,13 @@ export interface FieldDef {
   required?: boolean;
   /** Allowed values for text fields (e.g. a question "Type": multiple_choice | true_false | open). */
   options?: string[];
+  /**
+   * How much the field matters to the document. "essential" fields carry the point of the output
+   * (the question, its answer) and a template that drops them does not really fit the agent;
+   * "useful" fields improve it; "extra" fields (a topic tag, a difficulty chip) can be left out.
+   * Used to judge template fit and to decide what must be mapped before a run.
+   */
+  importance?: "essential" | "useful" | "extra";
   /** Document data: filled from the user's answer to this agent input (date, topic…) instead of being generated. */
   fromInputId?: string;
   /** Lists: how many elements previews/sample data should show (e.g. 16 for a 4×4 puzzle). */

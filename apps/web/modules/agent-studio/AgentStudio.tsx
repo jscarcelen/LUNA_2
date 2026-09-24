@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSpec } from "./engine/types";
 import { createAgentSpec, createVocabularyFlashcardsSpec, createQuizSpec, primaryCollection, collectionFields } from "./engine/model";
 import { runConfigFromSpec, specFromLegacy } from "./engine/migrate";
@@ -10,6 +10,7 @@ import { InputSchemaBuilder } from "./steps/InputSchemaBuilder";
 import { ContextBuilder } from "./steps/ContextBuilder";
 import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
 import { OutputComposer } from "./steps/OutputComposer";
+import { GeneratedTemplate } from "./steps/GeneratedTemplate";
 import { TestStep } from "./test/TestStep";
 import { AdvancedEditor } from "./AdvancedEditor";
 import { ensureRefined } from "./engine/refine";
@@ -116,6 +117,13 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
   const docs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType !== "generated" && String(d.reviewStatus || "approved") === "approved").map((d: any) => ({ id: d.id, name: d.name })), [subject]);
   const agentDocs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")).map((d: any) => ({ id: d.id, name: d.name, content: d.content })), [subject]);
   const spec = state.spec;
+  // Saved templates, so the output step can offer them instead of the generated document.
+  const [templateRows, setTemplateRows] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    const list = contextRef.current?.onListDocumentBlockTemplates;
+    if (typeof list !== "function") return;
+    list().then((rows: any) => setTemplateRows(Array.isArray(rows) ? rows : [])).catch(() => undefined);
+  }, []);
   const editId = toolContext?.editAgentDocumentId || "";
   const openedEditRef = useRef("");
   if (editId && openedEditRef.current !== editId && agentDocs.length) {
@@ -194,6 +202,8 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
               {outputMode === "blocks"
                 ? <OutputComposer spec={spec} onChange={update} listTemplates={contextRef.current?.onListDocumentBlockTemplates} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />
                 : <OutputSchemaBuilder spec={spec} onChange={update} />}
+              {/* Whatever way the fields were defined, Luna designs a finished document for them. */}
+              <GeneratedTemplate spec={spec} onChange={update} templates={templateRows} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />
             </div>
           ) : null}
           {step === 5 ? <TestStep key={spec.inputs.map((i) => i.id).join(",")} spec={spec} docs={docs} workspaceId={workspaceId} subjectId={subjectId} generation={generation} lastRun={state.lastRun} lastChanges={state.lastChanges} onRun={(run) => dispatch({ type: "run", run })} onChange={update} onUndo={() => dispatch({ type: "undo" })} /> : null}

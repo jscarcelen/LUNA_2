@@ -403,15 +403,25 @@ export function layoutDocument(template: Template, rawData: DataObject, options:
   // Resolve first/last page scopes now that the page count is known.
   const scoped = new Map<ID, Element>();
   for (const page of pages) for (const element of page.elements) if (element.pageScope.mode === "first" || element.pageScope.mode === "last" || element.pageScope.mode === "selected") scoped.set(element.id, element);
+  // A scoped GROUP is drawn through its children, so its presence on a page must be judged by any
+  // of its descendants — otherwise the group is laid out a second time on top of itself.
+  const ownerOf = new Map<ID, ID>();
+  for (const element of scoped.values()) {
+    const mark = (node: Element) => {
+      ownerOf.set(node.id, element.id);
+      if (node.type === "group") (node as GroupElement).children.forEach(mark);
+    };
+    mark(element);
+  }
   if (scoped.size) {
     out.forEach((laidPage, index) => {
       const position = out.length === 1 ? "only" : index === 0 ? "first" : index === out.length - 1 ? "last" : "middle";
       laidPage.items = laidPage.items.filter((item) => {
-        const element = scoped.get(item.elementId);
+        const element = scoped.get(ownerOf.get(item.elementId) || item.elementId);
         return !element || scopeMatches(element, position, laidPage.sourcePageId, laidPage.continuation);
       });
       for (const element of scoped.values()) {
-        const alreadyThere = laidPage.items.some((item) => item.elementId === element.id);
+        const alreadyThere = laidPage.items.some((item) => (ownerOf.get(item.elementId) || item.elementId) === element.id);
         if (!alreadyThere && scopeMatches(element, position, laidPage.sourcePageId, laidPage.continuation) && (position === "last" || position === "first")) {
           laidPage.items.push(...layoutElement(element, 0, 0, root, ctx, layout.canvas.height).items);
         }

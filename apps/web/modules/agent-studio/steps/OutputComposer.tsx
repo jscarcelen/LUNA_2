@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { AgentSpec } from "../engine/types";
 import type { Template } from "../../template-studio/engine/types";
 import { createTemplate } from "../../template-studio/engine/model";
+import { templateFromFields } from "../../template-studio/engine/autoTemplate";
 import { migrateToV3, normalizeTemplate } from "../../template-studio/engine/migrate";
 import { buildSampleData } from "../../template-studio/engine/sample";
 import { compileForSave } from "../../template-studio/adapters/agentTemplate";
@@ -60,7 +61,14 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
-    const initial = spec.outputTemplate ? normalizeTemplate(migrateToV3(spec.outputTemplate)) : createTemplate(spec.name || "Agent output");
+    // A spec can already describe its fields (an example, or the manual Fields tab) without ever
+    // having been composed; starting from an empty canvas would silently erase that schema, so the
+    // composition is designed from the fields instead.
+    const initial = spec.outputTemplate
+      ? normalizeTemplate(migrateToV3(spec.outputTemplate))
+      : spec.outputSchema.length
+        ? templateFromFields(spec.outputSchema, { name: spec.name || "Agent output" })
+        : createTemplate(spec.name || "Agent output");
     initial.editorMode = "simple";
     store.open(initial, spec.outputTemplateId || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps

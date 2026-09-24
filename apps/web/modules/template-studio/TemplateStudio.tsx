@@ -191,7 +191,7 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   }
 
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(createStarter(kind))} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
+    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(createStarter(kind))} onGenerated={(generated, note) => { store.open(generated); setStatus(note); }} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

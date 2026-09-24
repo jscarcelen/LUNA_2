@@ -6,6 +6,7 @@
  */
 import type { FieldDef } from "../../template-studio/engine/types";
 import { deriveData } from "../../template-studio/engine/derive";
+import { renderMath } from "../../template-studio/engine/latex";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
@@ -60,7 +61,9 @@ export interface Attempt {
 type Row = Record<string, unknown>;
 
 const slug = (name: string) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
-const text = (value: unknown): string => (value === undefined || value === null ? "" : Array.isArray(value) ? value.map(text).join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value));
+// Questions carry formulas as LaTeX; the player and the exported HTML show plain text, so the
+// maths is converted as the activity is built — answers are compared on the converted form too.
+const text = (value: unknown): string => (value === undefined || value === null ? "" : Array.isArray(value) ? value.map(text).join(", ") : typeof value === "object" ? JSON.stringify(value) : renderMath(String(value)));
 const norm = (value: unknown) => text(value).trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?"'()]/g, "");
 
 function pick(row: Row, ...names: string[]): unknown {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { activityKindLabel, byDifficulty, byResource, bySkill, errorsByTopic, estimateExamMinutes, joinAttempts, readResources, summarise, timeByKind, timeline } from "./metrics";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
+import { PhoneCollapse } from "../ui/PhoneCollapse";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -136,6 +137,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
             </select>
           </div>
         </div>
+        <PhoneCollapse label="Filters" activeCount={Object.values(filters).filter(Boolean).length}>
         <div className="flex flex-wrap items-center gap-2">
           <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((f) => <option key={f.id} value={f.id}>📁 {f.name}</option>)}</select>
           <select className={field} value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })}><option value="">Any resource</option>{resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}</select>
@@ -147,6 +149,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{sources.map((s) => <option key={s} value={s}>{s}</option>)}</select>
           {Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => setFilters({ folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "" })}>Clear</button> : null}
         </div>
+        </PhoneCollapse>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">

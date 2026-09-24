@@ -59,6 +59,41 @@ export function wrapDocHtml(fragment, { forPrint = false } = {}) {
 
 /* ------------------------------------------------------------------------------ PDF */
 
+/**
+ * pdf-lib's standard fonts speak WinAnsi only, so a formula's ∑ or a stray emoji would abort the
+ * whole export. Characters the font cannot draw become their closest readable ASCII spelling.
+ */
+const PDF_FALLBACK = {
+  "∑": "sum", "∏": "prod", "∫": "int", "√": "sqrt", "∞": "inf", "≤": "<=", "≥": ">=", "≠": "!=",
+  "≈": "~=", "≡": "=", "∼": "~", "∝": "prop", "∈": "in", "∉": "not in", "⊂": "subset", "⊆": "subset=",
+  "⊃": "superset", "⊇": "superset=", "∪": "U", "∩": "n", "∀": "for all", "∃": "exists", "¬": "not",
+  "∧": "and", "∨": "or", "∅": "empty", "∠": "angle", "⊥": "perp", "→": "->", "←": "<-", "↔": "<->",
+  "⇒": "=>", "⇔": "<=>", "∂": "d", "∇": "grad", "…": "...", "⋯": "...", "∓": "-/+", "∗": "*", "⋆": "*",
+  "≪": "<<", "≫": ">>", "∴": "therefore", "∬": "int int", "∮": "int",
+  "⁰": "^0", "¹": "^1", "⁴": "^4", "⁵": "^5", "⁶": "^6", "⁷": "^7", "⁸": "^8", "⁹": "^9",
+  "⁺": "^+", "⁻": "^-", "⁼": "^=", "⁽": "^(", "⁾": "^)", "ⁿ": "^n", "ⁱ": "^i", "ᵀ": "^T",
+  "₀": "_0", "₁": "_1", "₂": "_2", "₃": "_3", "₄": "_4", "₅": "_5", "₆": "_6", "₇": "_7", "₈": "_8", "₉": "_9",
+  "₊": "_+", "₋": "_-", "₌": "_=", "₍": "_(", "₎": "_)", "ₐ": "_a", "ₑ": "_e", "ᵢ": "_i", "ⱼ": "_j",
+  "ₖ": "_k", "ₘ": "_m", "ₙ": "_n", "ₒ": "_o", "ₚ": "_p", "ᵣ": "_r", "ₛ": "_s", "ₜ": "_t", "ᵤ": "_u", "ᵥ": "_v", "ₓ": "_x",
+  "α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "epsilon", "ζ": "zeta", "η": "eta",
+  "θ": "theta", "ϑ": "theta", "ι": "iota", "κ": "kappa", "λ": "lambda", "ν": "nu", "ξ": "xi",
+  "π": "pi", "ρ": "rho", "σ": "sigma", "τ": "tau", "υ": "upsilon", "φ": "phi", "χ": "chi", "ψ": "psi", "ω": "omega",
+  "Γ": "Gamma", "Δ": "Delta", "Θ": "Theta", "Λ": "Lambda", "Ξ": "Xi", "Π": "Pi", "Σ": "Sigma", "Φ": "Phi", "Ψ": "Psi", "Ω": "Omega",
+  "•": "-", "—": "-", "–": "-", "“": '"', "”": '"', "‘": "'", "’": "'", "\u00a0": " "
+};
+
+function pdfSafeText(value = "") {
+  // Combining marks (x̄) have no WinAnsi form: drop the mark, keep the letter.
+  const flat = String(value).normalize("NFC").replace(/[\u0300-\u036f\u20d0-\u20ff]/g, "");
+  let out = "";
+  for (const char of flat) {
+    if (char.charCodeAt(0) < 256) { out += char; continue; }
+    const mapped = PDF_FALLBACK[char];
+    out += mapped === undefined ? "?" : mapped;
+  }
+  return out;
+}
+
 async function embedImage(pdf, src) {
   if (!src) return null;
   try {
@@ -135,7 +170,7 @@ export async function renderDocPdfBuffer(template, data = {}, { prelaid = null }
       let cursorY = pageH - top - fontSize;
       for (const rawLine of item.lines) {
         // Re-wrap with real glyph metrics so PDF lines never overflow the box.
-        const words = String(rawLine).split(/\s+/);
+        const words = pdfSafeText(rawLine).split(/\s+/);
         let line = "";
         const flush = () => {
           const textWidth = font.widthOfTextAtSize(line, fontSize);

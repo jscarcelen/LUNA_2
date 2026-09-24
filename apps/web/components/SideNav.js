@@ -11,7 +11,8 @@ export function SideNav({
   onRenameWorkspace,
   onSetWorkspaceColor,
   onRemoveWorkspace,
-  isWorking
+  isWorking,
+  onNavigate
 }) {
   const [showAddWorkspace, setShowAddWorkspace] = useState(false);
   const [workspaceName, setWorkspaceName] = useState("");
@@ -24,6 +25,7 @@ export function SideNav({
     const nextName = workspaceName.trim();
     if (!nextName) return;
     onCreateWorkspace(nextName);
+    onNavigate?.();
     setWorkspaceName("");
     setShowAddWorkspace(false);
   }
@@ -44,6 +46,7 @@ export function SideNav({
       <div className="brand-wrap">
         <div className="brand-dot" />
         <h1>{appName}</h1>
+        <button className="mobile-close-btn" type="button" onClick={onNavigate} aria-label="Close menu">✕</button>
         <button className="side-nav-collapse-btn" type="button" onClick={() => setCollapsed(true)} title="Collapse sidebar" style={{ marginLeft: "auto" }}>‹</button>
       </div>
 
@@ -97,7 +100,7 @@ export function SideNav({
                   </div>
                 ) : (
                   <>
-                    <button className="rail-workspace-main" type="button" onClick={() => onSelectWorkspace(workspace.id)} disabled={isWorking}>
+                    <button className="rail-workspace-main" type="button" onClick={() => { onSelectWorkspace(workspace.id); onNavigate?.(); }} disabled={isWorking}>
                       <span className="workspace-dot" style={{ backgroundColor: workspace.color || "#9b7cff" }} />
                       <span>{workspace.name}</span>
                     </button>

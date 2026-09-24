@@ -7,6 +7,7 @@ import { RESOURCE_TAG, isFavourite, parseResource, resourceDifficulty, resourceS
 import { SKILLS } from "../activities/engine/activity";
 import { ResourceExports } from "./ResourceExports";
 import { addLearner, defaultLearner, readLearners } from "../performance/learners";
+import { PhoneCollapse } from "../ui/PhoneCollapse";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -125,6 +126,7 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
           </div>
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["gallery", "Gallery"], ["list", "List"]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
         </div>
+        <PhoneCollapse label="Search & filters" activeCount={(query ? 1 : 0) + Object.values(filters).filter(Boolean).length}>
         <div className="flex flex-wrap items-center gap-2">
           <input className={`${field} min-w-52 flex-1`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search name, agent, template, material, tag…" />
           <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{agents.map((a) => <option key={a} value={a}>{a}</option>)}</select>
@@ -135,6 +137,7 @@ export function ResourcesPage({ role = "student", profileName = "", workspaces =
           <button type="button" onClick={() => setFilters({ ...filters, favourite: !filters.favourite })} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${filters.favourite ? "bg-[#ffe9a8] text-[#8a5a00]" : "border border-ink/15 text-soft-ink"}`}>★ Favourites</button>
           {query || Object.values(filters).some(Boolean) ? <button type="button" className={ghostBtn} onClick={() => { setQuery(""); setFilters({ agent: "", template: "", source: "", folder: "", tag: "", favourite: false }); }}>Clear</button> : null}
         </div>
+        </PhoneCollapse>
         <div className="flex flex-wrap items-center gap-2">
           {onCreateFolder ? (
             <>

@@ -1,5 +1,6 @@
 import type { ContentSource, DataObject, DataValue, Element, FieldDef, GroupElement, ID, Layout, Page, Style, View } from "./types";
 import { findField, slug } from "./model";
+import { renderMath } from "./latex";
 
 /** Applies a view's overrides and visibility filter to a page's elements. */
 export function resolveView(layout: Layout, viewId: ID | null): Page[] {
@@ -71,14 +72,15 @@ export function valueToText(value: DataValue | undefined): string {
   if (value === undefined || value === null) return "";
   if (Array.isArray(value)) return value.map((item) => valueToText(item)).join(", ");
   if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
+  // Formulas are written as LaTeX by the agents; every export draws plain text, so convert here.
+  return renderMath(String(value));
 }
 
 /* ---------------------------------------------------------------- rich text (Markdown + LaTeX) → plain lines for M1 */
 
 /** Strips Markdown emphasis/headers and keeps LaTeX as-is; renderers that can typeset do so later. */
 export function richTextToLines(text: string): string[] {
-  return String(text || "")
+  return renderMath(String(text || ""))
     .replace(/\*\*(.+?)\*\*/g, "$1")
     .replace(/__(.+?)__/g, "$1")
     .replace(/(^|\s)\*(?!\s)(.+?)\*(?=\s|$)/g, "$1$2")

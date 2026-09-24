@@ -1,3 +1,4 @@
+import { renderMath } from "../../../template-studio/engine/latex";
 /**
  * Helpers shared by the live preview pane and the "save to workspace" path so what the user
  * sees in the preview is exactly what gets stored.
@@ -66,9 +67,9 @@ export function renderFieldAsMarkdown(type, value) {
 function renderFieldAsHtml(type, value) {
   if (type === "bullet_list") {
     const items = Array.isArray(value) ? value : String(value || "").split(/\n+/).filter(Boolean);
-    return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+    return `<ul>${items.map((item) => `<li>${escapeHtml(renderMath(item))}</li>`).join("")}</ul>`;
   }
-  const text = escapeHtml(Array.isArray(value) ? value.join(", ") : String(value ?? ""));
+  const text = escapeHtml(renderMath(Array.isArray(value) ? value.join(", ") : String(value ?? "")));
   if (type === "heading1") return `<h1>${text}</h1>`;
   if (type === "heading2") return `<h2>${text}</h2>`;
   if (type === "heading3") return `<h3>${text}</h3>`;

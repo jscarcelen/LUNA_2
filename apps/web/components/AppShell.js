@@ -644,13 +644,18 @@ export function AppShell() {
     return result?.savedDocument || null;
   }
 
+  // Phone: the workspace rail is a sheet that slides in, so the page keeps the whole screen.
+  const [menuOpen, setMenuOpen] = useState(false);
+
   function handleRoleChange(nextRole) {
     setRole(nextRole);
     setPage(defaultPage[nextRole]);
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${menuOpen ? " nav-open" : ""}`}>
+      {/* Phone only: tapping the dimmed page closes the workspace sheet. */}
+      <button className="nav-scrim" type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
       <SideNav
         role={role}
         onRoleChange={handleRoleChange}
@@ -662,9 +667,10 @@ export function AppShell() {
         onSetWorkspaceColor={handleSetWorkspaceColor}
         onRemoveWorkspace={handleRemoveWorkspace}
         isWorking={isWorking}
+        onNavigate={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} navItems={navItems} page={page} onPageChange={setPage} />
+        <TopBar title={title} navItems={navItems} page={page} onPageChange={(next) => { setPage(next); setMenuOpen(false); }} onOpenMenu={() => setMenuOpen(true)} />
         <div className="page-content">{content}</div>
       </main>
     </div>

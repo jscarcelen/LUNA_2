@@ -5010,3 +5010,171 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
 .subject-card.on { background: var(--accent-soft); }
 .role-switch { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
 .role-switch button { padding: 7px 4px; font-size: 13px; }
+
+/* ========================================================
+   Phone layout (≤ 760px)
+   The computer layout is untouched: below this width the workspace rail becomes a sheet behind a
+   menu button, the site map becomes one scrollable row, and multi-column panels stack.
+   ======================================================== */
+
+.mobile-menu-btn,
+.mobile-close-btn,
+.nav-scrim {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  /* The rail slides in over the page instead of pushing it down. */
+  .side-nav {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 60;
+    width: min(84vw, 320px);
+    transform: translateX(-102%);
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    padding-top: max(20px, env(safe-area-inset-top));
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.25);
+  }
+
+  .app-shell.nav-open .side-nav {
+    transform: translateX(0);
+  }
+
+  .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.28s ease;
+  }
+
+  .app-shell.nav-open .nav-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 auto;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ink);
+    font-size: 17px;
+    line-height: 1;
+  }
+
+  .mobile-close-btn {
+    display: inline-flex;
+    margin-left: auto;
+    border: 0;
+    background: none;
+    color: var(--soft-ink);
+    font-size: 17px;
+    line-height: 1;
+    padding: 4px 6px;
+  }
+
+  .side-nav-collapse-btn {
+    display: none;
+  }
+
+  /* Header: menu · title · credits on one line; the site map scrolls under it. */
+  .top-bar {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "menu title credits" "map map map";
+    gap: 8px 10px;
+    padding: max(10px, env(safe-area-inset-top)) 14px 8px;
+  }
+
+  .top-bar .mobile-menu-btn { grid-area: menu; }
+  .top-bar-title-wrap { grid-area: title; min-width: 0; }
+  .top-bar .credits-badge, .top-bar > :last-child { grid-area: credits; }
+
+  .top-bar h2 {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .top-site-map {
+    grid-area: map;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin: 0 -14px;
+    padding: 2px 14px 4px;
+  }
+
+  .top-site-map::-webkit-scrollbar { display: none; }
+
+  .top-map-item {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    padding: 7px 12px;
+    font-size: 13px;
+  }
+
+  .page-content {
+    padding: 14px 14px max(18px, env(safe-area-inset-bottom));
+  }
+
+  /* Anything laid out in columns becomes one column. */
+  .panel-grid,
+  .panel-grid.two,
+  .panel-grid.three,
+  .panel-grid.two-wide,
+  .kpi-grid,
+  .quiz-choice-grid,
+  .quiz-top-tracker,
+  .quiz-wizard-tracker,
+  .quiz-hero,
+  .quiz-stepper,
+  .quiz-result-summary {
+    grid-template-columns: 1fr !important;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* Wide tables scroll sideways instead of squashing. */
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+
+  /* Tailwind-scoped screens (AI tools, resources, performance): stack and loosen up. */
+  .tw-scope .lg\:sticky { position: static !important; }
+  .tw-scope [class*="lg:grid-cols-"],
+  .tw-scope [class*="md:grid-cols-"] { grid-template-columns: 1fr !important; }
+  .tw-scope .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+}
+
+/* Very small phones: give the content the whole width. */
+@media (max-width: 420px) {
+  .page-content { padding-left: 10px; padding-right: 10px; }
+  .top-bar { padding-left: 10px; padding-right: 10px; }
+  .top-site-map { margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
+}

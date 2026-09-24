@@ -8,6 +8,7 @@ import { ResourceDetail } from "../../resources/ResourceDetail";
 import { ActivityPlayer } from "../../activities/ActivityPlayer";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
 import { isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "../../resources/resource";
+import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
 import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -15,6 +16,14 @@ const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-s
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
 const field = "rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-sm text-ink";
 const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
+
+/** What a processed document can be exported as — the point of having parsed it in the first place. */
+const FORMATS = {
+  uploaded: [["original", "Original file"], ["html", "HTML"], ["editable-html", "HTML (editable)"], ["markdown", "Markdown"], ["blocks-json", "JSON (structure)"], ["txt", "Plain text"]],
+  // A generated resource is data, so JSON, HTML and text are produced here from what it holds;
+  // PDF, Word and PowerPoint come from its template, in the resource's own Downloads tab.
+  generated: [["json", "JSON (the data)"], ["html", "HTML"], ["txt", "Plain text"], ["template", "PDF / Word / slides…"]]
+};
 
 const KINDS = [
   { id: "all", label: "Everything" },
@@ -62,6 +71,9 @@ export function WorkspaceBrowser({
   onUpdateGeneratedDocument,
   onSaveGeneratedQuizDocument,
   onRegenerateResource,
+  onReviewDocument,
+  onReprocessDocument,
+  onOpenClassicTools,
   onSelectFolder
 }) {
   const [nodeId, setNodeId] = useState("");
@@ -75,6 +87,7 @@ export function WorkspaceBrowser({
   const [playing, setPlaying] = useState(null);
   const [planningRow, setPlanningRow] = useState(null);
   const [preview, setPreview] = useState(null);
+  const [formatFor, setFormatFor] = useState("");
   const fileRef = useRef(null);
   const folderRef = useRef(null);
 
@@ -91,8 +104,10 @@ export function WorkspaceBrowser({
 
   useEffect(() => { onSelectFolder?.(nodeId ? parseNode(nodeId) : null); }, [nodeId, onSelectFolder]);
 
-  const branch = useMemo(() => (nodeId ? branchOf(folders, nodeId) : null), [folders, nodeId]);
-  const visible = allDocuments.filter((document) => {
+  const needsReview = useMemo(() => allDocuments.filter((document) => document.requiresReview || String(document.reviewStatus || "approved") !== "approved"), [allDocuments]);
+  const reviewing = nodeId === "__review";
+  const branch = useMemo(() => (nodeId && !reviewing ? branchOf(folders, nodeId) : null), [folders, nodeId, reviewing]);
+  const visible = (reviewing ? needsReview : allDocuments).filter((document) => {
     if (kind === "uploaded" && document.sourceType === "generated") return false;
     if (kind === "generated" && document.sourceType !== "generated") return false;
     if (kind === "favourite" && !isFavourite(document)) return false;
@@ -103,7 +118,7 @@ export function WorkspaceBrowser({
     return true;
   });
 
-  const current = nodeId ? parseNode(nodeId) : null;
+  const current = nodeId && !reviewing ? parseNode(nodeId) : null;
   const currentSubjectId = current?.subjectId || workspace?.subjects?.[0]?.id || "";
 
   /* ---------------------------------------------------------------- folders */
@@ -176,24 +191,41 @@ export function WorkspaceBrowser({
     onUpdateDocumentMeta?.(document.id, { folderIds: raw?.folderIds || [], tags: [...keep, ...value.split(",").map((entry) => entry.trim()).filter(Boolean)] }, document.subjectId);
   }
 
-  async function downloadOne(document) {
+  async function downloadOne(document, format = "") {
+    setFormatFor("");
+    const row = rowsByDocumentId.get(document.id);
+    // Anything a resource already holds is written here; only the original files need the server.
+    if (row && format === "template") { setOpenId(document.id); setStatus("Pick the view and the format in Downloads."); return; }
+    if (row && (format === "json" || format === "html" || format === "txt")) {
+      const raw = rawDocuments.find((item) => item.id === document.id);
+      const fields = Object.keys(row.resource.data?.items?.[0] || {}).map((name) => ({ name, label: name }));
+      const body = format === "json"
+        ? JSON.stringify(row.resource, null, 2)
+        : format === "html"
+          ? wrapPreviewDocument(renderPlainOutputHtml(row.resource.data?.items || [], fields, {}, { title: row.resource.name }, {}, []), { title: row.resource.name })
+          : String(raw?.content || JSON.stringify(row.resource, null, 2));
+      const base64 = typeof window === "undefined" ? "" : window.btoa(unescape(encodeURIComponent(body)));
+      download(`${row.resource.name}.${format === "json" ? "json" : format === "html" ? "html" : "txt"}`, base64, format === "json" ? "application/json" : format === "html" ? "text/html" : "text/plain");
+      setStatus("");
+      return;
+    }
     if (!onDownloadDocument) return;
-    setStatus(`Preparing “${document.name}”…`);
-    const file = await onDownloadDocument(document);
+    setStatus(`Preparing “${document.name}”${format && format !== "original" ? ` as ${format.toUpperCase()}` : ""}…`);
+    const file = await onDownloadDocument(document, format);
     if (!file) { setStatus("Nothing to download for this item."); return; }
     download(file.fileName || document.name, file.contentBase64, file.mimeType);
     setStatus("");
   }
 
   /** Several files (or a whole folder) come down as one zip that keeps the folder structure. */
-  async function downloadMany(documents, zipName) {
+  async function downloadMany(documents, zipName, zipFormat = "") {
     if (!onDownloadDocument || !documents.length) return;
     setStatus(`Preparing ${documents.length} file${documents.length === 1 ? "" : "s"}…`);
     const zip = new JSZip();
     let added = 0;
     for (const document of documents) {
       try {
-        const file = await onDownloadDocument(document);
+        const file = await onDownloadDocument(document, zipFormat);
         if (!file?.contentBase64) continue;
         const folder = (document.folderIds || []).map((id) => pathOf(folders, id)).find(Boolean) || "";
         zip.file(`${folder ? `${folder}/` : ""}${file.fileName || document.name}`, file.contentBase64, { base64: true });
@@ -300,10 +332,21 @@ export function WorkspaceBrowser({
     const row = rowsByDocumentId.get(document.id);
     return (
       <span className="flex shrink-0 flex-wrap items-center gap-1" onClick={(event) => event.stopPropagation()}>
+        {reviewing && onReviewDocument ? <button type="button" className={ghostBtn} title="Accept the extracted text" onClick={() => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`))}>✓ Approve</button> : null}
+        {reviewing && onReprocessDocument ? <button type="button" className={ghostBtn} title="Read the file again" onClick={() => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); }}>↻ Re-read</button> : null}
         <button type="button" className={ghostBtn} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
         {row ? <button type="button" className={ghostBtn} title="Schedule it in a study plan" onClick={() => setPlanningRow(row)}>＋ Plan</button> : null}
         {row && onRegenerateResource ? <button type="button" className={ghostBtn} onClick={() => onRegenerateResource(document.id)}>Regenerate</button> : null}
-        <button type="button" className={ghostBtn} title="Download" onClick={() => downloadOne(document)}>⤓</button>
+        <span className="relative">
+          <button type="button" className={ghostBtn} title="Download in any format" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
+          {formatFor === document.id ? (
+            <span className="absolute right-0 top-full z-30 mt-1 grid w-44 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]" onMouseLeave={() => setFormatFor("")}>
+              {(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => (
+                <button key={value} type="button" className="rounded-lg px-2 py-1 text-left text-xs text-ink hover:bg-[var(--surface-soft)]" onClick={() => downloadOne(document, value)}>{label}</button>
+              ))}
+            </span>
+          ) : null}
+        </span>
         <button type="button" className={ghostBtn} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
         <button type="button" className={ghostBtn} title="Tags" onClick={() => editTags(document)}>🏷</button>
         <button type="button" className={ghostBtn} title="Rename" onClick={() => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); }}>✎</button>
@@ -338,20 +381,34 @@ export function WorkspaceBrowser({
             </div>
           </div>
         ) : null}
+        {/* The review centre is just another folder: the documents Luna could not read confidently. */}
+        <button
+          type="button"
+          onClick={() => setNodeId(reviewing ? "" : "__review")}
+          className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
+        >
+          <span aria-hidden>🛡</span><span className="font-medium">Review centre</span><span className="ml-auto text-[11px] text-soft-ink">{needsReview.length || ""}</span>
+        </button>
         <div className="grid gap-1.5">
           <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
           <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
-          <button type="button" className={ghostBtn} disabled={!visible.length} onClick={() => downloadMany(visible, pathOf(folders, nodeId) || workspace.name)}>⤓ Download this folder</button>
+          <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download this folder as
+            <select className={field} value="" disabled={!visible.length} onChange={(event) => { if (event.target.value) downloadMany(visible, pathOf(folders, nodeId) || workspace.name, event.target.value); event.target.value = ""; }}>
+              <option value="">Choose a format…</option>
+              {[["original", "Original files"], ["html", "HTML"], ["pdf", "PDF (generated only)"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
           <input ref={fileRef} type="file" multiple className="hidden" onChange={(event) => { upload(event.target.files); event.target.value = ""; }} />
           <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(event) => { upload(event.target.files); event.target.value = ""; }} />
+          {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
         </div>
       </aside>
 
       <div className={`${card} grid gap-3 p-4`}>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-bold text-ink">{nodeId ? pathOf(folders, nodeId) : "All folders"}</p>
-            <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}</p>
+            <p className="m-0 truncate text-sm font-bold text-ink">{reviewing ? "Review centre" : nodeId ? pathOf(folders, nodeId) : "All folders"}</p>
+            <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}{reviewing ? " Luna could not read with confidence" : ""}</p>
           </div>
           <input className={`${field} min-w-40 flex-1`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" />
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">

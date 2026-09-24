@@ -270,6 +270,17 @@ Consequences for the product:
   own (schedule, goals, what is left), plus concept mastery, questions that keep going wrong,
   whether repeating helped, the trend, the streak and the daily rhythm.
 
+### 5.1j Do the plan, one workspace, better templates (founder spec, 2026-09-24)
+
+- **A plan must execute itself.** When Luna proposes quizzes, flashcards or summaries, it runs the
+  agents, saves the results in the workspace folder, and files them as activities with their
+  deadlines. The user edits afterwards — but the work is already there.
+- **One workspace.** No separate "advanced" screen: the review centre is simply another folder, and
+  every processed document can be downloaded in the formats the processing makes possible (HTML,
+  Markdown, JSON, plain text, the original, and PDF/Word through its template).
+- **The templates keep improving.** Colour bands, tinted cards with an accent edge, pill options,
+  ribbons and cut lines, zebra tables — the standard a generated document is measured against.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -472,6 +483,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1j: plans execute their own steps, the workspace absorbed the advanced screen and gained multi-format downloads, starter templates redesigned.
 - 2026-09-24 — Added §5.1i: templates generated from the component catalogue, a design critic that reviews and repairs every generated preview, per-plan and deeper performance.
 - 2026-09-24 — Added §5.1h: folders only, one workspace screen, resources inside it, concepts per resource, plan goals/deadlines/sub-plans, calendar and alerts, automatic plan generation from performance.
 - 2026-09-24 — Added §5.1g: navigation rail + account cluster, Templates as a section, agent deletion, filing of generated resources, workspace file browser, resources as activities, study plans, cuter generated templates.

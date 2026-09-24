@@ -40,28 +40,34 @@ export function createExamTemplate(): Template {
   layout.views.push(key);
 
   const header = createGroup({
-    name: "Header", frame: { x: 12, y: 12, w: 186, h: 30 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "first" },
+    name: "Header", frame: { x: 12, y: 12, w: 186, h: 34 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "first" },
     children: [
-      tx(title.id, "Biology · Midterm exam", { x: 0, y: 0, w: 140, h: 11 }, { fontSize: 21, fontWeight: "bold", color: INK }),
-      tx(subtitle.id, "Grade 10 · Spring 2026", { x: 140, y: 2, w: 46, h: 6 }, { fontSize: 9, color: SOFT, align: "right" }),
-      st("Name: ______________________________", { x: 0, y: 14, w: 110, h: 6 }, { fontSize: 9.5, color: SOFT }),
-      st("Date: ______________", { x: 130, y: 14, w: 56, h: 6 }, { fontSize: 9.5, color: SOFT, align: "right" }),
-      tx(instructions.id, "Answer every question. Only one option is correct.", { x: 0, y: 22, w: 186, h: 6 }, { fontSize: 9, color: SOFT }),
-      createShape("line", { frame: { x: 0, y: 29, w: 186, h: 0.5 }, style: defaultStyle({ stroke: ACCENT, strokeWidth: 0.5 }) })
+      createShape("rect", { name: "Title band", frame: { x: 0, y: 0, w: 186, h: 20 }, style: defaultStyle({ fill: "#eaf3fd", stroke: "", radius: 4 }) }),
+      createShape("rect", { name: "Accent", frame: { x: 0, y: 0, w: 3, h: 20 }, style: defaultStyle({ fill: ACCENT, stroke: "", radius: 1.5 }) }),
+      tx(title.id, "Biology · Midterm exam", { x: 8, y: 3.5, w: 132, h: 9 }, { fontSize: 19, fontWeight: "bold", color: INK }),
+      tx(subtitle.id, "Grade 10 · Spring 2026", { x: 8, y: 13, w: 132, h: 5 }, { fontSize: 9, color: SOFT }),
+      st("Name", { x: 146, y: 4, w: 12, h: 5 }, { fontSize: 8, fontWeight: "bold", color: ACCENT }),
+      createShape("line", { frame: { x: 158, y: 8.5, w: 24, h: 0.3 }, style: defaultStyle({ stroke: "#9db6e0", strokeWidth: 0.3 }) }),
+      st("Date", { x: 146, y: 12, w: 12, h: 5 }, { fontSize: 8, fontWeight: "bold", color: ACCENT }),
+      createShape("line", { frame: { x: 158, y: 16.5, w: 24, h: 0.3 }, style: defaultStyle({ stroke: "#9db6e0", strokeWidth: 0.3 }) }),
+      tx(instructions.id, "Answer every question. Only one option is correct.", { x: 0, y: 23, w: 186, h: 6 }, { fontSize: 9, color: SOFT })
     ]
   });
 
-  const answerLine = tx(answer.id, "B. Absorb light energy", { x: 15, y: 30, w: 120, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#2f9e5b" }, { name: "Answer", visibility: { views: [key.id] } });
-  const explanationLine = tx(explanation.id, "Chlorophyll captures the light used to convert CO₂ and water into glucose.", { x: 15, y: 35.5, w: 165, h: 6 }, { fontSize: 8, color: SOFT }, { name: "Explanation", format: "rich", visibility: { views: [key.id] } });
+  const answerBand = createShape("rect", { name: "Answer band", frame: { x: 15, y: 28.5, w: 166, h: 13 }, style: defaultStyle({ fill: "#eaf7ef", stroke: "", radius: 3 }) });
+  (answerBand as unknown as { visibility: { views: string[] } }).visibility = { views: [] };
+  const answerLine = tx(answer.id, "B. Absorb light energy", { x: 19, y: 30, w: 120, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#2f9e5b" }, { name: "Answer", visibility: { views: [key.id] } });
+  const explanationLine = tx(explanation.id, "Chlorophyll captures the light used to convert CO₂ and water into glucose.", { x: 19, y: 35.5, w: 158, h: 6 }, { fontSize: 8, color: SOFT }, { name: "Explanation", format: "rich", visibility: { views: [key.id] } });
 
   const card = createGroup({
-    name: "Question", frame: { x: 12, y: 46, w: 186, h: 42 }, layout: { mode: "free", gap: 3 },
+    name: "Question", frame: { x: 12, y: 50, w: 186, h: 42 }, layout: { mode: "free", gap: 4 },
     repeat: { fieldId: questions.id, mode: "flow" },
     pagination: { breakBefore: false, breakAfter: false, keepTogether: true, allowSplit: false, overflow: "continue" },
-    style: defaultStyle({ fill: "#ffffff", stroke: "#e5e5ea", strokeWidth: 0.35, radius: 3 }),
+    style: defaultStyle({ fill: "#f7faff", stroke: "#dce6f7", strokeWidth: 0.35, radius: 4 }),
     children: [
-      createShape("ellipse", { frame: { x: 5, y: 5, w: 8, h: 8 }, style: defaultStyle({ fill: "#eaf3fd", stroke: "" }) }),
-      st("{{n}}", { x: 5, y: 6.6, w: 8, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: ACCENT, align: "center" }),
+      createShape("rect", { name: "Edge", frame: { x: 0, y: 0, w: 2.5, h: 40 }, style: defaultStyle({ fill: ACCENT, stroke: "", radius: 1.2 }) }),
+      createShape("ellipse", { frame: { x: 5, y: 5, w: 8, h: 8 }, style: defaultStyle({ fill: ACCENT, stroke: "" }) }),
+      st("{{n}}", { x: 5, y: 6.6, w: 8, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#ffffff", align: "center" }),
       tx(question.id, "What is the main function of chlorophyll in plants?", { x: 15, y: 5, w: 150, h: 8 }, { fontSize: 11, fontWeight: "bold", color: INK }, { format: "rich" }),
       tx(points.id, "2", { x: 168, y: 5.5, w: 10, h: 5 }, { fontSize: 8, fontWeight: "bold", color: SOFT, align: "right" }),
       st("pts", { x: 178, y: 5.5, w: 6, h: 5 }, { fontSize: 8, color: SOFT }),
@@ -69,13 +75,15 @@ export function createExamTemplate(): Template {
         name: "Options", frame: { x: 15, y: 15, w: 165, h: 13 }, layout: { mode: "vertical", gap: 1.4 },
         repeat: { fieldId: options.id, mode: "flow" },
         children: [createGroup({
-          name: "Option", frame: { x: 0, y: 0, w: 165, h: 6 }, layout: { mode: "free", gap: 0 }, repeat: null,
+          name: "Option", frame: { x: 0, y: 0, w: 165, h: 7 }, layout: { mode: "free", gap: 0 }, repeat: null,
           children: [
-            createShape("ellipse", { frame: { x: 0, y: 1, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: "#b9c6e8", strokeWidth: 0.35 }) }),
-            tx(option.id, "Absorb light energy for photosynthesis", { x: 6.5, y: 0, w: 156, h: 6 }, { fontSize: 10, color: INK })
+            createShape("rect", { name: "Pill", frame: { x: 0, y: 0, w: 165, h: 7 }, style: defaultStyle({ fill: "#ffffff", stroke: "#dce6f7", strokeWidth: 0.3, radius: 3.5 }) }),
+            createShape("ellipse", { frame: { x: 2.5, y: 1.6, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: "#9db6e0", strokeWidth: 0.35 }) }),
+            tx(option.id, "Absorb light energy for photosynthesis", { x: 9, y: 0.6, w: 152, h: 6 }, { fontSize: 10, color: INK })
           ]
         })]
       }),
+      { ...answerBand, visibility: { views: [key.id] } } as Element,
       answerLine,
       explanationLine
     ]
@@ -117,13 +125,15 @@ export function createFlashcardsTemplate(): Template {
     name: "Card", frame: { x: 0, y: 0, w: 148, h: 105 }, layout: { mode: "free", gap: 0 },
     repeat: { fieldId: cards.id, mode: "page" },
     children: [
-      createShape("rect", { frame: { x: 6, y: 6, w: 136, h: 93 }, style: defaultStyle({ fill: "#ffffff", stroke: "#d9e2f5", strokeWidth: 0.4, radius: 5 }) }),
-      createShape("rect", { frame: { x: 6, y: 6, w: 136, h: 10 }, style: defaultStyle({ fill: "#eaf3fd", stroke: "", radius: 5 }) }),
-      tx(topic.id, "Vocabulary · Unit 3", { x: 12, y: 8.5, w: 124, h: 6 }, { fontSize: 8, fontWeight: "bold", color: ACCENT }),
-      tx(front.id, "perro", { x: 12, y: 30, w: 124, h: 18 }, { fontSize: 24, fontWeight: "bold", align: "center", color: INK }),
-      tx(hint.id, "(animal)", { x: 12, y: 50, w: 124, h: 6 }, { fontSize: 9, align: "center", color: SOFT }),
-      createShape("line", { frame: { x: 24, y: 62, w: 100, h: 0.3 }, style: defaultStyle({ stroke: "#d9e2f5", strokeWidth: 0.3 }) }),
-      tx(back.id, "dog", { x: 12, y: 68, w: 124, h: 14 }, { fontSize: 15, align: "center", color: "#2f9e5b" }, { name: "Back", visibility: { views: [study.id] } })
+      createShape("rect", { name: "Cut line", frame: { x: 4, y: 4, w: 140, h: 97 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c8d6ef", strokeWidth: 0.3, radius: 6 }) }),
+      createShape("rect", { name: "Ribbon", frame: { x: 4, y: 4, w: 140, h: 13 }, style: defaultStyle({ fill: ACCENT, stroke: "", radius: 6 }) }),
+      createShape("rect", { name: "Ribbon base", frame: { x: 4, y: 12, w: 140, h: 5 }, style: defaultStyle({ fill: ACCENT, stroke: "" }) }),
+      tx(topic.id, "Vocabulary · Unit 3", { x: 11, y: 7, w: 126, h: 7 }, { fontSize: 8.5, fontWeight: "bold", color: "#ffffff" }),
+      tx(front.id, "perro", { x: 11, y: 30, w: 126, h: 18 }, { fontSize: 26, fontWeight: "bold", align: "center", color: INK }),
+      tx(hint.id, "(animal)", { x: 11, y: 50, w: 126, h: 6 }, { fontSize: 9, align: "center", color: SOFT }),
+      createShape("rect", { name: "Back panel", frame: { x: 11, y: 62, w: 126, h: 22 }, style: defaultStyle({ fill: "#eaf7ef", stroke: "", radius: 4 }), visibility: { views: [study.id] } }),
+      tx(back.id, "dog", { x: 14, y: 68, w: 120, h: 14 }, { fontSize: 16, fontWeight: "bold", align: "center", color: "#2f9e5b" }, { name: "Back", visibility: { views: [study.id] } }),
+      st("✂ cut here", { x: 11, y: 90, w: 126, h: 5 }, { fontSize: 7.5, color: "#9db6e0", align: "center" })
     ]
   });
   layout.pages[0].elements = [card] as Element[];
@@ -151,33 +161,35 @@ export function createVocabularyTemplate(): Template {
   layout.views.push(practice);
 
   const header = createGroup({
-    name: "Header", frame: { x: 12, y: 12, w: 186, h: 24 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "first" },
+    name: "Header", frame: { x: 12, y: 12, w: 186, h: 26 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "first" },
     children: [
-      tx(title.id, "Spanish · English vocabulary", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 20, fontWeight: "bold", color: INK }),
-      tx(subtitle.id, "Unit 3 · 12 words", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 9.5, color: SOFT }),
-      createShape("rect", { frame: { x: 0, y: 20, w: 24, h: 1.2 }, style: defaultStyle({ fill: ACCENT, stroke: "", radius: 0.6 }) })
+      createShape("rect", { name: "Band", frame: { x: 0, y: 0, w: 186, h: 22 }, style: defaultStyle({ fill: "#f2f7ff", stroke: "", radius: 4 }) }),
+      createShape("rect", { name: "Accent", frame: { x: 0, y: 0, w: 3, h: 22 }, style: defaultStyle({ fill: ACCENT, stroke: "", radius: 1.5 }) }),
+      tx(title.id, "Spanish · English vocabulary", { x: 8, y: 3.5, w: 176, h: 10 }, { fontSize: 19, fontWeight: "bold", color: INK }),
+      tx(subtitle.id, "Unit 3 · 12 words", { x: 8, y: 14, w: 176, h: 6 }, { fontSize: 9.5, color: SOFT })
     ]
   });
 
   const tableHead = createGroup({
-    name: "Table header", frame: { x: 12, y: 40, w: 186, h: 8 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "every" },
-    style: defaultStyle({ fill: "#eaf3fd", stroke: "", radius: 1.5 }),
+    name: "Table header", frame: { x: 12, y: 42, w: 186, h: 9 }, layout: { mode: "free", gap: 0 }, repeat: null, pageScope: { mode: "every" },
+    style: defaultStyle({ fill: ACCENT, stroke: "", radius: 3 }),
     children: [
-      st("Word", { x: 4, y: 1.8, w: 44, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: ACCENT }),
-      st("Translation", { x: 54, y: 1.8, w: 44, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: ACCENT }),
-      st("Example", { x: 104, y: 1.8, w: 78, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: ACCENT })
+      st("Word", { x: 5, y: 2.2, w: 44, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#ffffff" }),
+      st("Translation", { x: 55, y: 2.2, w: 44, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#ffffff" }),
+      st("Example", { x: 105, y: 2.2, w: 76, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: "#ffffff" })
     ]
   });
 
   const row = createGroup({
-    name: "Word row", frame: { x: 12, y: 50, w: 186, h: 10 }, layout: { mode: "free", gap: 0 },
+    name: "Word row", frame: { x: 12, y: 53, w: 186, h: 11 }, layout: { mode: "free", gap: 0 },
     repeat: { fieldId: words.id, mode: "flow" },
-    style: defaultStyle({ fill: "", stroke: "#eef0f4", strokeWidth: 0.25 }),
+    style: defaultStyle({ fill: "#fbfcff", stroke: "#e9eef8", strokeWidth: 0.25, radius: 2 }),
     children: [
-      tx(word.id, "casa", { x: 4, y: 2.4, w: 46, h: 5.5 }, { fontSize: 10.5, fontWeight: "bold", color: INK }),
-      tx(translation.id, "house", { x: 54, y: 2.4, w: 46, h: 5.5 }, { fontSize: 10.5, color: ACCENT }, { name: "Translation", visibility: { views: [full.id] } }),
-      st("______________", { x: 54, y: 2.4, w: 46, h: 5.5 }, { fontSize: 10.5, color: "#c7c7cc" }, { name: "Blank", visibility: { views: [practice.id] } }),
-      tx(example.id, "Mi casa es pequeña.", { x: 104, y: 2.4, w: 78, h: 5.5 }, { fontSize: 9.5, color: SOFT })
+      createShape("rect", { name: "Marker", frame: { x: 0, y: 0, w: 1.6, h: 11 }, style: defaultStyle({ fill: "#dce6f7", stroke: "" }) }),
+      tx(word.id, "casa", { x: 5, y: 2.8, w: 46, h: 5.5 }, { fontSize: 10.5, fontWeight: "bold", color: INK }),
+      tx(translation.id, "house", { x: 55, y: 2.8, w: 46, h: 5.5 }, { fontSize: 10.5, color: ACCENT }, { name: "Translation", visibility: { views: [full.id] } }),
+      st("______________", { x: 55, y: 2.8, w: 46, h: 5.5 }, { fontSize: 10.5, color: "#8e98ab" }, { name: "Blank", visibility: { views: [practice.id] } }),
+      tx(example.id, "Mi casa es pequeña.", { x: 105, y: 2.8, w: 76, h: 5.5 }, { fontSize: 9.5, color: SOFT })
     ]
   });
 

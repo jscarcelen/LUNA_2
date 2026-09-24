@@ -23,13 +23,14 @@ const KINDS = [
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], resources = [], attempts = [], onCancel, onDone, onSavePlan }) {
+export function GeneratePlanDialog({ documents = [], resources = [], attempts = [], onCancel, onDone, onSavePlan, onBuild }) {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [minutes, setMinutes] = useState(120);
   const [kinds, setKinds] = useState(["quiz", "flashcards"]);
   const [picked, setPicked] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [buildNow, setBuildNow] = useState(true);
   const [error, setError] = useState("");
 
   const material = useMemo(() => documents.filter((document) => document.sourceType !== "generated" || (document.tags || []).includes("resource")), [documents]);
@@ -106,8 +107,14 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
         items,
         materialIds: picked
       });
-      await onSavePlan?.(plan);
-      onDone?.(`Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.`);
+      const saved = await onSavePlan?.(plan);
+      const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.`;
+      if (buildNow && onBuild && items.some((item) => item.generate)) {
+        const result = await onBuild(plan, saved?.id || saved?.documentId || "");
+        onDone?.(`${planned} ${result?.created || 0} resource${result?.created === 1 ? "" : "s"} generated and filed${result?.failures?.length ? `, ${result.failures.length} still to build` : ""}.`);
+        return;
+      }
+      onDone?.(planned);
     } catch (problem) {
       setError(String(problem.message || problem));
     } finally {
@@ -149,6 +156,7 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
               {!material.length ? <p className="m-0 text-xs text-soft-ink">Nothing in this folder yet.</p> : null}
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={buildNow} onChange={(event) => setBuildNow(event.target.checked)} />Generate the quizzes and summaries now, and file them in my workspace</label>
           {performance ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-[11px] text-soft-ink">Luna will use your results: {performance.activities} activities, {Math.round(performance.average * 100)}% average{performance.weakConcepts.length ? `, weakest on ${performance.weakConcepts.slice(0, 3).join(", ")}` : ""}.</p> : null}
         </div>
         {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}

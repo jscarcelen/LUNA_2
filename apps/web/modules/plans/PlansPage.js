@@ -7,6 +7,7 @@ import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
+import { executePlan } from "./execute";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -35,6 +36,7 @@ function Ring({ ratio, colour, size = 56 }) {
  * alert panel says what is due now.
  */
 export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenResource }) {
+  const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const [openId, setOpenId] = useState("");
@@ -59,9 +61,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const file = { name: `${plan.name}.plan.json`, content, preview: `${(plan.items || []).length} steps${deadline ? ` · ${deadline.date}` : ""}`, sizeBytes: content.length };
     setBusy(true);
     try {
-      if (documentId) await onUpdateGeneratedDocument?.(documentId, { file });
-      else await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file });
+      const saved = documentId
+        ? await onUpdateGeneratedDocument?.(documentId, { file })
+        : await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file });
       setStatus(`Saved “${plan.name}”.`);
+      return saved;
     } catch (error) {
       setStatus(String(error.message || error));
     } finally {
@@ -72,6 +76,34 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   function updateOpen(updater) {
     if (!open) return;
     save(updater(open.plan), open.document.id);
+  }
+
+  /**
+   * Turns the steps that only promised material into real material: runs the agent for each one,
+   * files the result in the workspace as a resource (and an activity when it has questions), and
+   * points the step at it with its due date kept.
+   */
+  async function build(row) {
+    const pending = (row.plan.items || []).filter((item) => item.generate && !item.resourceId);
+    if (!pending.length) { setStatus("Every step of this plan already has its material."); return; }
+    setBuilding(row.document.id);
+    try {
+      const result = await executePlan({
+        plan: row.plan,
+        documents,
+        workspaceId: selectedWorkspaceId,
+        subjectId: selectedSubjectId,
+        folderIds: (row.document.folderIds || []).filter(Boolean),
+        onSaveGeneratedQuizDocument,
+        onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
+      });
+      await save(result.plan, row.document.id);
+      setStatus(`${result.created} resource${result.created === 1 ? "" : "s"} generated and filed in your workspace${result.failures.length ? ` · ${result.failures.length} could not be built (${result.failures[0].message})` : ""}.`);
+    } catch (error) {
+      setStatus(String(error.message || error));
+    } finally {
+      setBuilding("");
+    }
   }
 
   /** Dropping an item on a day of the calendar moves its due date, whichever plan it belongs to. */
@@ -109,7 +141,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               </p>
               {plan.note ? <p className="m-0 mt-2 max-w-2xl text-sm text-ink">{plan.note}</p> : null}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex flex-wrap items-center gap-4">
+              {plan.items.some((item) => item.generate && !item.resourceId) ? (
+                <button type="button" className={primaryBtn} disabled={building === open.document.id} onClick={() => build(open)}>
+                  {building === open.document.id ? "Building…" : `✦ Build the ${plan.items.filter((item) => item.generate && !item.resourceId).length} missing resources`}
+                </button>
+              ) : null}
               <Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} />
               {progress.average ? <div><p className={kicker}>Average</p><p className="m-0 text-xl font-bold text-ink">{Math.round(progress.average * 100)}%</p></div> : null}
               {progress.late.length ? <div><p className={kicker}>Late</p><p className="m-0 text-xl font-bold text-[var(--color-danger)]">{progress.late.length}</p></div> : null}
@@ -382,7 +419,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                     </ul>
                   </div>
                 ) : <p className="m-0 text-xs text-soft-ink">Everything done. 🎉</p>}
-                <button type="button" className={`${primaryBtn} mt-auto`} onClick={() => setOpenId(document.id)}>Open plan</button>
+                <div className="mt-auto grid gap-1.5">
+                  {plan.items.some((item) => item.generate && !item.resourceId) ? (
+                    <button type="button" className={ghostBtn} disabled={building === document.id} onClick={() => build({ document, plan })}>
+                      {building === document.id ? "Building…" : `✦ Build ${plan.items.filter((item) => item.generate && !item.resourceId).length} resources`}
+                    </button>
+                  ) : null}
+                  <button type="button" className={primaryBtn} onClick={() => setOpenId(document.id)}>Open plan</button>
+                </div>
               </article>
             );
           })}
@@ -400,6 +444,20 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           onCancel={() => setGenerating(false)}
           onDone={(message) => { setGenerating(false); setStatus(message); }}
           onSavePlan={(plan) => save(plan)}
+          onBuild={async (plan, savedDocumentId) => {
+            // The plan is worth nothing until its material exists, so it is built immediately.
+            const result = await executePlan({
+              plan,
+              documents,
+              workspaceId: selectedWorkspaceId,
+              subjectId: selectedSubjectId,
+              folderIds: [],
+              onSaveGeneratedQuizDocument,
+              onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
+            });
+            if (savedDocumentId) await save(result.plan, savedDocumentId);
+            return result;
+          }}
         />
       ) : null}
     </section>

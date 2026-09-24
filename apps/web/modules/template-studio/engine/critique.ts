@@ -59,7 +59,9 @@ export function critiqueTemplate(template: Template, data?: Record<string, unkno
   // Headers and footers are meant to sit in the margin band; only the page edge binds them.
   const chromeIds = new Set<string>();
   walk(layout.pages[0]?.elements || [], (element) => {
-    if (element.pageScope.mode === "every" || element.placement === "fixed") walk([element], (child) => chromeIds.add(child.id));
+    // Full-bleed blocks (a card that IS the page) are judged against the page edge as well.
+    const fullBleed = element.frame.w >= layout.canvas.width * 0.9;
+    if (element.pageScope.mode === "every" || element.placement === "fixed" || fullBleed) walk([element], (child) => chromeIds.add(child.id));
   });
 
   for (const [pageIndex, page] of result.pages.entries()) {

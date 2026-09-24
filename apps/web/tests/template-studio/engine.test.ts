@@ -67,16 +67,21 @@ describe("layout engine", () => {
     expect(item.type === "text" && item.style.fontSize).toBe(30);
   });
 
-  it("moves a flowing element that does not fit to the next page, and reports overflow for fixed ones", () => {
+  it("moves a flowing element that does not fit to the next page", () => {
     const template = createTemplate("t");
     template.layouts[0].pages[0].elements = [createText({ type: "static", value: "x".repeat(4000) }, { frame: { x: 12, y: 280, w: 50, h: 8 } })];
     const flowing = layoutDocument(template, {});
     expect(flowing.pages.length).toBe(2);
     expect(flowing.overflows.length).toBe(0);
-    template.layouts[0].pages[0].elements = [createText({ type: "static", value: "x".repeat(4000) }, { placement: "fixed", frame: { x: 12, y: 280, w: 50, h: 8 } })];
-    const fixed = layoutDocument(template, {});
-    expect(fixed.pages.length).toBe(1);
-    expect(fixed.overflows.length).toBe(1);
+  });
+
+  it("lets a fixed block sit in the margin band, but reports one that runs off the page", () => {
+    // Footers live below the bottom margin by design, so only the paper's edge binds them.
+    const template = createTemplate("t");
+    template.layouts[0].pages[0].elements = [createText({ type: "static", value: "Page 1" }, { placement: "fixed", frame: { x: 12, y: 288, w: 60, h: 6 } })];
+    expect(layoutDocument(template, {}).overflows).toHaveLength(0);
+    template.layouts[0].pages[0].elements = [createText({ type: "static", value: "x".repeat(4000) }, { placement: "fixed", frame: { x: 12, y: 290, w: 50, h: 8 } })];
+    expect(layoutDocument(template, {}).overflows).toHaveLength(1);
   });
 });
 

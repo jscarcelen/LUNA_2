@@ -531,11 +531,11 @@ export function AppShell() {
   }
 
   /** The original file for uploaded material, or the stored file for a generated document. */
-  async function handleDownloadDocument(documentDescriptor) {
+  async function handleDownloadDocument(documentDescriptor, format = "") {
     const documentId = typeof documentDescriptor === "string" ? documentDescriptor : documentDescriptor?.id;
     if (!documentId) return null;
     const generated = typeof documentDescriptor === "object" && documentDescriptor?.sourceType === "generated";
-    const result = await postWorkspaceAction(generated ? "downloadGeneratedDocument" : "downloadUploadedDocument", { documentId });
+    const result = await postWorkspaceAction(generated ? "downloadGeneratedDocument" : "downloadUploadedDocument", { documentId, format });
     return result.ok ? result.data?.download || null : null;
   }
 

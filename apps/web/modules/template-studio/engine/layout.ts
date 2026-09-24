@@ -286,7 +286,10 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       if (!header || !isShown(element, scopes, ctx)) continue;
       const laid = layoutElement(element, 0, 0, scopes, ctx, limit);
       target.items.push(...laid.items);
-      if (laid.bottom > limit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(target), reason: "exceeds-page" });
+      // Headers and footers live in the margin band by design; only the page edge binds them.
+      const fullBleed = element.frame.w >= layout.canvas.width * 0.9;
+      const edge = element.pageScope.mode === "every" || element.placement === "fixed" || fullBleed ? layout.canvas.height : limit;
+      if (laid.bottom > edge + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(target), reason: "exceeds-page" });
     }
   };
   stamp(current, false);
@@ -336,7 +339,8 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           pageLimit = limit;
           laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
         }
-        if (laid.bottom > pageLimit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: element.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
+        const bleeds = element.frame.w >= layout.canvas.width * 0.9;
+        if (laid.bottom > (bleeds ? layout.canvas.height : pageLimit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: element.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
         current.items.push(...laid.items);
         c = laid.bottom + gap;
         onPage += 1;
@@ -351,7 +355,8 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
         y = cursor;
         laid = layoutElement({ ...element, frame: { ...element.frame, y } } as Element, 0, 0, scopes, ctx, limit);
       }
-      if (laid.bottom > limit + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: "exceeds-page" });
+      const fullBleed = element.frame.w >= layout.canvas.width * 0.9;
+      if (laid.bottom > (fullBleed ? layout.canvas.height : limit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: "exceeds-page" });
       current.items.push(...laid.items);
       cursor = laid.bottom;
     }

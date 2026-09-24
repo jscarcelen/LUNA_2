@@ -1,168 +1,51 @@
-import { useState } from "react";
-import { appName, roleProfiles } from "./data";
+"use client";
 
-export function SideNav({
-  role,
-  onRoleChange,
-  workspaces,
-  selectedWorkspaceId,
-  onSelectWorkspace,
-  onCreateWorkspace,
-  onRenameWorkspace,
-  onSetWorkspaceColor,
-  onRemoveWorkspace,
-  isWorking,
-  onNavigate
-}) {
-  const [showAddWorkspace, setShowAddWorkspace] = useState(false);
-  const [workspaceName, setWorkspaceName] = useState("");
-  const [menuWorkspaceId, setMenuWorkspaceId] = useState("");
-  const [editWorkspaceId, setEditWorkspaceId] = useState("");
-  const [editWorkspaceName, setEditWorkspaceName] = useState("");
+import { useEffect, useState } from "react";
+import { appName } from "./data";
+
+/**
+ * The navigation rail: the Luna mark and the sections of the app, collapsible to icons.
+ *
+ * Workspaces, storage and the profile no longer live here — a workspace is chosen inside the
+ * Workspaces page and the account sits in the top bar — so the rail is only ever about where you
+ * are going. The collapsed state is remembered per browser.
+ */
+export function SideNav({ navItems = [], page, onPageChange, onClose }) {
   const [collapsed, setCollapsed] = useState(false);
-
-  function handleCreateWorkspace() {
-    const nextName = workspaceName.trim();
-    if (!nextName) return;
-    onCreateWorkspace(nextName);
-    onNavigate?.();
-    setWorkspaceName("");
-    setShowAddWorkspace(false);
+  useEffect(() => {
+    try { setCollapsed(window.localStorage.getItem("luna.nav.collapsed") === "1"); } catch { /* ignore */ }
+  }, []);
+  function toggle() {
+    setCollapsed((value) => {
+      const next = !value;
+      try { window.localStorage.setItem("luna.nav.collapsed", next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
   }
-
-  if (collapsed) {
-    return (
-      <aside className="side-nav workspace-rail side-nav-collapsed">
-        <button className="side-nav-collapse-btn" type="button" onClick={() => setCollapsed(false)} title="Expand sidebar">
-          <div className="brand-dot" style={{ margin: "0 auto 8px" }} />
-          <span style={{ fontSize: 16 }}>›</span>
-        </button>
-      </aside>
-    );
-  }
+  const isCurrent = (item) => page === item.key || (item.match ? String(page).startsWith(item.match) : false);
 
   return (
-    <aside className="side-nav workspace-rail">
-      <div className="brand-wrap">
-        <div className="brand-dot" />
-        <h1>{appName}</h1>
-        <button className="mobile-close-btn" type="button" onClick={onNavigate} aria-label="Close menu">✕</button>
-        <button className="side-nav-collapse-btn" type="button" onClick={() => setCollapsed(true)} title="Collapse sidebar" style={{ marginLeft: "auto" }}>‹</button>
+    <aside className={`side-nav nav-rail${collapsed ? " nav-rail-collapsed" : ""}`}>
+      <div className="nav-rail-brand">
+        <span className="brand-dot" />
+        {collapsed ? null : <span className="nav-rail-word">{appName}</span>}
+        <button className="nav-rail-toggle" type="button" onClick={toggle} title={collapsed ? "Expand menu" : "Collapse menu"} aria-label={collapsed ? "Expand menu" : "Collapse menu"}>{collapsed ? "›" : "‹"}</button>
+        <button className="mobile-close-btn" type="button" onClick={onClose} aria-label="Close menu">✕</button>
       </div>
-
-      <div className="role-switch" role="tablist" aria-label="Role selector">
-        <button className={role === "student" ? "on" : ""} onClick={() => onRoleChange("student")}>Student</button>
-        <button className={role === "teacher" ? "on" : ""} onClick={() => onRoleChange("teacher")}>Teacher</button>
-        <button className={role === "parent" ? "on" : ""} onClick={() => onRoleChange("parent")}>Parent</button>
-      </div>
-
-      <section className="rail-workspaces">
-        <div className="rail-workspaces-head">
-          <h4>Workspaces</h4>
-          <button className="table-btn" type="button" onClick={() => setShowAddWorkspace((previous) => !previous)} disabled={isWorking}>+</button>
-        </div>
-
-        {showAddWorkspace ? (
-          <div className="rail-add-inline">
-            <input className="input" value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="New workspace" disabled={isWorking} />
-            <button className="primary-btn" type="button" onClick={handleCreateWorkspace} disabled={isWorking}>Add</button>
-          </div>
-        ) : null}
-
-        <div className="rail-workspace-list">
-          {workspaces.map((workspace) => {
-            const selected = workspace.id === selectedWorkspaceId;
-            const menuOpen = menuWorkspaceId === workspace.id;
-            const editing = editWorkspaceId === workspace.id;
-
-            return (
-              <div key={workspace.id} className={selected ? "rail-workspace-item on" : "rail-workspace-item"}>
-                {editing ? (
-                  <div className="rail-inline-edit">
-                    <input className="input" value={editWorkspaceName} onChange={(event) => setEditWorkspaceName(event.target.value)} disabled={isWorking} />
-                    <div className="inline-actions">
-                      <button
-                        className="table-btn"
-                        type="button"
-                        onClick={() => {
-                          const nextName = editWorkspaceName.trim();
-                          if (!nextName) return;
-                          onRenameWorkspace(workspace.id, nextName);
-                          setEditWorkspaceId("");
-                          setEditWorkspaceName("");
-                        }}
-                        disabled={isWorking}
-                      >
-                        Save
-                      </button>
-                      <button className="table-btn" type="button" onClick={() => setEditWorkspaceId("")} disabled={isWorking}>Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <button className="rail-workspace-main" type="button" onClick={() => { onSelectWorkspace(workspace.id); onNavigate?.(); }} disabled={isWorking}>
-                      <span className="workspace-dot" style={{ backgroundColor: workspace.color || "#9b7cff" }} />
-                      <span>{workspace.name}</span>
-                    </button>
-                    <div className="doc-inline-menu-wrap">
-                        <button className="table-btn icon-btn emoji-menu-btn" type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setMenuWorkspaceId((previous) => (previous === workspace.id ? "" : workspace.id));
-                        }}
-                        disabled={isWorking}
-                      >
-                          🛠️
-                      </button>
-                      {menuOpen ? (
-                        <div className="row-menu">
-                          <button
-                            className="table-btn"
-                            type="button"
-                            onClick={() => {
-                              setEditWorkspaceId(workspace.id);
-                              setEditWorkspaceName(workspace.name);
-                              setMenuWorkspaceId("");
-                            }}
-                          >
-                            Edit
-                          </button>
-                          <label className="rail-color-row">
-                            <span>Color</span>
-                            <input
-                              className="input color-input"
-                              type="color"
-                              value={workspace.color || "#9b7cff"}
-                              onChange={(event) => onSetWorkspaceColor(workspace.id, event.target.value)}
-                              disabled={isWorking}
-                            />
-                          </label>
-                          <button className="table-btn danger" type="button" onClick={() => onRemoveWorkspace(workspace.id)} disabled={isWorking}>Delete</button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className="storage-box">
-        <strong>Storage</strong>
-        <p className="hint">2.4 GB of 10 GB used</p>
-        <div className="storage-meter"><span style={{ width: "24%" }} /></div>
-        <button className="table-btn" type="button">Upgrade</button>
-      </div>
-
-      <div className="side-footer">
-        <div className="avatar">{(roleProfiles[role] || roleProfiles.student).initials}</div>
-        <div>
-          <strong>{(roleProfiles[role] || roleProfiles.student).name}</strong>
-          <p>{(roleProfiles[role] || roleProfiles.student).subtitle}</p>
-        </div>
-      </div>
+      <nav className="nav-rail-items" aria-label="Sections">
+        {navItems.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={isCurrent(item) ? "nav-rail-item on" : "nav-rail-item"}
+            onClick={() => { onPageChange(item.key); onClose?.(); }}
+            title={collapsed ? item.label : undefined}
+          >
+            <span className="nav-rail-icon" aria-hidden>{item.icon || "•"}</span>
+            {collapsed ? null : <span className="nav-rail-label">{item.label}</span>}
+          </button>
+        ))}
+      </nav>
     </aside>
   );
 }

@@ -31,7 +31,8 @@ export function AppShell() {
   const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "").split("?")[0] : "";
   const resumeResourceDocumentId = page.includes("?resource=") ? page.split("?resource=")[1] : "";
   const editAgentDocumentId = page.startsWith("agent-edit:") ? page.replace("agent-edit:", "") : "";
-  const openTemplateId = page.startsWith("ai-tool:template-builder?open=") ? page.split("?open=")[1] : "";
+  // Template Studio is reachable as its own section ("templates?open=…") and, for older links, as a tool.
+  const openTemplateId = page.includes("?open=") ? page.split("?open=")[1] : "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
   const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
   const navItems = navByRole[role] || [];
@@ -201,13 +202,33 @@ export function AppShell() {
         />
       );
     }
+    if (page === "templates" || page.startsWith("templates?")) {
+      // Templates are their own section of the app, not an AI tool.
+      const studio = findAiToolById("template-builder");
+      const Studio = studio.component;
+      return (
+        <Studio
+          toolContext={{
+            openTemplateId,
+            workspaces,
+            selectedWorkspaceId,
+            selectedSubjectId,
+            onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`),
+            onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
+            onSaveDocumentBlockTemplate: handleSaveDocumentBlockTemplate,
+            onDeleteDocumentBlockTemplate: handleDeleteDocumentBlockTemplate
+          }}
+        />
+      );
+    }
     if (page === "ai-tools") {
       return (
         <AIToolsHubPage
           onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)}
           onOpenCustomAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
           onEditAgent={(documentId) => setPage(`agent-edit:${documentId}`)}
-          onListTemplates={handleListDocumentBlockTemplates}
+          onDeleteAgent={handleRemoveDocument}
+          onOpenTemplates={() => setPage("templates")}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -657,20 +678,13 @@ export function AppShell() {
       {/* Phone only: tapping the dimmed page closes the workspace sheet. */}
       <button className="nav-scrim" type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
       <SideNav
-        role={role}
-        onRoleChange={handleRoleChange}
-        workspaces={workspaces}
-        selectedWorkspaceId={selectedWorkspaceId}
-        onSelectWorkspace={handleSelectWorkspace}
-        onCreateWorkspace={handleCreateWorkspace}
-        onRenameWorkspace={handleRenameWorkspace}
-        onSetWorkspaceColor={handleSetWorkspaceColor}
-        onRemoveWorkspace={handleRemoveWorkspace}
-        isWorking={isWorking}
-        onNavigate={() => setMenuOpen(false)}
+        navItems={navItems}
+        page={page}
+        onPageChange={(next) => { setPage(next); setMenuOpen(false); }}
+        onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} navItems={navItems} page={page} onPageChange={(next) => { setPage(next); setMenuOpen(false); }} onOpenMenu={() => setMenuOpen(true)} />
+        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
         <div className="page-content">{content}</div>
       </main>
     </div>

@@ -91,11 +91,11 @@ body {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 270px 1fr;
+  grid-template-columns: 228px 1fr;
 }
 
-.app-shell:has(.side-nav-collapsed) {
-  grid-template-columns: 56px 1fr;
+.app-shell:has(.nav-rail-collapsed) {
+  grid-template-columns: 64px 1fr;
 }
 
 .side-nav {
@@ -1976,13 +1976,20 @@ body {
 }
 
 @media (max-width: 1024px) {
+  /* The rail stays a column on tablets; it only becomes a sheet on phones (≤ 760px). */
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: 64px 1fr;
   }
 
-  .side-nav {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
+  .nav-rail .nav-rail-word,
+  .nav-rail .nav-rail-label,
+  .nav-rail .nav-rail-toggle {
+    display: none;
+  }
+
+  .nav-rail .nav-rail-item {
+    justify-content: center;
+    padding: 10px 0;
   }
 
   .kpi-grid {
@@ -5028,6 +5035,17 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
     grid-template-columns: 1fr;
   }
 
+  /* The sheet shows the full labels again. */
+  .nav-rail .nav-rail-word,
+  .nav-rail .nav-rail-label {
+    display: inline;
+  }
+
+  .nav-rail .nav-rail-item {
+    justify-content: flex-start;
+    padding: 10px 12px;
+  }
+
   /* The rail slides in over the page instead of pushing it down. */
   .side-nav {
     position: fixed;
@@ -5177,4 +5195,208 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
   .page-content { padding-left: 10px; padding-right: 10px; }
   .top-bar { padding-left: 10px; padding-right: 10px; }
   .top-site-map { margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
+}
+
+/* ========================================================
+   Navigation rail + account cluster
+   The rail is only about where you are going; the account (credit, storage, profile) sits top right.
+   ======================================================== */
+
+.nav-rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  padding: 16px 12px;
+  gap: 10px;
+  overflow-y: auto;
+}
+
+.nav-rail-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 10px;
+}
+
+.nav-rail-word {
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--ink);
+}
+
+.nav-rail-toggle {
+  margin-left: auto;
+  border: 0;
+  background: none;
+  color: var(--soft-ink);
+  font-size: 15px;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.nav-rail-toggle:hover {
+  background: var(--surface-soft, rgba(0, 0, 0, 0.05));
+  color: var(--ink);
+}
+
+.nav-rail-collapsed .nav-rail-brand {
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 10px;
+}
+
+.nav-rail-collapsed .nav-rail-toggle {
+  margin-left: 0;
+}
+
+.nav-rail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: var(--soft-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-rail-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink);
+}
+
+.nav-rail-item.on {
+  background: var(--ink);
+  color: #fff;
+}
+
+.nav-rail-icon {
+  width: 20px;
+  text-align: center;
+  font-size: 15px;
+}
+
+.nav-rail-collapsed .nav-rail-item {
+  justify-content: center;
+  padding: 10px 0;
+}
+
+/* Account cluster */
+.top-account {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.storage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--soft-ink);
+  cursor: default;
+}
+
+.storage-chip-bar {
+  display: block;
+  width: 42px;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.storage-chip-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--teal, #4cc3b0), var(--accent, #0071e3));
+}
+
+.profile-wrap {
+  position: relative;
+}
+
+.profile-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.profile-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: 232px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.14);
+}
+
+.profile-menu-name {
+  margin: 0;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.profile-menu-sub,
+.profile-menu-storage {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--soft-ink);
+}
+
+.profile-menu .role-switch {
+  margin: 10px 0 8px;
+}
+
+@media (max-width: 760px) {
+  .nav-rail {
+    height: 100%;
+    padding-top: max(16px, env(safe-area-inset-top));
+  }
+
+  .nav-rail-toggle {
+    display: none;
+  }
+
+  .top-bar {
+    grid-template-areas: "menu title credits";
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .top-account {
+    grid-area: credits;
+    gap: 6px;
+  }
+
+  .storage-chip-text {
+    display: none;
+  }
 }

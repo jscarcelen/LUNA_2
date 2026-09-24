@@ -2,31 +2,35 @@ export const appName = "LUNA";
 
 export const navByRole = {
   student: [
-    { key: "dashboard", label: "Home" },
-    { key: "workspaces", label: "Workspaces" },
-    { key: "activities", label: "Activities" },
-    { key: "resources", label: "Resources" },
-    { key: "performance", label: "Performance" },
-    { key: "ai-tools", label: "AI Tools" },
-    { key: "marketplace", label: "Marketplace" }
+    { key: "dashboard", label: "Home", icon: "⌂" },
+    { key: "workspaces", label: "Workspaces", icon: "🗂" },
+    { key: "activities", label: "Activities", icon: "✎" },
+    { key: "resources", label: "Resources", icon: "◫" },
+    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "performance", label: "Performance", icon: "◴" },
+    { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
+    { key: "templates", label: "Templates", icon: "▦" },
+    { key: "marketplace", label: "Marketplace", icon: "⬡" }
   ],
   teacher: [
-    { key: "dashboard", label: "Classes" },
-    { key: "workspaces", label: "Workspaces" },
-    { key: "activities", label: "Activities" },
-    { key: "resources", label: "Resources" },
-    { key: "performance", label: "Performance" },
-    { key: "ai-tools", label: "AI Tools" },
-    { key: "ai-tool:template-builder", label: "Templates" },
-    { key: "marketplace", label: "Marketplace" }
+    { key: "dashboard", label: "Classes", icon: "⌂" },
+    { key: "workspaces", label: "Workspaces", icon: "🗂" },
+    { key: "activities", label: "Activities", icon: "✎" },
+    { key: "resources", label: "Resources", icon: "◫" },
+    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "performance", label: "Performance", icon: "◴" },
+    { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
+    { key: "templates", label: "Templates", icon: "▦" },
+    { key: "marketplace", label: "Marketplace", icon: "⬡" }
   ],
   parent: [
-    { key: "dashboard", label: "Children" },
-    { key: "workspaces", label: "Workspaces" },
-    { key: "activities", label: "Activities" },
-    { key: "resources", label: "Resources" },
-    { key: "performance", label: "Performance" },
-    { key: "marketplace", label: "Marketplace" }
+    { key: "dashboard", label: "Children", icon: "⌂" },
+    { key: "workspaces", label: "Workspaces", icon: "🗂" },
+    { key: "activities", label: "Activities", icon: "✎" },
+    { key: "resources", label: "Resources", icon: "◫" },
+    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "performance", label: "Performance", icon: "◴" },
+    { key: "marketplace", label: "Marketplace", icon: "⬡" }
   ]
 };
 
@@ -42,7 +46,9 @@ export const pageTitles = {
   activities: "Activities",
   resources: "Resources",
   performance: "Performance",
-  "ai-tools": "AI Tools",
+  "ai-tools": "AI agents",
+  templates: "Templates",
+  plans: "Study plans",
   "ai-tool-quiz": "Quiz Generator",
   "ai-tool-tutor": "AI Tutor",
   "ai-tool-chatbot": "Chatbot",

@@ -10,6 +10,7 @@ import { AgentMarketplacePage } from "../modules/agent-marketplace";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
 import { ResourcesPage } from "../modules/resources/ResourcesPage";
 import { PerformancePage } from "../modules/performance/PerformancePage";
+import { PlansPage } from "../modules/plans/PlansPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 
@@ -203,6 +204,20 @@ export function AppShell() {
           onDeleteDocumentBlockTemplate={handleDeleteDocumentBlockTemplate}
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
+        />
+      );
+    }
+    if (page === "plans") {
+      return (
+        <PlansPage
+          role={role}
+          workspaces={workspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          selectedSubjectId={selectedSubjectId}
+          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
+          onRemoveDocument={handleRemoveDocument}
+          onOpenResource={() => setPage("resources")}
         />
       );
     }

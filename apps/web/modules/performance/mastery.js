@@ -15,11 +15,11 @@
 const DIFFICULTY_WEIGHT = { easy: 0.8, medium: 1, hard: 1.25 };
 
 export const STATUSES = [
-  { id: "mastered", label: "Mastered", min: 85, colour: "#2f9e5b" },
-  { id: "strong", label: "Strong", min: 70, colour: "#34c759" },
-  { id: "developing", label: "Developing", min: 55, colour: "#b25e00" },
-  { id: "practice", label: "Needs practice", min: 40, colour: "#ff9f0a" },
-  { id: "attention", label: "Needs attention", min: 0, colour: "#d7003a" }
+  { id: "mastered", label: "Mastered", min: 85, colour: "#2f9e5b", ink: "#1d7a44" },
+  { id: "strong", label: "Strong", min: 70, colour: "#34c759", ink: "#1d7a44" },
+  { id: "developing", label: "Developing", min: 55, colour: "#b25e00", ink: "#8a4a00" },
+  { id: "practice", label: "Needs practice", min: 40, colour: "#ff9f0a", ink: "#8a5a00" },
+  { id: "attention", label: "Needs attention", min: 0, colour: "#d7003a", ink: "#b30031" }
 ];
 
 export const MASTERY_THRESHOLD = 70;

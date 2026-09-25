@@ -317,6 +317,36 @@ what do they struggle with, why, and what should happen next.** There is one und
   intervention), and students × subjects, which separates "struggling in my subject" from
   "struggling everywhere". No leaderboards.
 
+### 5.1m The interface critic, and a performance tab the reader arranges (founder spec, 2026-09-24)
+
+**Nothing may spill out of its box.** Text that does not fit truncates, a row of controls collapses
+into a menu rather than growing, a long name never widens a column past the screen, and where
+content genuinely must be wider than the window it scrolls inside its own card. The iPhone and the
+iPad both count as first-class screens, not as a desktop layout squeezed.
+
+- **The interface critic.** Every change to the website is assessed by an agent that reads the
+  rendered page — text out of its box, controls overlapping, a row pushing the page sideways, tap
+  targets too small for a thumb, text too pale to read, an unlabelled control — and raises what it
+  finds so it gets fixed. It runs while Luna is being built and on request in production
+  (`?uicheck=1`), at phone, tablet and desktop width. A change that adds an issue is not finished.
+
+- **The user defines the logic of subjects and topics — and it is the study plans.** Luna does not
+  invent a taxonomy: a plan is the subject, its goals are the topics, and an activity counts towards
+  a goal when its resource belongs to that goal or to a step of the plan. The screen says how much
+  of the evidence a plan actually covers. Folders and question tags remain as fallbacks.
+
+- **An agent that reads the errors.** Beyond measuring, Luna reads the mistakes and extracts a
+  diagnosis, actions to take this week (each with the evidence that justifies it) and the same
+  finding phrased for a student, a parent and a teacher. Each action is actionable from the tab.
+
+- **Less, and arranged by the reader.** The tab starts from a pre-made, visually appealing default
+  per profile and holds only what matters; everything else is available but hidden. Every metric can
+  be shown or hidden, moved, widened, and read as it stands, over time or broken down — Power-BI
+  style. Several views live side by side as tabs ("Every day", "Before the exam", "Parent evening"),
+  and filtering is dynamic on anything: students, dates, plans, folders, resources, skills,
+  difficulty, agent, template, material. An arrangement is a small document, so it can be saved,
+  shared and **sold in the marketplace as a ready-made performance dashboard** — the sixth shelf.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -519,6 +549,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.
 - 2026-09-24 — Added §5.1k: plan steps open their document, activities by plan and priority, the study-plan folder structure, and the five marketplaces with seller stores.
 - 2026-09-24 — Added §5.1j: plans execute their own steps, the workspace absorbed the advanced screen and gained multi-format downloads, starter templates redesigned.

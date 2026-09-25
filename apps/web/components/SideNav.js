@@ -39,7 +39,10 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
             type="button"
             className={isCurrent(item) ? "nav-rail-item on" : "nav-rail-item"}
             onClick={() => { onPageChange(item.key); onClose?.(); }}
-            title={collapsed ? item.label : undefined}
+            /* On a tablet the rail is icons only, so every item carries its name for the tooltip
+               and for anyone reading the screen aloud. */
+            title={item.label}
+            aria-label={item.label}
           >
             <span className="nav-rail-icon" aria-hidden>{item.icon || "•"}</span>
             {collapsed ? null : <span className="nav-rail-label">{item.label}</span>}

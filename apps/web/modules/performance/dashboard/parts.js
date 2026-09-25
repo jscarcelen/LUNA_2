@@ -42,7 +42,7 @@ export function MasteryMap({ topics = [], onSelect, selected = "", emptyText = "
               <span className="text-sm font-semibold text-ink">{topic.topic}</span>
               <span className="flex items-center gap-2 text-[11px]">
                 <span className={trendTone(topic.trend)}>{trendArrow(topic.trend)}</span>
-                <span style={{ color: status.colour }} className="font-semibold">{status.label}</span>
+                <span style={{ color: status.ink || status.colour }} className="font-semibold">{status.label}</span>
                 <span className="w-9 text-right font-bold text-ink">{topic.mastery}%</span>
               </span>
             </span>
@@ -70,7 +70,7 @@ export function ErrorBreakdown({ analysis, onPick, limit = 5 }) {
         <div key={type.id} className="rounded-xl border border-ink/10 p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="m-0 text-sm font-bold text-ink">{type.label}</p>
-            <p className="m-0 text-xs font-semibold" style={{ color: type.colour }}>{Math.round(type.share * 100)}% of mistakes · {type.count}</p>
+            <p className="m-0 text-xs font-semibold" style={{ color: type.ink || type.colour }}>{Math.round(type.share * 100)}% of mistakes · {type.count}</p>
           </div>
           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${type.share * 100}%`, background: type.colour }} /></div>
           <p className="m-0 mt-1 text-[11px] text-soft-ink">{type.blurb} {type.advice}</p>
@@ -114,7 +114,7 @@ export function NextActions({ actions = [], onOpen }) {
         <li key={action.topic} className="rounded-xl border border-ink/10 p-3">
           <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
             <span>{index + 1}. {action.topic}</span>
-            <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).colour }}>{action.mastery}% mastery</span>
+            <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).ink }}>{action.mastery}% mastery</span>
           </p>
           <p className="m-0 mt-1 text-[11px] text-soft-ink">Main issue: {action.reason}. {action.advice}</p>
           {onOpen ? <button type="button" className={`${ghostBtn} mt-2`} onClick={() => onOpen(action)}>Practise {action.questions} questions</button> : null}
@@ -130,7 +130,7 @@ export function Heatmap({ columns = [], rows = [], onCell, firstColumnLabel = "S
   const cell = (value) => {
     if (value === null || value === undefined) return { background: "var(--surface-soft)", color: "var(--soft-ink)" };
     const status = statusOf(value);
-    return { background: `${status.colour}22`, color: status.colour };
+    return { background: `${status.colour}22`, color: status.ink || status.colour };
   };
   return (
     <div className="overflow-x-auto">
@@ -188,5 +188,5 @@ export function ClassTopicBars({ rows = [], onPick }) {
 
 export function TypeChip({ id }) {
   const type = typeOf(id);
-  return <span className={chip} style={{ background: `${type.colour}1f`, color: type.colour }}>{type.label}</span>;
+  return <span className={chip} style={{ background: `${type.colour}1f`, color: type.ink || type.colour }}>{type.label}</span>;
 }

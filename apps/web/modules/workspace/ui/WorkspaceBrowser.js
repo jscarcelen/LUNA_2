@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import { FolderTree } from "../../ui/FolderTree";
 import { DocumentBrowser } from "../../ui/DocumentBrowser";
+import { RowMenu } from "../../ui/RowMenu";
 import { ResourceDetail } from "../../resources/ResourceDetail";
 import { ActivityPlayer } from "../../activities/ActivityPlayer";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
@@ -15,7 +16,7 @@ const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
 const field = "rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-sm text-ink";
-const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
+const chip = "inline-flex max-w-[11rem] items-center truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold";
 
 /** What a processed document can be exported as — the point of having parsed it in the first place. */
 const FORMATS = {
@@ -345,17 +346,19 @@ export function WorkspaceBrowser({
     );
   };
 
+  /**
+   * A row shows what people reach for — open, favourite, download — and keeps the rest in a menu.
+   * Eleven buttons in a row pushed the file name out of its box on any narrow window; two buttons
+   * and a menu fit at phone width and still reach everything.
+   */
   const actions = (document) => {
     const row = rowsByDocumentId.get(document.id);
     return (
-      <span className="flex shrink-0 flex-wrap items-center gap-1" onClick={(event) => event.stopPropagation()}>
-        {reviewing && onReviewDocument ? <button type="button" className={ghostBtn} title="Accept the extracted text" onClick={() => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`))}>✓ Approve</button> : null}
-        {reviewing && onReprocessDocument ? <button type="button" className={ghostBtn} title="Read the file again" onClick={() => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); }}>↻ Re-read</button> : null}
+      <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
         <button type="button" className={ghostBtn} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
-        {row ? <button type="button" className={ghostBtn} title="Schedule it in a study plan" onClick={() => setPlanningRow(row)}>＋ Plan</button> : null}
-        {row && onRegenerateResource ? <button type="button" className={ghostBtn} onClick={() => onRegenerateResource(document.id)}>Regenerate</button> : null}
+        <button type="button" className={ghostBtn} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
         <span className="relative">
-          <button type="button" className={ghostBtn} title="Download in any format" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
+          <button type="button" className={ghostBtn} title="Download in any format" aria-label="Download" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
           {formatFor === document.id ? (
             <span className="absolute right-0 top-full z-30 mt-1 grid w-44 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]" onMouseLeave={() => setFormatFor("")}>
               {(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => (
@@ -364,17 +367,24 @@ export function WorkspaceBrowser({
             </span>
           ) : null}
         </span>
-        <button type="button" className={ghostBtn} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
-        <button type="button" className={ghostBtn} title="Tags" onClick={() => editTags(document)}>🏷</button>
-        <button type="button" className={ghostBtn} title="Rename" onClick={() => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); }}>✎</button>
-        <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} title="Delete" onClick={() => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); }}>🗑</button>
+        <RowMenu
+          items={[
+            reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
+            reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
+            row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : null,
+            row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
+            { label: "Tags", icon: "🏷", onSelect: () => editTags(document) },
+            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } },
+            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); } }
+          ]}
+        />
       </span>
     );
   };
 
   return (
     <section className="tw-scope grid items-start gap-3 lg:grid-cols-[250px_minmax(0,1fr)]">
-      <aside className={`${card} grid gap-3 p-4 lg:sticky lg:top-4`}>
+      <aside className={`${card} grid min-w-0 gap-3 p-4 lg:sticky lg:top-4`}>
         <div>
           <p className={kicker}>Folders</p>
           <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} document{allDocuments.length === 1 ? "" : "s"} in {workspace.name}</p>
@@ -421,13 +431,13 @@ export function WorkspaceBrowser({
         </div>
       </aside>
 
-      <div className={`${card} grid gap-3 p-4`}>
+      <div className={`${card} grid min-w-0 gap-3 p-4`}>
         <div className="flex flex-wrap items-center gap-2">
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-sm font-bold text-ink">{reviewing ? "Review centre" : nodeId ? pathOf(folders, nodeId) : "All folders"}</p>
             <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}{reviewing ? " Luna could not read with confidence" : ""}</p>
           </div>
-          <input className={`${field} min-w-40 flex-1`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" />
+          <input className={`${field} min-w-40 flex-1`} aria-label="Search this workspace" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" />
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
             {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${kind === entry.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{entry.label}</button>)}
           </div>

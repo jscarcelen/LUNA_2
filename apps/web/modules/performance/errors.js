@@ -10,14 +10,14 @@
  */
 
 export const ERROR_TYPES = [
-  { id: "conceptual", label: "Conceptual", blurb: "The idea itself is misunderstood.", advice: "Go back to the explanation before practising again.", colour: "#d7003a" },
-  { id: "procedural", label: "Procedural", blurb: "Right idea, the steps go wrong.", advice: "Work through two examples slowly, writing every step.", colour: "#b25e00" },
-  { id: "calculation", label: "Calculation", blurb: "The reasoning is right, the arithmetic is not.", advice: "Slow down on the arithmetic and check the last line.", colour: "#ff9f0a" },
-  { id: "interpretation", label: "Misread the question", blurb: "Answered something the question did not ask.", advice: "Underline what is being asked before answering.", colour: "#8e44ad" },
-  { id: "application", label: "Application", blurb: "Fine in familiar exercises, lost in a new context.", advice: "Practise the same idea in word problems.", colour: "#0aa2c0" },
-  { id: "gap", label: "Knowledge gap", blurb: "A prerequisite is missing.", advice: "Cover the prerequisite first — practice will not fix this.", colour: "#5b5bd6" },
-  { id: "careless", label: "Careless", blurb: "Known elsewhere, missed here.", advice: "Re-read the answer before submitting.", colour: "#6e6e73" },
-  { id: "incomplete", label: "Incomplete", blurb: "Started right, stopped early or left blank.", advice: "Finish the reasoning, even when unsure.", colour: "#8e98ab" }
+  { id: "conceptual", label: "Conceptual", blurb: "The idea itself is misunderstood.", advice: "Go back to the explanation before practising again.", colour: "#d7003a", ink: "#b30031" },
+  { id: "procedural", label: "Procedural", blurb: "Right idea, the steps go wrong.", advice: "Work through two examples slowly, writing every step.", colour: "#b25e00", ink: "#8a4a00" },
+  { id: "calculation", label: "Calculation", blurb: "The reasoning is right, the arithmetic is not.", advice: "Slow down on the arithmetic and check the last line.", colour: "#ff9f0a", ink: "#8a5a00" },
+  { id: "interpretation", label: "Misread the question", blurb: "Answered something the question did not ask.", advice: "Underline what is being asked before answering.", colour: "#8e44ad", ink: "#73348f" },
+  { id: "application", label: "Application", blurb: "Fine in familiar exercises, lost in a new context.", advice: "Practise the same idea in word problems.", colour: "#0aa2c0", ink: "#04708a" },
+  { id: "gap", label: "Knowledge gap", blurb: "A prerequisite is missing.", advice: "Cover the prerequisite first — practice will not fix this.", colour: "#5b5bd6", ink: "#4242b0" },
+  { id: "careless", label: "Careless", blurb: "Known elsewhere, missed here.", advice: "Re-read the answer before submitting.", colour: "#6e6e73", ink: "#5b5b60" },
+  { id: "incomplete", label: "Incomplete", blurb: "Started right, stopped early or left blank.", advice: "Finish the reasoning, even when unsure.", colour: "#8e98ab", ink: "#5f6878" }
 ];
 
 export const typeOf = (id) => ERROR_TYPES.find((type) => type.id === id) || ERROR_TYPES[0];

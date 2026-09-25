@@ -12,6 +12,7 @@ import { PerformancePage } from "../modules/performance/PerformancePage";
 import { PlansPage } from "../modules/plans/PlansPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
+import { UiCritic } from "../modules/ui/UiCritic";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -712,6 +713,16 @@ export function AppShell() {
   // Phone: the workspace rail is a sheet that slides in, so the page keeps the whole screen.
   const [menuOpen, setMenuOpen] = useState(false);
 
+  /**
+   * The interface critic runs while the app is being built, and in production only when asked for
+   * with ?uicheck=1 — a reviewer can turn it on anywhere without it ever showing to a learner.
+   */
+  const [criticOn, setCriticOn] = useState(false);
+  useEffect(() => {
+    const asked = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("uicheck");
+    setCriticOn(process.env.NODE_ENV !== "production" || asked);
+  }, []);
+
   function handleRoleChange(nextRole) {
     setRole(nextRole);
     setPage(defaultPage[nextRole]);
@@ -731,6 +742,7 @@ export function AppShell() {
         <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
         <div className="page-content">{content}</div>
       </main>
+      <UiCritic enabled={criticOn} />
     </div>
   );
 }

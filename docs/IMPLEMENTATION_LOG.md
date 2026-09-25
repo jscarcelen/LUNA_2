@@ -1,5 +1,58 @@
 # Implementation Log
 
+## 2026-09-24 (later)
+
+### The interface critic
+
+- `modules/ui/critique.js` — `auditUI(root)` reads the rendered DOM and reports what a careful eye
+  would: text out of its box, controls overlapping, a row pushing the page sideways, controls wider
+  than the screen, tap targets too small for a thumb, text too pale against what is actually behind
+  it (translucent layers are composited; colours in syntaxes it cannot read are left unjudged), and
+  unlabelled controls. Exposed as `window.lunaAuditUI` for a browser harness.
+- `modules/ui/UiCritic.js` + `.ui-critic*` in `globals.css` — a badge that appears only when the
+  screen has faults, lists them, outlines the element and re-checks on every DOM change. Mounted in
+  `AppShell` in development and on request in production (`?uicheck=1`); ⌥⇧U toggles it.
+- Fixed everything it found across all eight pages at 390 / 834 / 1440px: workspace rows now show
+  Open · ★ · ⤓ and a `RowMenu` ("…") instead of eleven buttons; chips truncate at 11rem; the folder
+  tree and the workspace panes may shrink (`min-w-0`), as may every panel (`.tw-scope .grid > *`),
+  so one long file name no longer widens a column past the screen; status and error colours gained a
+  darker `ink` variant for text (the bright colour stays on bars); the phone close button and the
+  storage chip are now proper tap targets; nav items carry their name when the rail is icons only;
+  search and file inputs are labelled.
+- iPad: at 761–1100px the rail is icons, the page keeps 18px gutters and the two-column layouts
+  stack. Phone: controls are at least 34px tall.
+
+### Performance: the targets are the study plans
+
+- `modules/performance/targets.js` — `targetsFor(trackBy, …)` builds the subject/topic mapping from
+  the user's own plans (plan = subject, goal = topic, via `goal.resourceIds` and plan steps), with
+  folders and question tags as fallbacks, plus `coverageOf` so the screen says how much of the
+  evidence a plan actually accounts for. Chosen per view with "Track by".
+
+### Performance: an agent that reads the mistakes
+
+- `app/api/performance/coach/route.js` — takes mastery per topic, the error breakdown and the
+  questions that keep going wrong, and returns a headline, a diagnosis, two to five actions (each
+  with its evidence, kind and effort) and the same finding phrased for a student, a parent and a
+  teacher. `dashboard/CoachPanel.js` renders it, caches a read against the evidence it was made
+  from, and turns each action into "Do it now" / "Put it in a plan".
+
+### Performance: a dashboard the reader arranges
+
+- `modules/performance/views.js` — views as small documents (panels with visibility, order, mode and
+  size), a curated default per profile, localStorage persistence, duplicate/blank/delete, and
+  `exportView`/`importView` for sharing and selling (arrangement only, never results).
+- `dashboard/registry.js` — 20 panels, each declaring its roles, size and the ways it can read
+  (now / over time / broken down); `dashboard/Customise.js` — drag-to-reorder, show/hide, mode and
+  width, save as a new view, reset, and "Sell this arrangement".
+- `PerformancePage.js` rewritten around the registry: view tabs, dynamic filters (learner, preset
+  range or exact dates, plan, folder, resource, activity, skill, difficulty, agent, template,
+  material) and panels rendered in the view's order. The old monolithic Student/Teacher dashboards
+  were removed; `parts.js` is shared.
+- `marketplace/market.js` — a sixth shelf, "Performance dashboards".
+- Tests: `apps/web/tests/agent-studio/views.test.js` (6) — 93 passing.
+
+
 ## 2026-09-18
 
 ### Hub, galleries, folders, publishing

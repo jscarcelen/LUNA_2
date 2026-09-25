@@ -1,9 +1,9 @@
 /**
  * The marketplace.
  *
- * Five kinds of thing are sold, because they are the five things Luna makes: agents, whole
- * templates, single template components, one study resource, and a whole study plan with the
- * material and activities it schedules. Everything is sold *by* a store — a seller's brand, with a
+ * Six kinds of thing are sold, because they are the six things Luna makes: agents, whole templates,
+ * single template components, one study resource, a whole study plan with the material and
+ * activities it schedules, and an arrangement of the performance dashboard. Everything is sold *by* a store — a seller's brand, with a
  * name, a look and a record: downloads, ratings and what buyers wrote.
  *
  * Until accounts and payments exist this lives in localStorage; the shape is what matters, and it
@@ -18,7 +18,9 @@ export const KINDS = [
   { id: "template", label: "Templates", blurb: "Whole documents: exams, worksheets, flashcards, slides.", icon: "▦" },
   { id: "component", label: "Components", blurb: "Single blocks to drop into your own templates.", icon: "◫" },
   { id: "resource", label: "Study resources", blurb: "Ready-made quizzes, summaries and activities.", icon: "◉" },
-  { id: "plan", label: "Study plans", blurb: "A full plan: schedule, goals, material and activities.", icon: "◷" }
+  { id: "plan", label: "Study plans", blurb: "A full plan: schedule, goals, material and activities.", icon: "◷" },
+  // A dashboard arrangement is worth selling too: which metrics matter, in what order, read how.
+  { id: "view", label: "Performance dashboards", blurb: "Ready-made performance views: the metrics that matter, arranged.", icon: "◔" }
 ];
 
 export const PRICING_TYPE_LABELS = {

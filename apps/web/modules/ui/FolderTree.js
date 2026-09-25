@@ -63,7 +63,7 @@ export function FolderTree({
     return (
       <div key={node.id}>
         <div
-          className={`group flex items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : dropTarget === node.id ? "bg-[var(--surface-soft)] ring-2 ring-[var(--accent)]/40" : "hover:bg-[var(--surface-soft)]"}`}
+          className={`group flex min-w-0 items-center gap-1 rounded-lg px-2 py-1.5 text-sm transition ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : dropTarget === node.id ? "bg-[var(--surface-soft)] ring-2 ring-[var(--accent)]/40" : "hover:bg-[var(--surface-soft)]"}`}
           style={{ paddingLeft: 8 + node.depth * 14 }}
           onDragOver={(event) => { if (onDropDocuments) { event.preventDefault(); setDropTarget(node.id); } }}
           onDragLeave={() => setDropTarget((current) => (current === node.id ? "" : current))}
@@ -77,7 +77,7 @@ export function FolderTree({
         >
           <button
             type="button"
-            className={`w-4 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`}
+            className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`}
             onClick={() => setOpen((current) => ({ ...current, [node.id]: !expanded }))}
             aria-label={expanded ? "Collapse" : "Expand"}
           >
@@ -102,10 +102,10 @@ export function FolderTree({
               <span className="ml-auto shrink-0 text-[11px] text-soft-ink">{deepCount(node) || ""}</span>
             </button>
           )}
-          <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100">
-            {onCreateFolder ? <button type="button" title="New subfolder" className="px-1 text-xs text-soft-ink hover:text-ink" onClick={() => { setAdding(node.id); setNewName(""); setOpen((current) => ({ ...current, [node.id]: true })); }}>＋</button> : null}
-            {onRenameFolder ? <button type="button" title="Rename" className="px-1 text-xs text-soft-ink hover:text-ink" onClick={() => { setRenaming(node.id); setDraftName(node.name); }}>✎</button> : null}
-            {onRemoveFolder ? <button type="button" title="Delete folder" className="px-1 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete the folder “${node.name}”? Its documents stay, unfiled.`)) onRemoveFolder(node.id); }}>🗑</button> : null}
+          <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 max-[760px]:opacity-100">
+            {onCreateFolder ? <button type="button" title="New subfolder" className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setAdding(node.id); setNewName(""); setOpen((current) => ({ ...current, [node.id]: true })); }}>＋</button> : null}
+            {onRenameFolder ? <button type="button" title="Rename" className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setRenaming(node.id); setDraftName(node.name); }}>✎</button> : null}
+            {onRemoveFolder ? <button type="button" title="Delete folder" className="w-7 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete the folder “${node.name}”? Its documents stay, unfiled.`)) onRemoveFolder(node.id); }}>🗑</button> : null}
           </span>
         </div>
         {adding === node.id ? (
@@ -130,18 +130,18 @@ export function FolderTree({
   };
 
   return (
-    <div className="grid gap-1">
+    <div className="grid min-w-0 gap-1">
       <button
         type="button"
-        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${selectedId === "" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
+        className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${selectedId === "" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
         onClick={() => onSelect?.("")}
       >
-        <span aria-hidden>🗂</span><span className="font-medium">All {countLabel}s</span><span className="ml-auto text-[11px] text-soft-ink">{documents.length || ""}</span>
+        <span aria-hidden>🗂</span><span className="min-w-0 truncate font-medium">All {countLabel}s</span><span className="ml-auto text-[11px] text-soft-ink">{documents.length || ""}</span>
       </button>
       {tree.map(row)}
       <button
         type="button"
-        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${selectedId === "__unfiled" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
+        className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${selectedId === "__unfiled" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
         onClick={() => onSelect?.("__unfiled")}
         onDragOver={(event) => { if (onDropDocuments) event.preventDefault(); }}
         onDrop={(event) => {

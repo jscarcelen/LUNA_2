@@ -5100,12 +5100,17 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
 
   .mobile-close-btn {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     margin-left: auto;
     border: 0;
     background: none;
     color: var(--soft-ink);
     font-size: 17px;
     line-height: 1;
+    /* A thumb, not a mouse pointer: the close target is a full 36px square. */
+    min-width: 36px;
+    min-height: 36px;
     padding: 4px 6px;
   }
 
@@ -5308,6 +5313,8 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
 .storage-chip {
   display: inline-flex;
   align-items: center;
+  /* It is a readout, not a control, but it still has to be comfortable next to a thumb. */
+  min-height: 32px;
   gap: 8px;
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -5399,4 +5406,116 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
   .storage-chip-text {
     display: none;
   }
+}
+
+/* ========================================================
+   The interface critic's own furniture
+   It floats over the app while Luna is being built, and never ships to a learner.
+   ======================================================== */
+
+.ui-critic {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  z-index: 90;
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.ui-critic > * {
+  pointer-events: auto;
+}
+
+.ui-critic-badge {
+  border: 1px solid rgba(255, 59, 48, 0.4);
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #ff3b30;
+  cursor: pointer;
+}
+
+.ui-critic-panel {
+  width: min(92vw, 380px);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+/* ========================================================
+   Phone and tablet
+   Nothing may leave its box or push the page sideways: a long file name truncates, a row of
+   controls stays on one line, and every table scrolls inside its own card.
+   ======================================================== */
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+.page-content table {
+  max-width: 100%;
+}
+
+/* iPad, portrait and split view: the rail stays, the two-column pages become one. */
+@media (min-width: 761px) and (max-width: 1100px) {
+  .app-shell {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .nav-rail .nav-rail-word,
+  .nav-rail .nav-rail-label {
+    display: none;
+  }
+
+  .nav-rail .nav-rail-item {
+    justify-content: center;
+  }
+
+  .page-content {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+
+  /* Side-by-side layouts meant for a desktop window stack instead of squeezing. */
+  .tw-scope .lg\:grid-cols-\[250px_minmax\(0\,1fr\)\],
+  .tw-scope .lg\:grid-cols-\[minmax\(0\,3fr\)_minmax\(0\,2fr\)\] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  /* A dialog is a sheet, not a window: full width, its own scroll. */
+  .tw-scope [role="dialog"] {
+    max-height: 92vh;
+  }
+
+  /* Touch: nothing smaller than a fingertip. */
+  .tw-scope button,
+  .tw-scope select,
+  .tw-scope input,
+  .tw-scope a {
+    min-height: 34px;
+  }
+
+  .ui-critic-panel {
+    width: min(96vw, 380px);
+  }
+}
+
+/*
+ * A CSS grid track is as wide as its widest child unless that child is allowed to shrink, which is
+ * how one long file name used to widen a whole column past the screen. Every panel in Luna may
+ * shrink; what is inside it truncates or wraps instead.
+ */
+.tw-scope .grid > *,
+.tw-scope .flex > * {
+  min-width: 0;
 }

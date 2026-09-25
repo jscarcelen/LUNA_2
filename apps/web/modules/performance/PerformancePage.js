@@ -7,6 +7,9 @@ import { parseResource } from "../resources/resource";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
 import { PhoneCollapse } from "../ui/PhoneCollapse";
+import { buildEvidence } from "./mastery";
+import { StudentDashboard, ParentDashboard } from "./dashboard/StudentDashboard";
+import { TeacherDashboard } from "./dashboard/TeacherDashboard";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -114,6 +117,33 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const stuck = repeatedMistakes(attempts);
   const retries = retryGains(attempts);
   const planStats = activePlan ? planProgress(activePlan.plan, all) : null;
+  /**
+   * One object underneath every view: learner → subject → topic → mastery + evidence. The subject
+   * of an attempt is the top-level folder its resource is filed in, so "×subjects" is the
+   * workspace's own structure rather than a second taxonomy.
+   */
+  const subjectOfAttempt = useMemo(() => {
+    const byFolder = new Map();
+    const roots = new Map((subject?.folders || []).map((folder) => [folder.id, folder]));
+    const rootName = (folderId) => {
+      let current = roots.get(folderId);
+      while (current?.parentFolderId && roots.get(current.parentFolderId)) current = roots.get(current.parentFolderId);
+      return current?.name || subject?.name || "";
+    };
+    for (const folder of subject?.folders || []) byFolder.set(folder.id, rootName(folder.id));
+    return (attempt) => byFolder.get((attempt.folderIds || [])[0]) || subject?.name || "";
+  }, [subject]);
+  const conceptsOfAttempt = useMemo(() => {
+    const map = new Map();
+    for (const [documentId, resource] of resourceByDocumentId) map.set(documentId, (resource.concepts || []).map((concept) => concept.name));
+    return (attempt) => map.get(attempt.resourceId) || [];
+  }, [resourceByDocumentId]);
+  const evidence = useMemo(() => buildEvidence(attempts, { subjectOf: subjectOfAttempt, conceptsOf: conceptsOfAttempt }), [attempts, subjectOfAttempt, conceptsOfAttempt]);
+  const sessionsPerWeek = useMemo(() => {
+    if (!attempts.length) return 0;
+    const days = Math.max(7, range || 30);
+    return (attempts.length / days) * 7;
+  }, [attempts, range]);
 
   async function saveGoal() {
     if (!onSaveGeneratedQuizDocument || !goalDraft.title.trim() || !goalDraft.date) return;
@@ -176,7 +206,18 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         </PhoneCollapse>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {/* The dashboard proper: one layer of learning intelligence, three levels of abstraction. */}
+      {isOwn ? (
+        <StudentDashboard evidence={evidence} streak={runStreak} onPractise={() => onOpenPage?.("activities")} />
+      ) : role === "parent" ? (
+        <ParentDashboard evidence={evidence} sessionsPerWeek={sessionsPerWeek} learner={learner} />
+      ) : (
+        <TeacherDashboard evidence={evidence} subjectName={subject.name} onOpenLearner={() => onOpenPage?.("activities")} />
+      )}
+
+      <details className={`${card} p-5`}>
+        <summary className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-soft-ink">All the numbers</summary>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Kpi label="Activities done" value={stats.done} hint={`${stats.resources} different resources`} />
         <Kpi label="Average score" value={percent(stats.score)} accent={tone(stats.score)} hint={`${stats.questions} questions answered`} />
         <Kpi label="Mistakes" value={stats.errors} accent={stats.errors ? "text-[var(--color-danger)]" : "text-ink"} hint={stats.questions ? `${percent(stats.errors / stats.questions)} of answers` : ""} />
@@ -186,7 +227,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <Kpi label="Day streak" value={runStreak} hint={runStreak ? "consecutive days with an activity" : "do one today to start a streak"} />
         <Kpi label="Concepts mastered" value={`${concepts.filter((concept) => concept.mastered).length}/${concepts.length}`} hint={concepts.length ? `weakest: ${concepts[0].concept}` : "resources need their concepts listed"} />
         <Kpi label="Stuck questions" value={stuck.length} accent={stuck.length ? "text-[var(--color-danger)]" : "text-ink"} hint={stuck.length ? "wrong more than once" : "nothing repeats as a mistake"} />
-      </div>
+        </div>
+      </details>
 
       {activePlan && planStats ? (
         <section className={`${card} p-5`} style={{ borderTop: `4px solid ${activePlan.plan.colour}` }}>

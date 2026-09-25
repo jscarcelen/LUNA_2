@@ -294,6 +294,29 @@ Consequences for the product:
   whole study plans. Sellers open a **store** — their brand — and carry its record: downloads,
   ratings and what buyers wrote.
 
+### 5.1l The learning intelligence layer (founder spec, 2026-09-24)
+
+The dashboard answers one question at three levels of abstraction: **what does this learner know,
+what do they struggle with, why, and what should happen next.** There is one underlying object —
+**learner → subject → topic → mastery + evidence** — and every screen is an aggregation of it.
+
+- **Mastery is not accuracy.** It weighs recent accuracy above older accuracy, raises or lowers by
+  question difficulty, is capped while there is too little evidence (coverage), rewards knowledge
+  that survives a delay (retention) and decays when nothing has been asked for a long time.
+- **Errors carry a taxonomy** — conceptual, procedural, calculation, misread the question,
+  application, knowledge gap, careless, incomplete — because "you got six wrong" helps nobody.
+- **Student**: overall mastery, topics mastered, topics to improve, accuracy, retention; the topic
+  mastery map as the centrepiece; why answers are wrong; mastery over time; and what to work on
+  next. Practice and streaks stay at the bottom: the screen must never push "do more" over "learn
+  more".
+- **Parent**: the same data one level up, opening with a paragraph in plain words, then progress,
+  strongest and weakest areas, mastery by subject and where the mistakes come from.
+- **Teacher**: three views — the class in this subject (class × topic heatmap, how much of the
+  class holds each topic, the class's error distribution, and who needs attention with the signals
+  that put them there), one student in this subject (their map, their errors, the recommended
+  intervention), and students × subjects, which separates "struggling in my subject" from
+  "struggling everywhere". No leaderboards.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -496,6 +519,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.
 - 2026-09-24 — Added §5.1k: plan steps open their document, activities by plan and priority, the study-plan folder structure, and the five marketplaces with seller stores.
 - 2026-09-24 — Added §5.1j: plans execute their own steps, the workspace absorbed the advanced screen and gained multi-format downloads, starter templates redesigned.
 - 2026-09-24 — Added §5.1i: templates generated from the component catalogue, a design critic that reviews and repairs every generated preview, per-plan and deeper performance.

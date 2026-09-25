@@ -9,6 +9,7 @@
 
 import type { Element, FieldDef, GroupElement, ID, TextElement } from "./types";
 import { createField, createGroup, createId, createShape, createText, defaultStyle, walkElements } from "./model";
+import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, accentEdge, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
 
 export type BlockCategory = "questions" | "cards" | "structure" | "kids" | "custom";
 
@@ -41,14 +42,8 @@ export interface BlockDef {
 
 export interface AccentPreset { id: string; label: string; main: string; tint: string }
 
-export const ACCENT_PRESETS: AccentPreset[] = [
-  { id: "blue", label: "Blue", main: "#0071e3", tint: "#eaf3fd" },
-  { id: "green", label: "Green", main: "#2f9e5b", tint: "#eaf7ee" },
-  { id: "orange", label: "Orange", main: "#e0730f", tint: "#fdf1e4" },
-  { id: "purple", label: "Purple", main: "#8a4fd6", tint: "#f3ecfb" },
-  { id: "pink", label: "Rose", main: "#d8366f", tint: "#fceaf0" },
-  { id: "graphite", label: "Graphite", main: "#1d1d1f", tint: "#f2f2f4" }
-];
+/** The accents a template can be recoloured with — the same palettes the components are built from. */
+export const ACCENT_PRESETS: AccentPreset[] = PALETTES.map(({ id, label: name, main, tint }) => ({ id, label: name, main, tint }));
 
 const A = ACCENT_PRESETS[0];
 
@@ -70,7 +65,29 @@ function st(value: string, frame: TextElement["frame"], style: Partial<TextEleme
   return createText({ type: "static", value }, { frame, style: defaultStyle(style), ...extra });
 }
 
+/** Moves a piece built at x = 0 into place, so a row of parts can be composed once and reused. */
+function shift<T extends Element>(element: T, dx: number, dy = 0): T {
+  return { ...element, frame: { ...element.frame, x: element.frame.x + dx, y: element.frame.y + dy } };
+}
+
+/** A tick box and its word — True / False, or anything else that gets ticked. */
+function tickBox(accent: ReturnType<typeof palette>, x: number, y: number, word: string): Element[] {
+  return [
+    createShape("rect", { frame: { x, y, w: 4.6, h: 4.6 }, style: defaultStyle({ fill: INK.paper, stroke: accent.line, strokeWidth: 0.35, radius: 0.9 }) }),
+    label(word, { x: x + 6, y: y + 0.2, w: 16, h: 4.6 }, { fontSize: TYPE.small, color: INK.body })
+  ];
+}
+
+/**
+ * The teaching components, built from the design language in `design.ts`.
+ *
+ * Each one is a real piece of print design: a white card with a hairline and a generous radius, a
+ * coloured badge for structure, lettered options, an answer band that only appears in the key, and
+ * enough room around everything that a page of them reads as a document rather than a form.
+ */
+
 function examQuestion(): BlockDef {
+  const accent = palette("blue");
   const question = createField("Question", "rich_text", { description: "The question text." });
   const option = createField("Option", "text");
   const options = createField("Options", "array", { children: [option] });
@@ -81,38 +98,27 @@ function examQuestion(): BlockDef {
   const difficulty = createField("Difficulty", "text", { description: "easy, medium or hard", options: ["easy", "medium", "hard"], required: false });
   const source = createField("Source", "text", { description: "Short quote from the material where the answer is found", required: false });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer, points, skill, difficulty, source] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Exam question",
-    frame: { x: 12, y: 12, w: 186, h: 44 },
-    layout: { mode: "free", gap: 2 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 52 },
+    layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
-    style: defaultStyle({ fill: A.tint, stroke: "", radius: 3 }),
+    style: cardStyle(accent),
     children: [
-      createShape("rect", { name: "opt:number|Number badge", frame: { x: 4, y: 4, w: 9, h: 9 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 4.5 }) }),
-      st("{{n}}", { x: 4, y: 5.6, w: 9, h: 6 }, { fontSize: 9, fontWeight: "bold", color: "#ffffff", align: "center" }, { name: "opt:number|Number" }),
-      tx(points.id, "2", { x: 160, y: 5.5, w: 16, h: 6 }, { fontSize: 8, fontWeight: "bold", color: A.main, align: "right" }, { name: "opt:points|Points" }),
-      st("pts", { x: 176, y: 5.5, w: 7, h: 6 }, { fontSize: 8, color: A.main }, { name: "opt:points|Points label" }),
-      tx(question.id, "What is the derivative of x²?", { x: 17, y: 5, w: 140, h: 9 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
+      accentEdge(accent, 52),
+      ...numberBadge(accent, 6, 6),
+      ...pointsPill(accent, points.id, W - 20, 6.6),
+      field(question.id, "Which organelle absorbs light energy for photosynthesis?", { x: 17, y: 6.4, w: W - 40, h: 9 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
       createGroup({
         name: "Options",
-        frame: { x: 17, y: 16, w: 160, h: 18 },
-        layout: { mode: "vertical", gap: 1.2 },
+        frame: { x: 17, y: 18, w: W - 24, h: 20 },
+        layout: { mode: "vertical", gap: 1.6 },
         repeat: { fieldId: options.id, mode: "flow" },
-        children: [
-          createGroup({
-            name: "Option row",
-            frame: { x: 0, y: 0, w: 160, h: 5.5 },
-            layout: { mode: "free", gap: 0 },
-            repeat: null,
-            children: [
-              createShape("ellipse", { frame: { x: 0, y: 0.8, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35 }) }),
-              tx(option.id, "2x", { x: 6, y: 0, w: 150, h: 5.5 }, { fontSize: 10 })
-            ]
-          })
-        ]
+        children: [optionRow(accent, option.id, W - 24)]
       }),
-      st("Answer:", { x: 17, y: 36, w: 14, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: A.main }, { name: "opt:answer|Answer label" }),
-      tx(answer.id, "2x", { x: 32, y: 36, w: 140, h: 5 }, { fontSize: 8.5, color: A.main }, { name: "opt:answer|Answer" })
+      ...confidenceRow(accent, 40, W - 24).map((element) => shift(element, 17)),
+      ...answerBand(accent, answer.id, 46, W).map((element) => element)
     ]
   });
   return {
@@ -120,35 +126,41 @@ function examQuestion(): BlockDef {
     family: "Question card",
     variant: "Multiple choice",
     name: "Exam question",
-    description: "Numbered question card with options, points and an optional answer line.",
+    description: "Numbered card with lettered options, points, an optional confidence check and an answer band for the key.",
     category: "questions",
     icon: "❶",
     fields: [questions],
     elements: [group],
-    options: [{ key: "number", label: "Question number", default: true }, { key: "points", label: "Points", default: true }, { key: "answer", label: "Show answer", default: false }],
-    accent: A,
+    options: [
+      { key: "number", label: "Question number", default: true },
+      { key: "points", label: "Points", default: true },
+      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false },
+      { key: "answer", label: "Show answer", default: false }
+    ],
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function openQuestion(): BlockDef {
+  const accent = palette("blue");
   const question = createField("Question", "rich_text");
   const points = createField("Points", "number");
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, points] })] });
-  const lines = [0, 1, 2].map((row) => createShape("line", { frame: { x: 17, y: 18 + row * 7, w: 160, h: 0.3 }, style: defaultStyle({ stroke: "#c7c7cc", strokeWidth: 0.3 }) }));
+  const W = PAGE.width;
   const group = createGroup({
     name: "Open question",
-    frame: { x: 12, y: 12, w: 186, h: 42 },
-    layout: { mode: "free", gap: 2 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 52 },
+    layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
-    style: defaultStyle({ fill: "", stroke: A.main, strokeWidth: 0.3, radius: 3 }),
+    style: cardStyle(accent),
     children: [
-      createShape("rect", { name: "opt:number|Number badge", frame: { x: 4, y: 4, w: 9, h: 9 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 2 }) }),
-      st("{{n}}", { x: 4, y: 5.6, w: 9, h: 6 }, { fontSize: 9, fontWeight: "bold", color: "#ffffff", align: "center" }, { name: "opt:number|Number" }),
-      tx(points.id, "5", { x: 160, y: 5.5, w: 16, h: 6 }, { fontSize: 8, fontWeight: "bold", color: A.main, align: "right" }, { name: "opt:points|Points" }),
-      st("pts", { x: 176, y: 5.5, w: 7, h: 6 }, { fontSize: 8, color: A.main }, { name: "opt:points|Points label" }),
-      tx(question.id, "Explain why the median is robust to outliers.", { x: 17, y: 5, w: 140, h: 9 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
-      ...lines
+      accentEdge(accent, 52),
+      ...numberBadge(accent, 6, 6),
+      ...pointsPill(accent, points.id, W - 20, 6.6),
+      field(question.id, "Explain why the median resists outliers.", { x: 17, y: 6.4, w: W - 40, h: 9 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
+      ...[0, 1, 2, 3].map((row) => writingLine(20 + row * 7.5, 17, W - 24)),
+      ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17))
     ]
   });
   return {
@@ -156,35 +168,40 @@ function openQuestion(): BlockDef {
     family: "Question card",
     variant: "Open answer",
     name: "Open question",
-    description: "Question with ruled space for a written answer.",
+    description: "Question with ruled space to write in, points and an optional confidence check.",
     category: "questions",
     icon: "✎",
     fields: [questions],
     elements: [group],
-    options: [{ key: "number", label: "Question number", default: true }, { key: "points", label: "Points", default: true }],
-    accent: A,
+    options: [
+      { key: "number", label: "Question number", default: true },
+      { key: "points", label: "Points", default: true },
+      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }
+    ],
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function trueFalse(): BlockDef {
+  const accent = palette("blue");
   const statement = createField("Statement", "rich_text");
   const answer = createField("Answer", "boolean", { description: "true when the statement is correct." });
   const statements = createField("Statements", "array", { children: [createField("item", "object", { children: [statement, answer] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "True / false",
-    frame: { x: 12, y: 12, w: 186, h: 12 },
-    layout: { mode: "free", gap: 0 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 16 },
+    layout: { mode: "free", gap: SPACE.xs },
     repeat: { fieldId: statements.id, mode: "flow" },
-    style: defaultStyle({ fill: A.tint, stroke: "", radius: 2 }),
+    style: cardStyle(accent),
     children: [
-      st("{{n}}.", { x: 4, y: 3.5, w: 8, h: 6 }, { fontSize: 9.5, fontWeight: "bold", color: A.main }, { name: "opt:number|Number" }),
-      tx(statement.id, "The mean is always larger than the median.", { x: 13, y: 3.5, w: 128, h: 6 }, { fontSize: 10 }, { format: "rich" }),
-      createShape("rect", { frame: { x: 146, y: 3.5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
-      st("True", { x: 152, y: 3.5, w: 12, h: 5 }, { fontSize: 8.5 }),
-      createShape("rect", { frame: { x: 166, y: 3.5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
-      st("False", { x: 172, y: 3.5, w: 12, h: 5 }, { fontSize: 8.5 }),
-      tx(answer.id, "true", { x: 146, y: 8.5, w: 36, h: 3.5 }, { fontSize: 6.5, color: A.main, align: "right" }, { name: "opt:answer|Answer" })
+      accentEdge(accent, 16),
+      label("{{n}}", { x: 6, y: 5.4, w: 7, h: 5.5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep }, { name: "opt:number|Number" }),
+      field(statement.id, "The mean is always larger than the median.", { x: 15, y: 5.2, w: W - 72, h: 6 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" }),
+      ...tickBox(accent, W - 54, 5, "True"),
+      ...tickBox(accent, W - 30, 5, "False"),
+      field(answer.id, "true", { x: W - 54, y: 11, w: 46, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep, align: "right" }, { name: "opt:answer|Answer" })
     ]
   });
   return {
@@ -192,40 +209,42 @@ function trueFalse(): BlockDef {
     family: "Question card",
     variant: "True / false",
     name: "True / false",
-    description: "Statement with tick boxes; the answer can be shown for the key.",
+    description: "Statement with tick boxes on one tidy line; the answer can be shown for the key.",
     category: "questions",
     icon: "☑",
     fields: [statements],
     elements: [group],
     options: [{ key: "number", label: "Number", default: true }, { key: "answer", label: "Show answer", default: false }],
-    accent: A,
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function flashcard(): BlockDef {
+  const accent = palette("purple");
   const front = createField("Front", "text");
   const back = createField("Back", "text");
   const topic = createField("Topic", "text");
   const cards = createField("Cards", "array", { children: [createField("item", "object", { children: [front, back, topic] })] });
   const group = createGroup({
     name: "Flashcards",
-    frame: { x: 12, y: 12, w: 186, h: 52 },
-    layout: { mode: "grid", gap: 4, columns: 2 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: PAGE.width, h: 58 },
+    layout: { mode: "grid", gap: 6, columns: 2 },
     repeat: { fieldId: cards.id, mode: "grid", columns: 2 },
     children: [
       createGroup({
         name: "Card",
-        frame: { x: 0, y: 0, w: 90, h: 52 },
+        frame: { x: 0, y: 0, w: 90, h: 58 },
         layout: { mode: "free", gap: 0 },
         repeat: null,
-        style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 3 }),
+        style: cardStyle(accent, "outlined"),
         children: [
-          createShape("rect", { frame: { x: 0, y: 0, w: 90, h: 7 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0 }) }),
-          tx(topic.id, "Vocabulary", { x: 4, y: 1.4, w: 82, h: 5 }, { fontSize: 7.5, fontWeight: "bold", color: "#ffffff" }, { name: "opt:topic|Topic" }),
-          tx(front.id, "perro", { x: 4, y: 12, w: 82, h: 16 }, { fontSize: 18, fontWeight: "bold", align: "center" }),
-          createShape("line", { frame: { x: 12, y: 32, w: 66, h: 0.3 }, style: defaultStyle({ stroke: A.tint === "#f2f2f4" ? "#c7c7cc" : A.main, strokeWidth: 0.3 }) }),
-          tx(back.id, "dog", { x: 4, y: 35, w: 82, h: 12 }, { fontSize: 12, align: "center", color: "#6e6e73" })
+          createShape("rect", { name: "opt:topic|Topic ribbon", frame: { x: 0, y: 0, w: 90, h: 8 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: RADIUS.card }) }),
+          createShape("rect", { name: "opt:topic|Ribbon foot", frame: { x: 0, y: 5.5, w: 90, h: 2.5 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0 }) }),
+          field(topic.id, "Vocabulary", { x: 5, y: 1.8, w: 80, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.paper }, { name: "opt:topic|Topic" }),
+          field(front.id, "perro", { x: 5, y: 16, w: 80, h: 16 }, { fontSize: 19, fontWeight: "bold", align: "center", color: INK.strong }),
+          divider(36, 60, accent.line),
+          field(back.id, "dog", { x: 5, y: 40, w: 80, h: 12 }, { fontSize: TYPE.subtitle, align: "center", color: INK.muted })
         ]
       })
     ]
@@ -235,50 +254,52 @@ function flashcard(): BlockDef {
     family: "Flashcard",
     variant: "Grid, topic ribbon",
     name: "Flashcard",
-    description: "Front / back cards in a two-column grid with a topic ribbon.",
+    description: "Front / back cards in a two-column grid with a coloured topic ribbon.",
     category: "cards",
     icon: "▤",
     fields: [cards],
     elements: [group],
     options: [{ key: "topic", label: "Topic ribbon", default: true }],
-    accent: A,
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function vocabularyRow(): BlockDef {
+  const accent = palette("green");
   const word = createField("Word", "text");
   const translation = createField("Translation", "text");
   const example = createField("Example", "text");
   const words = createField("Words", "array", { children: [createField("item", "object", { children: [word, translation, example] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Vocabulary rows",
-    frame: { x: 12, y: 12, w: 186, h: 30 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 34 },
     layout: { mode: "vertical", gap: 0 },
     repeat: null,
     children: [
       createGroup({
         name: "Header",
-        frame: { x: 0, y: 0, w: 186, h: 7 },
+        frame: { x: 0, y: 0, w: W, h: 9 },
         layout: { mode: "free", gap: 0 },
         repeat: null,
-        style: defaultStyle({ fill: A.main, stroke: "", radius: 1.5 }),
+        style: defaultStyle({ fill: accent.main, stroke: "", radius: RADIUS.panel }),
         children: [
-          st("Word", { x: 3, y: 1.5, w: 40, h: 5 }, { fontSize: 8, fontWeight: "bold", color: "#ffffff" }),
-          st("Translation", { x: 48, y: 1.5, w: 40, h: 5 }, { fontSize: 8, fontWeight: "bold", color: "#ffffff" }),
-          st("Example", { x: 96, y: 1.5, w: 80, h: 5 }, { fontSize: 8, fontWeight: "bold", color: "#ffffff" })
+          kicker("Word", { x: 5, y: 2.6, w: 40, h: 4 }, INK.paper),
+          kicker("Translation", { x: 55, y: 2.6, w: 40, h: 4 }, INK.paper),
+          kicker("Example", { x: 105, y: 2.6, w: 70, h: 4 }, INK.paper)
         ]
       }),
       createGroup({
         name: "Row",
-        frame: { x: 0, y: 7, w: 186, h: 8 },
+        frame: { x: 0, y: 9, w: W, h: 10 },
         layout: { mode: "free", gap: 0 },
         repeat: { fieldId: words.id, mode: "flow" },
-        style: defaultStyle({ fill: "", stroke: "#e5e5ea", strokeWidth: 0.25 }),
+        style: defaultStyle({ fill: "", stroke: INK.hairline, strokeWidth: 0.25 }),
         children: [
-          tx(word.id, "casa", { x: 3, y: 2, w: 42, h: 5 }, { fontSize: 9.5, fontWeight: "bold" }),
-          tx(translation.id, "house", { x: 48, y: 2, w: 42, h: 5 }, { fontSize: 9.5, color: A.main }),
-          tx(example.id, "Mi casa es pequeña.", { x: 96, y: 2, w: 86, h: 5 }, { fontSize: 9, color: "#6e6e73" })
+          field(word.id, "casa", { x: 5, y: 2.6, w: 46, h: 5.5 }, { fontSize: TYPE.body, fontWeight: "bold", color: INK.strong }),
+          field(translation.id, "house", { x: 55, y: 2.6, w: 46, h: 5.5 }, { fontSize: TYPE.body, color: accent.deep }),
+          field(example.id, "Mi casa es pequeña.", { x: 105, y: 2.6, w: W - 110, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted })
         ]
       })
     ]
@@ -293,34 +314,36 @@ function vocabularyRow(): BlockDef {
     icon: "▦",
     fields: [words],
     elements: [group],
-    accent: A,
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function documentStructure(): BlockDef {
+  const accent = palette("blue");
   const title = createField("Title", "text", { description: "Document title." });
   const subtitle = createField("Subtitle", "text");
   const heading = createField("Heading", "text");
   const body = createField("Body", "rich_text");
   const sections = createField("Sections", "array", { children: [createField("item", "object", { children: [heading, body] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Document",
-    frame: { x: 12, y: 12, w: 186, h: 60 },
-    layout: { mode: "vertical", gap: 3 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 70 },
+    layout: { mode: "vertical", gap: SPACE.md },
     repeat: null,
     children: [
-      tx(title.id, "Key Concepts in Statistics", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold" }),
-      tx(subtitle.id, "A short guide for students", { x: 0, y: 12, w: 186, h: 7 }, { fontSize: 11, color: "#6e6e73" }, { name: "opt:subtitle|Subtitle" }),
-      createShape("rect", { frame: { x: 0, y: 21, w: 24, h: 1.2 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.6 }) }),
+      field(title.id, "Key Concepts in Statistics", { x: 0, y: 0, w: W, h: 13 }, { fontSize: TYPE.display, fontWeight: "bold", color: INK.strong, lineHeight: 1.15 }),
+      field(subtitle.id, "A short guide for students", { x: 0, y: 14, w: W, h: 7 }, { fontSize: TYPE.subtitle, color: INK.muted }, { name: "opt:subtitle|Subtitle" }),
+      createShape("rect", { frame: { x: 0, y: 23, w: 26, h: 1.4 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.7 }) }),
       createGroup({
         name: "Section",
-        frame: { x: 0, y: 26, w: 186, h: 22 },
-        layout: { mode: "vertical", gap: 1.5 },
+        frame: { x: 0, y: 30, w: W, h: 26 },
+        layout: { mode: "vertical", gap: SPACE.xs },
         repeat: { fieldId: sections.id, mode: "flow" },
         children: [
-          tx(heading.id, "Central tendency", { x: 0, y: 0, w: 186, h: 7 }, { fontSize: 13, fontWeight: "bold", color: A.main }),
-          tx(body.id, "The mean, median and mode describe where the centre of a distribution lies…", { x: 0, y: 8, w: 186, h: 12 }, { fontSize: 10, lineHeight: 1.45 }, { format: "rich" })
+          field(heading.id, "Central tendency", { x: 0, y: 0, w: W, h: 8 }, { fontSize: TYPE.heading, fontWeight: "bold", color: accent.deep }),
+          field(body.id, "The mean, median and mode describe where the centre of a distribution lies…", { x: 0, y: 9, w: W, h: 14 }, { fontSize: TYPE.body, lineHeight: 1.5 }, { format: "rich" })
         ]
       })
     ]
@@ -336,32 +359,34 @@ function documentStructure(): BlockDef {
     fields: [title, subtitle, sections],
     elements: [group],
     options: [{ key: "subtitle", label: "Subtitle", default: true }],
-    accent: A,
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
 
 function keyPoints(): BlockDef {
+  const accent = palette("orange");
   const title = createField("Title", "text");
   const point = createField("Point", "rich_text");
   const points = createField("Points", "array", { children: [createField("item", "object", { children: [point] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Key points",
-    frame: { x: 12, y: 12, w: 186, h: 40 },
-    layout: { mode: "vertical", gap: 2.5 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 46 },
+    layout: { mode: "vertical", gap: SPACE.sm },
     repeat: null,
     children: [
-      tx(title.id, "Three things to remember", { x: 0, y: 0, w: 186, h: 9 }, { fontSize: 16, fontWeight: "bold" }, { name: "opt:title|Title" }),
+      field(title.id, "Three things to remember", { x: 0, y: 0, w: W, h: 10 }, { fontSize: TYPE.title, fontWeight: "bold", color: INK.strong }, { name: "opt:title|Title" }),
       createGroup({
         name: "Point",
-        frame: { x: 0, y: 12, w: 186, h: 10 },
+        frame: { x: 0, y: 13, w: W, h: 13 },
         layout: { mode: "free", gap: 0 },
         repeat: { fieldId: points.id, mode: "flow" },
-        style: defaultStyle({ fill: A.tint, stroke: "", radius: 2 }),
+        style: defaultStyle({ fill: accent.tint, stroke: "", radius: RADIUS.panel }),
         children: [
-          createShape("rect", { frame: { x: 0, y: 0, w: 1.6, h: 10 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.8 }) }),
-          st("{{n}}", { x: 4, y: 2.5, w: 6, h: 5 }, { fontSize: 10, fontWeight: "bold", color: A.main }, { name: "opt:number|Number" }),
-          tx(point.id, "**Central tendency:** the median resists outliers.", { x: 11, y: 2.5, w: 170, h: 6 }, { fontSize: 10 }, { format: "rich" })
+          accentEdge(accent, 13),
+          ...numberBadge(accent, 5, 3.4, 6.2),
+          field(point.id, "**Central tendency:** the median resists outliers.", { x: 14, y: 3.6, w: W - 19, h: 6.5 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" })
         ]
       })
     ]
@@ -371,13 +396,13 @@ function keyPoints(): BlockDef {
     family: "Key points",
     variant: "Numbered rows",
     name: "Key points",
-    description: "Title plus numbered highlight rows with an accent bar.",
+    description: "Title plus numbered highlight rows with a coloured edge.",
     category: "structure",
     icon: "•",
     fields: [title, points],
     elements: [group],
     options: [{ key: "title", label: "Title", default: true }, { key: "number", label: "Numbers", default: true }],
-    accent: A,
+    accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
 }
@@ -386,80 +411,90 @@ function keyPoints(): BlockDef {
 /* ---------------------------------------------------------------- more families */
 
 function examHeader(): BlockDef {
+  const accent = palette("blue");
   const title = createField("Title", "text", { description: "Document title" });
   const subtitle = createField("Subtitle", "text", { description: "Course, class or subject" });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Header",
-    frame: { x: 12, y: 12, w: 186, h: 26 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 34 },
     layout: { mode: "free", gap: 0 },
     repeat: null,
     pageScope: { mode: "first" },
     children: [
-      createShape("ellipse", { frame: { x: 0, y: 1, w: 5, h: 5 }, style: defaultStyle({ fill: A.main, stroke: "" }) }),
-      st("LUNA", { x: 6.5, y: 0.2, w: 30, h: 7 }, { fontSize: 13, fontWeight: "bold" }, { name: "opt:logo|Logo" }),
-      tx(subtitle.id, "Biology · Grade 10", { x: 120, y: 1, w: 66, h: 5 }, { fontSize: 8, color: "#6e6e73", align: "right" }, { name: "opt:subtitle|Subtitle" }),
-      tx(title.id, "Biology Midterm Exam", { x: 0, y: 9, w: 140, h: 9 }, { fontSize: 18, fontWeight: "bold" }),
-      st("Name: ______________________", { x: 0, y: 20, w: 90, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:namedate|Name line" }),
-      st("Date: ____________", { x: 130, y: 20, w: 56, h: 5 }, { fontSize: 8.5, color: "#6e6e73", align: "right" }, { name: "opt:namedate|Date line" }),
-      createShape("line", { frame: { x: 0, y: 25.5, w: 186, h: 0.4 }, style: defaultStyle({ stroke: A.main, strokeWidth: 0.4 }) })
+      createShape("rect", { frame: { x: 0, y: 0, w: W, h: 22 }, style: defaultStyle({ fill: accent.tint, stroke: "", radius: RADIUS.card }) }),
+      createShape("rect", { frame: { x: 0, y: 0, w: 2, h: 22 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 1 }) }),
+      createShape("ellipse", { name: "opt:logo|Logo mark", frame: { x: 7, y: 4.2, w: 4.6, h: 4.6 }, style: defaultStyle({ fill: accent.main, stroke: "" }) }),
+      label("LUNA", { x: 13, y: 4.2, w: 26, h: 5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep }, { name: "opt:logo|Logo" }),
+      field(subtitle.id, "Biology · Grade 10", { x: W - 76, y: 4.4, w: 69, h: 5 }, { fontSize: TYPE.meta, color: INK.muted, align: "right" }, { name: "opt:subtitle|Subtitle" }),
+      field(title.id, "Biology Midterm Exam", { x: 7, y: 11, w: W - 14, h: 10 }, { fontSize: TYPE.title, fontWeight: "bold", color: INK.strong }),
+      label("Name", { x: 0, y: 26, w: 12, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: "opt:namedate|Name label" }),
+      writingLine(30.5, 12, 76),
+      label("Date", { x: W - 62, y: 26, w: 12, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: "opt:namedate|Date label" }),
+      writingLine(30.5, W - 50, 50)
     ]
   });
-  return { id: "block-header-exam", family: "Header", variant: "Exam header", name: "Header", description: "Logo, title, subtitle and Name / Date lines on the first page.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: A, builtIn: true };
+  return { id: "block-header-exam", family: "Header", variant: "Exam header", name: "Header", description: "Tinted title panel with the subject, plus Name / Date lines on the first page.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function minimalHeader(): BlockDef {
+  const accent = palette("blue");
   const title = createField("Title", "text", { description: "Document title" });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Header",
-    frame: { x: 12, y: 12, w: 186, h: 16 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 20 },
     layout: { mode: "free", gap: 0 },
     repeat: null,
     pageScope: { mode: "first" },
     children: [
-      tx(title.id, "Study guide", { x: 0, y: 0, w: 186, h: 10 }, { fontSize: 20, fontWeight: "bold", align: "center" }),
-      createShape("rect", { frame: { x: 81, y: 12, w: 24, h: 1.2 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.6 }) })
+      field(title.id, "Study guide", { x: 0, y: 0, w: W, h: 12 }, { fontSize: TYPE.display, fontWeight: "bold", align: "center", color: INK.strong }),
+      createShape("rect", { frame: { x: W / 2 - 13, y: 15, w: 26, h: 1.4 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.7 }) })
     ]
   });
-  return { id: "block-header-minimal", family: "Header", variant: "Centered title", name: "Header", description: "Centered title with an accent rule.", category: "structure", icon: "▔", fields: [title], elements: [group], accent: A, builtIn: true };
+  return { id: "block-header-minimal", family: "Header", variant: "Centered title", name: "Header", description: "Centred title with an accent rule.", category: "structure", icon: "▔", fields: [title], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function footer(): BlockDef {
   const title = createField("Title", "text", { description: "Document title" });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Footer",
-    frame: { x: 12, y: 280, w: 186, h: 8 },
+    frame: { x: PAGE.margin, y: 280, w: W, h: 8 },
     layout: { mode: "free", gap: 0 },
     repeat: null,
     pageScope: { mode: "every" },
     children: [
-      createShape("line", { frame: { x: 0, y: 0, w: 186, h: 0.3 }, style: defaultStyle({ stroke: "#d2d2d7", strokeWidth: 0.3 }) }),
-      tx(title.id, "Biology Midterm Exam", { x: 0, y: 2, w: 120, h: 5 }, { fontSize: 7.5, color: "#6e6e73" }),
-      st("Page {{page}}", { x: 140, y: 2, w: 46, h: 5 }, { fontSize: 7.5, color: "#6e6e73", align: "right" }, { name: "opt:page|Page number" })
+      divider(0, W),
+      field(title.id, "Biology Midterm Exam", { x: 0, y: 2.4, w: 120, h: 5 }, { fontSize: TYPE.micro, color: INK.faint }),
+      label("Page {{page}}", { x: W - 46, y: 2.4, w: 46, h: 5 }, { fontSize: TYPE.micro, color: INK.faint, align: "right" }, { name: "opt:page|Page number" })
     ]
   });
-  return { id: "block-footer", family: "Footer", variant: "Title + page number", name: "Footer", description: "Thin rule, document title and page number on every page.", category: "structure", icon: "▁", fields: [title], elements: [group], options: [{ key: "page", label: "Page number", default: true }], accent: A, builtIn: true };
+  return { id: "block-footer", family: "Footer", variant: "Title + page number", name: "Footer", description: "Hairline, document title and page number on every page.", category: "structure", icon: "▁", fields: [title], elements: [group], options: [{ key: "page", label: "Page number", default: true }], accent: { main: palette("blue").main, tint: palette("blue").tint }, builtIn: true };
 }
 
 function sectionHeader(): BlockDef {
+  const accent = palette("blue");
   const title = createField("Section title", "text");
   const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
   const sections = createField("Sections", "array", { children: [createField("item", "object", { children: [title, intro] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Section header",
-    frame: { x: 12, y: 12, w: 186, h: 20 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 24 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: sections.id, mode: "flow" },
     children: [
-      createShape("rect", { frame: { x: 0, y: 0, w: 24, h: 5.5 }, style: defaultStyle({ fill: A.tint, stroke: "", radius: 1.2 }) }),
-      st("SECTION {{n}}", { x: 0, y: 1, w: 24, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main, align: "center" }),
-      tx(title.id, "Multiple choice", { x: 0, y: 7, w: 186, h: 8 }, { fontSize: 15, fontWeight: "bold" }),
-      tx(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: 15, w: 186, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:intro|Intro line" })
+      ...chip("SECTION {{n}}", accent, { x: 0, y: 0, w: 27, h: 6 }),
+      field(title.id, "Multiple choice", { x: 0, y: 8, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
+      field(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: 17.5, w: W, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line" })
     ]
   });
-  return { id: "block-section-header", family: "Section header", variant: "Badge + title", name: "Section header", description: "Numbered section badge, title and intro line — one per section.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: A, builtIn: true };
+  return { id: "block-section-header", family: "Section header", variant: "Badge + title", name: "Section header", description: "Numbered section badge, title and intro line — one per section.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function sectionWithQuestions(): BlockDef {
+  const accent = palette("blue");
   const title = createField("Section title", "text");
   const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
   const question = createField("Question", "rich_text");
@@ -468,191 +503,193 @@ function sectionWithQuestions(): BlockDef {
   const answer = createField("Answer", "text", { description: "The correct option" });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
   const sections = createField("Sections", "array", { description: "One element per section: its title, intro and its own questions", children: [createField("item", "object", { children: [title, intro, questions] })] });
+  const W = PAGE.width;
   const card = createGroup({
     name: "Question card",
-    frame: { x: 0, y: 22, w: 186, h: 34 },
-    layout: { mode: "free", gap: 2 },
+    frame: { x: 0, y: 26, w: W, h: 46 },
+    layout: { mode: "free", gap: SPACE.sm },
     repeat: { fieldId: questions.id, mode: "flow" },
-    style: defaultStyle({ fill: "#ffffff", stroke: "#e5e5ea", strokeWidth: 0.3, radius: 2.5 }),
+    style: cardStyle(accent),
     children: [
-      createShape("ellipse", { frame: { x: 4, y: 4, w: 7, h: 7 }, style: defaultStyle({ fill: A.tint, stroke: "" }) }),
-      st("{{n}}", { x: 4, y: 5.4, w: 7, h: 5 }, { fontSize: 7.5, fontWeight: "bold", color: A.main, align: "center" }),
-      tx(question.id, "What is the main function of chlorophyll in plants?", { x: 15, y: 4.5, w: 165, h: 8 }, { fontSize: 10.5, fontWeight: "bold" }, { format: "rich" }),
+      accentEdge(accent, 46),
+      ...numberBadge(accent, 6, 6, 7.4, ""),
+      field(question.id, "What is the main function of chlorophyll in plants?", { x: 16, y: 6, w: W - 24, h: 8.5 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
       createGroup({
         name: "Options",
-        frame: { x: 15, y: 14, w: 165, h: 16 },
-        layout: { mode: "vertical", gap: 1.2 },
+        frame: { x: 16, y: 17, w: W - 24, h: 20 },
+        layout: { mode: "vertical", gap: 1.6 },
         repeat: { fieldId: options.id, mode: "flow" },
-        children: [createGroup({ name: "Option row", frame: { x: 0, y: 0, w: 165, h: 5.5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
-          createShape("ellipse", { frame: { x: 0, y: 0.8, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35 }) }),
-          tx(option.id, "Absorb light energy for photosynthesis", { x: 6, y: 0, w: 155, h: 5.5 }, { fontSize: 9.5 })
-        ] })]
+        children: [optionRow(accent, option.id, W - 24)]
       }),
-      tx(answer.id, "B", { x: 15, y: 31, w: 100, h: 3 }, { fontSize: 7, color: A.main }, { name: "opt:answer|Answer" })
+      ...confidenceRow(accent, 38, W - 24).map((element) => shift(element, 16)),
+      ...answerBand(accent, answer.id, 40, W)
     ]
   });
   const group = createGroup({
     name: "Section",
-    frame: { x: 12, y: 12, w: 186, h: 58 },
-    layout: { mode: "free", gap: 3 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 74 },
+    layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: sections.id, mode: "flow" },
     children: [
-      createShape("rect", { frame: { x: 0, y: 0, w: 24, h: 5.5 }, style: defaultStyle({ fill: A.tint, stroke: "", radius: 1.2 }) }),
-      st("SECTION {{n}}", { x: 0, y: 1, w: 24, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main, align: "center" }),
-      tx(title.id, "Multiple choice", { x: 0, y: 7, w: 186, h: 8 }, { fontSize: 15, fontWeight: "bold" }),
-      tx(intro.id, "Choose the correct answer for each question.", { x: 0, y: 15, w: 186, h: 5 }, { fontSize: 8.5, color: "#6e6e73" }, { name: "opt:intro|Intro line" }),
+      ...chip("SECTION {{n}}", accent, { x: 0, y: 0, w: 27, h: 6 }),
+      field(title.id, "Multiple choice", { x: 0, y: 8, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
+      field(intro.id, "Choose the correct answer for each question.", { x: 0, y: 17.5, w: W, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line" }),
       card
     ]
   });
-  return { id: "block-section-questions", family: "Section header", variant: "Section with question cards", name: "Section + questions", description: "Sections in the agent's order, each with its title and its own question cards.", category: "questions", icon: "§❶", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+  return { id: "block-section-questions", family: "Section header", variant: "Section with question cards", name: "Section + questions", description: "Sections in the agent's order, each with its title and its own question cards.", category: "questions", icon: "§❶", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }, { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }, { key: "answer", label: "Show answer", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function callout(): BlockDef {
+  const accent = palette("orange");
   const note = createField("Note", "rich_text", { description: "Important information, tip or reminder" });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Callout",
-    frame: { x: 12, y: 12, w: 186, h: 16 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 20 },
     layout: { mode: "free", gap: 0 },
     repeat: null,
-    style: defaultStyle({ fill: A.tint, stroke: "", radius: 2.5 }),
+    style: defaultStyle({ fill: accent.tint, stroke: "", radius: RADIUS.card }),
     children: [
-      createShape("rect", { frame: { x: 0, y: 0, w: 1.6, h: 16 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 0.8 }) }),
-      st("Important", { x: 6, y: 2.5, w: 60, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: A.main }, { name: "opt:label|Label" }),
-      tx(note.id, "Remember: photosynthesis only occurs in the presence of light and chlorophyll.", { x: 6, y: 8, w: 175, h: 7 }, { fontSize: 9.5 }, { format: "rich" })
+      accentEdge(accent, 20),
+      createShape("ellipse", { name: "opt:label|Icon", frame: { x: 6, y: 6.4, w: 6, h: 6 }, style: defaultStyle({ fill: accent.main, stroke: "" }) }),
+      label("!", { x: 6, y: 7.4, w: 6, h: 4.5 }, { fontSize: TYPE.small, fontWeight: "bold", color: INK.paper, align: "center" }, { name: "opt:label|Icon mark" }),
+      kicker("Important", { x: 15, y: 4.6, w: 60, h: 4 }, accent.deep, { name: "opt:label|Label" }),
+      field(note.id, "Photosynthesis only happens where there is both light and chlorophyll.", { x: 15, y: 9.4, w: W - 20, h: 8 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" })
     ]
   });
-  return { id: "block-callout", family: "Callout", variant: "Info box", name: "Callout", description: "Highlighted box for important information, tips or notes.", category: "structure", icon: "ⓘ", fields: [note], elements: [group], options: [{ key: "label", label: "Label", default: true }], accent: A, builtIn: true };
+  return { id: "block-callout", family: "Callout", variant: "Info box", name: "Callout", description: "Highlighted box for important information, tips or notes.", category: "structure", icon: "ⓘ", fields: [note], elements: [group], options: [{ key: "label", label: "Label", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function answerBox(): BlockDef {
+  const green = palette("green");
   const answer = createField("Answer", "text");
   const explanation = createField("Explanation", "rich_text");
   const items = createField("Answers", "array", { children: [createField("item", "object", { children: [answer, explanation] })] });
-  const green = ACCENT_PRESETS[1];
+  const W = PAGE.width;
   const group = createGroup({
     name: "Answer box",
-    frame: { x: 12, y: 12, w: 186, h: 22 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 26 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: items.id, mode: "flow" },
-    style: defaultStyle({ fill: green.tint, stroke: `${green.main}`, strokeWidth: 0.3, radius: 2.5 }),
+    style: defaultStyle({ fill: green.tint, stroke: green.line, strokeWidth: 0.3, radius: RADIUS.card }),
     children: [
-      createShape("ellipse", { frame: { x: 4, y: 3.5, w: 5, h: 5 }, style: defaultStyle({ fill: green.main, stroke: "" }) }),
-      st("✓", { x: 4, y: 4.2, w: 5, h: 4 }, { fontSize: 7, fontWeight: "bold", color: "#ffffff", align: "center" }),
-      st("Correct answer {{n}}", { x: 11, y: 3.5, w: 80, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: green.main }),
-      tx(answer.id, "B. Absorb light energy for photosynthesis", { x: 11, y: 9, w: 170, h: 5.5 }, { fontSize: 9.5, fontWeight: "bold" }),
-      tx(explanation.id, "Chlorophyll absorbs light energy, which is used to convert CO₂ and H₂O into glucose.", { x: 11, y: 15, w: 170, h: 6 }, { fontSize: 8.5, color: "#3a3a3c" }, { format: "rich", name: "opt:explanation|Explanation" })
+      accentEdge(green, 26),
+      createShape("ellipse", { frame: { x: 6, y: 5.4, w: 5.6, h: 5.6 }, style: defaultStyle({ fill: green.main, stroke: "" }) }),
+      label("✓", { x: 6, y: 6.3, w: 5.6, h: 4.2 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.paper, align: "center" }),
+      kicker("Answer {{n}}", { x: 15, y: 6, w: 60, h: 4 }, green.deep),
+      field(answer.id, "B · Absorbs light energy for photosynthesis", { x: 15, y: 11, w: W - 20, h: 6 }, { fontSize: TYPE.body, fontWeight: "bold", color: INK.strong }),
+      field(explanation.id, "Chlorophyll absorbs light energy, which is used to convert CO₂ and H₂O into glucose.", { x: 15, y: 17.5, w: W - 20, h: 7 }, { fontSize: TYPE.small, color: INK.body, lineHeight: 1.45 }, { format: "rich", name: "opt:explanation|Explanation" })
     ]
   });
-  return { id: "block-answer-box", family: "Answer box", variant: "Correct answer + explanation", name: "Answer box", description: "Green box with the correct answer and an explanation — ideal for answer keys.", category: "questions", icon: "✓", fields: [items], elements: [group], options: [{ key: "explanation", label: "Explanation", default: true }], accent: green, builtIn: true };
+  return { id: "block-answer-box", family: "Answer box", variant: "Correct answer + explanation", name: "Answer box", description: "Green box with the correct answer and why it is right — the heart of an answer key.", category: "questions", icon: "✓", fields: [items], elements: [group], options: [{ key: "explanation", label: "Explanation", default: true }], accent: { main: green.main, tint: green.tint }, builtIn: true };
 }
 
 function flashcardSingle(): BlockDef {
+  const accent = palette("purple");
   const front = createField("Front", "text");
   const back = createField("Back", "text");
   const cards = createField("Cards", "array", { children: [createField("item", "object", { children: [front, back] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Flashcard",
-    frame: { x: 12, y: 12, w: 186, h: 60 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 66 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: cards.id, mode: "page" },
-    style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.4, radius: 4 }),
+    style: cardStyle(accent, "outlined"),
     children: [
-      st("FRONT", { x: 6, y: 5, w: 30, h: 4 }, { fontSize: 6.5, fontWeight: "bold", color: A.main }),
-      tx(front.id, "Photosynthesis", { x: 6, y: 14, w: 174, h: 16 }, { fontSize: 24, fontWeight: "bold", align: "center" }),
-      createShape("line", { frame: { x: 20, y: 36, w: 146, h: 0.3 }, style: defaultStyle({ stroke: A.main, strokeWidth: 0.3 }) }),
-      tx(back.id, "The process by which plants convert light energy into chemical energy.", { x: 12, y: 40, w: 162, h: 14 }, { fontSize: 11, align: "center", color: "#6e6e73" })
+      createShape("rect", { frame: { x: 0, y: 0, w: W, h: 2.4 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0 }) }),
+      kicker("Front", { x: 8, y: 7, w: 30, h: 4 }, accent.deep),
+      field(front.id, "Photosynthesis", { x: 8, y: 17, w: W - 16, h: 17 }, { fontSize: 24, fontWeight: "bold", align: "center", color: INK.strong }),
+      divider(40, W - 60, accent.line),
+      kicker("Back", { x: 8, y: 45, w: 30, h: 4 }, INK.faint),
+      field(back.id, "The process by which plants convert light energy into chemical energy.", { x: 14, y: 51, w: W - 28, h: 12 }, { fontSize: TYPE.subtitle, align: "center", color: INK.muted, lineHeight: 1.45 })
     ]
   });
-  return { id: "block-flashcard-single", family: "Flashcard", variant: "One card per page / slide", name: "Flashcard", description: "Large front / back card, one per page or slide.", category: "cards", icon: "▤", fields: [cards], elements: [group], accent: A, builtIn: true };
+  return { id: "block-flashcard-single", family: "Flashcard", variant: "One card per page / slide", name: "Flashcard", description: "Large front / back card, one per page or slide.", category: "cards", icon: "▤", fields: [cards], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function compactQuestion(): BlockDef {
+  const accent = palette("blue");
   const question = createField("Question", "rich_text");
   const option = createField("Option", "text");
   const options = createField("Options", "array", { children: [option] });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options] })] });
+  const W = PAGE.width;
   const group = createGroup({
     name: "Question (compact)",
-    frame: { x: 12, y: 12, w: 186, h: 16 },
-    layout: { mode: "free", gap: 1 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 20 },
+    layout: { mode: "free", gap: SPACE.xs },
     repeat: { fieldId: questions.id, mode: "flow" },
     children: [
-      st("{{n}}.", { x: 0, y: 0, w: 8, h: 6 }, { fontSize: 10, fontWeight: "bold", color: A.main }),
-      tx(question.id, "Which organelle is the powerhouse of the cell?", { x: 8, y: 0, w: 178, h: 6 }, { fontSize: 10, fontWeight: "bold" }, { format: "rich" }),
+      label("{{n}}.", { x: 0, y: 0, w: 8, h: 6 }, { fontSize: TYPE.body, fontWeight: "bold", color: accent.deep }),
+      field(question.id, "Which organelle is the powerhouse of the cell?", { x: 8, y: 0, w: W - 8, h: 6 }, { fontSize: TYPE.body, fontWeight: "bold", color: INK.strong }, { format: "rich" }),
       createGroup({
         name: "Options",
-        frame: { x: 8, y: 7, w: 178, h: 8 },
-        layout: { mode: "grid", gap: 2, columns: 2 },
+        frame: { x: 8, y: 8, w: W - 8, h: 10 },
+        layout: { mode: "grid", gap: 3, columns: 2 },
         repeat: { fieldId: options.id, mode: "grid", columns: 2 },
-        children: [createGroup({ name: "Option", frame: { x: 0, y: 0, w: 86, h: 5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
-          st("○", { x: 0, y: 0, w: 4, h: 5 }, { fontSize: 9, color: A.main }),
-          tx(option.id, "Mitochondrion", { x: 5, y: 0, w: 80, h: 5 }, { fontSize: 9 })
-        ] })]
+        children: [optionRow(accent, option.id, (W - 11) / 2)]
       })
     ]
   });
-  return { id: "block-question-compact", family: "Question card", variant: "Compact, options in 2 columns", name: "Question (compact)", description: "Numbered question with options in two columns — fits many per page.", category: "questions", icon: "❶", fields: [questions], elements: [group], accent: A, builtIn: true };
+  return { id: "block-question-compact", family: "Question card", variant: "Compact, options in 2 columns", name: "Question (compact)", description: "Numbered question with lettered options in two columns — fits many per page.", category: "questions", icon: "❶", fields: [questions], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 
 function mixedQuestions(): BlockDef {
+  const accent = palette("blue");
   const type = createField("Type", "text", { description: "multiple_choice, true_false or open — decides which design is used", options: ["multiple_choice", "true_false", "open"] });
   const question = createField("Question", "rich_text");
   const option = createField("Option", "text");
   const options = createField("Options", "array", { children: [option] });
   const answer = createField("Answer", "text", { description: "The correct option, true/false, or a model answer" });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [type, question, options, answer] })] });
-  const numberBadge = () => [
-    createShape("rect", { name: "opt:number|Number badge", frame: { x: 4, y: 4, w: 9, h: 9 }, style: defaultStyle({ fill: A.main, stroke: "", radius: 4.5 }) }),
-    st("{{n}}", { x: 4, y: 5.6, w: 9, h: 6 }, { fontSize: 9, fontWeight: "bold", color: "#ffffff", align: "center" }, { name: "opt:number|Number" })
-  ];
+  const W = PAGE.width;
   const mc = createGroup({
-    name: "Multiple choice", frame: { x: 0, y: 0, w: 186, h: 36 }, layout: { mode: "free", gap: 2 }, repeat: null,
+    name: "Multiple choice", frame: { x: 0, y: 0, w: W, h: 46 }, layout: { mode: "free", gap: SPACE.sm }, repeat: null,
     condition: { fieldId: type.id, equals: "multiple_choice" },
-    style: defaultStyle({ fill: A.tint, stroke: "", radius: 3 }),
+    style: cardStyle(accent),
     children: [
-      ...numberBadge(),
-      tx(question.id, "Which organelle produces ATP?", { x: 17, y: 5, w: 160, h: 8 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
-      createGroup({ name: "Options", frame: { x: 17, y: 15, w: 160, h: 18 }, layout: { mode: "vertical", gap: 1.2 }, repeat: { fieldId: options.id, mode: "flow" }, children: [
-        createGroup({ name: "Option row", frame: { x: 0, y: 0, w: 160, h: 5.5 }, layout: { mode: "free", gap: 0 }, repeat: null, children: [
-          createShape("ellipse", { frame: { x: 0, y: 0.8, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35 }) }),
-          tx(option.id, "Mitochondrion", { x: 6, y: 0, w: 150, h: 5.5 }, { fontSize: 10 })
-        ] })
-      ] }),
-      tx(answer.id, "B", { x: 17, y: 32, w: 100, h: 3 }, { fontSize: 7, color: A.main }, { name: "opt:answer|Answer" })
+      accentEdge(accent, 46),
+      ...numberBadge(accent, 6, 6),
+      field(question.id, "Which organelle produces ATP?", { x: 17, y: 6.4, w: W - 24, h: 8.5 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
+      createGroup({ name: "Options", frame: { x: 17, y: 17.5, w: W - 24, h: 20 }, layout: { mode: "vertical", gap: 1.6 }, repeat: { fieldId: options.id, mode: "flow" }, children: [optionRow(accent, option.id, W - 24)] }),
+      ...confidenceRow(accent, 38, W - 24).map((element) => shift(element, 17)),
+      ...answerBand(accent, answer.id, 40, W)
     ]
   });
   const tf = createGroup({
-    name: "True / false", frame: { x: 0, y: 0, w: 186, h: 14 }, layout: { mode: "free", gap: 0 }, repeat: null,
+    name: "True / false", frame: { x: 0, y: 0, w: W, h: 16 }, layout: { mode: "free", gap: 0 }, repeat: null,
     condition: { fieldId: type.id, equals: "true_false" },
-    style: defaultStyle({ fill: A.tint, stroke: "", radius: 3 }),
+    style: cardStyle(accent),
     children: [
-      ...numberBadge(),
-      tx(question.id, "The mitochondrion has its own DNA.", { x: 17, y: 5, w: 120, h: 6 }, { fontSize: 10.5, fontWeight: "bold" }, { format: "rich" }),
-      createShape("rect", { frame: { x: 142, y: 5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
-      st("True", { x: 148, y: 5, w: 12, h: 5 }, { fontSize: 8.5 }),
-      createShape("rect", { frame: { x: 162, y: 5, w: 4.5, h: 4.5 }, style: defaultStyle({ fill: "#ffffff", stroke: A.main, strokeWidth: 0.35, radius: 0.8 }) }),
-      st("False", { x: 168, y: 5, w: 14, h: 5 }, { fontSize: 8.5 }),
-      tx(answer.id, "true", { x: 142, y: 10, w: 40, h: 3 }, { fontSize: 6.5, color: A.main, align: "right" }, { name: "opt:answer|Answer" })
+      accentEdge(accent, 16),
+      ...numberBadge(accent, 6, 4.2, 7.4),
+      field(question.id, "The mitochondrion has its own DNA.", { x: 17, y: 5.2, w: W - 74, h: 6 }, { fontSize: TYPE.body, fontWeight: "bold", color: INK.strong }, { format: "rich" }),
+      ...tickBox(accent, W - 54, 5, "True"),
+      ...tickBox(accent, W - 30, 5, "False"),
+      field(answer.id, "true", { x: W - 54, y: 11, w: 46, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep, align: "right" }, { name: "opt:answer|Answer" })
     ]
   });
   const open = createGroup({
-    name: "Open answer", frame: { x: 0, y: 0, w: 186, h: 38 }, layout: { mode: "free", gap: 0 }, repeat: null,
+    name: "Open answer", frame: { x: 0, y: 0, w: W, h: 46 }, layout: { mode: "free", gap: 0 }, repeat: null,
     condition: { fieldId: type.id, equals: "open" },
-    style: defaultStyle({ fill: "", stroke: A.main, strokeWidth: 0.3, radius: 3 }),
+    style: cardStyle(accent, "outlined"),
     children: [
-      ...numberBadge(),
-      tx(question.id, "Explain how ATP is produced in the mitochondrion.", { x: 17, y: 5, w: 160, h: 8 }, { fontSize: 11, fontWeight: "bold" }, { format: "rich" }),
-      ...[0, 1, 2].map((row) => createShape("line", { frame: { x: 17, y: 18 + row * 6.5, w: 160, h: 0.3 }, style: defaultStyle({ stroke: "#c7c7cc", strokeWidth: 0.3 }) })),
-      tx(answer.id, "Model answer…", { x: 17, y: 34, w: 160, h: 3 }, { fontSize: 6.5, color: A.main }, { name: "opt:answer|Answer" })
+      accentEdge(accent, 46),
+      ...numberBadge(accent, 6, 6),
+      field(question.id, "Explain how ATP is produced in the mitochondrion.", { x: 17, y: 6.4, w: W - 24, h: 8.5 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
+      ...[0, 1, 2, 3].map((row) => writingLine(19 + row * 7, 17, W - 24)),
+      field(answer.id, "Model answer…", { x: 17, y: 41, w: W - 24, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep }, { name: "opt:answer|Answer" })
     ]
   });
   const group = createGroup({
-    name: "Question (any type)", frame: { x: 12, y: 12, w: 186, h: 38 }, layout: { mode: "free", gap: 2 },
+    name: "Question (any type)", frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 46 }, layout: { mode: "free", gap: SPACE.sm },
     repeat: { fieldId: questions.id, mode: "flow" },
     children: [mc, tf, open]
   });
-  return { id: "block-question-mixed", family: "Question card", variant: "Mixed — design chosen by question Type", name: "Question (any type)", description: "One spot, three designs: multiple choice, true/false or open — the agent's Type field decides, in its order.", category: "questions", icon: "❶⁄", fields: [questions], elements: [group], options: [{ key: "number", label: "Question number", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+  return { id: "block-question-mixed", family: "Question card", variant: "Mixed — design chosen by question Type", name: "Question (any type)", description: "One spot, three designs: multiple choice, true/false or open — the agent's Type field decides, in its order.", category: "questions", icon: "❶⁄", fields: [questions], elements: [group], options: [{ key: "number", label: "Question number", default: true }, { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }, { key: "answer", label: "Show answer", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 
@@ -976,6 +1013,24 @@ function replaceColor(value: string | undefined, from: string, to: string): stri
   return value && value.toLowerCase() === from.toLowerCase() ? to : value;
 }
 
+/**
+ * Recolouring a block means swapping its whole palette, not just its brightest colour: the badge,
+ * the darker ink used for the option letters, the tinted band and the hairline all move together,
+ * or an orange card ends up with blue lettering.
+ */
+function paletteMap(fromMain: string, toId: string): Record<string, string> {
+  const source = PALETTES.find((entry) => entry.main.toLowerCase() === String(fromMain).toLowerCase());
+  const target = PALETTES.find((entry) => entry.id === toId);
+  if (!source || !target || source.id === target.id) return {};
+  return {
+    [source.main.toLowerCase()]: target.main,
+    [source.deep.toLowerCase()]: target.deep,
+    [source.tint.toLowerCase()]: target.tint,
+    [source.soft.toLowerCase()]: target.soft,
+    [source.line.toLowerCase()]: target.line
+  };
+}
+
 export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], options: InsertOptions = {}): { fields: FieldDef[]; elements: Element[] } {
   const idMap = new Map<ID, ID>();
   const fields = mergeFields(templateFields, block.fields, idMap);
@@ -984,6 +1039,12 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
   const hidden = new Set((block.options || []).filter((option) => toggles[option.key] === false || (toggles[option.key] === undefined && !option.default)).map((option) => option.key));
   const from = block.accent || A;
   const to = options.accent ? { main: options.accent.main, tint: options.accent.tint } : from;
+  const swatches = options.accent ? paletteMap(from.main, options.accent.id) : {};
+  const recolour = (value: string | undefined): string | undefined => {
+    if (!value) return value;
+    const mapped = swatches[value.toLowerCase()];
+    return mapped || value;
+  };
 
   const remapElements = (list: Element[]): Element[] =>
     list
@@ -992,9 +1053,9 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
         const next = { ...element, id: createId("el"), name: displayName(element) || element.name } as Element;
         next.style = {
           ...next.style,
-          fill: replaceColor(replaceColor(next.style.fill, from.main, to.main), from.tint, to.tint),
-          stroke: replaceColor(next.style.stroke, from.main, to.main),
-          color: replaceColor(next.style.color, from.main, to.main)
+          fill: recolour(replaceColor(replaceColor(next.style.fill, from.main, to.main), from.tint, to.tint)),
+          stroke: recolour(replaceColor(next.style.stroke, from.main, to.main)),
+          color: recolour(replaceColor(next.style.color, from.main, to.main))
         };
         if ((next.type === "text" || next.type === "image") && next.source.type === "field") {
           next.source = { type: "field", fieldId: idMap.get(next.source.fieldId) || next.source.fieldId };

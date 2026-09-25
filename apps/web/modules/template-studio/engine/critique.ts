@@ -28,10 +28,31 @@ export interface Issue {
   elementIds: string[];
   /** true when `repairTemplate` knows how to fix it. */
   fixable: boolean;
+  /**
+   * A fault is a defect anybody would call wrong — text on top of text, type too small to read,
+   * something off the page. A suggestion is a matter of taste the critic is usually right about —
+   * a repeated item that would read better on a card, edges that nearly line up. The generator acts
+   * on both; only faults mean the design is broken.
+   */
+  severity?: "fault" | "suggestion";
 }
+
+const SUGGESTIONS = new Set<IssueKind>(["no_card", "misaligned", "cramped"]);
+
+/** The defects, as opposed to the matters of taste. */
+export const faultsOf = (issues: Issue[]): Issue[] => issues.filter((issue) => (issue.severity || "fault") === "fault");
 
 const MIN_FONT = 7;
 const EDGE = 2; // mm of breathing room expected inside a card
+
+/** True when something in the template repeats one item per page (a flashcard, a slide). */
+function hasPageRepeat(elements: Element[]): boolean {
+  let found = false;
+  walk(elements, (element) => {
+    if (element.type === "group" && (element as GroupElement).repeat?.mode === "page") found = true;
+  });
+  return found;
+}
 
 function walk(elements: Element[], visit: (element: Element, parent: GroupElement | null) => void, parent: GroupElement | null = null) {
   for (const element of elements) {
@@ -46,6 +67,16 @@ function luminance(hex: string): number {
   if (full.length !== 6) return 1;
   const [r, g, b] = [0, 2, 4].map((index) => parseInt(full.slice(index, index + 2), 16) / 255);
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The box an item actually paints into: rotated text swaps its width and height about its centre. */
+function uprightBox<T extends { x: number; y: number; w: number; h?: number; style?: { rotate?: number } }>(item: T): T {
+  const rotation = Math.abs(Number(item.style?.rotate || 0)) % 180;
+  if (rotation < 45 || rotation > 135) return item;
+  const h = item.h || 0;
+  const cx = item.x + item.w / 2;
+  const cy = item.y + h / 2;
+  return { ...item, x: cx - h / 2, y: cy - item.w / 2, w: h, h: item.w };
 }
 
 /** Everything wrong with how this template lays out, worst first. */
@@ -66,8 +97,10 @@ export function critiqueTemplate(template: Template, data?: Record<string, unkno
 
   for (const [pageIndex, page] of result.pages.entries()) {
     const texts = page.items.filter((item): item is LaidOutTextItem => item.type === "text" && item.lines.join("").trim().length > 0);
-    // Off the page or into the margins.
-    for (const item of page.items) {
+    // Off the page or into the margins. Text turned on its side is measured as it is painted:
+    // the box rotates about its own centre, so width and height swap.
+    for (const raw of page.items) {
+      const item = uprightBox(raw);
       const bottom = item.y + (item.h || 0);
       const chrome = item.elementId ? chromeIds.has(item.elementId) : false;
       const top = chrome ? 0 : layout.margins.top - 3;
@@ -97,8 +130,10 @@ export function critiqueTemplate(template: Template, data?: Record<string, unkno
         issues.push({ kind: "tiny_text", message: `“${item.lines[0]?.slice(0, 24)}” is set at ${item.style.fontSize}pt — too small to read on paper.`, elementIds: [item.elementId].filter(Boolean) as string[], fixable: true });
       }
     }
-    // A page that is almost empty reads as a mistake.
-    if (result.pages.length > 1 && pageIndex < result.pages.length - 1) {
+    // A page that is almost empty reads as a mistake — unless the template puts one item per page
+    // on purpose, which is what a flashcard or a slide does.
+    const oneItemPerPage = hasPageRepeat(layout.pages[0]?.elements || []);
+    if (!oneItemPerPage && result.pages.length > 1 && pageIndex < result.pages.length - 1) {
       const used = page.items.reduce((max, item) => Math.max(max, item.y + (item.h || 0)), 0);
       if (used < page.height * 0.45) {
         issues.push({ kind: "empty_page", message: `Page ${pageIndex + 1} is less than half used before the next page starts.`, elementIds: [], fixable: false });
@@ -138,7 +173,12 @@ export function critiqueTemplate(template: Template, data?: Record<string, unkno
       const fill = child.style?.fill;
       if (fill && fill !== "transparent" && child.frame.w >= group.frame.w * 0.6) hasCard = true;
     });
-    if (!hasCard && group.children.length > 1) {
+    // A repeating section of pure prose (a heading and a paragraph) is a document, not a card, and
+    // boxing it would be worse design. The rule is about repeated items that already reach for
+    // shapes and badges but never got their background.
+    const outlined = Boolean(group.style?.stroke && group.style.stroke !== "transparent");
+    const proseOnly = group.children.every((child) => child.type === "text");
+    if (!hasCard && !outlined && !proseOnly && group.children.length > 1) {
       issues.push({ kind: "no_card", message: `“${group.name || "The repeating block"}” is bare text on white — a filled card would read better.`, elementIds: [group.id], fixable: true });
     }
   });
@@ -162,6 +202,8 @@ export function critiqueTemplate(template: Template, data?: Record<string, unkno
   }
 
   const order: IssueKind[] = ["overlap", "off_page", "tiny_text", "low_contrast", "no_card", "misaligned", "overflow", "cramped", "empty_page"];
+  for (const issue of issues) issue.severity = SUGGESTIONS.has(issue.kind) ? "suggestion" : "fault";
+
   return issues.sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));
 }
 

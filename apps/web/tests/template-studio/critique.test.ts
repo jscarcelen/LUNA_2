@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createField, createGroup, createPage, createTemplate, createText, defaultStyle } from "../../modules/template-studio/engine/model";
+import { createField, createGroup, createPage, createShape, createTemplate, createText, defaultStyle } from "../../modules/template-studio/engine/model";
 import { critiqueTemplate, polishTemplate } from "../../modules/template-studio/engine/critique";
 import { createExamTemplate } from "../../modules/template-studio/engine/starters";
 
@@ -16,6 +16,8 @@ function messyTemplate() {
         name: "Item", frame: { x: 12, y: 12, w: 186, h: 20 }, layout: { mode: "free", gap: 0 },
         repeat: { fieldId: items.id, mode: "flow" },
         children: [
+          // A badge with no card behind it: the design reaches for a shape and then forgets the background.
+          createShape("ellipse", { frame: { x: 0, y: 0, w: 6, h: 6 }, style: defaultStyle({ fill: "#0071e3", stroke: "" }) }),
           createText({ type: "field", fieldId: question.id }, { frame: { x: 0, y: 0, w: 120, h: 8 }, style: defaultStyle({ fontSize: 11 }) }),
           // Sits on top of the question, and is far too small to read.
           createText({ type: "field", fieldId: answer.id }, { frame: { x: 10, y: 2, w: 120, h: 8 }, style: defaultStyle({ fontSize: 4 }) })

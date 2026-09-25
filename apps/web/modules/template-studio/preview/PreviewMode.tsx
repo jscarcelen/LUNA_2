@@ -27,7 +27,7 @@ export function PreviewMode({ template, layoutId, viewId, sampleData, sampleValu
         <section className={`${card} p-5`}>
           <p className={kicker}>Data</p>
           <div className="mt-2"><Segmented value={source} options={[["sample", "Sample data"], ["agent", "Agent output"]]} onChange={setSource} /></div>
-          {source === "sample" ? <div className="mt-3 flex items-center gap-2 text-sm text-ink">Generate <input type="number" min="1" max="60" className={`${fieldBase} w-20 px-2 py-1 text-sm`} value={sampleCount} onChange={(event) => onSampleCount(Math.max(1, Math.min(60, Number(event.target.value) || 1)))} /> items</div> : <p className="m-0 mt-3 text-xs text-soft-ink">Run an agent and pick this template in its Configure output step — the preview there uses the real output.</p>}
+          {source === "sample" ? <div className="mt-3 flex items-center gap-2 text-sm text-ink">Generate <input type="number" min="1" max="60" aria-label="How many sample items to generate" className={`${fieldBase} w-20 px-2 py-1 text-sm`} value={sampleCount} onChange={(event) => onSampleCount(Math.max(1, Math.min(60, Number(event.target.value) || 1)))} /> items</div> : <p className="m-0 mt-3 text-xs text-soft-ink">Run an agent and pick this template in its Configure output step — the preview there uses the real output.</p>}
         </section>
         <section className={`${card} p-5`}>
           <p className={kicker}>Result</p>

@@ -63,7 +63,10 @@ export function assembleTemplate(brief: TemplateBrief, sections: DesignedSection
     // A repeating section must be able to split across pages, and only a flow-repeat group can.
     // The designed block wraps its repeat in an outer group, so the repeat is lifted out and any
     // fixed part above it (a table head, a caption) becomes its own small block before it.
-    if (section.repeats && !isFooter) {
+    // A house component already repeats at its top level (one card per question), and its inner
+    // list is the options inside that card — lifting THAT out would throw the card away.
+    const alreadyRepeats = group.repeat?.mode === "flow";
+    if (section.repeats && !isFooter && !alreadyRepeats) {
       const repeatChild = group.children.find((child): child is GroupElement => child.type === "group" && child.repeat?.mode === "flow");
       if (repeatChild) {
         const above = group.children.filter((child) => child !== repeatChild && child.frame.y < repeatChild.frame.y);

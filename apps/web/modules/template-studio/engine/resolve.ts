@@ -16,7 +16,15 @@ export function resolveView(layout: Layout, viewId: ID | null): Page[] {
         const merged: Element = override
           ? ({ ...element, style: { ...element.style, ...(override.style || {}) }, ...(override.source && "source" in element ? { source: override.source } : {}) } as Element)
           : element;
-        return merged.type === "group" ? ({ ...merged, children: apply((merged as GroupElement).children) } as Element) : merged;
+        if (merged.type !== "group") return merged;
+        const group = merged as GroupElement;
+        const kept = apply(group.children);
+        const lost = kept.length !== group.children.length;
+        return ({
+          ...group,
+          children: kept,
+          ...(lost ? { fitContent: true, designedBottom: Math.max(0, ...group.children.map((child) => child.frame.y + child.frame.h)) } : {})
+        } as Element);
       });
   return pages.map((page) => ({ ...page, elements: apply(page.elements) }));
 }
@@ -59,10 +67,27 @@ export function resolveFieldValue(fields: FieldDef[], fieldId: ID, scopes: Scope
   return undefined;
 }
 
+/** 0 → A, 25 → Z, 26 → AA: an option letter that never runs out. */
+function letterFor(index: number): string {
+  let value = Math.max(0, Math.floor(index));
+  let out = "";
+  do {
+    out = String.fromCharCode(65 + (value % 26)) + out;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return out;
+}
+
 export function resolveSource(fields: FieldDef[], source: ContentSource, scopes: Scope[], pageNumber?: number): { value: DataValue | undefined; isField: boolean } {
   if (source.type === "static") {
-    // `{{n}}` in static text is the 1-based index of the innermost repeated item (question numbers).
-    const value = source.value.replace(/\{\{n\}\}/g, String((scopes[0]?.index ?? 0) + 1)).replace(/\{\{page\}\}/g, pageNumber === undefined ? "{{page}}" : String(pageNumber));
+    // `{{n}}` in static text is the 1-based index of the innermost repeated item (question numbers);
+    // `{{A}}` is the same index as a letter, which is how answer options are labelled on an exam.
+    const index = scopes[0]?.index ?? 0;
+    const value = source.value
+      .replace(/\{\{n\}\}/g, String(index + 1))
+      .replace(/\{\{A\}\}/g, letterFor(index))
+      .replace(/\{\{a\}\}/g, letterFor(index).toLowerCase())
+      .replace(/\{\{page\}\}/g, pageNumber === undefined ? "{{page}}" : String(pageNumber));
     return { value, isField: false };
   }
   return { value: resolveFieldValue(fields, source.fieldId, scopes), isField: true };

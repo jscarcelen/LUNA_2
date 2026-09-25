@@ -55,7 +55,12 @@ export interface Attempt {
   durationMs?: number;
   /** Milliseconds spent on each question (id → ms). */
   durations?: Record<string, number>;
-  results: { id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string; correct: boolean | null; given: string; expected: string; ms?: number }[];
+  /**
+   * `confidence` is what the learner said before checking: "high", "medium" or "low". A wrong answer
+   * given with certainty is a misconception to correct; a wrong answer given with a shrug is a gap
+   * to teach. Blank when the activity did not ask.
+   */
+  results: { id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string; correct: boolean | null; given: string; expected: string; ms?: number; confidence?: string }[];
 }
 
 type Row = Record<string, unknown>;
@@ -155,7 +160,7 @@ export function hasAnswerableContent(fields: FieldDef[], data: Row): boolean {
 }
 
 /** Checks the student's answers. Flashcards are self-assessed (given = "known" | "unknown"). */
-export function gradeActivity(activity: Activity, answers: Record<string, unknown>, startedAt?: number, durations: Record<string, number> = {}): Attempt {
+export function gradeActivity(activity: Activity, answers: Record<string, unknown>, startedAt?: number, durations: Record<string, number> = {}, confidence: Record<string, string> = {}): Attempt {
   const results: Attempt["results"] = activity.questions.map((question) => {
     const given = answers[question.id];
     let correct: boolean | null = null;
@@ -184,7 +189,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
       correct = given === undefined || given === "" ? false : norm(given) === norm(question.answer);
       expected = String(question.answer);
     }
-    return { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, ms: durations[question.id] || 0, correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
+    return { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, ms: durations[question.id] || 0, confidence: confidence[question.id] || "", correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
   });
   const graded = results.filter((r) => r.correct !== null);
   return { activityId: activity.id, activityTitle: activity.title, at: new Date().toISOString(), score: graded.filter((r) => r.correct).length, total: graded.length, durationMs: startedAt ? Date.now() - startedAt : undefined, durations, results };

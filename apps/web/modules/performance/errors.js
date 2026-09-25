@@ -35,8 +35,16 @@ export function classifyError(row, context = {}) {
   const given = normalise(row.given);
   const expected = normalise(row.expected);
   const { topicAccuracy = 0, repeats = 0, options = [] } = context;
+  /**
+   * What the learner said before checking. Certainty is the strongest single signal there is: being
+   * sure and wrong is a misconception, not a slip, and no amount of extra practice fixes it. A
+   * shrug on a weak topic is a gap. Only used when the activity asked.
+   */
+  const confidence = String(row.confidence || "").toLowerCase();
 
   if (!given) return repeats > 1 || topicAccuracy < 0.4 ? "gap" : "incomplete";
+  if (confidence === "high" && topicAccuracy < 0.85) return repeats > 1 ? "gap" : "conceptual";
+  if (confidence === "low" && topicAccuracy <= 0.5) return "gap";
 
   const givenNumbers = numbersIn(given);
   const expectedNumbers = numbersIn(expected);

@@ -209,6 +209,14 @@ export interface Pagination {
 }
 
 export interface GroupElement extends ElementBase {
+  /**
+   * Set by `resolveView` when this view hides some of the group's children: the card then fits what
+   * it actually shows, instead of leaving a hole where the answer would have been. `designedBottom`
+   * is how far the content reached before anything was hidden, so the padding the designer left
+   * under the last element survives.
+   */
+  fitContent?: boolean;
+  designedBottom?: number;
   type: "group";
   layout: { mode: GroupLayoutMode; gap: number; columns?: number };
   repeat: RepeatRule | null;

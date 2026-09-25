@@ -20,8 +20,16 @@ function shuffle(list, seed) {
  * attempt to `onSubmit` (stored by the caller for tracking). Works for choice, true/false, text,
  * numbers, matching and flashcards.
  */
+/**
+ * How sure the learner is, asked before they check. It costs one tap and it changes what a wrong
+ * answer means: sure and wrong is a misconception to correct, unsure and wrong is a gap to teach,
+ * and unsure and right is something to revisit before it is forgotten.
+ */
+const CONFIDENCE = [["high", "Sure"], ["medium", "Fairly sure"], ["low", "Guessing"]];
+
 export function ActivityPlayer({ activity, onSubmit, onClose }) {
   const [answers, setAnswers] = useState({});
+  const [confidence, setConfidence] = useState({});
   const [attempt, setAttempt] = useState(null);
   const [flipped, setFlipped] = useState({});
   const [pickedTile, setPickedTile] = useState(null);
@@ -45,7 +53,7 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
   function check() {
-    const graded = gradeActivity(activity, answers, startedAt, closeTiming());
+    const graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence);
     setAttempt(graded);
     if (typeof onSubmit === "function") onSubmit(graded);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -62,6 +70,18 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
           <div className="mt-4 rounded-2xl bg-[var(--accent-soft)] p-4">
             <p className="m-0 text-3xl font-bold text-ink">{attempt.score} / {attempt.total}</p>
             <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}</p>
+            {(() => {
+              // Where certainty and correctness disagree is the most useful thing on this screen.
+              const sureWrong = attempt.results.filter((row) => row.confidence === "high" && row.correct === false).length;
+              const unsureRight = attempt.results.filter((row) => row.confidence === "low" && row.correct === true).length;
+              if (!sureWrong && !unsureRight) return null;
+              return (
+                <p className="m-0 mt-2 text-xs text-ink">
+                  {sureWrong ? `${sureWrong} you were sure about ${sureWrong === 1 ? "was" : "were"} wrong — those are misunderstandings, not slips. ` : ""}
+                  {unsureRight ? `${unsureRight} you guessed ${unsureRight === 1 ? "was" : "were"} right — worth going over once more.` : ""}
+                </p>
+              );
+            })()}
           </div>
         ) : (
           <div className="mt-3 flex items-center gap-3">
@@ -179,6 +199,28 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
                   </div>
                 ) : null}
 
+                {!attempt && answers[q.id] !== undefined && answers[q.id] !== "" ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[11px] font-semibold text-soft-ink">How sure are you?</span>
+                    {CONFIDENCE.map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setConfidence((prev) => ({ ...prev, [q.id]: prev[q.id] === value ? "" : value }))}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${confidence[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/12 text-soft-ink hover:bg-[var(--surface-soft)]"}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {result && result.confidence ? (
+                  <p className="m-0 mt-2 text-[11px] text-soft-ink">
+                    You said you were <strong className="text-ink">{CONFIDENCE.find(([value]) => value === result.confidence)?.[1].toLowerCase() || result.confidence}</strong>
+                    {result.correct === false && result.confidence === "high" ? " — worth a second look: this one is a misunderstanding rather than a slip." : ""}
+                    {result.correct === true && result.confidence === "low" ? " — but you got it right. Come back to it once more and it will stick." : ""}
+                  </p>
+                ) : null}
                 {result && result.correct === false && q.kind !== "match" ? <p className="m-0 mt-2 text-sm text-[var(--color-danger)]">Correct answer: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
                 {result && q.source?.extract ? <p className="m-0 mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">📖 {q.source.documentName ? <strong className="text-ink">{q.source.documentName}</strong> : null}{q.source.locator ? ` · ${q.source.locator}` : ""}: “{q.source.extract}”</p> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}

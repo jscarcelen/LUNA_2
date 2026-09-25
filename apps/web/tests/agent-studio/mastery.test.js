@@ -99,3 +99,17 @@ describe("error taxonomy", () => {
     expect(analysis.byTopic.get("Ratios")[0].id).toBe("conceptual");
   });
 });
+
+describe("what certainty says about a mistake", () => {
+  it("treats sure-and-wrong as a misconception, not a slip", () => {
+    // Same wrong answer, same strong topic — only the learner's certainty differs.
+    const slip = classifyError({ given: "cats breathe through gills", expected: "lungs", confidence: "" }, { topicAccuracy: 0.8 });
+    const misconception = classifyError({ given: "cats breathe through gills", expected: "lungs", confidence: "high" }, { topicAccuracy: 0.8 });
+    expect(slip).toBe("careless");
+    expect(misconception).toBe("conceptual");
+  });
+
+  it("treats a guess on a weak topic as a gap", () => {
+    expect(classifyError({ given: "b", expected: "c", confidence: "low" }, { topicAccuracy: 0.45 })).toBe("gap");
+  });
+});

@@ -44,6 +44,12 @@ interface Ctx {
   overflows: OverflowReport[];
   itemCounts: Record<ID, number>;
   pageIndex: () => number;
+  /**
+   * Which slice of a nested list to draw, by element id. This is how a section that is taller than
+   * a page is split: the same section is laid out twice, showing items 1–4 on one page and 5–9 on
+   * the next, rather than running off the bottom.
+   */
+  windows?: Map<ID, { from: number; to: number }>;
 }
 
 interface Laid { items: LaidOutItem[]; bottom: number; right: number; height: number }
@@ -121,7 +127,9 @@ function repeatRecords(group: GroupElement, scopes: Scope[], ctx: Ctx): Scope[] 
   const list = Array.isArray(value) ? value : [];
   const records = list.length ? list : [null];
   ctx.itemCounts[group.id] = list.length;
-  return records.map((data, index) => ({ data: data as DataValue, index }));
+  const all = records.map((data, index) => ({ data: data as DataValue, index }));
+  const window = ctx.windows?.get(group.id);
+  return window ? all.slice(window.from, window.to) : all;
 }
 
 /** Normalises values for "show only when" comparisons: "Multiple choice" ≈ "multiple_choice". */
@@ -135,6 +143,35 @@ export function isShown(element: Element, scopes: Scope[], ctx: Ctx): boolean {
   const value = resolveFieldValue(ctx.fields, element.condition.fieldId, scopes);
   if (value === undefined) return true; // no data yet (design time) → show
   return normal(value) === normal(element.condition.equals);
+}
+
+/**
+ * The one nested repeating list inside a record — what a section that does not fit can be split at.
+ * Only a single nested list qualifies: with two of them there is no obvious place to cut.
+ */
+function innerList(group: GroupElement, scopes: Scope[], ctx: Ctx): { groupId: ID; count: number } | null {
+  const nested = group.children.filter((child) => child.type === "group" && child.repeat && child.repeat.mode !== "page") as GroupElement[];
+  if (nested.length !== 1) return null;
+  const child = nested[0];
+  const value = resolveFieldValue(ctx.fields, child.repeat!.fieldId, scopes);
+  const count = Array.isArray(value) ? value.length : 0;
+  return count > 1 ? { groupId: child.id, count } : null;
+}
+
+/** How many of the inner items fit on this page, laid out — at least one, so it always advances. */
+function fitWindow(group: GroupElement, groupId: ID, from: number, count: number, x: number, y: number, scopes: Scope[], ctx: Ctx, limitBottom: number): { laid: Laid; to: number } {
+  if (!ctx.windows) ctx.windows = new Map();
+  let best: { laid: Laid; to: number } | null = null;
+  for (let to = from + 1; to <= count; to += 1) {
+    ctx.windows.set(groupId, { from, to });
+    const laid = layoutInstance(group, x, y, scopes, ctx, limitBottom);
+    if (laid.bottom > limitBottom + 0.5 && best) break;
+    best = { laid, to };
+    if (laid.bottom > limitBottom + 0.5) break; // even one item overruns: draw it and move on
+  }
+  ctx.windows.set(groupId, { from, to: best ? best.to : from + 1 });
+  const laid = best ? best.laid : layoutInstance(group, x, y, scopes, ctx, limitBottom);
+  return { laid, to: best ? best.to : from + 1 };
 }
 
 /** Lays out the children of ONE instance at (x, y). Stacks by mode; nested repeats expand and push siblings. */
@@ -151,6 +188,14 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   let shift = 0; // free mode: how far content pushed things down
 
   const conditional = group.children.some((child) => child.type === "group" && child.condition?.fieldId);
+  /**
+   * Whether anything the card was designed to hold is not being drawn — an answer hidden in the
+   * student's view, an option the teacher switched off. When that happens the card fits what it
+   * actually shows instead of keeping a hole where the answer used to be, while the padding the
+   * designer left under the last element is preserved.
+   */
+  const missing = Boolean(group.fitContent) || group.children.some((child) => !isShown(child, scopes, ctx));
+  const designedAll = Math.max(group.designedBottom || 0, ...group.children.map((child) => child.frame.y + child.frame.h), 0);
   let designedBottom = 0;
   for (const child of children) {
     if (!isShown(child, scopes, ctx)) continue;
@@ -201,8 +246,10 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
     right = Math.max(right, laid.right);
   }
   // With "one of" children the designed height is the tallest variant; fit the one actually shown.
-  const pad = conditional ? Math.max(0, group.frame.h - Math.max(...group.children.map((child) => child.frame.y + child.frame.h), 0)) : 0;
-  const height = conditional && mode === "free" ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + shift : 0, bottom - y);
+  // A card missing some of its content fits the same way, so hiding the answer closes the gap.
+  const fits = mode === "free" && (conditional || missing);
+  const pad = fits ? Math.max(0, group.frame.h - designedAll) : 0;
+  const height = fits ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + shift : 0, bottom - y);
   void designedBottom;
   const chrome: LaidOutItem[] = group.style.fill || group.style.stroke ? [{ type: "rect", x, y, w: group.frame.w, h: height, style: group.style, elementId: group.id }] : [];
   return { items: [...chrome, ...items], bottom: y + height, right, height };
@@ -340,6 +387,28 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
         }
         const bleeds = element.frame.w >= layout.canvas.width * 0.9;
+        // One record taller than a whole page: a section with more questions than fit. Split it at
+        // its own list instead of letting it run off the bottom — each page repeats the section's
+        // heading and carries as many of its items as fit.
+        const splittable = laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip" ? innerList(element, recordScopes, ctx) : null;
+        if (splittable) {
+          let drawn = 0;
+          while (drawn < splittable.count) {
+            const fitted = fitWindow(element, splittable.groupId, drawn, splittable.count, element.frame.x, c, recordScopes, ctx, pageLimit);
+            current.items.push(...fitted.laid.items);
+            drawn = fitted.to;
+            if (drawn < splittable.count) {
+              newPage(element);
+              c = cursor;
+              pageLimit = limit;
+            } else {
+              c = fitted.laid.bottom + gap;
+            }
+          }
+          ctx.windows?.delete(splittable.groupId);
+          onPage += 1;
+          continue;
+        }
         if (laid.bottom > (bleeds ? layout.canvas.height : pageLimit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: element.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
         current.items.push(...laid.items);
         c = laid.bottom + gap;

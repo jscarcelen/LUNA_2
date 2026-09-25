@@ -58,6 +58,39 @@ function briefSchema(blockNames) {
   };
 }
 
+/** Words that say nothing about which component a section wants. */
+const NOISE = new Set(["the", "a", "an", "of", "and", "or", "for", "with", "each", "this", "that", "its", "one", "per", "into", "card", "cards", "box", "boxes", "section", "sections", "page", "pages", "student", "students", "teacher", "document", "template"]);
+const words = (value) => String(value || "").toLowerCase().split(/[^a-z0-9]+/).filter((word) => word.length > 2 && !NOISE.has(word));
+
+/**
+ * The component a section is asking for, when the planner did not name one.
+ *
+ * The house components are already designed, consistent and checked by the critic, so a section
+ * drawn from scratch should be the exception. This reads what the section says it contains and
+ * matches it against the catalogue by role and by wording; a weak match is no match, and that
+ * section goes to the designer as before.
+ */
+function matchBlock(section, blocks) {
+  const role = String(section.role || "");
+  const wanted = new Set([...words(section.title), ...words(section.request)]);
+  if (!wanted.size) return null;
+  let best = null;
+  for (const block of blocks) {
+    const repeats = block.fields.some((field) => field.type === "array");
+    // A header is a header and a footer is a footer: role decides before wording does.
+    if (role === "header" && block.family !== "Header") continue;
+    if (role === "footer" && block.family !== "Footer") continue;
+    if (role !== "header" && role !== "footer" && (block.family === "Header" || block.family === "Footer")) continue;
+    if (section.repeats === true && !repeats) continue;
+    const vocabulary = new Set([...words(block.name), ...words(block.family), ...words(block.variant), ...words(block.description)]);
+    let score = 0;
+    for (const word of wanted) if (vocabulary.has(word)) score += 1;
+    if (role === "header" || role === "footer") score += 2; // the role alone is a strong signal
+    if (score > (best?.score || 0)) best = { block, score };
+  }
+  return best && best.score >= 2 ? best.block : null;
+}
+
 /**
  * Whole-template generator: the user describes the document they want (optionally with a reference
  * image and a nod to templates they already have) and Luna designs it end to end — brief, sections,
@@ -110,7 +143,9 @@ ${DESIGN_RULES}`,
     const byName = new Map(builtInBlocks().map((block) => [block.name.toLowerCase(), block]));
     const designed = await Promise.all(sections.map(async (section) => {
       // A section that names a house component needs no design pass at all.
-      const reused = byName.get(String(section.reuseBlock || "").toLowerCase().trim());
+      // Named by the planner, or matched from what the section says it needs: either way, a house
+      // component beats a fresh drawing.
+      const reused = byName.get(String(section.reuseBlock || "").toLowerCase().trim()) || matchBlock(section, builtInBlocks());
       if (reused) return { ...section, blockName: reused.name, blockOptions: Array.isArray(section.blockOptions) ? section.blockOptions : [], dsl: null };
       const context = `This component is the "${section.title}" (${section.role}) of a document: ${brief.improvedPrompt}. Accent colour ${brief.accent || "#5b5bd6"}. Audience: ${brief.audience || "teenagers"}. Visual direction for the whole document (follow it exactly): ${brief.styleNotes || "soft pastel cards with one accent colour"}. ${section.repeats ? "It repeats once per generated item." : "It appears once."}`;
       try {
@@ -127,10 +162,12 @@ ${DESIGN_RULES}`,
     }));
 
     const failed = designed.filter((section) => !section.dsl && !section.blockName);
+    const usedBlocks = [...new Set(designed.filter((section) => section.blockName).map((section) => section.blockName))];
     return NextResponse.json({
+      usedBlocks,
       brief: { name: brief.name, canvas: brief.canvas, accent: brief.accent, audience: brief.audience, styleNotes: brief.styleNotes, views: brief.views, improvedPrompt: brief.improvedPrompt, reuseTemplateName: brief.reuseTemplateName, images: brief.images, notes: brief.notes },
       sections: designed.filter((section) => section.dsl || section.blockName),
-      reply: `${brief.notes || "Here is your template."} ${designed.filter((section) => section.blockName).length} section${designed.filter((section) => section.blockName).length === 1 ? "" : "s"} built from Luna's own components.${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
+      reply: `${brief.notes || "Here is your template."}${usedBlocks.length ? ` Built from Luna's own components: ${usedBlocks.join(", ")}.` : ""}${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
     });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });

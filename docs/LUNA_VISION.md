@@ -347,6 +347,27 @@ iPad both count as first-class screens, not as a desktop layout squeezed.
   difficulty, agent, template, material. An arrangement is a small document, so it can be saved,
   shared and **sold in the marketplace as a ready-made performance dashboard** — the sixth shelf.
 
+### 5.1n Components are the design, and the learner says how sure they are (founder spec, 2026-09-24)
+
+**Templates are assembled from components, not drawn from scratch.** The template agent must build
+every section from the house catalogue; drawing a section itself is the exception, and the reply
+says which components were used. A section whose plan does not name one is matched to the catalogue
+by what it asks for, and a component's own repeating card is what repeats — never the list inside it.
+
+**The components have to look like something you would pay for.** One design language governs all of
+them (`engine/design.ts`): one accent per document with a darker ink for text on white, a real type
+scale, a spacing rhythm, hairline cards with a generous radius, colour used for structure — a badge,
+an edge, a band — and never as decoration. Options are lettered A, B, C. Nothing prints below 7pt.
+Recolouring a component swaps its whole palette, not half of it. A card fits what it actually shows,
+so hiding the answer in the student's view closes the gap instead of leaving a hole, and a section
+with more questions than fit splits across pages instead of running off the bottom.
+
+**The exam question card asks how sure the learner is.** An optional row of High / Medium / Low
+prints on the card, and in the interactive version the learner taps it before checking. It is worth
+asking because sure-and-wrong is a misconception to correct while unsure-and-wrong is a gap to
+teach — the error taxonomy uses it, and the result screen says which questions the learner was sure
+about and got wrong.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -549,6 +570,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1n: templates assembled from components, one design language for the component library, and the confidence check on question cards.
 - 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.
 - 2026-09-24 — Added §5.1k: plan steps open their document, activities by plan and priority, the study-plan folder structure, and the five marketplaces with seller stores.

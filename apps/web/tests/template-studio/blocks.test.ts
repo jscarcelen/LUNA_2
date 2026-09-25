@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createField, createTemplate, walkElements } from "../../modules/template-studio/engine/model";
 import { layoutDocument } from "../../modules/template-studio/engine/layout";
 import { buildSampleData } from "../../modules/template-studio/engine/sample";
+import { palette } from "../../modules/template-studio/engine/design";
 import { ACCENT_PRESETS, blockFromElements, builtInBlocks, instantiateBlock } from "../../modules/template-studio/engine/blocks";
 import type { GroupElement } from "../../modules/template-studio/engine/types";
 
@@ -43,10 +44,14 @@ describe("blocks", () => {
     expect(names).not.toContain("Number");
     expect(names).not.toContain("Answer");
     expect(names).toContain("Points");
+    // Recolouring swaps the whole palette — badge, the darker ink on lettering, tint and hairline —
+    // so nothing of the original accent may survive anywhere in the card.
     expect(colours).toContain(ACCENT_PRESETS[2].main);
-    expect(colours).toContain(ACCENT_PRESETS[2].tint);
-    expect(colours).not.toContain(ACCENT_PRESETS[0].main);
-    expect(colours).not.toContain(ACCENT_PRESETS[0].tint);
+    expect(colours).toContain(palette("orange").soft);
+    expect(colours).toContain(palette("orange").deep);
+    for (const shade of [palette("blue").main, palette("blue").deep, palette("blue").tint, palette("blue").soft, palette("blue").line]) {
+      expect(colours).not.toContain(shade);
+    }
   });
 
   it("numbers repeated items with {{n}} and lays out sample data", () => {

@@ -1,5 +1,54 @@
 # Implementation Log
 
+## 2026-09-24 (components)
+
+### One design language for the components
+
+- `modules/template-studio/engine/design.ts` (new): palettes (main / deep / tint / soft / line), ink,
+  a type scale whose smallest size is 7.2pt, a spacing rhythm, radii, and the pieces every component
+  is built from — `cardStyle`, `accentEdge`, `numberBadge`, `pointsPill`, `optionRow`, `answerBand`,
+  `confidenceRow`, `chip`, `divider`, `writingLine`.
+- Every non-kids block rebuilt on it: exam question, open question, true/false, mixed, compact,
+  section + questions, answer box, flashcards (grid and single), vocabulary table, callout, key
+  points, document structure, both headers and the footer. Options are lettered A, B, C via the new
+  `{{A}}` token in `resolve.ts`. The three starters were re-tokenised to match.
+- `instantiateBlock` now swaps a component's whole palette when recolouring (badge, lettering, tint
+  and hairline together) instead of only its brightest colour.
+
+### The engine behind the look
+
+- `layout.ts`: a card whose content is hidden in this view fits what it shows (`resolveView` marks
+  the group and remembers its designed bottom), so the student's copy has no hole where the answer
+  is; and a repeating section taller than a page now splits at its own list — each page repeats the
+  section heading and carries as many items as fit (`innerList` / `fitWindow`, `Ctx.windows`).
+- `critique.ts`: issues carry a severity — faults (overlap, off-page, unreadable, low contrast) vs
+  suggestions (no card, misaligned, cramped); rotated text is measured as it is painted; a page that
+  is half empty is fine when the template puts one item per page; prose sections are not "missing a
+  card". `faultsOf()` is what a check should assert on.
+- `assemble.ts`: a house component that already repeats is used as it is — the previous code lifted
+  its inner Options list out and threw the question card away.
+
+### The confidence check
+
+- A `confidence` option on the exam, open, mixed and section question cards prints "How sure are
+  you?" with High / Medium / Low boxes.
+- `ActivityPlayer` asks the same question on screen once a question is answered; `gradeActivity`
+  records it per result; the score card names the questions the learner was sure about and got
+  wrong, and the ones they guessed and got right.
+- `errors.js` uses it: sure-and-wrong is conceptual (or a gap when it repeats), a guess on a weak
+  topic is a gap.
+
+### The generator builds from components
+
+- `/api/templates/template-chat` matches a section to the catalogue when the planner did not name a
+  component (by role and wording), returns `usedBlocks`, and names them in its reply.
+- Verified end to end: "a Year 8 biology quiz with a confidence check on each question" →
+  "Built from Luna's own components: Header, Exam question, Answer box, Footer", with the confidence
+  option switched on and a student / answer-key pair of views.
+- Tests: `components.test.ts` (every component passes the critic at every size, offers the
+  confidence check, and recolours completely) and `assemble-blocks.test.ts` — 127 passing.
+
+
 ## 2026-09-24 (later)
 
 ### The interface critic

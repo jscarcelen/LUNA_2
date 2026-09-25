@@ -391,6 +391,7 @@ export function AppShell() {
     if (result?.created?.id) {
       setSelectedSubjectId(result.created.id);
     }
+    return result?.created || null;
   }
 
   async function handleRenameSubject(subjectId, nextName) {

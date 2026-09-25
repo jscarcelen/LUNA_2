@@ -272,7 +272,15 @@ export function WorkspaceBrowser({
   async function upload(fileList) {
     const files = [...fileList];
     if (!files.length || !onUpload) return;
-    if (!currentSubjectId) { setStatus("Create a top-level folder first."); return; }
+    let uploadSubjectId = currentSubjectId;
+    if (!uploadSubjectId) {
+      // No subjects exist yet — ask for one so the upload has a home.
+      const name = window.prompt("Name the folder these files will go into:");
+      if (!name?.trim()) { setStatus("Upload cancelled — create a folder first."); return; }
+      const created = await onCreateSubject?.(name.trim());
+      uploadSubjectId = created?.id || workspace?.subjects?.[0]?.id || "";
+      if (!uploadSubjectId) { setStatus("Could not create folder — try again."); return; }
+    }
     setStatus(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`);
     try {
       const base = current?.kind === "folder" ? current.folderId : "";
@@ -285,7 +293,7 @@ export function WorkspaceBrowser({
         for (const part of parts) {
           const key = `${parentId}/${part}`;
           if (!created.has(key)) {
-            const folder = await onCreateFolder?.(part, parentId, currentSubjectId);
+            const folder = await onCreateFolder?.(part, parentId, uploadSubjectId);
             created.set(key, folder?.id || parentId);
           }
           parentId = created.get(key);
@@ -298,7 +306,7 @@ export function WorkspaceBrowser({
         byFolder.get(entry.folderId).push(entry.file);
       }
       for (const [folderId, group] of byFolder) {
-        await onUpload(group, { folderIds: folderId ? [folderId] : [], subjectId: currentSubjectId });
+        await onUpload(group, { folderIds: folderId ? [folderId] : [], subjectId: uploadSubjectId });
       }
       setStatus(`${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
     } catch (error) {
@@ -450,13 +458,19 @@ export function WorkspaceBrowser({
         ) : null}
 
         <div className="grid gap-1.5 border-t border-ink/8 pt-3">
+          {/* Create top-level folder */}
+          {onCreateSubject ? (
+            <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) onCreateSubject(name.trim()); }}>
+              ＋ New folder
+            </button>
+          ) : null}
+          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
+          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
           <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
             className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
             <span aria-hidden>🛡</span><span>Review centre</span>
             {needsReview.length ? <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span> : null}
           </button>
-          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
-          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
           <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download visible as
             <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
               <option value="">Choose a format…</option>

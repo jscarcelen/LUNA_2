@@ -69,8 +69,10 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
  */
 export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onDeleteAgent, onOpenTemplates, workspaces = [], selectedWorkspaceId, selectedSubjectId }) {
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
-  const selectedSubject = selectedWorkspace?.subjects?.find((subject) => subject.id === selectedSubjectId) || null;
-  const customAgents = (selectedSubject?.documents || []).filter((document) => document.sourceType === "generated" && (document.tags || []).includes("ai-agent"));
+  // Show agents from all subjects in the workspace — not just the selected one.
+  // A user who saves an agent while subject A is selected should still see it when subject B is active.
+  const allSubjectDocs = useMemo(() => (selectedWorkspace?.subjects || []).flatMap((s) => s.documents || []), [selectedWorkspace]);
+  const customAgents = allSubjectDocs.filter((document) => document.sourceType === "generated" && (document.tags || []).includes("ai-agent"));
   const builtInAgents = aiToolsRegistry.filter((tool) => !["agent-builder", "template-builder", "ai-tutor", "chatbot"].includes(tool.id));
   const [filter, setFilter] = useState("all");
   const visibleAgents = useMemo(() => customAgents.filter((document) => {

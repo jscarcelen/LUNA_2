@@ -113,9 +113,12 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
   contextRef.current = toolContext;
   const workspaceId = toolContext?.selectedWorkspaceId || "";
   const subjectId = toolContext?.selectedSubjectId || "";
-  const subject = useMemo(() => (toolContext?.workspaces || []).find((w: any) => w.id === workspaceId)?.subjects?.find((s: any) => s.id === subjectId), [toolContext?.workspaces, workspaceId, subjectId]);
-  const docs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType !== "generated" && String(d.reviewStatus || "approved") === "approved").map((d: any) => ({ id: d.id, name: d.name })), [subject]);
-  const agentDocs = useMemo(() => (subject?.documents || []).filter((d: any) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")).map((d: any) => ({ id: d.id, name: d.name, content: d.content })), [subject]);
+  // Docs and saved agents come from the whole workspace so the user isn't limited
+  // to whichever subject happens to be selected when they open the studio.
+  const workspaceSubjects = useMemo(() => (toolContext?.workspaces || []).find((w: any) => w.id === workspaceId)?.subjects || [], [toolContext?.workspaces, workspaceId]);
+  const allWorkspaceDocs = useMemo(() => workspaceSubjects.flatMap((s: any) => s.documents || []), [workspaceSubjects]);
+  const docs = useMemo(() => allWorkspaceDocs.filter((d: any) => d.sourceType !== "generated" && String(d.reviewStatus || "approved") === "approved").map((d: any) => ({ id: d.id, name: d.name })), [allWorkspaceDocs]);
+  const agentDocs = useMemo(() => allWorkspaceDocs.filter((d: any) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")).map((d: any) => ({ id: d.id, name: d.name, content: d.content })), [allWorkspaceDocs]);
   const spec = state.spec;
   // Saved templates, so the output step can offer them instead of the generated document.
   const [templateRows, setTemplateRows] = useState<{ id: string; name: string }[]>([]);

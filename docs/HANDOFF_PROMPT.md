@@ -1,5 +1,9 @@
 # Prompt to hand this project to another Claude account
 
+> **Superseded by [`../LUNA_HANDOVER.md`](../LUNA_HANDOVER.md)** (2026-09-25), which covers the same
+> ground plus platform access, the current architecture, how work is verified and what to do next.
+> This file is kept for the short paste-in prompt below.
+
 Copy everything between the lines into the first message of a new Claude Code session (desktop app or CLI) on the new account. Then follow the "Before you paste" list.
 
 ## Before you paste

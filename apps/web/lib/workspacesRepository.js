@@ -1306,6 +1306,16 @@ export async function renameFolder(folderId, nextName) {
   if (error) throw error;
 }
 
+export async function moveFolder(folderId, newParentFolderId) {
+  const client = createSupabaseAdminClient();
+  // newParentFolderId = "" means move to subject root (set parent_folder_id to null).
+  const { error } = await client
+    .from("folders")
+    .update({ parent_folder_id: newParentFolderId || null, updated_at: new Date().toISOString() })
+    .eq("id", folderId);
+  if (error) throw error;
+}
+
 export async function removeFolder(folderId) {
   const client = createSupabaseAdminClient();
   // `documents.folder_id` uses ON DELETE SET NULL and child folders use ON DELETE CASCADE.

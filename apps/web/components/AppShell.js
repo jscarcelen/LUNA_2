@@ -181,6 +181,7 @@ export function AppShell() {
           onSetSubjectColor={handleSetSubjectColor}
           onRemoveSubject={handleRemoveSubject}
           onCreateFolder={handleCreateFolder}
+          onMoveFolder={handleMoveFolder}
           onAddTopicTag={handleAddTopicTag}
           onRenameFolder={handleRenameFolder}
           onRemoveFolder={handleRemoveFolder}
@@ -380,6 +381,10 @@ export function AppShell() {
         selectFallback(forced.data.workspaces || []);
       }
     }
+  }
+
+  async function handleMoveFolder(folderId, newParentFolderId) {
+    await runWorkspaceAction("moveFolder", { folderId, newParentFolderId });
   }
 
   async function handleCreateSubject(name) {

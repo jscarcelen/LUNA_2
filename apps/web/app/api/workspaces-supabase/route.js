@@ -7,6 +7,7 @@ import {
   getUploadedDocumentDownload,
   listDocumentBlockTemplates,
   listWorkspaceTree,
+  moveFolder,
   removeDocument,
   deleteDocumentBlockTemplate,
   removeFolder,
@@ -129,6 +130,11 @@ export async function POST(request) {
 
     if (action === "renameFolder") {
       await renameFolder(payload.folderId, payload.nextName);
+      return await ok(ownerUserId);
+    }
+
+    if (action === "moveFolder") {
+      await moveFolder(payload.folderId, payload.newParentFolderId || "");
       return await ok(ownerUserId);
     }
 

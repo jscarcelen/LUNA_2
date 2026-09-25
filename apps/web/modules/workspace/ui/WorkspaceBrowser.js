@@ -60,6 +60,7 @@ export function WorkspaceBrowser({
   onRenameSubject,
   onRemoveSubject,
   onCreateFolder,
+  onMoveFolder,
   onRenameFolder,
   onRemoveFolder,
   onUpdateDocumentMeta,
@@ -93,7 +94,8 @@ export function WorkspaceBrowser({
   const [formatFor, setFormatFor] = useState("");
   const fileRef = useRef(null);
   const folderRef = useRef(null);
-  const dragIdRef = useRef("");
+  // dragRef tracks { type: "file"|"folder", id: string } for the current drag.
+  const dragRef = useRef(null);
   function toggleNode(id) { setOpenNodes((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
 
   const folders = useMemo(() => foldersOf(workspace), [workspace]);
@@ -183,6 +185,26 @@ export function WorkspaceBrowser({
     }
     setSelectedIds([]);
     setStatus(`${moved} item${moved === 1 ? "" : "s"} moved${blocked ? ` · ${blocked} left where they were (they belong to another top-level folder)` : ""}.`);
+  }
+
+  /**
+   * Move a folder (node id) into a target folder (node id).
+   * Subjects cannot be moved into subfolders — they are always top-level.
+   * A folder cannot be dropped into itself or one of its own descendants.
+   */
+  function moveFolder(draggedNodeId, targetNodeId) {
+    const dragged = parseNode(draggedNodeId);
+    const target = parseNode(targetNodeId);
+    if (dragged.kind === "subject") { setStatus("Top-level folders cannot be nested inside another folder."); return; }
+    if (draggedNodeId === targetNodeId) return; // same folder
+    // Prevent dropping into a descendant (would create a cycle).
+    const branch = branchOf(folders, draggedNodeId);
+    if (branch.has(targetNodeId)) { setStatus("A folder cannot be moved inside one of its own subfolders."); return; }
+    // Determine the raw parent folder id the API expects.
+    // If target is the subject root, clear parentFolderId; otherwise use its folderId.
+    const newParentFolderId = target.kind === "folder" ? target.folderId : "";
+    onMoveFolder?.(dragged.folderId, newParentFolderId);
+    setStatus("Folder moved.");
   }
 
   function copyHere(ids) {
@@ -547,9 +569,21 @@ export function WorkspaceBrowser({
                   <div key={folder.id}
                     onDragOver={(e) => { e.preventDefault(); e.currentTarget.dataset.over = "1"; e.currentTarget.style.background = "var(--accent-soft)"; }}
                     onDragLeave={(e) => { delete e.currentTarget.dataset.over; e.currentTarget.style.background = ""; }}
-                    onDrop={(e) => { e.currentTarget.style.background = ""; if (dragIdRef.current) { move([dragIdRef.current], folder.id); dragIdRef.current = ""; } }}>
-                    {/* Folder header */}
-                    <div className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
+                    onDrop={(e) => {
+                      e.stopPropagation();
+                      e.currentTarget.style.background = "";
+                      const drag = dragRef.current;
+                      if (!drag) return;
+                      dragRef.current = null;
+                      if (drag.type === "file") { move([drag.id], folder.id); }
+                      else if (drag.type === "folder") { moveFolder(drag.id, folder.id); }
+                    }}>
+                    {/* Folder header — draggable so folders can be nested */}
+                    <div
+                      draggable
+                      onDragStart={(e) => { e.stopPropagation(); dragRef.current = { type: "folder", id: folder.id }; }}
+                      onDragEnd={() => { dragRef.current = null; }}
+                      className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
                       <button type="button" className="w-4 shrink-0 text-center text-[10px] text-soft-ink" onClick={() => toggleNode(folder.id)}>{isOpen ? "▾" : "▸"}</button>
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
@@ -566,7 +600,8 @@ export function WorkspaceBrowser({
                         {docs.map((document) => (
                           <div key={document.id}
                             draggable
-                            onDragStart={() => { dragIdRef.current = document.id; }}
+                            onDragStart={(e) => { e.stopPropagation(); dragRef.current = { type: "file", id: document.id }; }}
+                            onDragEnd={() => { dragRef.current = null; }}
                             className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}
                             style={{ paddingLeft: paddingLeft + 20 }}>
                             <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
@@ -591,7 +626,9 @@ export function WorkspaceBrowser({
               if (!roots.length && visible.length) {
                 // Documents with no folder structure — flat list
                 return visible.map((document) => (
-                  <div key={document.id} draggable onDragStart={() => { dragIdRef.current = document.id; }}
+                  <div key={document.id} draggable
+                    onDragStart={() => { dragRef.current = { type: "file", id: document.id }; }}
+                    onDragEnd={() => { dragRef.current = null; }}
                     className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]">
                     <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                     <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>

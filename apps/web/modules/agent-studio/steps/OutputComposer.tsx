@@ -83,12 +83,14 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     const key = JSON.stringify(template.fields) + template.updatedAt;
     if (key === lastSynced.current) return;
     lastSynced.current = key;
-    // JSON order follows the blocks: fields in the order the components use them, unused ones last.
+    // JSON order follows the blocks: fields in the order the components use them; fields with no
+    // active block are excluded (deleting a block removes it from the output schema).
     const layout = template.layouts[0];
     const order: string[] = [];
     for (const element of simpleOrder(layout?.pages[0]?.elements || [], layout)) for (const b of bindingsOf(element, template.fields)) if (!order.includes(b.field.id)) order.push(b.field.id);
     const rank = (id: string) => { const index = order.indexOf(id); return index < 0 ? Number.MAX_SAFE_INTEGER : index; };
-    const ordered = [...template.fields].sort((a, b) => rank(a.id) - rank(b.id));
+    const usedIds = new Set(order);
+    const ordered = [...template.fields].filter((f) => usedIds.has(f.id)).sort((a, b) => rank(a.id) - rank(b.id));
     onChange((current) => ({ ...current, outputTemplate: template as unknown as AgentSpec["outputTemplate"], outputSchema: ordered }));
   }, [template, onChange]);
 

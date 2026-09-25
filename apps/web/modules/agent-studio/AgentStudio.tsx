@@ -169,7 +169,9 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
 
   const step = state.step;
   const [title, subtitle] = stepTitles[step];
-  const canNext = step === 1 ? Boolean(spec.name && spec.instructions.core) : step === 4 ? collectionFields(primaryCollection(spec)).some((f) => f.name) : true;
+  // Blocks mode: the composition is the source of truth and syncs asynchronously — always allow
+  // Next so the user is not blocked while the effect hasn't fired yet.
+  const canNext = step === 1 ? Boolean(spec.name && spec.instructions.core) : step === 4 ? (outputMode === "blocks" || collectionFields(primaryCollection(spec)).some((f) => f.name)) : true;
 
   return (
     <section className="tw-scope grid gap-3">

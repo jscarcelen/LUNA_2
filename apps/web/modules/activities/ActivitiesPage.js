@@ -39,6 +39,8 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const [planFilter, setPlanFilter] = useState("");
   const [sort, setSort] = useState("priority");
   const [grouped, setGrouped] = useState(true);
+  const [collapsedGroups, setCollapsedGroups] = useState(new Set());
+  function toggleGroup(id) { setCollapsedGroups((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
 
   /** Which study plan each activity belongs to — an activity can be scheduled by one. */
   const plans = useMemo(() => docs.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [docs]);
@@ -154,14 +156,19 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <section className={`${card} p-5`}>
             <div className="grid gap-4">
-              {groups.map((group) => (
+              {groups.map((group) => {
+                const isCollapsed = collapsedGroups.has(group.id || "none");
+                return (
                 <div key={group.id || "none"}>
                   {grouped ? (
-                    <p className="m-0 mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-soft-ink">
-                      <span className="size-2 rounded-full" style={{ background: group.colour }} />{group.name}<span className="font-normal">· {group.rows.length}</span>
-                    </p>
+                    <button type="button" onClick={() => toggleGroup(group.id || "none")} className="m-0 mb-2 flex w-full items-center gap-2 text-left text-xs font-bold uppercase tracking-[0.1em] text-soft-ink transition hover:text-ink">
+                      <span className="size-2 shrink-0 rounded-full" style={{ background: group.colour }} />
+                      <span className="flex-1">{group.name}</span>
+                      <span className="font-normal">{group.rows.length}</span>
+                      <span className="text-soft-ink">{isCollapsed ? "▸" : "▾"}</span>
+                    </button>
                   ) : null}
-            <div className="grid gap-2">
+            {!isCollapsed && <div className="grid gap-2">
               {group.rows.map((r) => {
                 const q = r.parsed.activity.questions.length;
                 const pct = Math.round(r.best * 100);
@@ -178,9 +185,10 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                   </div>
                 );
               })}
-            </div>
+            </div>}
                 </div>
-              ))}
+                );
+              })}
               {!visible.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{view === "todo" ? "Nothing to do here. Create a quiz, exam or flashcards with an agent — or let a study plan build them for you." : "Nothing yet."}</p> : null}
             </div>
           </section>

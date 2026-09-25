@@ -26,16 +26,27 @@ function fieldDefs(fields = []) {
   return [...once, { id: "lf_items", name: "items", type: "array", children: [{ id: "lf_items_item", name: "item", type: "object", children: perItem }] }];
 }
 
-/** A small reading agent: the plan asks for summaries, and no built-in agent writes them. */
+/**
+ * Summary writer: condenses reading material to ~20 % of its length (max 2 pages).
+ * Produces structured key-point cards so the output renders well in any template,
+ * while still being compact enough to replace reading for a revision pass.
+ */
 const SUMMARY_AGENT = {
   name: "Summary writer",
-  instructions: "You are a teacher writing revision notes. Using ONLY the reference material, write the key points a student must remember, each one self-contained and short. Cover the whole material rather than the first pages. Add a worked example or a memory hook where it helps.",
+  instructions: `You are an expert teacher producing concise revision summaries.
+Rules you MUST follow:
+1. Use ONLY information from the provided reference material — never add external facts.
+2. Aim for 12–20 key points that together cover the whole document (not just the first pages).
+3. Each point must be self-contained: a student reading only that card should understand it.
+4. Assign a short topic label (2–4 words) to each point so they can be grouped.
+5. Keep the total length to roughly 20 % of the source — be ruthless about brevity.
+6. Where a concept needs an example or a memory hook, add it in the "detail" field.`,
   questions: [],
   template: {
     fields: [
-      { name: "point", label: "Key point", type: "string", repeatScope: "per-output", description: "One thing to remember, in a full sentence." },
-      { name: "detail", label: "Detail", type: "string", repeatScope: "per-output", description: "A sentence of explanation, an example or a memory hook." },
-      { name: "topic", label: "Topic", type: "string", repeatScope: "per-output", description: "Short topic tag from the material." }
+      { name: "point", label: "Key point", type: "string", repeatScope: "per-output", description: "One essential thing to remember, in one clear sentence." },
+      { name: "detail", label: "Explanation / example", type: "string", repeatScope: "per-output", description: "One or two sentences of explanation, a worked example, or a memory hook." },
+      { name: "topic", label: "Topic", type: "string", repeatScope: "per-output", description: "Short topic tag (2–4 words) from the material." }
     ]
   },
   model: "gpt-4o-mini",
@@ -149,6 +160,28 @@ export async function executePlan({ plan, documents = [], workspaceId, subjectId
       created += 1;
     } catch (error) {
       failures.push({ title: step.title, message: String(error.message || error) });
+    }
+  }
+
+  // Auto-generate summaries for reading steps that reference a document and have none yet.
+  const readingPending = (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId);
+  for (const step of readingPending) {
+    onProgress?.({ index: created, total: pending.length + readingPending.length, title: `Summarising: ${step.title}` });
+    try {
+      const result = await runStep({
+        step: { ...step, title: `Summary — ${step.title}`, generate: "summary" },
+        sourceDocumentIds: [step.resourceId],
+        workspaceId,
+        subjectId,
+        folderIds,
+        onSaveGeneratedQuizDocument,
+        learnerNote: plan.note || ""
+      });
+      const position = items.findIndex((item) => item.id === step.id);
+      if (position >= 0) items[position] = { ...items[position], summaryDocumentId: result.documentId };
+      created += 1;
+    } catch (error) {
+      failures.push({ title: `Summary for "${step.title}"`, message: String(error.message || error) });
     }
   }
 

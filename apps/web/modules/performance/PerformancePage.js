@@ -98,6 +98,32 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     return true;
   });
 
+  /* Topics: derived from topic:Name tags on documents. Each topic links to its materials,
+     any plans that include those materials, and any activities tagged with the same topic. */
+  const tagTopics = useMemo(() => {
+    const topicMap = new Map();
+    for (const document of documents) {
+      const topicTags = (document.tags || []).filter((t) => String(t).startsWith("topic:")).map((t) => String(t).slice(6));
+      const isActivity = (document.tags || []).includes("activity");
+      const isMaterial = !isActivity && document.sourceType !== "generated";
+      for (const topic of topicTags) {
+        if (!topicMap.has(topic)) topicMap.set(topic, { name: topic, materials: [], activities: [], plans: [] });
+        const entry = topicMap.get(topic);
+        if (isActivity) entry.activities.push(document);
+        else if (isMaterial) entry.materials.push(document);
+      }
+    }
+    // Add plans that include materials tagged with a topic
+    for (const row of plans) {
+      const materialIds = new Set((row.plan.items || []).map((item) => item.resourceId).filter(Boolean));
+      for (const [topic, entry] of topicMap) {
+        if (entry.materials.some((m) => materialIds.has(m.id))) entry.plans.push(row.document);
+      }
+    }
+    return [...topicMap.values()].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [documents, plans]);
+  const [selectedTagTopic, setSelectedTagTopic] = useState("");
+
   /** Where the folder a resource is filed in stands in for a subject, when plans are not the target. */
   const folderSubjectOf = useMemo(() => {
     const roots = new Map(folders.map((folder) => [folder.id, folder]));
@@ -390,6 +416,45 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           ))}
         </div>
       )}
+
+      {/* ── Topics index ───────────────────────────────────────────────── */}
+      {tagTopics.length ? (
+        <section className={`${card} p-5`}>
+          <p className={kicker}>Topics</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Topics come from <code>topic:Name</code> tags on materials, activities and plans. Tag a document in the Workspace tab to add it here.</p>
+          <div className="mt-3 grid gap-3 lg:grid-cols-2">
+            {tagTopics.map((topic) => {
+              const isSelected = selectedTagTopic === topic.name;
+              return (
+                <div key={topic.name}
+                  className={`rounded-2xl border p-3 transition cursor-pointer ${isSelected ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10 hover:border-ink/20"}`}
+                  onClick={() => setSelectedTagTopic(isSelected ? "" : topic.name)}>
+                  <p className="m-0 flex items-center gap-2 text-sm font-semibold text-ink">
+                    <span className="inline-flex size-5 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[10px] font-bold text-[var(--accent-ink)]">⬡</span>
+                    {topic.name}
+                  </p>
+                  <div className="mt-2 grid gap-0.5 text-[11px] text-soft-ink">
+                    {topic.materials.length ? <p className="m-0">📄 {topic.materials.length} material{topic.materials.length === 1 ? "" : "s"}: {topic.materials.slice(0, 3).map((m) => m.name).join(", ")}{topic.materials.length > 3 ? "…" : ""}</p> : null}
+                    {topic.activities.length ? <p className="m-0">✎ {topic.activities.length} activit{topic.activities.length === 1 ? "y" : "ies"}: {topic.activities.slice(0, 2).map((a) => a.name).join(", ")}{topic.activities.length > 2 ? "…" : ""}</p> : null}
+                    {topic.plans.length ? <p className="m-0">◷ In {topic.plans.length} plan{topic.plans.length === 1 ? "" : "s"}: {topic.plans.slice(0, 2).map((p) => p.name).join(", ")}</p> : null}
+                    {!topic.materials.length && !topic.activities.length ? <p className="m-0 italic">No tagged items yet</p> : null}
+                  </div>
+                  {isSelected ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {onOpenPage ? (
+                        <>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspace", { topicFilter: topic.name }); }}>Open in Workspace →</button>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>Open in Activities →</button>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-[11px] text-soft-ink">

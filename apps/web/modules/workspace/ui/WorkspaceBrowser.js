@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
-import { FolderTree } from "../../ui/FolderTree";
-import { DocumentBrowser } from "../../ui/DocumentBrowser";
 import { RowMenu } from "../../ui/RowMenu";
 import { ResourceDetail } from "../../resources/ResourceDetail";
 import { ActivityPlayer } from "../../activities/ActivityPlayer";
@@ -79,10 +77,13 @@ export function WorkspaceBrowser({
   onSelectFolder
 }) {
   const [nodeId, setNodeId] = useState("");
-  const [view, setView] = useState("list");
   const [kind, setKind] = useState("all");
   const [query, setQuery] = useState("");
   const [tag, setTag] = useState("");
+  const [topicFilter, setTopicFilter] = useState("");
+  const [dateSort, setDateSort] = useState("newest");
+  const [planFilter, setPlanFilter] = useState("");
+  const [openNodes, setOpenNodes] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState([]);
   const [status, setStatus] = useState("");
   const [openId, setOpenId] = useState("");
@@ -92,6 +93,8 @@ export function WorkspaceBrowser({
   const [formatFor, setFormatFor] = useState("");
   const fileRef = useRef(null);
   const folderRef = useRef(null);
+  const dragIdRef = useRef("");
+  function toggleNode(id) { setOpenNodes((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
 
   const folders = useMemo(() => foldersOf(workspace), [workspace]);
   const allDocuments = useMemo(() => documentsOf(workspace).filter((document) => !(document.tags || []).some((entry) => SYSTEM_TAGS.includes(entry))), [workspace]);
@@ -103,6 +106,9 @@ export function WorkspaceBrowser({
   const templateById = useMemo(() => Object.fromEntries(templates.map((template) => [template.id, template])), [templates]);
   const rawDocuments = useMemo(() => (workspace?.subjects || []).flatMap((subject) => subject.documents || []), [workspace]);
   const allTags = useMemo(() => [...new Set(allDocuments.flatMap((document) => resourceTags(document)))], [allDocuments]);
+  const allTopics = useMemo(() => [...new Set(allDocuments.flatMap((document) => (document.tags || []).filter((t) => String(t).startsWith("topic:")).map((t) => String(t).slice(6))))], [allDocuments]);
+  const studyPlans = useMemo(() => rawDocuments.filter((d) => (d.tags || []).includes("study-plan")).map((d) => { try { const plan = JSON.parse(d.content || "{}"); return plan?.name ? { id: d.id, name: plan.name, items: plan.items || [] } : null; } catch { return null; } }).filter(Boolean), [rawDocuments]);
+  const docIdsInPlan = useMemo(() => { if (!planFilter) return null; const plan = studyPlans.find((p) => p.id === planFilter); if (!plan) return null; return new Set(plan.items.map((item) => item.resourceId).filter(Boolean)); }, [planFilter, studyPlans]);
 
   useEffect(() => { onSelectFolder?.(nodeId && nodeId !== "__review" ? parseNode(nodeId) : null); }, [nodeId, onSelectFolder]);
 
@@ -131,9 +137,15 @@ export function WorkspaceBrowser({
     if (kind === "favourite" && !isFavourite(document)) return false;
     if (branch && !(document.folderIds || []).some((id) => branch.has(id))) return false;
     if (tag && !resourceTags(document).includes(tag)) return false;
+    if (topicFilter && !(document.tags || []).includes(`topic:${topicFilter}`)) return false;
+    if (docIdsInPlan && !docIdsInPlan.has(document.id)) return false;
     const term = query.trim().toLowerCase();
     if (term && !`${document.name} ${(document.tags || []).join(" ")}`.toLowerCase().includes(term)) return false;
     return true;
+  }).sort((a, b) => {
+    const da = new Date(a.uploadedAt || a.createdAt || 0).getTime();
+    const db = new Date(b.uploadedAt || b.createdAt || 0).getTime();
+    return dateSort === "oldest" ? da - db : db - da;
   });
 
   const current = nodeId && !reviewing ? parseNode(nodeId) : null;
@@ -383,85 +395,203 @@ export function WorkspaceBrowser({
   };
 
   return (
-    <section className="tw-scope grid items-start gap-3 lg:grid-cols-[250px_minmax(0,1fr)]">
-      <aside className={`${card} grid min-w-0 gap-3 p-4 lg:sticky lg:top-4`}>
+    <section className="tw-scope grid items-start gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <aside className={`${card} grid min-w-0 content-start gap-3 p-4 lg:sticky lg:top-4`}>
         <div>
-          <p className={kicker}>Folders</p>
-          <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} document{allDocuments.length === 1 ? "" : "s"} in {workspace.name}</p>
+          <p className={kicker}>{workspace.name}</p>
+          <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} item{allDocuments.length === 1 ? "" : "s"}</p>
         </div>
-        <FolderTree
-          folders={folders}
-          documents={allDocuments}
-          selectedId={nodeId}
-          countLabel="document"
-          onSelect={setNodeId}
-          onCreateFolder={createFolder}
-          onRenameFolder={renameFolder}
-          onRemoveFolder={removeFolder}
-          onDropDocuments={move}
-        />
-        {allTags.length ? (
+
+        <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" aria-label="Search workspace" />
+
+        <div>
+          <p className={`${kicker} mb-1.5`}>Show</p>
+          <div className="flex flex-wrap gap-1">
+            {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`${chip} transition ${kind === entry.id ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry.label}</button>)}
+          </div>
+        </div>
+
+        <div>
+          <p className={`${kicker} mb-1`}>Date</p>
+          <select className={`${field} w-full text-xs`} value={dateSort} onChange={(e) => setDateSort(e.target.value)}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+          </select>
+        </div>
+
+        {studyPlans.length ? (
           <div>
-            <p className={kicker}>Tags</p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {allTags.map((entry) => <button key={entry} type="button" onClick={() => setTag(tag === entry ? "" : entry)} className={`${chip} ${tag === entry ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{entry}</button>)}
+            <p className={`${kicker} mb-1`}>Study plan</p>
+            <select className={`${field} w-full text-xs`} value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+              <option value="">All plans</option>
+              {studyPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+            </select>
+          </div>
+        ) : null}
+
+        {allTopics.length ? (
+          <div>
+            <p className={`${kicker} mb-1.5`}>Topic</p>
+            <div className="flex flex-wrap gap-1">
+              {allTopics.map((topic) => <button key={topic} type="button" onClick={() => setTopicFilter(topicFilter === topic ? "" : topic)} className={`${chip} transition ${topicFilter === topic ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{topic}</button>)}
             </div>
           </div>
         ) : null}
-        {/* The review centre is just another folder: the documents Luna could not read confidently. */}
-        <button
-          type="button"
-          onClick={() => setNodeId(reviewing ? "" : "__review")}
-          className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
-        >
-          <span aria-hidden>🛡</span><span className="font-medium">Review centre</span><span className="ml-auto text-[11px] text-soft-ink">{needsReview.length || ""}</span>
-        </button>
-        <div className="grid gap-1.5">
+
+        {allTags.length ? (
+          <div>
+            <p className={`${kicker} mb-1.5`}>Tags</p>
+            <div className="flex flex-wrap gap-1">
+              {allTags.map((entry) => <button key={entry} type="button" onClick={() => setTag(tag === entry ? "" : entry)} className={`${chip} transition ${tag === entry ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry}</button>)}
+            </div>
+          </div>
+        ) : null}
+
+        <div className="grid gap-1.5 border-t border-ink/8 pt-3">
+          <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
+            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
+            <span aria-hidden>🛡</span><span>Review centre</span>
+            {needsReview.length ? <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span> : null}
+          </button>
           <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
           <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
-          <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download this folder as
-            <select className={field} value="" disabled={!visible.length} onChange={(event) => { if (event.target.value) downloadMany(visible, pathOf(folders, nodeId) || workspace.name, event.target.value); event.target.value = ""; }}>
+          <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download visible as
+            <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
               <option value="">Choose a format…</option>
-              {[["original", "Original files"], ["html", "HTML"], ["pdf", "PDF (generated only)"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {[["original", "Original files"], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </label>
-          <input ref={fileRef} type="file" multiple className="hidden" onChange={(event) => { upload(event.target.files); event.target.value = ""; }} />
-          <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(event) => { upload(event.target.files); event.target.value = ""; }} />
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
+          <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
           {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
         </div>
       </aside>
 
-      <div className={`${card} grid min-w-0 gap-3 p-4`}>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <p className="m-0 truncate text-sm font-bold text-ink">{reviewing ? "Review centre" : nodeId ? pathOf(folders, nodeId) : "All folders"}</p>
-            <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}{reviewing ? " Luna could not read with confidence" : ""}</p>
+      {/* ── Finder tree ─────────────────────────────────────────────────── */}
+      <div className={`${card} min-w-0 p-4`}>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <div>
+            <p className="m-0 text-sm font-bold text-ink">{reviewing ? "Review centre — needs attention" : "All folders"}</p>
+            <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}</p>
           </div>
-          <input className={`${field} min-w-40 flex-1`} aria-label="Search this workspace" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search…" />
-          <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-            {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${kind === entry.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{entry.label}</button>)}
-          </div>
-          <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-            {[["list", "List"], ["grid", "Grid"]].map(([value, label]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
-          </div>
+          {!reviewing && folders.length ? (
+            <button type="button" className={ghostBtn}
+              onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
+              {openNodes.size ? "Collapse all" : "Expand all"}
+            </button>
+          ) : null}
         </div>
-        {status ? <p className="m-0 text-xs text-[var(--accent-ink)]">{status}{isWorking ? " …" : ""}</p> : null}
-        <DocumentBrowser
-          documents={visible}
-          folders={folders.map((folder) => ({ id: folder.id, name: pathOf(folders, folder.id) }))}
-          view={view}
-          selectedIds={selectedIds}
-          onSelectionChange={setSelectedIds}
-          onOpen={(document) => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}
-          onMove={move}
-          onCopy={copyHere}
-          onDelete={removeDocuments}
-          onDownload={(ids) => downloadMany(visible.filter((document) => ids.includes(document.id)), "luna-selection")}
-          marquee
-          renderMeta={meta}
-          renderActions={actions}
-          emptyText={query ? "Nothing matches your search." : "This folder is empty — upload files, or drag documents here."}
-        />
+
+        {status ? <p className="mb-3 text-xs text-[var(--accent-ink)]">{status}{isWorking ? " …" : ""}</p> : null}
+
+        {reviewing ? (
+          <div className="grid gap-1">
+            {needsReview.length ? needsReview.map((document) => (
+              <div key={document.id} className="flex items-center gap-2 rounded-xl border border-[rgba(255,149,0,0.25)] bg-[rgba(255,149,0,0.04)] px-3 py-2">
+                <span className="shrink-0 text-sm" aria-hidden>📄</span>
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
+                  <p className="m-0 truncate text-sm font-medium text-ink">{document.name}</p>
+                  {meta(document)}
+                </div>
+                {actions(document)}
+              </div>
+            )) : <p className="py-4 text-center text-sm text-soft-ink">No documents need attention.</p>}
+          </div>
+        ) : (
+          <div className="grid gap-0.5">
+            {(() => {
+              /* ── Finder tree builder ── */
+              const docsByNode = new Map();
+              for (const document of visible) {
+                const primaryNode = (document.folderIds || [])[0] || "";
+                if (!docsByNode.has(primaryNode)) docsByNode.set(primaryNode, []);
+                docsByNode.get(primaryNode).push(document);
+              }
+              const childrenOf = new Map();
+              for (const folder of folders) {
+                const key = folder.parentFolderId || "";
+                if (!childrenOf.has(key)) childrenOf.set(key, []);
+                childrenOf.get(key).push(folder);
+              }
+
+              function countVisible(folderId) {
+                let n = (docsByNode.get(folderId) || []).length;
+                for (const child of childrenOf.get(folderId) || []) n += countVisible(child.id);
+                return n;
+              }
+
+              function renderFolderRow(folder, depth) {
+                const isOpen = openNodes.has(folder.id);
+                const docs = docsByNode.get(folder.id) || [];
+                const children = childrenOf.get(folder.id) || [];
+                const total = countVisible(folder.id);
+                const paddingLeft = 8 + depth * 20;
+
+                return (
+                  <div key={folder.id}
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.dataset.over = "1"; e.currentTarget.style.background = "var(--accent-soft)"; }}
+                    onDragLeave={(e) => { delete e.currentTarget.dataset.over; e.currentTarget.style.background = ""; }}
+                    onDrop={(e) => { e.currentTarget.style.background = ""; if (dragIdRef.current) { move([dragIdRef.current], folder.id); dragIdRef.current = ""; } }}>
+                    {/* Folder header */}
+                    <div className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
+                      <button type="button" className="w-4 shrink-0 text-center text-[10px] text-soft-ink" onClick={() => toggleNode(folder.id)}>{isOpen ? "▾" : "▸"}</button>
+                      <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : "📁"}</span>
+                      <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
+                      {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
+                      <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                        {(onCreateFolder || onCreateSubject) ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
+                        <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button>
+                        <button type="button" title="Delete" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-[rgba(255,59,48,0.1)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); }}>🗑</button>
+                      </span>
+                    </div>
+
+                    {isOpen && (
+                      <div>
+                        {docs.map((document) => (
+                          <div key={document.id}
+                            draggable
+                            onDragStart={() => { dragIdRef.current = document.id; }}
+                            className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}
+                            style={{ paddingLeft: paddingLeft + 20 }}>
+                            <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
+                            <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
+                              <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
+                              {meta(document)}
+                            </div>
+                            {actions(document)}
+                          </div>
+                        ))}
+                        {children.map((child) => renderFolderRow(child, depth + 1))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              const roots = childrenOf.get("") || [];
+              if (!roots.length && !visible.length) {
+                return <p key="empty" className="py-8 text-center text-sm text-soft-ink">Upload files or create a folder to get started.</p>;
+              }
+              if (!roots.length && visible.length) {
+                // Documents with no folder structure — flat list
+                return visible.map((document) => (
+                  <div key={document.id} draggable onDragStart={() => { dragIdRef.current = document.id; }}
+                    className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]">
+                    <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
+                    <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
+                      <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
+                      {meta(document)}
+                    </div>
+                    {actions(document)}
+                  </div>
+                ));
+              }
+              return roots.map((folder) => renderFolderRow(folder, 0));
+            })()}
+          </div>
+        )}
       </div>
 
       {openRow ? (

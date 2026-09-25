@@ -37,10 +37,13 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const [selected, setSelected] = useState("");
   const [errorFilter, setErrorFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("");
+  const [topicFilter, setTopicFilter] = useState("");
   const [sort, setSort] = useState("priority");
   const [grouped, setGrouped] = useState(true);
   const [collapsedGroups, setCollapsedGroups] = useState(new Set());
   function toggleGroup(id) { setCollapsedGroups((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
+
+  const allTopics = useMemo(() => [...new Set(docs.flatMap((d) => (d.tags || []).filter((t) => String(t).startsWith("topic:")).map((t) => String(t).slice(6))))], [docs]);
 
   /** Which study plan each activity belongs to — an activity can be scheduled by one. */
   const plans = useMemo(() => docs.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [docs]);
@@ -77,6 +80,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const visible = withPlans
     .filter((r) => (view === "todo" ? !r.done : view === "done" ? r.done : true))
     .filter((r) => (planFilter === "" ? true : planFilter === "__none" ? !r.plan : r.plan?.id === planFilter))
+    .filter((r) => (topicFilter === "" ? true : (r.document.tags || []).includes(`topic:${topicFilter}`)))
     .sort(sorters[sort] || sorters.priority);
   /** Grouping puts each plan's work together, with everything unplanned at the end. */
   const groups = grouped
@@ -124,6 +128,12 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
               {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
               <option value="__none">Not in a plan</option>
             </select>
+            {allTopics.length ? (
+              <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
+                <option value="">All topics</option>
+                {allTopics.map((topic) => <option key={topic} value={topic}>⬡ {topic}</option>)}
+              </select>
+            ) : null}
             <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={sort} onChange={(event) => setSort(event.target.value)}>
               <option value="priority">Sort: what is most urgent</option>
               <option value="due">Sort: due date</option>

@@ -143,6 +143,9 @@ See `apps/web/modules/README.md`.
 
 ## Workflow
 
+- **Before responding to any multi-part request: list every bullet/numbered item the user asked for
+  and confirm each is addressed in the current response. Do not mark a session as done until all
+  sub-requests are implemented. If a request has 5 sections, implement all 5 in one session.**
 - Don't commit or push unless asked. `main` deploys to production on Vercel — do feature work on a
   branch (`feat/...`) and let the user merge.
 - Long-running AI work must stream (see the agent-builder `/stream` route) rather than rely on Edge

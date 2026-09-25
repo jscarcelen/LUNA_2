@@ -91,3 +91,29 @@ describe("concepts", () => {
     expect(index.map((entry) => entry.name)).toContain("Mean");
   });
 });
+
+describe("plan folders", () => {
+  it("creates Study plans / <plan> / {Reference material, Generated resources} once", async () => {
+    const { ensurePlanFolders } = await import("../../modules/plans/folders");
+    const folders = [];
+    let next = 0;
+    const onCreateFolder = async (name, parentFolderId) => { const folder = { id: `f${(next += 1)}`, name, parentFolderId }; folders.push(folder); return folder; };
+    const first = await ensurePlanFolders("Maths final", { folders, subjectId: "s1", onCreateFolder });
+    expect(folders.map((folder) => folder.name)).toEqual(["Study plans", "Maths final", "Reference material", "Generated resources"]);
+    // Asked again, it reuses what is there instead of making a second set.
+    const again = await ensurePlanFolders("Maths final", { folders, subjectId: "s1", onCreateFolder });
+    expect(folders).toHaveLength(4);
+    expect(again.generatedId).toBe(first.generatedId);
+  });
+
+  it("links material into the plan's folder without copying the document", async () => {
+    const { linkMaterial } = await import("../../modules/plans/folders");
+    const documents = [{ id: "d1", name: "Notes.pdf", folderIds: ["raw"], tags: [] }];
+    const updates = [];
+    const linked = await linkMaterial(["d1"], "material", { documents, onUpdateDocumentMeta: async (id, payload) => updates.push({ id, payload }) });
+    expect(linked).toBe(1);
+    expect(updates[0].payload.folderIds).toEqual(["raw", "material"]);
+    // Nothing was created — the same document is simply filed in both places.
+    expect(documents).toHaveLength(1);
+  });
+});

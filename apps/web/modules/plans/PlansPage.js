@@ -8,6 +8,7 @@ import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
+import { ensurePlanFolders, linkMaterial } from "./folders";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -35,10 +36,11 @@ function Ring({ ratio, colour, size = 56 }) {
  * calendar puts every plan on the same weeks so a collision is visible before it happens, and the
  * alert panel says what is due now.
  */
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenResource }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
+  const folders = subject?.folders || [];
   const [openId, setOpenId] = useState("");
   const [tab, setTab] = useState("plans");
   const [busy, setBusy] = useState(false);
@@ -88,12 +90,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     if (!pending.length) { setStatus("Every step of this plan already has its material."); return; }
     setBuilding(row.document.id);
     try {
+      // Study plans / <plan> / {Reference material, Generated resources}
+      setStatus("Setting up the plan's folders…");
+      const planFolders = await ensurePlanFolders(row.plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
+      await linkMaterial(row.plan.materialIds || [], planFolders.materialId, { documents, onUpdateDocumentMeta });
+      if (planFolders.planId) await onUpdateDocumentMeta?.(row.document.id, { folderIds: [planFolders.planId], tags: row.document.tags || [] });
       const result = await executePlan({
         plan: row.plan,
         documents,
         workspaceId: selectedWorkspaceId,
         subjectId: selectedSubjectId,
-        folderIds: (row.document.folderIds || []).filter(Boolean),
+        folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
         onSaveGeneratedQuizDocument,
         onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
       });
@@ -445,13 +452,18 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           onDone={(message) => { setGenerating(false); setStatus(message); }}
           onSavePlan={(plan) => save(plan)}
           onBuild={async (plan, savedDocumentId) => {
-            // The plan is worth nothing until its material exists, so it is built immediately.
+            // The plan is worth nothing until its material exists, so it is built immediately —
+            // into its own folders, with the material it studies linked rather than copied.
+            setStatus("Setting up the plan's folders…");
+            const planFolders = await ensurePlanFolders(plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
+            await linkMaterial(plan.materialIds || [], planFolders.materialId, { documents, onUpdateDocumentMeta });
+            if (savedDocumentId && planFolders.planId) await onUpdateDocumentMeta?.(savedDocumentId, { folderIds: [planFolders.planId], tags: [PLAN_TAG] });
             const result = await executePlan({
               plan,
               documents,
               workspaceId: selectedWorkspaceId,
               subjectId: selectedSubjectId,
-              folderIds: [],
+              folderIds: planFolders.generatedId ? [planFolders.generatedId] : [],
               onSaveGeneratedQuizDocument,
               onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
             });

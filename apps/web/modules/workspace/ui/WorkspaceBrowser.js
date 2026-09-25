@@ -74,6 +74,7 @@ export function WorkspaceBrowser({
   onReviewDocument,
   onReprocessDocument,
   onOpenClassicTools,
+  focusDocumentId = "",
   onSelectFolder
 }) {
   const [nodeId, setNodeId] = useState("");
@@ -102,7 +103,23 @@ export function WorkspaceBrowser({
   const rawDocuments = useMemo(() => (workspace?.subjects || []).flatMap((subject) => subject.documents || []), [workspace]);
   const allTags = useMemo(() => [...new Set(allDocuments.flatMap((document) => resourceTags(document)))], [allDocuments]);
 
-  useEffect(() => { onSelectFolder?.(nodeId ? parseNode(nodeId) : null); }, [nodeId, onSelectFolder]);
+  useEffect(() => { onSelectFolder?.(nodeId && nodeId !== "__review" ? parseNode(nodeId) : null); }, [nodeId, onSelectFolder]);
+
+  /**
+   * Arriving with a document in mind (from a study plan step): show the folder it is filed in and
+   * open it straight away, so "Open" on a step lands on the thing itself.
+   */
+  const focusedRef = useRef("");
+  useEffect(() => {
+    if (!focusDocumentId || focusedRef.current === focusDocumentId) return;
+    const document = allDocuments.find((item) => item.id === focusDocumentId);
+    if (!document) return;
+    focusedRef.current = focusDocumentId;
+    setNodeId((document.folderIds || [])[0] || "");
+    setSelectedIds([focusDocumentId]);
+    if (rowsByDocumentId.has(focusDocumentId)) setOpenId(focusDocumentId);
+    else setPreview(document);
+  }, [focusDocumentId, allDocuments, rowsByDocumentId]);
 
   const needsReview = useMemo(() => allDocuments.filter((document) => document.requiresReview || String(document.reviewStatus || "approved") !== "approved"), [allDocuments]);
   const reviewing = nodeId === "__review";

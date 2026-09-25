@@ -6,7 +6,7 @@ import { TopBar } from "./TopBar";
 import { navByRole, pageTitles, roleProfiles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
-import { AgentMarketplacePage } from "../modules/agent-marketplace";
+import { MarketplacePage } from "../modules/marketplace/MarketplacePage";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
 import { PerformancePage } from "../modules/performance/PerformancePage";
 import { PlansPage } from "../modules/plans/PlansPage";
@@ -33,6 +33,8 @@ export function AppShell() {
   const editAgentDocumentId = page.startsWith("agent-edit:") ? page.replace("agent-edit:", "") : "";
   // Template Studio is reachable as its own section ("templates?open=…") and, for older links, as a tool.
   const openTemplateId = page.includes("?open=") ? page.split("?open=")[1] : "";
+  // "workspaces?doc=<id>" opens the folder browser on one document (from a plan step, say).
+  const openDocumentId = page.startsWith("workspaces?doc=") ? page.split("?doc=")[1] : "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
   const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
   const navItems = navByRole[role] || [];
@@ -145,9 +147,10 @@ export function AppShell() {
         />
       );
     }
-    if (page === "workspaces") {
+    if (page === "workspaces" || page.startsWith("workspaces?")) {
       return (
         <WorkspacePage
+          focusDocumentId={openDocumentId}
           templates={blockTemplates}
           onDownloadDocument={handleDownloadDocument}
           onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
@@ -199,6 +202,8 @@ export function AppShell() {
     if (page === "plans") {
       return (
         <PlansPage
+          onUpdateDocumentMeta={handleUpdateDocumentMeta}
+          onCreateFolder={handleCreateFolder}
           role={role}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
@@ -206,7 +211,7 @@ export function AppShell() {
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
           onRemoveDocument={handleRemoveDocument}
-          onOpenResource={() => setPage("resources")}
+          onOpenResource={(documentId) => setPage(documentId ? `workspaces?doc=${documentId}` : "workspaces")}
         />
       );
     }
@@ -293,13 +298,32 @@ export function AppShell() {
     }
     if (page === "marketplace") {
       return (
-        <AgentMarketplacePage
-          onGoBuilder={() => setPage("ai-tool:agent-builder")}
+        <MarketplacePage
+          role={role}
+          profileName={roleProfiles[role]?.name || ""}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
-          onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
-          onOpenAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
+          templates={blockTemplates}
+          onGoBuilder={() => setPage("ai-tool:agent-builder")}
+          onInstallAgent={async (listing) => {
+            const content = JSON.stringify({ ...(listing.payload || {}), installedFrom: { listingId: listing.id, storeId: listing.storeId } }, null, 2);
+            await handleSaveGeneratedQuizDocument({ folderIds: [], tags: ["ai-agent"], file: { name: `${listing.name}.agent.json`, content, sizeBytes: content.length } });
+          }}
+          onInstallTemplate={async (listing) => {
+            await handleSaveDocumentBlockTemplate({ ...(listing.payload || {}), id: "", name: listing.name });
+            setBlockTemplates(await handleListDocumentBlockTemplates());
+          }}
+          onInstallResource={async (listing) => {
+            // A plan arrives with its schedule; a resource with its activity. Both become documents.
+            const isPlan = listing.kind === "plan";
+            const content = JSON.stringify(listing.payload || {}, null, 2);
+            await handleSaveGeneratedQuizDocument({
+              folderIds: [],
+              tags: isPlan ? ["study-plan"] : ["resource", ...(listing.payload?.activity ? ["activity"] : [])],
+              file: { name: `${listing.name}.${isPlan ? "plan" : "resource"}.json`, content, sizeBytes: content.length }
+            });
+          }}
         />
       );
     }

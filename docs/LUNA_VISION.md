@@ -281,6 +281,19 @@ Consequences for the product:
 - **The templates keep improving.** Colour bands, tinted cards with an accent edge, pill options,
   ribbons and cut lines, zebra tables — the standard a generated document is measured against.
 
+### 5.1k Where the plan's work lives, and five marketplaces (founder spec, 2026-09-24)
+
+- **A plan's step opens its document** in the workspace, on the document itself, ready to be done;
+  the same resources appear in Activities.
+- **Activities are read by study plan and by priority** — grouped by the plan that scheduled them,
+  sorted by what is most urgent.
+- **A generated plan files itself**: `Study plans / <the plan> / Reference material` and
+  `/ Generated resources`. The reference material is a link to the document already in the
+  workspace — never a duplicate.
+- **Five marketplaces**: AI agents, templates, template components, single study resources, and
+  whole study plans. Sellers open a **store** — their brand — and carry its record: downloads,
+  ratings and what buyers wrote.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -483,6 +496,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-09-24 — Added §5.1k: plan steps open their document, activities by plan and priority, the study-plan folder structure, and the five marketplaces with seller stores.
 - 2026-09-24 — Added §5.1j: plans execute their own steps, the workspace absorbed the advanced screen and gained multi-format downloads, starter templates redesigned.
 - 2026-09-24 — Added §5.1i: templates generated from the component catalogue, a design critic that reviews and repairs every generated preview, per-plan and deeper performance.
 - 2026-09-24 — Added §5.1h: folders only, one workspace screen, resources inside it, concepts per resource, plan goals/deadlines/sub-plans, calendar and alerts, automatic plan generation from performance.

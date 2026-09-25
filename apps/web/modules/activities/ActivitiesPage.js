@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { ActivityPlayer } from "./ActivityPlayer";
 import { defaultLearner } from "../performance/learners";
+import { daysUntil, parsePlan } from "../plans/plan";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -35,6 +36,21 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const [view, setView] = useState("todo");
   const [selected, setSelected] = useState("");
   const [errorFilter, setErrorFilter] = useState("all");
+  const [planFilter, setPlanFilter] = useState("");
+  const [sort, setSort] = useState("priority");
+  const [grouped, setGrouped] = useState(true);
+
+  /** Which study plan each activity belongs to — an activity can be scheduled by one. */
+  const plans = useMemo(() => docs.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [docs]);
+  const planByResource = useMemo(() => {
+    const map = new Map();
+    for (const { document, plan } of plans) {
+      for (const item of plan.items || []) {
+        if (item.resourceId) map.set(item.resourceId, { id: document.id, name: plan.name, colour: plan.colour, dueDate: item.dueDate, goalId: item.goalId });
+      }
+    }
+    return map;
+  }, [plans]);
 
   const attemptsFor = (a) => attempts.filter((p) => (p.activityDocumentId && p.activityDocumentId === a.document.id) || p.activityId === a.parsed.activity.id);
   const rows = activities.map((a) => {
@@ -42,8 +58,30 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
     const best = list.reduce((m, p) => Math.max(m, p.attempt.total ? p.attempt.score / p.attempt.total : 0), 0);
     return { ...a, attempts: list, best, due: dueOf(a.document), done: list.length > 0, folder: (subject?.folders || []).find((f) => (a.document.folderIds || []).includes(f.id))?.name || "" };
   });
-  const visible = rows.filter((r) => (view === "todo" ? !r.done : view === "done" ? r.done : true)).sort((x, y) => (x.due || "9999").localeCompare(y.due || "9999"));
-  const active = rows.find((r) => r.document.id === selected) || null;
+  /** Priority: what is late first, then what is due soonest, then everything without a date. */
+  const priority = (row) => {
+    const days = daysUntil(row.due);
+    if (row.done) return 10000;
+    if (days === null) return 5000;
+    return days;
+  };
+  const sorters = {
+    priority: (a, b) => priority(a) - priority(b) || String(a.due || "9999").localeCompare(String(b.due || "9999")),
+    due: (a, b) => String(a.due || "9999").localeCompare(String(b.due || "9999")),
+    plan: (a, b) => String(a.plan?.name || "zzz").localeCompare(String(b.plan?.name || "zzz")) || priority(a) - priority(b),
+    name: (a, b) => String(a.parsed.activity.title).localeCompare(String(b.parsed.activity.title))
+  };
+  const withPlans = rows.map((row) => ({ ...row, plan: planByResource.get(row.document.id) || null }));
+  const visible = withPlans
+    .filter((r) => (view === "todo" ? !r.done : view === "done" ? r.done : true))
+    .filter((r) => (planFilter === "" ? true : planFilter === "__none" ? !r.plan : r.plan?.id === planFilter))
+    .sort(sorters[sort] || sorters.priority);
+  /** Grouping puts each plan's work together, with everything unplanned at the end. */
+  const groups = grouped
+    ? [...new Map(visible.map((row) => [row.plan?.id || "", { id: row.plan?.id || "", name: row.plan?.name || "Not in a plan", colour: row.plan?.colour || "#8e98ab" }])).values()]
+      .map((group) => ({ ...group, rows: visible.filter((row) => (row.plan?.id || "") === group.id) }))
+    : [{ id: "", name: "", colour: "", rows: visible }];
+  const active = withPlans.find((r) => r.document.id === selected) || null;
 
   const allErrors = useMemo(() => {
     const out = [];
@@ -77,6 +115,22 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", "To do"], ["done", "Done"], ["all", "All"], ["errors", `Mistakes (${allErrors.length})`]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
           {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("ai-tools")}>＋ Create with an agent</button> : null}
         </div>
+        {view !== "errors" ? (
+          <div className="flex w-full flex-wrap items-center gap-2">
+            <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}>
+              <option value="">Every study plan</option>
+              {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
+              <option value="__none">Not in a plan</option>
+            </select>
+            <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={sort} onChange={(event) => setSort(event.target.value)}>
+              <option value="priority">Sort: what is most urgent</option>
+              <option value="due">Sort: due date</option>
+              <option value="plan">Sort: study plan</option>
+              <option value="name">Sort: name</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink"><input type="checkbox" checked={grouped} onChange={(event) => setGrouped(event.target.checked)} />Group by plan</label>
+          </div>
+        ) : null}
       </div>
 
       {view === "errors" ? (
@@ -99,8 +153,16 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
       ) : (
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <section className={`${card} p-5`}>
+            <div className="grid gap-4">
+              {groups.map((group) => (
+                <div key={group.id || "none"}>
+                  {grouped ? (
+                    <p className="m-0 mb-2 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-soft-ink">
+                      <span className="size-2 rounded-full" style={{ background: group.colour }} />{group.name}<span className="font-normal">· {group.rows.length}</span>
+                    </p>
+                  ) : null}
             <div className="grid gap-2">
-              {visible.map((r) => {
+              {group.rows.map((r) => {
                 const q = r.parsed.activity.questions.length;
                 const pct = Math.round(r.best * 100);
                 const overdue = r.due && !r.done && r.due < new Date().toISOString().slice(0, 10);
@@ -108,7 +170,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                   <div key={r.document.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border p-3 transition ${selected === r.document.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10"}`}>
                     <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(r.document.id)}>
                       <p className="m-0 flex flex-wrap items-center gap-2 text-sm font-bold text-ink"><span className="truncate">{r.parsed.activity.title}</span>{r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>done</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>to do</span>}{overdue ? <span className={`${chip} bg-[rgba(255,59,48,0.12)] text-[var(--color-danger)]`}>overdue</span> : null}</p>
-                      <p className="m-0 mt-0.5 text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</p>
+                      <p className="m-0 mt-0.5 text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</p>
                     </button>
                     <label className="flex items-center gap-1 text-[11px] text-soft-ink">Due<input type="date" className="rounded-lg border border-ink/15 px-2 py-1 text-xs" value={r.due} onChange={(event) => setDue(r, event.target.value)} /></label>
                     <button type="button" className={primaryBtn} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
@@ -116,7 +178,10 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                   </div>
                 );
               })}
-              {!visible.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{view === "todo" ? "Nothing to do here. Create a quiz, exam or flashcards with an agent and choose “Do it on Luna”." : "Nothing yet."}</p> : null}
+            </div>
+                </div>
+              ))}
+              {!visible.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{view === "todo" ? "Nothing to do here. Create a quiz, exam or flashcards with an agent — or let a study plan build them for you." : "Nothing yet."}</p> : null}
             </div>
           </section>
           <section className={`${card} p-5`}>

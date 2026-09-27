@@ -61,7 +61,7 @@ export function createVocabularyFlashcardsSpec(): AgentSpec {
     style: "Keep each side to a single word or short phrase; no sentences on the card.",
     constraints: ["Return exactly the requested number of cards.", "Both sides must be in the requested languages."]
   };
-  const count = createInput("Number of cards", "number", { description: "How many cards to create", default: 20, min: 1, max: 100 });
+  const count = createInput("Number of cards", "number", { description: "How many cards to create (max 30 per set — keeps each set focused and usable in one study session)", default: 20, min: 1, max: 30 });
   const lang1 = createInput("Language 1", "language", { default: "Spanish" });
   const lang2 = createInput("Language 2", "language", { default: "English" });
   const difficulty = createInput("Difficulty", "choice", { options: ["Beginner", "Intermediate", "Advanced"], default: "Beginner" });

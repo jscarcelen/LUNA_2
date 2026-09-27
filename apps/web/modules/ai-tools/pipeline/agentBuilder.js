@@ -10,6 +10,23 @@ export const AGENT_MODEL_OPTIONS = [
 ];
 
 const DEFAULT_AGENT_MODEL = process.env.LUNA_AGENT_MODEL || AGENT_MODEL_OPTIONS[0].value;
+
+/**
+ * Hard ceiling on the number of cards/flashcards returned by any single generation.
+ * A document with 200 concepts would otherwise produce a 200-card set that overwhelms
+ * young learners. Set to 30 so every set fits in one study session.
+ * Callers can opt into a lower cap via config.maxItems; they cannot exceed this ceiling.
+ */
+export const FLASHCARD_MAX_ITEMS = 30;
+
+/**
+ * Returns true when the generation looks like a flashcard/card set based on the agent name,
+ * instructions, or field names — used to apply FLASHCARD_MAX_ITEMS automatically.
+ */
+function looksLikeFlashcards(config) {
+  const text = `${config.name || ""} ${config.instructions || ""} ${(config.template?.fields || []).map((f) => f.name).join(" ")}`.toLowerCase();
+  return /flashcard|flash card|\bcard\b|\bcards\b|vocabulary|vocab/.test(text);
+}
 const FIELD_TYPES = ["string", "number", "boolean", "array"];
 
 export function isAgentLlmConfigured() {
@@ -424,6 +441,17 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       const value = answered !== undefined && answered !== "" ? answered : fromQuestions !== undefined && fromQuestions !== "" ? fromQuestions : input?.default;
       result.root[slugify(field.name)] = value === undefined || value === null ? "" : Array.isArray(value) ? value.join(", ") : value;
     }
+  }
+
+  // Enforce a hard cap on item count.
+  // config.maxItems allows callers to request a tighter limit (e.g. 10 targeted questions).
+  // The global FLASHCARD_MAX_ITEMS ceiling applies automatically when the generation looks like
+  // flashcards — prevents a 100-card set from being produced for a large document.
+  const autoMax = looksLikeFlashcards(config) ? FLASHCARD_MAX_ITEMS : Infinity;
+  const effectiveMax = Math.min(Number(config.maxItems) > 0 ? Number(config.maxItems) : Infinity, autoMax);
+  if (Number.isFinite(effectiveMax) && result.items.length > effectiveMax) {
+    emit({ step: "generate", status: "capped", originalCount: result.items.length, cappedTo: effectiveMax });
+    result.items = result.items.slice(0, effectiveMax);
   }
 
   // Agent Studio specs carry validation rules — structural checks the creator can rely on.

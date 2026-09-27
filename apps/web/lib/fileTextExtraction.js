@@ -41,6 +41,10 @@ const DEFAULT_EXTRACTION_MIN_CONFIDENCE = Math.max(0, Math.min(1, Number(process
 const MATH_OCR_APP_ID = String(process.env.MATH_OCR_APP_ID || "").trim();
 const MATH_OCR_APP_KEY = String(process.env.MATH_OCR_APP_KEY || "").trim();
 const MATH_OCR_ENDPOINT = String(process.env.MATH_OCR_ENDPOINT || "https://api.mathpix.com/v3/text").trim();
+const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
+const ANTHROPIC_API_KEY = String(process.env.ANTHROPIC_API_KEY || "").trim();
+/** Model for image vision calls. gpt-4o-mini is fast+cheap; gpt-4o for higher quality. */
+const LUNA_VISION_MODEL = String(process.env.LUNA_VISION_MODEL || "gpt-4o").trim();
 
 const MARKDOWN_TARGET_TOKENS = 700;
 const MARKDOWN_MAX_TOKENS = 1000;
@@ -1376,6 +1380,8 @@ function computeConfidence({ method, text = "", ocrConfidence = null }) {
   if (method === "doc-legacy") methodBase = 0.7;
   if (method === "ppt-legacy") methodBase = 0.65;
   if (method === "ocr") methodBase = 0.58;
+  if (method === "pdf-vision") methodBase = 0.88;
+  if (method === "ocr-vision") methodBase = 0.85;
 
   const ocrScore = typeof ocrConfidence === "number"
     ? Math.max(0, Math.min(1, ocrConfidence / 100))
@@ -1610,6 +1616,72 @@ function estimateOcrConfidence(ocrData) {
   return total / words.length;
 }
 
+/**
+ * Extract text from an image using GPT-4o vision.
+ * Uses OPENAI_API_KEY; returns null on failure or missing key.
+ */
+async function callVisionForText(base64Str, mimeType, prompt) {
+  if (!OPENAI_API_KEY || !base64Str) return null;
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
+      body: JSON.stringify({
+        model: LUNA_VISION_MODEL,
+        max_tokens: 4096,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: `data:${mimeType};base64,${base64Str}`, detail: "high" } },
+            { type: "text", text: prompt }
+          ]
+        }]
+      })
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return String(data?.choices?.[0]?.message?.content || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract text/content from a document (PDF) using Claude's native document API.
+ * Uses ANTHROPIC_API_KEY; returns null on failure or missing key.
+ * Claude natively reads PDFs including scanned pages — no rendering needed.
+ */
+async function callAnthropicForDocument(base64Str, mimeType, prompt) {
+  if (!ANTHROPIC_API_KEY || !base64Str) return null;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "pdfs-2024-09-25",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 4096,
+        messages: [{
+          role: "user",
+          content: [
+            { type: "document", source: { type: "base64", media_type: String(mimeType || "application/pdf"), data: base64Str } },
+            { type: "text", text: prompt }
+          ]
+        }]
+      })
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return String(data?.content?.[0]?.text || "").trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 export async function extractTextFromUploadedFile(file, options = {}) {
   const minConfidence = Math.max(0, Math.min(1, Number(options?.minConfidence ?? DEFAULT_EXTRACTION_MIN_CONFIDENCE)));
   const name = String(file?.name || "uploaded-file");
@@ -1684,21 +1756,47 @@ export async function extractTextFromUploadedFile(file, options = {}) {
   if (extension === "pdf" || mimeType === "application/pdf") {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
+    let pdfText = "";
+    const pdfIssues = [];
     try {
       const parsed = await parser.getText();
-      const text = String(parsed?.text || "").trim();
-      return createExtractionResult({
-        text,
-        markdown: pdfTextToStructuredMarkdown(text),
-        sourcePreview: text,
-        sourceMimeType: mimeType || "application/pdf",
-        sourceContentBase64: String(file?.contentBase64 || ""),
-        method: "pdf",
-        minConfidence
-      });
+      pdfText = String(parsed?.text || "").trim();
     } finally {
       await parser.destroy();
     }
+
+    // Scanned / image-only PDFs have no text layer — pdf-parse returns empty or near-empty.
+    // Fall back to Claude's native PDF document API which can read scanned pages directly.
+    if (pdfText.length < 100 && ANTHROPIC_API_KEY) {
+      const visionPrompt = "Extract all text from this document. Include titles, body text, captions, math equations (in LaTeX), tables, and any readable content. Format as clean markdown with proper headings and structure. If the document is handwritten, transcribe it faithfully.";
+      const visionText = await callAnthropicForDocument(String(file?.contentBase64 || ""), "application/pdf", visionPrompt);
+      if (visionText && visionText.length > pdfText.length) {
+        return createExtractionResult({
+          text: visionText,
+          markdown: looksLikeMarkdown(visionText) ? normalizeMarkdownSpacing(visionText) : pdfTextToStructuredMarkdown(visionText),
+          sourcePreview: visionText.slice(0, 4000),
+          sourceMimeType: mimeType || "application/pdf",
+          sourceContentBase64: String(file?.contentBase64 || ""),
+          method: "pdf-vision",
+          issues: ["anthropic-pdf-vision"],
+          minConfidence
+        });
+      }
+      pdfIssues.push("scanned-pdf-vision-failed");
+    } else if (pdfText.length < 100 && !ANTHROPIC_API_KEY) {
+      pdfIssues.push("scanned-pdf-add-ANTHROPIC_API_KEY-to-env");
+    }
+
+    return createExtractionResult({
+      text: pdfText,
+      markdown: pdfTextToStructuredMarkdown(pdfText),
+      sourcePreview: pdfText,
+      sourceMimeType: mimeType || "application/pdf",
+      sourceContentBase64: String(file?.contentBase64 || ""),
+      method: "pdf",
+      issues: pdfIssues,
+      minConfidence
+    });
   }
 
   if (extension === "docx" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
@@ -1866,7 +1964,31 @@ export async function extractTextFromUploadedFile(file, options = {}) {
     }
 
     const slideBlocks = text.split(/\n\n+/).map((part) => cleanExtractedText(part)).filter(Boolean);
-    const markdown = normalizeMarkdownSpacing(slideBlocks.map((block, index) => `## Slide ${index + 1}\n\n${block}`).join("\n\n"));
+    let markdown = normalizeMarkdownSpacing(slideBlocks.map((block, index) => `## Slide ${index + 1}\n\n${block}`).join("\n\n"));
+
+    // Describe embedded slide images (charts, diagrams, figures) with GPT-4o vision.
+    // Skip images already handled by Mathpix math OCR.
+    if (OPENAI_API_KEY) {
+      try {
+        const zip2 = await JSZip.loadAsync(buffer);
+        const slideImages = await extractEmbeddedImagesFromZip(zip2, "ppt/media/", 8);
+        const mathPaths = new Set(pptxRiskMarkers.map((m) => String(m?.formula?.sourceXmlSnippet || "").replace("embedded-image:", "")));
+        const nonMathImages = slideImages.filter((img) => !mathPaths.has(img.path)).slice(0, 5);
+        const imageDescriptions = [];
+        for (const img of nonMathImages) {
+          const visionPrompt = "Describe what is shown in this slide image. If it contains a chart or graph: state the type, axes, key values and trend. If it contains a diagram or figure: describe its structure and labels. If it contains text: transcribe it. Be concise and educational.";
+          const desc = await callVisionForText(img.buffer.toString("base64"), img.mimeType, visionPrompt);
+          if (desc && desc.length > 20) imageDescriptions.push(desc);
+        }
+        if (imageDescriptions.length) {
+          const imageSection = imageDescriptions.map((desc, index) => `### Slide Image ${index + 1}\n\n${desc}`).join("\n\n");
+          markdown = `${markdown}\n\n## Embedded Images\n\n${imageSection}`;
+          pptxIssues.push("slide-images-described-by-vision");
+        }
+      } catch {
+        // Vision image description is best-effort — don't fail the upload.
+      }
+    }
 
     try {
       generatedPdfContentBase64 = await buildGeneratedPdfArtifactBase64(text, name);
@@ -1910,30 +2032,47 @@ export async function extractTextFromUploadedFile(file, options = {}) {
   }
 
   if (IMAGE_EXTENSIONS.has(extension) || mimeType.startsWith("image/")) {
-    const { recognize } = await import("tesseract.js");
+    const imageMimeType = mimeType || `image/${extension || "png"}`;
+    const imageBase64 = String(file?.contentBase64 || buffer.toString("base64"));
+    const selectedIssues = ["ocr-source"];
 
+    // --- Tesseract path ---
+    const { recognize } = await import("tesseract.js");
     const originalResult = await recognize(buffer, DEFAULT_OCR_LANGUAGES);
     const originalText = extractHighConfidenceText(originalResult?.data, DEFAULT_OCR_MIN_CONFIDENCE);
     const originalConfidence = estimateOcrConfidence(originalResult?.data);
-
     const preprocessedBuffer = await preprocessImageForOcr(buffer);
     const preprocessedResult = await recognize(preprocessedBuffer, DEFAULT_OCR_LANGUAGES);
     const preprocessedText = extractHighConfidenceText(preprocessedResult?.data, DEFAULT_OCR_MIN_CONFIDENCE);
     const preprocessedConfidence = estimateOcrConfidence(preprocessedResult?.data);
-
     const usePreprocessed = Number(preprocessedConfidence || 0) >= Number(originalConfidence || 0);
-    const selectedText = usePreprocessed ? preprocessedText : originalText;
-    const selectedConfidence = usePreprocessed ? preprocessedConfidence : originalConfidence;
-    const selectedIssues = ["ocr-source"];
+    let selectedText = usePreprocessed ? preprocessedText : originalText;
+    let selectedConfidence = usePreprocessed ? preprocessedConfidence : originalConfidence;
     if (usePreprocessed) selectedIssues.push("preprocessed-image");
 
+    // --- GPT-4o vision fallback ---
+    // Fires when: Tesseract confidence < 70 (typical for handwriting) or very little text extracted.
+    // Vision models handle cursive, mixed scripts, diagrams, and math far better than Tesseract.
+    const tessConfidenceNum = Number(selectedConfidence || 0);
+    const needsVision = OPENAI_API_KEY && (selectedText.length < 60 || tessConfidenceNum < 70);
+    if (needsVision) {
+      const visionPrompt = "Transcribe all text from this image, including handwritten content, typed text, math equations (write math as LaTeX), tables, and labels. Format as clean markdown — use headings, bullet points, and code blocks where appropriate. Preserve the logical structure of the content.";
+      const visionText = await callVisionForText(imageBase64, imageMimeType, visionPrompt);
+      if (visionText && visionText.length > selectedText.length) {
+        selectedText = visionText;
+        selectedConfidence = 82; // GPT-4o vision is generally high quality; report as 82 out of 100
+        selectedIssues.push("vision-model-used");
+      }
+    }
+
+    const method = selectedIssues.includes("vision-model-used") ? "ocr-vision" : "ocr";
     return createExtractionResult({
       text: selectedText,
-      markdown: plainTextToMarkdown(selectedText),
+      markdown: looksLikeMarkdown(selectedText) ? normalizeMarkdownSpacing(selectedText) : plainTextToMarkdown(selectedText),
       sourcePreview: selectedText,
-      sourceMimeType: mimeType || `image/${extension || "png"}`,
-      sourceContentBase64: String(file?.contentBase64 || ""),
-      method: "ocr",
+      sourceMimeType: imageMimeType,
+      sourceContentBase64: imageBase64,
+      method,
       ocrConfidence: selectedConfidence,
       issues: selectedIssues,
       minConfidence

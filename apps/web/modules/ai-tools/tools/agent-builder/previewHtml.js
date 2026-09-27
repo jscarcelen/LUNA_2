@@ -94,12 +94,17 @@ export function applyOutputCustomization(items = [], fields = [], customization 
 
 /** Plain (no template) rendering: one card per item, block type per field. Returns an HTML fragment. */
 export function renderPlainOutputHtml(items = [], fields = [], fieldTypeByName = {}, brand = {}, rootData = {}, onceFields = []) {
-  const itemFields = fields.filter((field) => field.repeatScope !== "once");
+  const itemFields = fields.filter((field) => field.repeatScope !== "once" && field.name !== "_source");
   const head = onceFields.filter((field) => rootData[field.name] !== undefined && rootData[field.name] !== "").map((field) => renderFieldAsHtml(fieldTypeByName[field.name] || (field === onceFields[0] ? "heading1" : "paragraph"), rootData[field.name])).join("\n");
   const cards = items.map((item, index) => {
     const inner = itemFields.map((field) => renderFieldAsHtml(fieldTypeByName[field.name] || "paragraph", item[field.name])).join("\n");
     const number = brand.numbered ? `<span class="item-number">${index + 1}</span>` : "";
-    return `<section class="item">${number}${inner}</section>`;
+    // Source attribution: show which document and section this item was drawn from.
+    const src = item._sourceResolved;
+    const sourceBadge = src
+      ? `<footer class="item-source">📄 <strong>${escapeHtml(String(src.documentName || ""))}</strong>${src.section ? ` › <em>${escapeHtml(String(src.section))}</em>` : ""}${src.headingPath && src.headingPath !== src.section ? ` <span class="item-source-path">${escapeHtml(String(src.headingPath))}</span>` : ""}</footer>`
+      : "";
+    return `<section class="item">${number}${inner}${sourceBadge}</section>`;
   }).join(brand.showDividers === false ? "\n" : '\n<hr class="divider" />\n');
   return `<div class="plain-output">${head ? `<section class="doc-head">${head}</section>` : ""}${cards || '<p class="empty">No items yet.</p>'}</div>`;
 }
@@ -143,6 +148,10 @@ export function wrapPreviewDocument(fragment, brand = {}, { forPrint = false, he
   .plain-output .doc-head h1 { font-size: 26px; margin: 0 0 4px; }
   .plain-output .item { position: relative; background: #fff; border: 1px solid #e4e6ef; border-left: 4px solid var(--accent); border-radius: 14px; padding: ${dense ? "12px 16px" : "18px 22px"}; box-shadow: 0 2px 10px rgba(28, 32, 51, 0.05); }
   .plain-output .item-number { position: absolute; top: 12px; right: 14px; font-size: 12px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, #fff); padding: 2px 8px; border-radius: 999px; }
+  .plain-output .item-source { margin-top: 10px; padding-top: 8px; border-top: 1px solid #e4e6ef; font-size: 11px; color: #8892aa; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .plain-output .item-source strong { color: #5a607a; font-weight: 600; }
+  .plain-output .item-source em { font-style: normal; color: var(--accent); }
+  .plain-output .item-source-path { display: none; }
   .plain-output h1, .plain-output h2, .plain-output h3 { margin: 0 0 6px; color: #12162a; }
   .plain-output h1 { font-size: 22px; } .plain-output h2 { font-size: 18px; } .plain-output h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
   .plain-output p { margin: 0 0 8px; } .plain-output p:last-child { margin-bottom: 0; }

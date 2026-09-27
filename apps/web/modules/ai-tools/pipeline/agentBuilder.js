@@ -61,12 +61,17 @@ function buildJsonSchemaFromFields(fields = []) {
 
   for (const field of fields) {
     const name = String(field?.name || "").trim();
-    if (!name) continue;
+    if (!name || name === "_source") continue; // _source is system-injected below
     const type = FIELD_TYPES.includes(field?.type) ? field.type : "string";
     properties[name] = type === "array" ? { type: "array", items: { type: "string" } } : { type };
     if (field?.description) properties[name].description = String(field.description);
     required.push(name);
   }
+
+  // System field: the model fills this with the sourceId of the chunk it drew from (e.g. "S3").
+  // Never shown as a user-configured field; resolved to full metadata in runAgentGeneration.
+  properties["_source"] = { type: "string", description: "The sourceId of the reference chunk this item was primarily drawn from (e.g. S3). Use the sourceId values from referenceMaterial." };
+  required.push("_source");
 
   return {
     type: "object",
@@ -87,10 +92,16 @@ function buildJsonSchemaFromFields(fields = []) {
   };
 }
 
-/** Whole chunks — selection already happened within the material budget; truncating here would hide content. */
+/**
+ * Whole chunks — selection already happened within the material budget; truncating here would hide content.
+ * Each chunk gets a short sourceId (S1, S2…) so the model can cite which one each item came from.
+ */
 function buildChunksContext(chunks, maxChunks = 40) {
-  return chunks.slice(0, maxChunks).map((chunk) => ({
+  return chunks.slice(0, maxChunks).map((chunk, index) => ({
+    sourceId: `S${index + 1}`,
     documentName: chunk.documentName,
+    section: chunk.section || "",
+    headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath.join(" > ") : "",
     chunkIndex: (chunk.chunkIndex || 0) + 1,
     content: String(chunk.content || "")
   }));
@@ -122,6 +133,7 @@ function buildUserMessage(config, chunks, styleChunks) {
     outputExample: config.outputExample || "",
     refinementPrompt: config.refinementPrompt || "",
     previousOutput: config.previousOutput || null,
+    sourcingInstruction: "Each referenceMaterial entry has a sourceId (S1, S2…). For every item you generate, set _source to the sourceId of the chunk it was primarily drawn from. If an item spans multiple chunks, pick the most relevant one.",
     referenceMaterial: buildChunksContext(chunks),
     styleExamples: styleChunks.length
       ? { note: "Imitate the format, tone and difficulty of these examples. Do not take content from them.", samples: buildChunksContext(styleChunks, 4) }
@@ -183,7 +195,7 @@ async function prepareMaterial(config, emit = () => {}) {
 export async function estimateAgentRun(config) {
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   const material = await prepareMaterial(config);
-  const schema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
+  const schema = injectSourceFieldIntoSchema(config.outputJsonSchema || buildJsonSchemaFromFields(fields));
   const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
   const inputTokens = approxTokens(buildUserMessage(config, material.rankedChunks, material.styleChunks)) + approxTokens(JSON.stringify(schema)) + 120;
   const outputTokens = estimateOutputTokens(config);
@@ -375,10 +387,43 @@ function generateAgentOutputLocally(chunks, fields, config = {}) {
           : `Sample ${name} ${index + 1}`;
       }
     }
+    item["_source"] = "";
     items.push(item);
   }
 
   return { items, model: "local-heuristic-v1" };
+}
+
+/**
+ * Ensures the _source field is in the items schema regardless of whether the schema came from
+ * buildJsonSchemaFromFields (already injected) or from an Agent Studio spec (outputJsonSchema).
+ * Safe to call on any schema shape; returns the schema unchanged if items isn't an object schema.
+ */
+function injectSourceFieldIntoSchema(schema) {
+  try {
+    const itemsSchema = schema?.properties?.items?.items;
+    if (!itemsSchema || itemsSchema.type !== "object") return schema;
+    if (itemsSchema.properties?._source) return schema; // already there
+    return {
+      ...schema,
+      properties: {
+        ...schema.properties,
+        items: {
+          ...schema.properties.items,
+          items: {
+            ...itemsSchema,
+            properties: {
+              ...itemsSchema.properties,
+              _source: { type: "string", description: "The sourceId of the reference chunk this item was primarily drawn from (e.g. S3)." }
+            },
+            required: [...(itemsSchema.required || []), "_source"]
+          }
+        }
+      }
+    };
+  } catch {
+    return schema;
+  }
 }
 
 /**
@@ -398,7 +443,10 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
 
   const { scopedDocuments, rankedChunks, styleChunks } = await prepareMaterial(config, emit);
 
-  const schema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
+  const baseSchema = config.outputJsonSchema || buildJsonSchemaFromFields(fields);
+  // Always ensure _source is in the item schema so the model can cite which chunk each item came from.
+  // When the schema came from the Agent Studio (outputJsonSchema), inject it there too.
+  const schema = injectSourceFieldIntoSchema(baseSchema);
 
   let result = null;
   let fallbackReason = "";
@@ -442,6 +490,21 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       result.root[slugify(field.name)] = value === undefined || value === null ? "" : Array.isArray(value) ? value.join(", ") : value;
     }
   }
+
+  // Resolve _source labels (S1, S2…) to full source metadata on each item.
+  // buildChunksContext uses the same indexing, so S1 = rankedChunks[0], S2 = rankedChunks[1], etc.
+  const chunkContextForResolution = buildChunksContext(rankedChunks);
+  const sourceIdMap = new Map(chunkContextForResolution.map((entry) => [entry.sourceId, entry]));
+  result.items = result.items.map((item) => {
+    const rawSourceId = String(item._source || "").trim();
+    const resolved = rawSourceId ? sourceIdMap.get(rawSourceId) : null;
+    return {
+      ...item,
+      _sourceResolved: resolved
+        ? { documentName: resolved.documentName, section: resolved.section, headingPath: resolved.headingPath }
+        : null
+    };
+  });
 
   // Enforce a hard cap on item count.
   // config.maxItems allows callers to request a tighter limit (e.g. 10 targeted questions).

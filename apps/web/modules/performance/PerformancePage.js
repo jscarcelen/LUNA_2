@@ -15,6 +15,7 @@ import { panelById } from "./dashboard/registry";
 import { Customise } from "./dashboard/Customise";
 import { card, ghostBtn, kicker, percent } from "./dashboard/parts";
 import { publish, readStores } from "../marketplace/market";
+import { ActivityPlayer } from "../activities/ActivityPlayer";
 
 /** A filter control never grows past this, whatever the longest option is called. */
 const field = "max-w-[10.5rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
@@ -50,6 +51,9 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const [goalDraft, setGoalDraft] = useState({ title: "", date: "", targetScore: 80, resourceIds: [] });
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [practising, setPractising] = useState(null);
+  const [generatingPractice, setGeneratingPractice] = useState(false);
+  const [practiceError, setPracticeError] = useState("");
 
   useEffect(() => { setLearners(readLearners()); }, []);
   useEffect(() => {
@@ -267,10 +271,75 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),
     onPickLearner: (name) => setLearner(name),
     onOpenPage,
-    onPractise: () => onOpenPage?.("activities"),
+    onPractise: (action) => practise(action),
     onSchedule: () => onOpenPage?.("plans"),
     renderGoals
   };
+
+  async function practise(action) {
+    const topic = String(action.topic || "").trim();
+    const count = action.effort?.includes("hour") ? 15 : action.effort?.includes("30") ? 10 : 6;
+    const sourceDocIds = documents
+      .filter((d) => {
+        if (!topic) return d.sourceType !== "generated";
+        return (d.tags || []).some((t) => String(t).toLowerCase().includes(topic.toLowerCase()));
+      })
+      .map((d) => d.id).slice(0, 5);
+    const fallbackIds = sourceDocIds.length ? sourceDocIds : documents.filter((d) => d.sourceType !== "generated").map((d) => d.id).slice(0, 3);
+    setGeneratingPractice(true);
+    setPracticeError("");
+    try {
+      const config = {
+        name: "Targeted practice",
+        instructions: `Generate ${count} practice questions focusing on: ${topic || "the student's weak areas"}. Error context: ${action.why || ""}. Make questions clear and specific. Always provide the correct answer and a brief explanation.`,
+        knowledgeText: topic ? `Focus topic: ${topic}` : "",
+        questionAnswers: [
+          { question: "How many questions?", answer: String(count) },
+          { question: "Difficulty", answer: "Mixed" },
+          { question: "Question types", answer: "Multiple choice" }
+        ],
+        outputExample: "",
+        model: "gpt-4o-mini",
+        creativity: "low",
+        template: {
+          fields: [
+            { name: "question", label: "Question", type: "string", repeatScope: "per-output" },
+            { name: "options", label: "Options", type: "array", repeatScope: "per-output" },
+            { name: "answer", label: "Answer", type: "string", repeatScope: "per-output" },
+            { name: "explanation", label: "Explanation", type: "string", repeatScope: "per-output" }
+          ]
+        },
+        scope: { workspaceId: selectedWorkspaceId, subjectId: selectedSubjectId, documentIds: fallbackIds, styleDocumentIds: [] }
+      };
+      const response = await fetch("/api/ai-tools/agent-builder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not generate practice.");
+      const items = Array.isArray(data.items) ? data.items : [];
+      if (!items.length) throw new Error("No questions were generated — try adding material to this subject first.");
+      const activity = {
+        id: `coach_${Date.now()}`,
+        title: action.title || (topic ? `Practice: ${topic}` : "Targeted practice"),
+        subtitle: action.why || "",
+        questions: items.map((item, index) => {
+          const opts = Array.isArray(item.options) ? item.options : [];
+          return {
+            id: `q_${index}`,
+            text: String(item.question || item.text || `Question ${index + 1}`),
+            type: opts.length ? "multiple_choice" : "short_answer",
+            options: opts.map((opt, oi) => ({ id: `o_${oi}`, text: String(opt) })),
+            answer: String(item.answer || ""),
+            explanation: String(item.explanation || ""),
+            topic, skill: topic
+          };
+        })
+      };
+      setPractising({ activity });
+    } catch (error) {
+      setPracticeError(String(error.message || error));
+    } finally {
+      setGeneratingPractice(false);
+    }
+  }
 
   function publishView() {
     const stores = readStores();
@@ -464,6 +533,34 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <button type="button" className={ghostBtn} onClick={() => { const blob = new Blob([JSON.stringify(exportView(view), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${view.name}.luna-view.json`; anchor.click(); URL.revokeObjectURL(url); }}>⤓ Save this view as a file</button>
         <span className="text-[11px] text-soft-ink">Mastery counts as {statusOf(70).label} at 70%. A view holds the arrangement only — never anybody's results.</span>
       </div>
+      {generatingPractice ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
+          <div className={`${card} max-w-sm p-6 text-center`}>
+            <p className="m-0 text-base font-bold text-ink">Building your practice…</p>
+            <p className="m-0 mt-1 text-sm text-soft-ink">Generating questions focused on your weak areas.</p>
+          </div>
+        </div>
+      ) : null}
+      {practiceError ? (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-[var(--color-danger)] px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          {practiceError} <button type="button" className="ml-3 opacity-75 hover:opacity-100" onClick={() => setPracticeError("")}>×</button>
+        </div>
+      ) : null}
+      {practising ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
+          <ActivityPlayer
+            activity={practising.activity}
+            onSubmit={async (attempt) => {
+              if (onSaveGeneratedQuizDocument) {
+                const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: "", activityId: attempt.activityId || "", learner: profileName || "", attempt }, null, 2);
+                await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Practice"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }).catch(() => {});
+              }
+              setPractising(null);
+            }}
+            onClose={() => setPractising(null)}
+          />
+        </div>
+      ) : null}
     </section>
   );
 }

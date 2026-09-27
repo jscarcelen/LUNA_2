@@ -9,6 +9,7 @@ import { PlanCalendar } from "./PlanCalendar";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { ensurePlanFolders, linkMaterial } from "./folders";
+import { ActivityPlayer } from "../activities/ActivityPlayer";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -48,6 +49,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
+  const [playing, setPlaying] = useState(null); // { activity, documentId, itemId, planDocumentId }
 
   const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
   const resources = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
@@ -78,6 +80,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   function updateOpen(updater) {
     if (!open) return;
     save(updater(open.plan), open.document.id);
+  }
+
+  async function saveAttempt(attempt, documentId) {
+    const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: documentId, activityId: attempt.activityId || "", learner: "", attempt }, null, 2);
+    try {
+      await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Activity"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
+    } catch { /* attempt still shows locally */ }
   }
 
   /**
@@ -220,7 +229,23 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             value={item.dueDate || ""}
                             onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
                           />
-                          {onOpenResource && item.resourceId ? <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>Open</button> : null}
+                          {item.resourceId ? (() => {
+                            const resourceDoc = documents.find((d) => d.id === item.resourceId);
+                            const resource = resourceDoc ? parseResource(resourceDoc) : null;
+                            const activity = resource?.activity?.questions?.length ? resource.activity : null;
+                            return (
+                              <>
+                                {activity ? (
+                                  <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                                ) : onOpenResource ? (
+                                  <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>Open</button>
+                                ) : null}
+                                {activity && onOpenResource ? (
+                                  <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>View</button>
+                                ) : null}
+                              </>
+                            );
+                          })() : null}
                           <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
                         </div>
                       );
@@ -349,6 +374,20 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         </div>
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+        {playing ? (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
+            <ActivityPlayer
+              activity={playing.activity}
+              onSubmit={async (attempt) => {
+                await saveAttempt(attempt, playing.documentId);
+                const row = plans.find((r) => r.document.id === playing.planDocumentId);
+                if (row) save({ ...row.plan, items: row.plan.items.map((entry) => entry.id === playing.itemId ? { ...entry, doneAt: new Date().toISOString() } : entry) }, playing.planDocumentId);
+                setPlaying(null);
+              }}
+              onClose={() => setPlaying(null)}
+            />
+          </div>
+        ) : null}
       </section>
     );
   }

@@ -124,6 +124,18 @@ export async function POST(request) {
       name: "template_brief", schema: briefSchema(builtInBlocks().map((block) => block.name)), temperature: 0.2,
       system: `You are the lead document designer of an education platform. A teacher describes the printable they want; you rewrite it as an exact brief and split the document into sections.
 Use the house components wherever they fit — they are already designed, consistent and tested, and a document built from them looks better than one drawn from scratch. For each section, name the catalogue block in reuseBlock and switch on the options it needs; only leave reuseBlock empty when the catalogue genuinely has nothing for that section, and then write a full design request for it.
+
+FORMAT RULES — honour the [Format: ...] tag in the user's prompt:
+- a4-portrait / letter-portrait: questions stack vertically; header has pageScope "first", footer pageScope "every"; repeating content has placement "flow"; HTML export mimics A4 but has no page breaks.
+- slides-16-9 / slides-4-3: each repeating item gets its own slide (placement "new_page"); header has pageScope "every"; no footer unless specifically asked; one idea per slide, large type.
+- card-a6: small cards, 2–4 per A4 page; each card is a self-contained item; no header/footer unless laminating separators are needed.
+Always set canvas from the [Format:] tag. If the user says "Slides" → slides-16-9. If "US Letter" → letter-portrait. If "A4" → a4-portrait. If "Cards" → card-a6.
+
+AUDIENCE RULES — honour the [Audience: ...] tag:
+- Kids: big type (≥11pt body), round cards (radius ≥6mm), playful emoji in badges, plenty of white space for writing, bright pastel colours.
+- Teens: clean structured cards, 9–10pt body, moderate radius, one accent colour, professional but approachable.
+- Adults: minimal, tight spacing, 8–9pt body, flat design, muted palette.
+
 CATALOGUE OF COMPONENTS:
 ${catalogue}
 
@@ -163,11 +175,13 @@ ${DESIGN_RULES}`,
 
     const failed = designed.filter((section) => !section.dsl && !section.blockName);
     const usedBlocks = [...new Set(designed.filter((section) => section.blockName).map((section) => section.blockName))];
+    const customSections = designed.filter((section) => section.dsl && !section.blockName).map((section) => section.title);
     return NextResponse.json({
       usedBlocks,
+      customSections,
       brief: { name: brief.name, canvas: brief.canvas, accent: brief.accent, audience: brief.audience, styleNotes: brief.styleNotes, views: brief.views, improvedPrompt: brief.improvedPrompt, reuseTemplateName: brief.reuseTemplateName, images: brief.images, notes: brief.notes },
       sections: designed.filter((section) => section.dsl || section.blockName),
-      reply: `${brief.notes || "Here is your template."}${usedBlocks.length ? ` Built from Luna's own components: ${usedBlocks.join(", ")}.` : ""}${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
+      reply: `${brief.notes || "Here is your template."}${usedBlocks.length ? ` Built from: ${usedBlocks.join(", ")}.` : ""}${customSections.length ? ` Custom-drawn: ${customSections.join(", ")}.` : ""}${failed.length ? ` (${failed.length} section could not be drawn: ${failed.map((section) => section.title).join(", ")}.)` : ""}`
     });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });

@@ -45,8 +45,8 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
         {busy ? <p className="m-0 mt-3 text-xs text-[var(--accent-ink)]">Preparing your pages…</p> : null}
       </div>
       {onGenerated ? <TemplateChat templateNames={templates.map((row) => row.name)} onBuilt={onGenerated} /> : null}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className={`${card} p-5 lg:col-span-2`}>
+      <div className="grid gap-3 lg:grid-cols-[1fr_2fr]">
+        <div className={`${card} p-5`}>
           <p className={kicker}>Start from an example</p>
           <div className="mt-3 grid gap-2">
             {STARTER_TEMPLATES.map((starter) => (
@@ -57,7 +57,7 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
             ))}
           </div>
         </div>
-        <div className={`${card} p-5 lg:col-span-2`}>
+        <div className={`${card} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className={kicker}>My templates</p>
             <div className="flex items-center gap-2">

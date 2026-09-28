@@ -97,7 +97,7 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
               <div className="min-w-0">
                 <p className="m-0 flex flex-wrap items-center gap-2 text-sm font-bold text-ink">
                   <span className="truncate">{elementName(element)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${repeat.tone === "once" ? "bg-[var(--surface-soft)] text-soft-ink" : "text-white"}`} style={repeat.tone === "once" ? undefined : { background: GROUP_COLOR }}>{repeat.label}</span>
+                  <span title={repeat.tone === "once" ? "This block appears once in the document." : repeat.tone === "page" ? "Each generated item gets its own page or slide." : "This block repeats for every item the agent generates."} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${repeat.tone === "once" ? "bg-[var(--surface-soft)] text-soft-ink" : "text-white"}`} style={repeat.tone === "once" ? undefined : { background: GROUP_COLOR }}>{repeat.label}</span>
                   {pinned ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">pinned to bottom</span> : null}
                 </p>
                 {isSet ? (
@@ -118,13 +118,13 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
                 {fieldIds.length && !isSet ? <p className="m-0 mt-1 flex flex-wrap gap-1">{fieldIds.slice(0, 8).map((id) => { const f = findField(fields, id); return f ? <span key={id} className="rounded-md bg-[var(--accent-soft)] px-1.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {f.name}</span> : null; })}</p> : <p className="m-0 mt-1 text-[11px] text-soft-ink">Fixed content</p>}
                 {!isSet ? nested.map((line) => <p key={line} className="m-0 mt-1 text-[11px] text-soft-ink">↳ {line}</p>) : null}
                 <div className="mt-2 grid gap-1.5 sm:grid-cols-[auto_1fr] sm:items-center" onClick={(event) => event.stopPropagation()}>
-                  <span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Order</span>
+                  <span title="Controls whether this block is pinned where you placed it, or whether the agent picks its position dynamically." className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Order</span>
                   <div className="flex flex-wrap items-center gap-1">
                     {isSet ? (
                       <span className="rounded-full px-2.5 py-0.5 text-[10.5px] font-semibold text-white" style={{ background: GROUP_COLOR }}>Agent decides (set of {setMembers.length})</span>
                     ) : (
                       <>
-                        <span className="rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[10.5px] font-semibold text-[var(--accent-ink)]">Fixed here</span>
+                        <span title="This block stays in the position you placed it — it always appears at this spot in every document." className="rounded-full border border-[var(--accent)]/40 bg-[var(--accent-soft)] px-2.5 py-0.5 text-[10.5px] font-semibold text-[var(--accent-ink)]">Fixed here</span>
                         {isGroup && (element as GroupElement).origin ? <button type="button" className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[10.5px] font-semibold text-soft-ink hover:text-ink" title="Let the agent decide where this design appears (joins the neighbouring set, or starts one)" onClick={() => onAgentOrder(elementId, true)}>Let the agent decide →</button> : null}
                       </>
                     )}
@@ -134,9 +134,14 @@ export function SimpleDesign({ layout, page, fields, selection, onSelect, onReor
                 </div>
                 {isGroup && !isSet ? (
                   <div className="mt-2 flex flex-wrap gap-1" onClick={(event) => event.stopPropagation()}>
-                    {([["none", "Once"], ["flow", "Repeat per item"], ["page", "One per page / slide"], ["grid", "Grid"]] as const).map(([mode, text]) => {
+                    {([
+                      ["none", "Once", "This block appears a single time in the whole document — great for a title, instructions, or a summary."],
+                      ["flow", "Repeat per item", "This block repeats once for every item the agent generates — each question, flashcard, or entry gets its own copy."],
+                      ["page", "One per page / slide", "Each generated item starts on its own page or slide — ideal for presentations or exam papers."],
+                      ["grid", "Grid", "Generated items are arranged side-by-side in a grid layout instead of stacking vertically."]
+                    ] as const).map(([mode, text, tooltip]) => {
                       const current = (element as GroupElement).repeat?.mode || "none";
-                      return <button key={mode} type="button" onClick={() => onSetRepeat(elementId, mode)} className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${current === mode ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/10 text-soft-ink hover:text-ink"}`}>{text}</button>;
+                      return <button key={mode} type="button" title={tooltip} onClick={() => onSetRepeat(elementId, mode)} className={`rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${current === mode ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/10 text-soft-ink hover:text-ink"}`}>{text}</button>;
                     })}
                   </div>
                 ) : null}

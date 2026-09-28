@@ -18,7 +18,7 @@ import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 
 /** A filter control never grows past this, whatever the longest option is called. */
-const field = "max-w-[10.5rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
+const field = "min-w-[9rem] max-w-[15rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
 const tone = (value) => (value >= 0.8 ? "text-[#2f9e5b]" : value >= 0.5 ? "text-[#b25e00]" : "text-[var(--color-danger)]");
 const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "", resource: "", skill: "", difficulty: "", from: "", to: "" };
@@ -410,35 +410,47 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         </p>
 
         <PhoneCollapse label="Filters" activeCount={activeFilters}>
-          <div className="flex flex-wrap items-center gap-1.5">
-            {!isOwn ? (
-              <>
-                <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
-                  <option value="">{role === "teacher" ? "Whole class" : "All children"}</option>
-                  {learners.map((name) => <option key={name} value={name}>{name}</option>)}
-                </select>
-                <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
-                {learner ? <button type="button" className={ghostBtn} onClick={() => { if (window.confirm(`Remove ${learner} from the list? Their results stay.`)) { setLearners(removeLearner(learner)); setLearner(""); } }}>Remove {learner}</button> : null}
-              </>
-            ) : null}
-            <select className={field} value={range} onChange={(event) => setRange(Number(event.target.value))}>
-              {[[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 3 months"], [0, "All time"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-            <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} title="From this date" />
-            <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} title="Up to this date" />
-            <select className={field} value={planId} onChange={(event) => setPlanId(event.target.value)}>
-              <option value="">Every plan</option>
-              {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
-            </select>
-            <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
-            <select className={field} value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })}><option value="">Any resource</option>{resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}</select>
-            <select className={field} value={filters.kind} onChange={(event) => setFilters({ ...filters, kind: event.target.value })}><option value="">Any activity</option>{filterOptions.kinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
-            <select className={field} value={filters.skill} onChange={(event) => setFilters({ ...filters, skill: event.target.value })}><option value="">Any skill</option>{filterOptions.skills.map((skill) => <option key={skill} value={skill}>{skill}</option>)}</select>
-            <select className={field} value={filters.difficulty} onChange={(event) => setFilters({ ...filters, difficulty: event.target.value })}><option value="">Any difficulty</option>{filterOptions.difficulties.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select>
-            <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{filterOptions.agents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}</select>
-            <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{filterOptions.templates.map((template) => <option key={template} value={template}>{template}</option>)}</select>
-            <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{filterOptions.sources.map((source) => <option key={source} value={source}>{source}</option>)}</select>
-            {activeFilters ? <button type="button" className={ghostBtn} onClick={() => { setFilters(EMPTY_FILTERS); setPlanId(""); setLearner(""); }}>Clear filters</button> : null}
+          <div className="flex flex-col gap-2">
+            {/* Row 1: People & Time */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Who / When</span>
+              {!isOwn ? (
+                <>
+                  <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
+                    <option value="">{role === "teacher" ? "Whole class" : "All children"}</option>
+                    {learners.map((name) => <option key={name} value={name}>{name}</option>)}
+                  </select>
+                  <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
+                  {learner ? <button type="button" className={ghostBtn} onClick={() => { if (window.confirm(`Remove ${learner} from the list? Their results stay.`)) { setLearners(removeLearner(learner)); setLearner(""); } }}>Remove {learner}</button> : null}
+                </>
+              ) : null}
+              <select className={field} value={range} onChange={(event) => setRange(Number(event.target.value))}>
+                {[[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 3 months"], [0, "All time"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+              <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} title="From this date" />
+              <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} title="Up to this date" />
+            </div>
+            {/* Row 2: Content */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Content</span>
+              <select className={field} value={planId} onChange={(event) => setPlanId(event.target.value)}>
+                <option value="">Every plan</option>
+                {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
+              </select>
+              <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
+              <select className={field} value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })}><option value="">Any resource</option>{resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}</select>
+              <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{filterOptions.sources.map((source) => <option key={source} value={source}>{source}</option>)}</select>
+            </div>
+            {/* Row 3: Activity */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Activity</span>
+              <select className={field} value={filters.kind} onChange={(event) => setFilters({ ...filters, kind: event.target.value })}><option value="">Any activity</option>{filterOptions.kinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
+              <select className={field} value={filters.skill} onChange={(event) => setFilters({ ...filters, skill: event.target.value })}><option value="">Any skill</option>{filterOptions.skills.map((skill) => <option key={skill} value={skill}>{skill}</option>)}</select>
+              <select className={field} value={filters.difficulty} onChange={(event) => setFilters({ ...filters, difficulty: event.target.value })}><option value="">Any difficulty</option>{filterOptions.difficulties.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select>
+              <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{filterOptions.agents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}</select>
+              <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{filterOptions.templates.map((template) => <option key={template} value={template}>{template}</option>)}</select>
+              {activeFilters ? <button type="button" className={ghostBtn} onClick={() => { setFilters(EMPTY_FILTERS); setPlanId(""); setLearner(""); }}>Clear filters</button> : null}
+            </div>
           </div>
         </PhoneCollapse>
         <p className="m-0 text-[11px] text-soft-ink">{attempts.length} result{attempts.length === 1 ? "" : "s"} · {stats.questions} questions · average {percent(stats.score)} <span className={tone(stats.score)}>●</span></p>
@@ -465,9 +477,9 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           </p>
         </section>
       ) : (
-        <div className="grid items-start gap-3 lg:grid-cols-2">
+        <div className="grid items-stretch gap-3 lg:grid-cols-2">
           {panels.map(({ panel, definition }) => (
-            <section key={panel.id} className={`${card} min-w-0 p-5 ${panel.size === "full" || definition.size === "full" ? "lg:col-span-2" : ""}`}>
+            <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5 ${panel.size === "full" || definition.size === "full" ? "lg:col-span-2" : ""}`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className={kicker}>{definition.title}</p>
                 {definition.modes.length > 1 ? (
@@ -480,7 +492,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                   </span>
                 ) : null}
               </div>
-              <div className="mt-3 min-w-0">{definition.render(context, panel.mode)}</div>
+              <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>
           ))}
         </div>

@@ -15,7 +15,7 @@ function InputCard({ input, onChange, onRemove }: { input: InputDef; onChange: (
         <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[var(--surface-soft)] text-sm font-bold text-ink">{def.icon}</span>
         <div className="grid flex-1 gap-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_170px]">
-            <input className={field} value={input.name} onChange={(event) => onChange({ ...input, name: event.target.value })} placeholder="What should the user choose?" />
+            <input className={field} value={input.name} onChange={(event) => onChange({ ...input, name: event.target.value })} placeholder="e.g. Number of flashcards to generate" />
             <select className={field} value={input.type} onChange={(event) => { const type = event.target.value as InputType; onChange({ ...input, type, options: getInputType(type).needsOptions ? input.options || [] : undefined, default: getInputType(type).defaultValue }); }}>{listInputTypes().map((item) => <option key={item.type} value={item.type}>{item.label}</option>)}</select>
           </div>
           <input className={`${fieldBase} w-full text-xs`} value={input.description || ""} onChange={(event) => onChange({ ...input, description: event.target.value })} placeholder="Help text (optional) — shown to the user and used by the agent" />

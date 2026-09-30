@@ -6,15 +6,16 @@ import type { Template } from "../../template-studio/engine/types";
 import { createTemplate } from "../../template-studio/engine/model";
 import { templateFromFields } from "../../template-studio/engine/autoTemplate";
 import { migrateToV3, normalizeTemplate } from "../../template-studio/engine/migrate";
-import { buildSampleData } from "../../template-studio/engine/sample";
 import { compileForSave } from "../../template-studio/adapters/agentTemplate";
 import { useTemplateStore } from "../../template-studio/state/useTemplateStore";
-import { DesignMode } from "../../template-studio/design/DesignMode";
 import { outputSkeleton } from "../engine/schema";
 import { createInput } from "../engine/model";
 import { simpleOrder } from "../../template-studio/engine/model";
 import { bindingsOf } from "../../template-studio/design/ComponentPreview";
-import { card, fieldBase, ghostBtn, kicker, primaryBtn } from "../ui";
+import { AddPanel } from "../../template-studio/design/AddPanel";
+import { ACCENT_PRESETS, instantiateBlock, type AccentPreset, type BlockDef } from "../../template-studio/engine/blocks";
+import type { GroupElement } from "../../template-studio/engine/types";
+import { card, ghostBtn, kicker, primaryBtn } from "../ui";
 import "../../template-studio/components";
 
 export interface TemplateRow { id: string; name: string; [key: string]: unknown }
@@ -27,28 +28,12 @@ export interface OutputComposerProps {
   onOpenTemplateStudio?: (templateId: string) => void;
 }
 
-/** Field-id → sample value for the block previews (mirrors TemplateStudio). */
-function sampleValuesFor(template: Template): Record<string, unknown> {
-  const data = buildSampleData(template, 3) as Record<string, unknown>;
-  const values: Record<string, unknown> = {};
-  const norm = (text: string) => text.toLowerCase().replace(/[^a-z0-9]+/g, "_");
-  const walk = (fields: Template["fields"], scope: Record<string, unknown> | undefined) => {
-    for (const field of fields) {
-      const key = Object.keys(scope || {}).find((k) => norm(k) === norm(field.name));
-      const value = key && scope ? scope[key] : undefined;
-      if (field.type === "array") { const first = Array.isArray(value) ? value[0] : undefined; const item = field.children?.[0]; if (item?.type === "object") walk(item.children || [], first as Record<string, unknown>); else if (item) values[item.id] = first; values[field.id] = value; continue; }
-      if (field.type === "object") { walk(field.children || [], value as Record<string, unknown>); continue; }
-      values[field.id] = value;
-    }
-  };
-  walk(template.fields, data);
-  return values;
-}
-
 /**
- * Output = an ordered composition of Template Studio blocks. The blocks' fields ARE the agent's
- * output schema, so any template built from the same blocks maps automatically. Structure only —
- * formatting is done later in Template Studio.
+ * Step 4 — Output blocks.
+ *
+ * The teacher clicks which block formats the agent may produce. The selected blocks'
+ * AI fields become the output JSON schema automatically. No canvas, no inspector —
+ * just the 3-level category / family / variant checkbox picker.
  */
 export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, onOpenTemplateStudio }: OutputComposerProps) {
   const store = useTemplateStore();
@@ -57,13 +42,10 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
   const [busy, setBusy] = useState(false);
   const openedRef = useRef(false);
 
-  // Open the spec's composition once (or a fresh structure named after the agent).
+  // Open the spec's template once (or a fresh empty one named after the agent).
   useEffect(() => {
     if (openedRef.current) return;
     openedRef.current = true;
-    // A spec can already describe its fields (an example, or the manual Fields tab) without ever
-    // having been composed; starting from an empty canvas would silently erase that schema, so the
-    // composition is designed from the fields instead.
     const initial = spec.outputTemplate
       ? normalizeTemplate(migrateToV3(spec.outputTemplate))
       : spec.outputSchema.length
@@ -71,11 +53,14 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
         : createTemplate(spec.name || "Agent output");
     initial.editorMode = "simple";
     store.open(initial, spec.outputTemplateId || "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEffect(() => { listTemplates?.().then((list) => setRows(Array.isArray(list) ? list : [])).catch(() => undefined); }, [listTemplates]);
 
-  // Composition → spec (fields become the output schema).
+  useEffect(() => {
+    listTemplates?.().then((list) => setRows(Array.isArray(list) ? list : [])).catch(() => undefined);
+  }, [listTemplates]);
+
+  // Sync template → spec (fields in block order; orphaned fields excluded).
   const template = store.state.template;
   const lastSynced = useRef<string>("");
   useEffect(() => {
@@ -83,19 +68,60 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     const key = JSON.stringify(template.fields) + template.updatedAt;
     if (key === lastSynced.current) return;
     lastSynced.current = key;
-    // JSON order follows the blocks: fields in the order the components use them; fields with no
-    // active block are excluded (deleting a block removes it from the output schema).
     const layout = template.layouts[0];
     const order: string[] = [];
-    for (const element of simpleOrder(layout?.pages[0]?.elements || [], layout)) for (const b of bindingsOf(element, template.fields)) if (!order.includes(b.field.id)) order.push(b.field.id);
-    const rank = (id: string) => { const index = order.indexOf(id); return index < 0 ? Number.MAX_SAFE_INTEGER : index; };
+    for (const element of simpleOrder(layout?.pages[0]?.elements || [], layout))
+      for (const b of bindingsOf(element, template.fields))
+        if (!order.includes(b.field.id)) order.push(b.field.id);
+    const rank = (id: string) => { const i = order.indexOf(id); return i < 0 ? Number.MAX_SAFE_INTEGER : i; };
     const usedIds = new Set(order);
     const ordered = [...template.fields].filter((f) => usedIds.has(f.id)).sort((a, b) => rank(a.id) - rank(b.id));
     onChange((current) => ({ ...current, outputTemplate: template as unknown as AgentSpec["outputTemplate"], outputSchema: ordered }));
   }, [template, onChange]);
 
-  const sampleValues = useMemo(() => (template ? sampleValuesFor(template) : {}), [template]);
-  const blocks = template?.layouts[0]?.pages[0]?.elements.length || 0;
+  /** IDs of blocks currently in the template (by origin.blockId). */
+  const selectedBlockIds = useMemo(() => {
+    const page = template?.layouts[0]?.pages[0];
+    if (!page) return [];
+    const ids: string[] = [];
+    const walk = (elements: typeof page.elements) => elements.forEach((el) => {
+      if (el.type === "group" && (el as GroupElement).origin?.blockId) ids.push((el as GroupElement).origin!.blockId);
+      if (el.type === "group") walk((el as GroupElement).children);
+    });
+    walk(page.elements);
+    return ids;
+  }, [template]);
+
+  const blockCount = template?.layouts[0]?.pages[0]?.elements.length || 0;
+  const fieldCount = template?.fields.length || 0;
+
+  /** Toggle a block on or off in the template. */
+  function toggleBlock(block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }, active: boolean) {
+    if (!template) return;
+    const layout = template.layouts[0];
+    const page = layout?.pages[0];
+    if (!page) return;
+
+    if (active) {
+      const { fields, elements } = instantiateBlock(block, template.fields, options);
+      store.update((current) => ({
+        ...current,
+        fields,
+        layouts: current.layouts.map((l) =>
+          l.id === layout.id ? { ...l, pages: l.pages.map((p) => p.id === page.id ? { ...p, elements: [...p.elements, ...elements] } : p) } : l
+        ),
+      }));
+    } else {
+      // Remove all top-level elements from this block
+      const toRemove = new Set(page.elements.filter((el) => el.type === "group" && (el as GroupElement).origin?.blockId === block.id).map((el) => el.id));
+      store.update((current) => ({
+        ...current,
+        layouts: current.layouts.map((l) =>
+          l.id === layout.id ? { ...l, pages: l.pages.map((p) => p.id === page.id ? { ...p, elements: p.elements.filter((el) => !toRemove.has(el.id)) } : p) } : l
+        ),
+      }));
+    }
+  }
 
   function useSaved(id: string) {
     const row = rows.find((item) => item.id === id);
@@ -104,8 +130,9 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     loaded.editorMode = "simple";
     store.open(loaded, row.id);
     onChange((current) => ({ ...current, outputTemplateId: row.id }));
-    setStatus(`Using “${row.name}” — its structure is now the agent's output.`);
+    setStatus(`Using "${row.name}" — its blocks are now the agent's output.`);
   }
+
   async function saveAsTemplate() {
     if (!template || !saveTemplate) return;
     setBusy(true);
@@ -116,7 +143,7 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
       store.dispatch({ type: "saved", id });
       onChange((current) => ({ ...current, outputTemplateId: id }));
       if (Array.isArray(saved?.templates)) setRows(saved!.templates as TemplateRow[]);
-      setStatus(`Saved as template “${template.name}”. Refine its format in Template Studio whenever you like.`);
+      setStatus(`Saved as "${template.name}". Format it further in Template Studio.`);
     } catch (error) {
       setStatus(String((error as Error).message || error));
     } finally {
@@ -124,40 +151,86 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
     }
   }
 
-  /** Document data: make sure an agent input with this name exists; the field is filled from it at run time. */
-  function ensureInput(name: string): string {
-    const existing = spec.inputs.find((input) => input.name.toLowerCase() === name.toLowerCase());
-    if (existing) return existing.id;
-    const input = createInput(name, "text", { required: false, description: `${name} shown in the document` });
-    onChange((current) => ({ ...current, inputs: [...current.inputs, input] }));
-    return input.id;
-  }
-
   if (!template) return null;
+
   return (
-    <div className="grid gap-3">
-      <div className={`${card} flex flex-wrap items-center gap-2 px-4 py-2.5`}>
-        <p className={`${kicker} mr-2`}>Output structure</p>
-        <input className={`${fieldBase} min-w-48 py-1.5 text-sm font-semibold`} value={template.name} onChange={(event) => store.update((current) => ({ ...current, name: event.target.value }))} aria-label="Structure name" />
-        <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink">Start from a saved template
-          <select className={`${fieldBase} max-w-56 py-1.5 text-sm`} value={store.state.savedId || ""} onChange={(event) => event.target.value && useSaved(event.target.value)}>
-            <option value="">Choose…</option>
-            {rows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-          </select>
-        </label>
+    <div className="tw-scope grid gap-4">
+      {/* Header bar */}
+      <div className={`${card} flex flex-wrap items-center gap-3 px-4 py-2.5`}>
+        <p className={`${kicker} mr-1`}>Output blocks</p>
+        <p className="m-0 text-xs text-soft-ink">
+          Select the block formats this agent can produce. The agent picks which to use and in what order — you only decide which formats are available.
+        </p>
         <span className="mx-auto" />
-        <span className="text-xs text-soft-ink">{blocks} block{blocks === 1 ? "" : "s"} · {template.fields.length} top-level field{template.fields.length === 1 ? "" : "s"}</span>
-        {saveTemplate ? <button type="button" className={ghostBtn} disabled={busy || !blocks} onClick={saveAsTemplate}>{store.state.savedId ? "Update template" : "Save as template"}</button> : null}
-        {store.state.savedId && onOpenTemplateStudio ? <button type="button" className={primaryBtn} onClick={() => onOpenTemplateStudio(store.state.savedId)}>Format in Template Studio ↗</button> : null}
+        {rows.length > 0 && (
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink">
+            Start from a saved template
+            <select
+              className="rounded-lg border border-ink/15 px-2.5 py-1.5 text-xs"
+              value={store.state.savedId || ""}
+              onChange={(e) => e.target.value && useSaved(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {rows.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+            </select>
+          </label>
+        )}
+        <span className="text-xs text-soft-ink">{blockCount} block{blockCount === 1 ? "" : "s"} · {fieldCount} field{fieldCount === 1 ? "" : "s"}</span>
+        {saveTemplate ? (
+          <button type="button" className={ghostBtn} disabled={busy || !blockCount} onClick={saveAsTemplate}>
+            {store.state.savedId ? "Update template" : "Save as template"}
+          </button>
+        ) : null}
+        {store.state.savedId && onOpenTemplateStudio ? (
+          <button type="button" className={primaryBtn} onClick={() => onOpenTemplateStudio(store.state.savedId)}>
+            Format in Template Studio ↗
+          </button>
+        ) : null}
       </div>
+
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
-      <div className="tw-scope">
-        <DesignMode store={store} sampleValues={sampleValues} composer onDataField={ensureInput} />
+
+      {/* Block picker — full-width, no canvas beside it */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <AddPanel
+          onAdd={() => undefined}
+          onAddBlock={(block, options) => toggleBlock(block, options, true)}
+          selectedBlockIds={selectedBlockIds}
+          onToggleBlock={toggleBlock}
+          hint=""
+          blocksOnly
+        />
+
+        {/* Selected blocks summary */}
+        <div className={`${card} p-4`}>
+          <p className={`${kicker} mb-2`}>What the agent will return</p>
+          {blockCount === 0 ? (
+            <p className="m-0 text-sm text-soft-ink">No blocks selected yet — pick at least one from the left to define what the agent generates.</p>
+          ) : (
+            <>
+              <p className="m-0 mb-3 text-xs text-soft-ink">These AI fields will be in every output. The agent fills them; the template controls how they look.</p>
+              <div className="grid gap-1">
+                {template.fields.filter((f) => f.type !== "object").slice(0, 20).map((f) => (
+                  <div key={f.id} className="flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                    <span className="text-[11px] font-semibold text-[var(--accent-ink)]">✦</span>
+                    <span className="text-[12px] font-semibold text-ink">{f.name}</span>
+                    <span className="ml-auto text-[10px] text-soft-ink">{f.type}</span>
+                  </div>
+                ))}
+                {template.fields.length > 20 ? <p className="m-0 text-[11px] text-soft-ink">+{template.fields.length - 20} more…</p> : null}
+              </div>
+            </>
+          )}
+
+          {/* JSON skeleton */}
+          {blockCount > 0 ? (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-[11px] font-semibold text-soft-ink">JSON the agent will return</summary>
+              <pre className="mt-2 overflow-x-auto rounded-xl bg-[var(--surface-soft)] p-3 text-[10px] leading-relaxed text-ink">{outputSkeleton(spec.outputSchema)}</pre>
+            </details>
+          ) : null}
+        </div>
       </div>
-      <details className={`${card} p-4`}>
-        <summary className="cursor-pointer text-xs font-semibold text-soft-ink">JSON the agent will return (derived from the blocks)</summary>
-        <pre className="mt-2 overflow-x-auto rounded-xl bg-[var(--surface-soft)] p-3 text-[11px] leading-relaxed text-ink">{outputSkeleton(spec.outputSchema)}</pre>
-      </details>
     </div>
   );
 }

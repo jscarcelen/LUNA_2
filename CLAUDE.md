@@ -15,6 +15,90 @@ summaries...), build their own agents (prompt + context + output template) and s
 marketplace. Longer term it will track how each student studies best so teachers and parents can
 send targeted homework.
 
+### Document upload & extraction
+Every uploaded file must be fully parsed: running text, headings and document structure, embedded
+pictures, mathematical formulas (MathML/LaTeX), graphs, charts, diagrams, and schemas. The CDM
+(canonical document model) stores all of these; the extraction pipeline (DOCX, PDF via Anthropic
+vision fallback, PPTX via GPT-4o slide description, handwritten notes via OCR) feeds into it.
+
+### Workspace organisation
+Workspaces are organised **Subject → Topic → Subfolder** (arbitrary depth). Within each node,
+material is classified as:
+- **Reference** — teacher-uploaded source material (textbooks, notes, past exams). Static; read
+  inside LUNA or exported.
+- **Generated / static** — summaries, infographics, schemes produced by agents. Read inside LUNA
+  or exported; not "answered".
+- **Generated / interactive** — quizzes, flashcards, worksheets, games. Answered inside LUNA; the
+  attempt and score are sent back to the performance tracker.
+
+### Study plans
+A study plan ties reference material to goals, topics, exam dates and generated activities with
+deadlines. Study plans can be embedded inside larger study plans (a topic plan inside a subject
+plan). Each resource can belong to zero, one, or many study plans.
+
+### Performance tracking — the "why" behind every dashboard
+Each role has concrete questions the dashboards must answer:
+
+**Student**
+- What skills do I need to improve? What topics should I reinforce?
+- Am I improving over time? Am I on track for my exam?
+- What resources work best for me / make me most efficient?
+- What mistakes am I making consistently?
+- Why am I making them? Lack of content knowledge? Lack of attention? Missing a core skill (e.g.
+  algebra) that underlies this topic?
+- Distinguish **topic skills** (Biology osmosis) from **transversal skills** (reading comprehension,
+  arithmetic, time management under pressure). The platform must detect both types of pattern.
+
+**Parent**
+- Is my child progressing (speed and quality)? Is their study time efficient?
+- How can I help? Which topics can I support? Which skills need external reinforcement?
+
+**Teacher**
+- Topic, subject and transversal performance views — per student, per class, across classes.
+- Identify students who need targeted resources for a given topic.
+- Generate student-focused resources directly from the performance view.
+
+Performance trends are tracked **within a topic** (exam mindset) and **transversally** (study
+skills that repeat across topics/subjects).
+
+### AI agent builder — 4-step flow (the north star)
+1. **Prompt** — what the agent does (one sentence; no "what should it generate?" field).
+2. **Context / reference** — which workspaces, documents, or example question sets the agent reads
+   (RAG source; can be empty).
+3. **User inputs** — the questions the *runner* answers at run time (language, number of questions,
+   difficulty…). Defined as typed controls (text, number, choice, toggle, language).
+4. **Output blocks** — which block categories the agent can produce. The teacher *selects* which
+   block formats to allow; the agent picks which of the allowed formats to use and in what order.
+   All blocks in the same category share identical AI fields — only the visual format differs, so
+   formats are fully interchangeable without touching the schema.
+
+### Agent runner — what a student/teacher does
+1. Upload reference material (optional — for agents that need it, e.g. "make an exam from my
+   notes").
+2. Answer the configured user inputs (language, count, difficulty…).
+3. Pick the visual format for each output block category (e.g. "I want multiple-choice cards in
+   the red style").
+4. Generate → answer inside LUNA, or export (HTML/PDF/DOCX/PPTX). Attempt results flow back to
+   the performance tracker.
+
+### Template Studio — the design layer (keep it simple)
+A template is **a selection of block formats**. Nothing more.
+- **Categories**: Document structure (static, no AI fields); Interactive — questions (exam
+  questions, MC, open answer, T/F…); Interactive — worksheets (fill-in-blanks, match, math…);
+  Games (flashcards, word search, puzzles…).
+- Within each category there are **families** (Question card, Flashcard…), each with multiple
+  **visual formats** (designs). All formats in a family share the same AI fields.
+- Building a template = picking which formats from each family are allowed. The agent decides
+  order, repetition and count. The user decides only the visual style.
+- The Template Studio UI is: **landing page** (create new or open existing) → **construction**
+  (prompt-generate OR manual block picker) → **preview** (with/without answers, A4/slides/cards)
+  → **save**.
+- The block editor (simple mode) is just the AddPanel checkbox list on the left and the Canvas
+  preview on the right. No inspector, no placement controls, no order controls — the blocks'
+  repetition and placement are preconfigured and invisible to the user.
+- The **Data tab** lets the user override any AI field with a fixed value (forces it in every
+  output).
+
 **Current reality vs. vision** — be honest about what exists:
 - Exists: workspaces/subjects/folders/tags/documents CRUD on Supabase, DOCX/PDF document-processing
   pipeline, RAG (chunking + pgvector retrieval), OpenAI-backed quiz generator, agent builder + run
@@ -78,24 +162,36 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 - `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 15 so far.
 - `docs/` — `ROADMAP.md`, `IMPLEMENTATION_LOG.md`, `SUPABASE_SETUP.md`, `VERCEL_DO_NOT_DO.md`.
 
-### Agents and templates (product rule)
-Every agent — built-in, user-made or from the marketplace — renders through
-`modules/ai-tools/tools/agent-builder/RunAgentPage.js`: intro + How it works → Configure questions
-→ Configure output → Export. Built-in agents are plain config objects (see
-`tools/quiz-generator/quizAgent.js`); do not build bespoke wizards. Templates are the
-**Template Studio v3** (`modules/template-studio/`, TypeScript, see its README and
+### Agents and templates (product rules — enforce these always)
+
+**Agent Studio** (`modules/agent-studio/`, TypeScript): 4-step wizard.
+- Step 1 Prompt — name + what the agent does. No "what should it generate?" field.
+- Step 2 Context — workspace/document sources for RAG.
+- Step 3 Inputs — typed controls (text / number / choice / toggle / language) the runner answers.
+- Step 4 Output — a **block picker**: the teacher clicks which block formats the agent may use.
+  This is the simplified `OutputComposer`: show the 4-category / family / variant AddPanel grid;
+  no full DesignMode in composer mode. The selected blocks' AI fields become the output JSON schema
+  automatically.
+- `AgentSpec` is canonical; JSON Schema is compiled from it; output is validated; feedback patches
+  the spec. Never expose prompts/JSON outside the Advanced panel; never bake source material into an
+  agent definition (use context slots at run time).
+
+**Template Studio v3** (`modules/template-studio/`, TypeScript — see README and
 `docs/TEMPLATE_STUDIO_ARCHITECTURE.md`): Template → Layout → View; elements with
 `source: static | field`; groups own repetition (flow / page / grid) and nest; page scope is
 separate from repetition; one layout engine feeds HTML/PDF/DOCX/PPTX. Templates are
-agent-independent (fields defined in the studio; agents auto-map by name). Saved rows carry
-`templateV3` + `dataFields`. Do not add per-format template code, expose implementation
-primitives in the Add menu, or reintroduce the block-list editor.
+agent-independent (fields auto-map by name). Saved rows carry `templateV3` + `dataFields`.
 
-Agents are **recipes** built in the Agent Studio (`modules/agent-studio/`, TypeScript, see README
-and `docs/AGENT_STUDIO_ARCHITECTURE.md`): `AgentSpec` is canonical, the prompt is compiled from
-it, JSON Schema is generated, output is validated, and feedback patches the spec (never the
-sample). Never expose prompts/JSON outside the Advanced panel; never bake user material into an
-agent (use context slots).
+Key rules:
+- The **AddPanel** (left sidebar) is the only way to add blocks in simple mode. It shows the
+  3-level accordion: category → family → variant, with checkboxes. Checking = add; unchecking =
+  remove. Do NOT add per-format template code, expose placement controls, or reintroduce the
+  block-list editor.
+- Simple mode layout: **[AddPanel 280px | Canvas preview full width]**. Inspector is hidden.
+- The **Data tab** in Template Studio lets users pin any AI field to a fixed value.
+- Every agent renders through `modules/ai-tools/tools/agent-builder/RunAgentPage.js`: intro →
+  reference material → configure inputs → configure output format (block style picker) → export.
+  Built-in agents are plain config objects (`tools/quiz-generator/quizAgent.js`); no bespoke wizards.
 
 ### Adding an AI tool
 Create `modules/ai-tools/tools/<id>/index.js` exporting a manifest (validated by

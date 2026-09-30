@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { TemplateThumbnail, compatibleAgentNames, templateFolderOf } from "./TemplateThumbnail";
-import { TemplateChat } from "./design/TemplateChat";
-import { card, kicker } from "./ui";
+import { card, kicker, primaryBtn } from "./ui";
 
 export interface SavedTemplateRow { id: string; name: string; folderId?: string; templateV3?: unknown; docModel?: unknown; dataFields?: unknown[] }
 
@@ -12,60 +11,11 @@ function AgentChips({ names }: { names: string[] }) {
   return <p className="m-0 mt-1 flex flex-wrap gap-1">{names.slice(0, 3).map((name) => <span key={name} className="rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent-ink)]">✦ {name}</span>)}{names.length > 3 ? <span className="text-[10px] text-soft-ink">+{names.length - 3}</span> : null}</p>;
 }
 
-type TemplateKind = "document" | "cards";
-
-/** Kind picker — the first step before the prompt. */
-function KindPicker({ onPick }: { onPick: (kind: TemplateKind) => void }) {
-  return (
-    <div className={`${card} p-6`}>
-      <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">Template Studio</span>
-      <h3 className="m-0 mt-3 text-[24px] font-bold tracking-tight text-ink">Create a new template</h3>
-      <p className="m-0 mt-1 max-w-xl text-sm text-soft-ink">A template is a designed document plus the places where the AI fills in. Choose what you want to make:</p>
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <button
-          type="button"
-          onClick={() => onPick("document")}
-          className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-ink/10 bg-white p-6 text-left transition hover:border-[var(--accent)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.08)]"
-        >
-          <span className="grid size-14 place-items-center rounded-2xl bg-[var(--accent-soft)] text-3xl">📄</span>
-          <span>
-            <span className="block text-base font-bold text-ink">Document, Exam or Worksheet</span>
-            <span className="mt-1 block text-sm text-soft-ink">Printable A4 / US Letter pages, also works as slides. Headers, footers, question cards, structured content, activities — in the order you choose.</span>
-          </span>
-          <span className="mt-auto flex flex-wrap gap-1.5">
-            {["📋 Exam", "📝 Worksheet", "📖 Study notes", "✍ Fill-in-the-blanks"].map((tag) => (
-              <span key={tag} className="rounded-full bg-[var(--surface-soft)] px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink">{tag}</span>
-            ))}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => onPick("cards")}
-          className="group flex flex-col items-start gap-3 rounded-2xl border-2 border-ink/10 bg-white p-6 text-left transition hover:border-[var(--accent)] hover:shadow-[0_8px_28px_rgba(0,0,0,0.08)]"
-        >
-          <span className="grid size-14 place-items-center rounded-2xl bg-[#fdf4ff] text-3xl">🃏</span>
-          <span>
-            <span className="block text-base font-bold text-ink">Cards, Games or Flashcards</span>
-            <span className="mt-1 block text-sm text-soft-ink">One item per card or slide. Flashcards, matching games, word puzzles, cut-apart tiles — made to play or display on screen.</span>
-          </span>
-          <span className="mt-auto flex flex-wrap gap-1.5">
-            {["🃏 Flashcards", "🎮 Word search", "▦ Matching game", "✂ Cut & paste"].map((tag) => (
-              <span key={tag} className="rounded-full bg-[#fdf4ff] px-2.5 py-0.5 text-[11px] font-semibold text-[#7e22ce]">{tag}</span>
-            ))}
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter, onUpload, onGenerated, onOpen, onMoveToFolder, onDelete }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onBlank: () => void; onStarter: (kind: string) => void; onGenerated?: (template: any, note: string) => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void; onDelete?: (row: SavedTemplateRow) => void }) {
-  const fileRef = useRef<HTMLInputElement>(null);
+export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onUpload, onOpen, onMoveToFolder, onDelete }: { templates: SavedTemplateRow[]; busy: boolean; agents?: { id: string; name: string; fields: any[] }[]; onNewTemplate: () => void; onUpload: (file: File) => void; onOpen: (row: SavedTemplateRow) => void; onMoveToFolder?: (row: SavedTemplateRow, folder: string) => void; onDelete?: (row: SavedTemplateRow) => void }) {
   const [view, setView] = useState<"gallery" | "list">("gallery");
   const [folder, setFolder] = useState<string>("");
   const [newFolder, setNewFolder] = useState("");
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
-  const [kind, setKind] = useState<TemplateKind | null>(null);
 
   const folders = useMemo(() => [...new Set([...templates.map(templateFolderOf).filter(Boolean), ...extraFolders])].sort(), [templates, extraFolders]);
   const createFolder = () => { const name = newFolder.trim(); if (!name) return; setExtraFolders((current) => [...new Set([...current, name])]); setFolder(name); setNewFolder(""); };
@@ -73,32 +23,22 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
 
   return (
     <section className="tw-scope grid gap-4">
-      {/* Step 1 — kind picker (or step 2 header once kind is chosen) */}
-      {!kind ? (
-        <KindPicker onPick={setKind} />
-      ) : (
-        <div className={`${card} p-4`}>
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={() => setKind(null)} className="rounded-full border border-ink/15 px-3 py-1.5 text-xs font-semibold text-soft-ink hover:text-ink">‹ Change type</button>
-            <span className="text-sm font-semibold text-ink">{kind === "document" ? "📄 Document, Exam or Worksheet" : "🃏 Cards, Games or Flashcards"}</span>
-          </div>
+      {/* Header */}
+      <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
+        <div>
+          <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">Template Studio</span>
+          <h2 className="m-0 mt-2 text-2xl font-bold tracking-tight text-ink">My templates</h2>
+          <p className="m-0 mt-0.5 text-sm text-soft-ink">Templates tell the AI how to format and present its output.</p>
         </div>
-      )}
-
-      {/* Step 2 — prompt (shown once kind is picked) */}
-      {kind && onGenerated ? (
-        <TemplateChat
-          kind={kind}
-          templateNames={templates.map((row) => row.name)}
-          onBuilt={onGenerated}
-          onUpload={onUpload}
-        />
-      ) : null}
+        <button type="button" className={`${primaryBtn} gap-1.5 px-5 py-2.5 text-sm`} onClick={onNewTemplate}>
+          ＋ New template
+        </button>
+      </div>
 
       {/* Gallery */}
       <div className={`${card} p-5`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className={kicker}>My templates</p>
+          <p className={kicker}>All templates</p>
           <div className="flex items-center gap-2">
             <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{(["gallery", "list"] as const).map((v) => <button key={v} type="button" onClick={() => setView(v)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold capitalize ${view === v ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{v}</button>)}</div>
           </div>
@@ -118,7 +58,16 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
                 </div>
               </div>
             ))}
-            {!shown.length ? <p className="m-0 col-span-full text-sm text-soft-ink">No templates yet — describe one above to get started.</p> : null}
+            {!shown.length ? (
+              <div className="col-span-full flex flex-col items-center gap-4 rounded-2xl border border-dashed border-ink/15 p-10 text-center">
+                <span className="text-4xl">📄</span>
+                <div>
+                  <p className="m-0 font-semibold text-ink">No templates yet</p>
+                  <p className="m-0 mt-1 text-sm text-soft-ink">Create your first template to define how the AI presents its output.</p>
+                </div>
+                <button type="button" className={`${primaryBtn} px-5 py-2`} onClick={onNewTemplate}>＋ Create template</button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <div className="mt-3 grid gap-1">
@@ -136,8 +85,6 @@ export function SourceChooser({ templates, busy, agents = [], onBlank, onStarter
         )}
       </div>
 
-      {/* Hidden file input for PDF/image upload (accessible from TemplateChat) */}
-      <input ref={fileRef} type="file" accept="application/pdf,image/png,image/jpeg" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) onUpload(file); event.target.value = ""; }} />
       {busy ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">Preparing pages…</p> : null}
     </section>
   );

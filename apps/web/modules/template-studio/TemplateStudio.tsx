@@ -11,6 +11,7 @@ import { useTemplateStore } from "./state/useTemplateStore";
 import { compileForSave } from "./adapters/agentTemplate";
 import { importPages } from "./pdfImport";
 import { SourceChooser, type SavedTemplateRow } from "./SourceChooser";
+import { TemplateWizard } from "./TemplateWizard";
 import { StudioShell } from "./StudioShell";
 import { DesignMode } from "./design/DesignMode";
 import { ViewsMode } from "./views/ViewsMode";
@@ -190,8 +191,20 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
     setStatus(current ? `Listing for “${publishBlock.name}” updated.` : `“${publishBlock.name}” is now in the Marketplace.`);
   }
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+
   if (!template || !layout) {
-    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onBlank={() => store.open(createTemplate())} onStarter={(kind) => store.open(createStarter(kind))} onGenerated={(generated, note) => { store.open(generated); setStatus(note); }} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
+    if (wizardOpen) {
+      return (
+        <section className="tw-scope grid gap-3">
+          <TemplateWizard
+            onBuilt={(generated, note) => { store.open(generated); setStatus(note); setWizardOpen(false); }}
+            onCancel={() => setWizardOpen(false)}
+          />
+        </section>
+      );
+    }
+    return <SourceChooser templates={rows} busy={busy} agents={agents} onDelete={deleteRow} onNewTemplate={() => setWizardOpen(true)} onUpload={upload} onOpen={openRow} onMoveToFolder={moveToFolder} />;
   }
 
   return (

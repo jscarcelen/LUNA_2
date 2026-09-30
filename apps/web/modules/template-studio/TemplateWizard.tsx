@@ -5,7 +5,7 @@ import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, typ
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
 import { createId, createTemplate, createView } from "./engine/model";
-import type { Template } from "./engine/types";
+import type { GroupElement, Template } from "./engine/types";
 import { ElementView } from "./design/canvas/ElementView";
 import { card, kicker, primaryBtn, ghostBtn, fieldBase } from "./ui";
 
@@ -121,6 +121,8 @@ function assembleTemplate(
       currentFields = studentResult.fields;
       let yOff = curY;
       const studentPlaced = studentResult.elements.map((el) => {
+        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
+        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [studentView.id] } };
         const y = yOff; yOff += el.frame.h + 4;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [studentView.id] } };
       });
@@ -130,6 +132,8 @@ function assembleTemplate(
       const keyResult = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: true } });
       let yOff2 = curY;
       const keyPlaced = keyResult.elements.map((el) => {
+        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
+        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [answerKey.id] } };
         const y = yOff2; yOff2 += el.frame.h + 4;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [answerKey.id] } };
       });
@@ -141,11 +145,17 @@ function assembleTemplate(
       currentFields = result.fields;
       let yOff = curY;
       const placed = result.elements.map((el) => {
+        // pageScope:"every" elements (header/footer) keep their original y position
+        // and do NOT advance the flow cursor — the renderer repeats them on every page.
+        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
+        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW } };
         const y = yOff; yOff += el.frame.h + 4;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
       });
       allElements.push(...placed);
-      curY = yOff + 4;
+      // Only advance curY for non-pageScope elements
+      const hasFlowEl = result.elements.some((el) => !(el.type === "group" && (el as GroupElement).pageScope?.mode === "every"));
+      if (hasFlowEl) curY = yOff + 4;
     }
   }
 
@@ -468,6 +478,8 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
   }, [structureType, selectedInteractiveIds, selectedGameOptionId, blockFormats, blockAccents, blockToggles]);
 
   const stylableBlocks = useMemo(() => resolvedSelections.filter((s) => !s.isFixed), [resolvedSelections]);
+  // For the "all formatted" check, only require non-fixed styleable blocks to have a color.
+  // Fixed blocks (header/footer) are pre-styled by the block builder; picking a color is optional.
   const requiredBlocks = useMemo(() => structureType === "document" ? [] : stylableBlocks, [structureType, stylableBlocks]);
   const allFormatted = useMemo(() => requiredBlocks.length === 0 || requiredBlocks.every((s) => blockAccents.has(s.origId)), [requiredBlocks, blockAccents]);
   const canvasW = structureType === "game" ? 148 : 210;
@@ -706,14 +718,34 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
             </div>
           </div>
         </div>
-        {stylableBlocks.map(({ origId, block }) => (
-          <FormatCard key={origId} origId={origId} block={block} allBlocks={allBlocks}
-            blockFormats={blockFormats} blockAccents={blockAccents} blockToggles={blockToggles} openBlocks={openBlocks}
-            onSelectFormat={selectFormat} onSelectColor={selectColor} onToggleOption={toggleOption} onToggleOpen={toggleOpen}
-            onVisualize={(id, b) => setVisualizeTarget({ origId: id, block: b })} />
-        ))}
-        {stylableBlocks.length === 0 && (
-          <div className={`${card} mt-3 p-5`}><p className="m-0 text-sm text-soft-ink">No styleable components — go back to add some.</p></div>
+        {/* Fixed structure blocks (header, footer) — always in the template, but still styleable */}
+        {resolvedSelections.filter((s) => s.isFixed).length > 0 && (
+          <div className="mt-4">
+            <p className={`${kicker} mb-2 px-1`}>Structure (always included)</p>
+            {resolvedSelections.filter((s) => s.isFixed).map(({ origId, block }) => (
+              <FormatCard key={origId} origId={origId} block={block} allBlocks={allBlocks}
+                blockFormats={blockFormats} blockAccents={blockAccents} blockToggles={blockToggles} openBlocks={openBlocks}
+                onSelectFormat={selectFormat} onSelectColor={selectColor} onToggleOption={toggleOption} onToggleOpen={toggleOpen}
+                onVisualize={(id, b) => setVisualizeTarget({ origId: id, block: b })} />
+            ))}
+          </div>
+        )}
+        {/* Interactive / content blocks */}
+        {stylableBlocks.length > 0 && (
+          <div className="mt-4">
+            {resolvedSelections.filter((s) => s.isFixed).length > 0 && (
+              <p className={`${kicker} mb-2 px-1`}>Content</p>
+            )}
+            {stylableBlocks.map(({ origId, block }) => (
+              <FormatCard key={origId} origId={origId} block={block} allBlocks={allBlocks}
+                blockFormats={blockFormats} blockAccents={blockAccents} blockToggles={blockToggles} openBlocks={openBlocks}
+                onSelectFormat={selectFormat} onSelectColor={selectColor} onToggleOption={toggleOption} onToggleOpen={toggleOpen}
+                onVisualize={(id, b) => setVisualizeTarget({ origId: id, block: b })} />
+            ))}
+          </div>
+        )}
+        {stylableBlocks.length === 0 && resolvedSelections.filter((s) => s.isFixed).length === 0 && (
+          <div className={`${card} mt-3 p-5`}><p className="m-0 text-sm text-soft-ink">No components — go back to add some.</p></div>
         )}
         <div className="mt-4 flex items-center justify-end gap-3">
           {!allFormatted && remaining > 0 && <span className="text-[12px] text-soft-ink">{remaining} component{remaining !== 1 ? "s" : ""} still need a style</span>}
@@ -739,18 +771,14 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
           <p className={`${kicker}`}>Components — {resolvedSelections.length} total</p>
           <button type="button" onClick={() => setStep(3)} className={`${ghostBtn} px-4 py-1.5 text-[12px]`}>✏ Edit components</button>
         </div>
-        <div className="flex flex-wrap gap-6">
+        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
           {resolvedSelections.map(({ origId, block, accent, toggles, isFixed }) => (
             <div key={origId} className="flex flex-col items-center gap-2">
-              <div className="group relative cursor-pointer"
-                onClick={(e) => { e.stopPropagation(); setVisualizeTarget({ origId: null, block }); }}>
-                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.65} maxW={300} />
-                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition group-hover:bg-black/10">
-                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-sm transition group-hover:opacity-100">View ↗</span>
-                </div>
+              <div className="relative">
+                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.55} maxW={340} />
                 {isFixed && <span className="absolute -right-1 -top-1 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Fixed</span>}
               </div>
-              <span className="max-w-[300px] truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
+              <span className="max-w-full truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
               <span className="text-[10px] text-soft-ink">{block.family}</span>
             </div>
           ))}

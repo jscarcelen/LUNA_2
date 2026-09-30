@@ -1,140 +1,135 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./engine/blocks";
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
-import { createId, createTemplate, createView } from "./engine/model";
+import { createId, createPage, createTemplate, createView } from "./engine/model";
 import type { Template } from "./engine/types";
 import { ElementView } from "./design/canvas/ElementView";
 import { card, kicker, primaryBtn, ghostBtn, fieldBase } from "./ui";
 
-/* ─── Categories ─────────────────────────────────────────────────── */
-const CATEGORIES = [
-  { id: "structure",  label: "Structure",     emoji: "▔", locked: true,  bg: "#f0fdf4", ink: "#166534", border: "#bbf7d0" },
-  { id: "questions",  label: "Questions",     emoji: "❶", locked: false, bg: "#dbeafe", ink: "#1d4ed8", border: "#bfdbfe" },
-  { id: "worksheets", label: "Worksheets",    emoji: "✍", locked: false, bg: "#fff7ed", ink: "#9a3412", border: "#fed7aa" },
-  { id: "games",      label: "Cards & Games", emoji: "🃏", locked: false, bg: "#fdf4ff", ink: "#7e22ce", border: "#e9d5ff" },
-] as const;
-type CatId = typeof CATEGORIES[number]["id"];
+/* ─── Structure types ────────────────────────────────────────────── */
+type StructureType = "quiz" | "document" | "game";
+type Step = 1 | 2 | 3 | 4;
 
-const WORKSHEET_FAMILIES = new Set(["Fill in the blanks", "Match the pairs", "Math practice set", "Cut and paste", "Tracing"]);
-
-// Excluded from the wizard UI
-const EXCLUDED_BLOCK_IDS = new Set(["block-question-mixed", "block-mc-kids"]);
-
-function uiCat(block: BlockDef): CatId {
-  if (block.category === "structure") return "structure";
-  if (block.category === "questions" || (block.category === "kids" && block.family === "Question card")) return "questions";
-  if (WORKSHEET_FAMILIES.has(block.family || "")) return "worksheets";
-  return "games";
-}
-
-// User-friendly names for structure blocks
-const STRUCTURE_LABELS: Record<string, string> = {
-  "block-header-exam":    "Activity header",
-  "block-header-minimal": "Page header",
-  "block-footer":         "Page footer",
-  "block-section-header": "Section heading",
-  "block-callout":        "Callout box",
-  "block-document":       "Document body",
-  "block-key-points":     "Key points / Numbered list",
-};
-
-function blockLabel(block: BlockDef): string {
-  return STRUCTURE_LABELS[block.id] || block.variant || block.name;
-}
-
-/* ─── Preview formats for the matrix ───────────────────────────────── */
-const PREVIEW_FORMATS = [
-  { id: "a4",     label: "A4",         emoji: "📄", w: 210, h: 297 },
-  { id: "letter", label: "Letter",     emoji: "📃", w: 216, h: 279 },
-  { id: "slides", label: "Slides 16:9",emoji: "🖥", w: 254, h: 143 },
+const STRUCTURE_TYPES: { id: StructureType; emoji: string; label: string; desc: string }[] = [
+  { id: "quiz",     emoji: "📝", label: "Quiz / Exam",          desc: "Fixed header (title, name, date). Add question types and worksheets." },
+  { id: "document", emoji: "📄", label: "Document / Summary",   desc: "Headings, paragraphs, bullets, callouts, tables — all included, you just style them." },
+  { id: "game",     emoji: "🃏", label: "Flashcard / Game",     desc: "Compact header + one game format (flashcard or puzzle)." },
 ];
 
-/* ─── Detect block IDs from an existing saved template ──────────────── */
-function detectBlockIds(template: Template): Set<string> {
-  const ids = new Set<string>();
-  const walk = (elements: any[]) => {
-    for (const el of elements) {
-      if (el.origin?.blockId) ids.add(el.origin.blockId);
-      if (el.children) walk(el.children);
-    }
-  };
-  for (const layout of template.layouts) {
-    for (const page of layout.pages) walk(page.elements);
-  }
-  return ids;
+/* ─── Fixed blocks per type ──────────────────────────────────────── */
+const QUIZ_FIXED_IDS     = ["block-header-exam", "block-footer"];
+const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-document", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
+const GAME_FIXED_IDS     = ["block-header-minimal"];
+
+/* ─── Interactive blocks for quiz step 2 ─────────────────────────── */
+const QUIZ_QUESTIONS: { id: string; label: string; icon: string; desc: string }[] = [
+  { id: "block-exam-question",     label: "Multiple choice",         icon: "❶",  desc: "Numbered question with lettered options." },
+  { id: "block-open-question",     label: "Open answer",             icon: "✍",  desc: "Question with a blank writing area." },
+  { id: "block-true-false",        label: "True / False",            icon: "◎",  desc: "Binary choice question." },
+  { id: "block-question-compact",  label: "Compact (2 columns)",     icon: "❶❶", desc: "Fits more questions per page." },
+  { id: "block-section-questions", label: "Sections with questions", icon: "§❶", desc: "Group questions under numbered sections." },
+  { id: "block-answer-box",        label: "Answer key box",          icon: "✓",  desc: "Highlighted correct answer with explanation." },
+];
+const QUIZ_WORKSHEETS: { id: string; label: string; icon: string; desc: string }[] = [
+  { id: "block-fill-blanks",   label: "Fill in the blanks",  icon: "Aa", desc: "Sentences with a missing word." },
+  { id: "block-match-pairs",   label: "Match the pairs",     icon: "⋯",  desc: "Connect words, images, or translations." },
+  { id: "block-math-practice", label: "Math practice set",   icon: "±",  desc: "Numbered operations with working and answer boxes." },
+  { id: "block-word-search",   label: "Word search",         icon: "▩",  desc: "Letter grid with words to find." },
+  { id: "block-pair-puzzle",   label: "Pair puzzle",         icon: "▦",  desc: "Cut-apart matching tiles." },
+  { id: "block-square-puzzle", label: "Square puzzle",       icon: "▦",  desc: "16-tile edge-matching grid." },
+  { id: "block-tracing",       label: "Tracing",             icon: "✎",  desc: "Large letters between writing lines." },
+  { id: "block-cut-paste",     label: "Cut and paste",       icon: "✂",  desc: "Category boxes with cut-out words." },
+];
+
+/* ─── Game options ───────────────────────────────────────────────── */
+const GAME_OPTIONS: { id: string; emoji: string; label: string; desc: string; primaryBlockId: string | null; familyIds: string[]; disabled?: boolean }[] = [
+  { id: "flashcard", emoji: "🃏", label: "Flashcard deck", desc: "Front / back cards — great for vocabulary and key concepts.", primaryBlockId: "block-flashcard", familyIds: ["block-flashcard", "block-flashcard-single"] },
+  { id: "puzzle",    emoji: "🧩", label: "Word puzzle",    desc: "Coming soon.", primaryBlockId: null, familyIds: [], disabled: true },
+];
+
+/* ─── Helpers ────────────────────────────────────────────────────── */
+function findBlock(id: string): BlockDef | undefined {
+  return builtInBlocks().find((b) => b.id === id);
 }
 
-/* ─── Assemble Template ──────────────────────────────────────────────── */
+function defaultToggles(block: BlockDef, isInteractive = true): Record<string, boolean> {
+  return Object.fromEntries((block.options || []).map((o) => [o.key, isInteractive ? true : o.default]));
+}
+
+function accentOf(id: string, map: Map<string, string>): AccentPreset {
+  return ACCENT_PRESETS.find((a) => a.id === (map.get(id) || "blue")) || ACCENT_PRESETS[0];
+}
+
+/* ─── assembleTemplate (page-break aware) ────────────────────────── */
 function assembleTemplate(
   name: string,
-  templateType: "document" | "cards",
+  canvasW: number,
+  canvasH: number,
   selections: { block: BlockDef; accent: AccentPreset; toggles: Record<string, boolean> }[]
 ): Template {
-  const mainW = templateType === "cards" ? 148 : 210;
-  const mainH = templateType === "cards" ? 105 : 297;
-
   let template = createTemplate(name);
   template = {
     ...template,
     layouts: template.layouts.map((l, i) =>
-      i === 0 ? { ...l, canvas: { ...l.canvas, width: mainW, height: mainH } } : l
+      i === 0 ? { ...l, canvas: { ...l.canvas, width: canvasW, height: canvasH } } : l
     ),
   };
-
   const margins = template.layouts[0].margins;
-  const contentW = mainW - margins.left - margins.right;
+  const contentW = canvasW - margins.left - margins.right;
+  const maxY = canvasH - margins.bottom;
+  let pageIdx = 0;
+  let curY = margins.top;
 
   for (const { block, accent, toggles } of selections) {
     const { fields, elements } = instantiateBlock(block, template.fields, { accent, toggles });
-    const page = template.layouts[0].pages[0];
-    const lastY = page.elements.length
-      ? Math.max(...page.elements.map((e) => e.frame.y + e.frame.h))
-      : margins.top;
-    const placed = elements.map((el, i) => ({
-      ...el,
-      frame: { ...el.frame, x: margins.left, y: lastY + 4 + i * 2, w: contentW },
-    }));
+    const blockH = elements.reduce((sum, el) => sum + el.frame.h + 4, 0);
+    if (curY > margins.top + 4 && curY + blockH > maxY) {
+      template = {
+        ...template,
+        layouts: template.layouts.map((l, li) =>
+          li === 0 ? { ...l, pages: [...l.pages, createPage()] } : l
+        ),
+      };
+      pageIdx++;
+      curY = margins.top;
+    }
+    let yOff = curY;
+    const placed = elements.map((el) => {
+      const y = yOff; yOff += el.frame.h + 4;
+      return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
+    });
     template = {
       ...template,
       fields,
       layouts: template.layouts.map((l, li) =>
         li === 0
-          ? { ...l, pages: l.pages.map((p, pi) => pi === 0 ? { ...p, elements: [...p.elements, ...placed] } : p) }
+          ? { ...l, pages: l.pages.map((p, pi) => pi === pageIdx ? { ...p, elements: [...p.elements, ...placed] } : p) }
           : l
       ),
     };
+    curY = yOff + 4;
   }
 
   const hasInteractive = selections.some((s) => s.block.category !== "structure");
   const studentView = { ...template.layouts[0].views[0], name: "Student view" };
   const views = hasInteractive ? [studentView, createView("Answer key")] : [studentView];
+  const fmts = canvasW < 200
+    ? [{ label: "Cards", w: canvasW, h: canvasH }]
+    : [{ label: "A4", w: 210, h: 297 }, { label: "Letter", w: 216, h: 279 }, { label: "Slides 16:9", w: 254, h: 143 }];
   const baseLayout = { ...template.layouts[0], views };
-
-  // Build one layout per preview format
-  const layouts = PREVIEW_FORMATS.map((fmt, i) => {
+  const layouts = fmts.map((fmt, i) => {
     if (i === 0) return { ...baseLayout, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
-    return {
-      ...baseLayout,
-      id: createId("layout"),
-      name: fmt.label,
-      canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h },
-      views: views.map((v) => ({ ...v, id: createId("view") })),
-    };
+    return { ...baseLayout, id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
   });
-
   return { ...template, layouts };
 }
 
-/* ─── BlockThumbnail ─────────────────────────────────────────────────── */
+/* ─── BlockThumbnail ─────────────────────────────────────────────── */
 function BlockThumbnail({ block, accent, toggles = {}, scale = 0.35, maxW = 180 }: {
-  block: BlockDef;
-  accent: AccentPreset;
-  toggles?: Record<string, boolean>;
-  scale?: number;
-  maxW?: number;
+  block: BlockDef; accent: AccentPreset; toggles?: Record<string, boolean>; scale?: number; maxW?: number;
 }) {
   const { fields, elements } = useMemo(
     () => instantiateBlock(block, [], { accent, toggles }),
@@ -142,126 +137,138 @@ function BlockThumbnail({ block, accent, toggles = {}, scale = 0.35, maxW = 180 
     [block.id, accent.id, JSON.stringify(toggles)]
   );
   const el = elements[0];
-  if (!el) return <div className="h-20 rounded-xl bg-[var(--surface-soft)]" />;
+  if (!el) return <div className="h-16 rounded-xl bg-[var(--surface-soft)]" />;
   const w = Math.min(el.frame.w * scale, maxW);
   const h = el.frame.h * scale;
   return (
     <div className="overflow-hidden rounded-xl border border-ink/10 bg-white" style={{ width: w + 8, height: h + 8, flexShrink: 0 }}>
-      <ElementView
-        element={{ ...el, frame: { ...el.frame, x: 4 / scale, y: 4 / scale } } as any}
-        scale={scale}
-        selectedIds={[]}
-        fields={fields}
-        sampleMode
-        sampleValues={{}}
-        onPointerDown={() => undefined}
-        onResizeStart={() => undefined}
-      />
+      <ElementView element={{ ...el, frame: { ...el.frame, x: 4 / scale, y: 4 / scale } } as any} scale={scale} selectedIds={[]} fields={fields} sampleMode sampleValues={{}} onPointerDown={() => undefined} onResizeStart={() => undefined} />
     </div>
   );
 }
 
-/* ─── VisualizeModal ─────────────────────────────────────────────────── */
-function VisualizeModal({ block, accent, toggles, onClose }: {
-  block: BlockDef;
-  accent: AccentPreset;
-  toggles: Record<string, boolean>;
-  onClose: () => void;
+/* ─── VisualizeModal ─────────────────────────────────────────────── */
+function VisualizeModal({ block: initialBlock, accentId: initialAccentId, toggles, allBlocks, onClose, onConfirm }: {
+  block: BlockDef; accentId: string; toggles: Record<string, boolean>; allBlocks: BlockDef[];
+  onClose: () => void; onConfirm?: (blockId: string, accentId: string) => void;
 }) {
-  const { fields, elements } = useMemo(
-    () => instantiateBlock(block, [], { accent, toggles }),
+  const [localBlockId, setLocalBlockId] = useState(initialBlock.id);
+  const [localAccentId, setLocalAccentId] = useState(initialAccentId || "blue");
+  const block = allBlocks.find((b) => b.id === localBlockId) || initialBlock;
+  const accent = ACCENT_PRESETS.find((a) => a.id === localAccentId) || ACCENT_PRESETS[0];
+  const familyVariants = allBlocks.filter((b) => (b.family || b.id) === (block.family || block.id) && b.category === block.category);
+  const { fields, elements } = useMemo(() => instantiateBlock(block, [], { accent, toggles }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [block.id, accent.id, JSON.stringify(toggles)]
-  );
+    [localBlockId, localAccentId, JSON.stringify(toggles)]);
   const el = elements[0];
   const scale = el ? Math.min(2.4, 760 / Math.max(40, el.frame.w)) : 1;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6" onClick={onClose}>
       <div className={`${card} max-h-[94vh] w-full max-w-4xl overflow-auto p-8`} onClick={(e) => e.stopPropagation()}>
         <div className="mb-5 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.1em] text-soft-ink">{block.family}</span>
-            <h3 className="m-0 text-xl font-bold text-ink">{blockLabel(block)}</h3>
+            <h3 className="m-0 text-xl font-bold text-ink">{block.variant || block.name}</h3>
           </div>
-          <button type="button" onClick={onClose} className={`${ghostBtn} px-3`}>✕ Close</button>
+          <div className="flex items-center gap-2">
+            {onConfirm && <button type="button" onClick={() => { onConfirm(localBlockId, localAccentId); onClose(); }} className={`${primaryBtn} px-4 py-2 text-sm`}>Use this style ✓</button>}
+            <button type="button" onClick={onClose} className={`${ghostBtn} px-3`}>✕ Close</button>
+          </div>
+        </div>
+        {familyVariants.length > 1 && (
+          <div className="mb-4">
+            <p className={`${kicker} mb-2`}>Format</p>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {familyVariants.map((v) => {
+                const sel = v.id === localBlockId;
+                return (
+                  <button key={v.id} type="button" onClick={() => setLocalBlockId(v.id)}
+                    className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-transparent bg-[var(--surface-soft)] hover:border-ink/20"}`}>
+                    <BlockThumbnail block={v} accent={accent} toggles={toggles} scale={0.22} maxW={90} />
+                    <span className="text-[10px] font-semibold" style={{ color: sel ? "var(--accent-ink)" : "#6b7280" }}>{v.variant || v.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        <div className="mb-5">
+          <p className={`${kicker} mb-2`}>Color</p>
+          <div className="flex flex-wrap gap-2">
+            {ACCENT_PRESETS.map((preset) => {
+              const sel = preset.id === localAccentId;
+              return (
+                <button key={preset.id} type="button" onClick={() => setLocalAccentId(preset.id)}
+                  className={`flex items-center gap-1.5 rounded-full border-2 px-3 py-1.5 text-[12px] font-semibold transition ${sel ? "border-[var(--accent)]" : "border-transparent bg-[var(--surface-soft)]"}`}
+                  style={{ background: sel ? preset.tint : undefined }}>
+                  <span className="size-3 rounded-full" style={{ background: preset.main }} />
+                  <span style={{ color: sel ? preset.main : "#6b7280" }}>{preset.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
         {el ? (
           <div className="overflow-auto rounded-xl border border-ink/10 bg-[#f0f0f3] p-5">
             <div className="relative bg-white shadow-sm" style={{ width: el.frame.w * scale + 24, minHeight: el.frame.h * scale + 24 }}>
-              <ElementView
-                element={{ ...el, frame: { ...el.frame, x: 12 / scale, y: 12 / scale } } as any}
-                scale={scale}
-                selectedIds={[]}
-                fields={fields}
-                sampleMode
-                sampleValues={{}}
-                onPointerDown={() => undefined}
-                onResizeStart={() => undefined}
-              />
+              <ElementView element={{ ...el, frame: { ...el.frame, x: 12 / scale, y: 12 / scale } } as any} scale={scale} selectedIds={[]} fields={fields} sampleMode sampleValues={{}} onPointerDown={() => undefined} onResizeStart={() => undefined} />
             </div>
           </div>
-        ) : <p className="text-sm text-soft-ink">No preview available.</p>}
+        ) : <p className="m-0 text-sm text-soft-ink">No preview available.</p>}
         <p className="m-0 mt-4 text-[12px] text-soft-ink">{block.description}</p>
       </div>
     </div>
   );
 }
 
-/* ─── PagePreviewModal ───────────────────────────────────────────────── */
+/* ─── PagePreviewModal ───────────────────────────────────────────── */
 function PagePreviewModal({ template, layoutIndex, viewIndex, onClose }: {
-  template: Template;
-  layoutIndex: number;
-  viewIndex: number;
-  onClose: () => void;
+  template: Template; layoutIndex: number; viewIndex: number; onClose: () => void;
 }) {
   const [html, setHtml] = useState("");
   const layout = template.layouts[layoutIndex] || template.layouts[0];
   const view = layout?.views[viewIndex] || layout?.views[0];
   const compiled = useMemo(() => compileForSave(template, ""), [template]);
-  const sampleData = useMemo(() => buildSampleData(template, 3), [template]);
-
-  useEffect(() => {
+  const sampleData = useMemo(() => buildSampleData(template, 2), [template]);
+  useMemo(() => {
     if (!compiled || !view) return;
     setHtml("");
     fetch("/api/templates/render-preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ template: compiled, sampleData, format: "html", layoutId: layout.id, viewId: view.id }),
     }).then((r) => r.json()).then((payload) => {
       setHtml(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#e5e5ea;}body{padding:10mm;}</style></head><body>${payload.html || ""}</body></html>`);
     }).catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout?.id, view?.id]);
-
-  const fmtLabel = PREVIEW_FORMATS[layoutIndex]?.label || "A4";
-  const viewName = view?.name || "Preview";
-
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-black/60" onClick={onClose}>
       <div className="flex items-center justify-between bg-white/95 px-6 py-3 shadow" onClick={(e) => e.stopPropagation()}>
-        <span className="font-bold text-ink">{viewName} — {fmtLabel} preview</span>
+        <span className="font-bold text-ink">{view?.name || "Preview"} — {layout?.name || "A4"}</span>
         <button type="button" onClick={onClose} className={`${ghostBtn} px-3`}>✕ Close</button>
       </div>
       <div className="flex-1 overflow-auto" onClick={(e) => e.stopPropagation()}>
-        {html
-          ? <iframe title="Preview" sandbox="" srcDoc={html} className="h-full w-full border-0" />
-          : <div className="flex h-full items-center justify-center text-white/70">Loading preview…</div>}
+        {html ? <iframe title="Preview" sandbox="" srcDoc={html} className="h-full w-full border-0" /> : <div className="flex h-full items-center justify-center text-white/70">Loading preview…</div>}
       </div>
     </div>
   );
 }
 
-/* ─── WizardHeader ───────────────────────────────────────────────────── */
-function WizardHeader({ step, title, subtitle, onBack }: { step: number; title: string; subtitle: string; onBack: () => void }) {
+/* ─── WizardHeader ───────────────────────────────────────────────── */
+function WizardHeader({ step, onBack }: { step: number; onBack: () => void }) {
+  const titles: Record<number, [string, string]> = {
+    1: ["Create a template",    "Choose the type of output this template will produce."],
+    2: ["What can it contain?", "Select the components you want to include."],
+    3: ["How should it look?",  "Pick a format design and color for each component."],
+    4: ["Preview your template","Review each component, then preview the full document."],
+  };
+  const [title, subtitle] = titles[step] || titles[1];
   return (
     <div className={`${card} p-5`}>
       <div className="flex items-center gap-3">
         <button type="button" onClick={onBack} className={`${ghostBtn} px-3 text-sm`}>‹ Back</button>
         <div className="ml-auto flex gap-1.5">
-          {[1, 2, 3, 4].map((n) => (
-            <span key={n} className={`h-1.5 w-6 rounded-full transition ${n === step ? "bg-[var(--accent)]" : n < step ? "bg-[var(--accent)]/40" : "bg-ink/15"}`} />
-          ))}
+          {[1, 2, 3, 4].map((n) => <span key={n} className={`h-1.5 w-6 rounded-full transition ${n === step ? "bg-[var(--accent)]" : n < step ? "bg-[var(--accent)]/40" : "bg-ink/15"}`} />)}
         </div>
         <span className="text-[11px] font-semibold text-soft-ink">Step {step} of 4</span>
       </div>
@@ -271,9 +278,101 @@ function WizardHeader({ step, title, subtitle, onBack }: { step: number; title: 
   );
 }
 
-/* ─── Main Wizard ────────────────────────────────────────────────────── */
-type Step = 1 | 2 | 3 | 4;
+/* ─── FormatCard (step 3 per-component card) ─────────────────────── */
+function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAccents, blockToggles, openBlocks, onSelectFormat, onSelectColor, onToggleOption, onToggleOpen, onVisualize }: {
+  origId: string; block: BlockDef; allBlocks: BlockDef[];
+  blockFormats: Map<string, string>; blockAccents: Map<string, string>; blockToggles: Map<string, Record<string, boolean>>;
+  openBlocks: Set<string>; onSelectFormat: (origId: string, blockId: string) => void;
+  onSelectColor: (origId: string, accentId: string) => void; onToggleOption: (origId: string, key: string, val: boolean) => void;
+  onToggleOpen: (origId: string) => void; onVisualize: (origId: string, block: BlockDef) => void;
+}) {
+  const currentBlockId = blockFormats.get(origId) || origId;
+  const currentBlock = allBlocks.find((b) => b.id === currentBlockId) || origBlock;
+  const selectedAccentId = blockAccents.get(origId);
+  const isFormatted = !!selectedAccentId;
+  const isOpen = openBlocks.has(origId) || !isFormatted;
+  const selectedAccent = ACCENT_PRESETS.find((a) => a.id === selectedAccentId) || null;
+  const previewAccent = selectedAccent || ACCENT_PRESETS[0];
+  const isInteractive = origBlock.category !== "structure";
+  const defToggles = Object.fromEntries((currentBlock.options || []).map((o) => [o.key, isInteractive ? true : o.default]));
+  const toggles = { ...defToggles, ...(blockToggles.get(origId) || {}) };
+  const variants = allBlocks.filter((b) => (b.family || b.id) === (origBlock.family || origBlock.id) && b.category === origBlock.category);
 
+  return (
+    <div className={`${card} mt-3 overflow-hidden transition-all`} style={{ border: isFormatted ? "2px solid #16a34a" : undefined }}>
+      <button type="button" onClick={() => onToggleOpen(origId)} className="flex w-full items-center gap-3 px-5 py-4 text-left">
+        <span className="min-w-0 flex-1">
+          <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{currentBlock.family}</span>
+          <span className="block text-[15px] font-bold text-ink">{currentBlock.variant || currentBlock.name}</span>
+        </span>
+        {isFormatted && selectedAccent
+          ? <span className="flex shrink-0 items-center gap-1.5 rounded-full border-2 border-green-600 bg-green-50 px-3 py-1 text-[12px] font-semibold text-green-700"><span className="size-3 rounded-full" style={{ background: selectedAccent.main }} />{selectedAccent.label} ✓</span>
+          : <span className="shrink-0 rounded-full border border-ink/15 px-3 py-1 text-[11px] text-soft-ink">{isInteractive ? "Pick a style" : "Optional style"}</span>}
+        <span className="text-[10px] text-soft-ink">{isOpen ? "▲" : "▼"}</span>
+      </button>
+      {isOpen ? (
+        <div className="border-t border-ink/10 px-5 pb-5 pt-4">
+          {variants.length > 1 && (
+            <div className="mb-4">
+              <p className={`${kicker} mb-2`}>Format design</p>
+              <div className="flex gap-2.5 overflow-x-auto pb-1">
+                {variants.map((v) => {
+                  const sel = v.id === currentBlockId;
+                  return (
+                    <button key={v.id} type="button" onClick={() => onSelectFormat(origId, v.id)}
+                      className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-transparent bg-[var(--surface-soft)] hover:border-ink/20"}`}>
+                      <BlockThumbnail block={v} accent={previewAccent} toggles={toggles} scale={0.25} maxW={100} />
+                      <span className="text-[10px] font-semibold" style={{ color: sel ? "var(--accent-ink)" : "#6b7280" }}>{v.variant || v.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <p className={`${kicker} mb-2`}>Color style</p>
+          <div className="flex gap-2.5 overflow-x-auto pb-2">
+            {ACCENT_PRESETS.map((preset) => {
+              const sel = selectedAccentId === preset.id;
+              return (
+                <button key={preset.id} type="button" onClick={() => onSelectColor(origId, preset.id)}
+                  className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-green-600 shadow-md" : "border-transparent hover:border-ink/20"}`}
+                  style={{ background: sel ? preset.tint : "var(--surface-soft)" }}>
+                  <BlockThumbnail block={currentBlock} accent={preset} toggles={toggles} scale={0.28} maxW={110} />
+                  <div className="flex items-center gap-1">
+                    <span className="size-2.5 rounded-full" style={{ background: preset.main }} />
+                    <span className="text-[10px] font-semibold" style={{ color: sel ? preset.main : "#6b7280" }}>{preset.label}</span>
+                    {sel && <span className="text-[10px] text-green-600">✓</span>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          {(currentBlock.options || []).length > 0 && (
+            <div className="mt-4">
+              <p className={`${kicker} mb-2`}>Options</p>
+              <div className="grid gap-1.5">
+                {(currentBlock.options || []).map((opt) => {
+                  const val = blockToggles.get(origId)?.[opt.key] ?? (isInteractive ? true : opt.default);
+                  return (
+                    <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-[13px] text-ink">
+                      <input type="checkbox" checked={val} onChange={(e) => onToggleOption(origId, opt.key, e.target.checked)} className="accent-[var(--accent)]" />
+                      {opt.label}
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="mt-4 flex justify-end">
+            <button type="button" onClick={() => onVisualize(origId, currentBlock)} className="rounded-full border border-ink/15 px-4 py-1.5 text-[12px] font-semibold text-soft-ink hover:border-[var(--accent)]/50">Visualize full size ↗</button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─── Main Wizard ────────────────────────────────────────────────── */
 export interface TemplateWizardProps {
   onSave: (template: Template, savedId?: string) => Promise<void>;
   onCancel: () => void;
@@ -283,360 +382,295 @@ export interface TemplateWizardProps {
 export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizardProps) {
   const [step, setStep] = useState<Step>(editTemplate ? 4 : 1);
   const [name, setName] = useState(editTemplate?.template.name || "");
-  const [templateType, setTemplateType] = useState<"document" | "cards">("document");
-
-  const [selectedBlockIds, setSelectedBlockIds] = useState<Set<string>>(() => {
-    if (editTemplate) return detectBlockIds(editTemplate.template);
-    const init = new Set<string>();
-    builtInBlocks()
-      .filter((b) => b.category === "structure" && !EXCLUDED_BLOCK_IDS.has(b.id))
-      .forEach((b) => init.add(b.id));
-    return init;
-  });
-
-  // Per-block color accent (blockId → accentId). When editing, default everything to blue.
-  const [blockAccents, setBlockAccents] = useState<Map<string, string>>(() => {
-    if (!editTemplate) return new Map();
-    const map = new Map<string, string>();
-    for (const id of detectBlockIds(editTemplate.template)) map.set(id, "blue");
-    return map;
-  });
-
+  const [structureType, setStructureType] = useState<StructureType>("quiz");
+  const [selectedInteractiveIds, setSelectedInteractiveIds] = useState<Set<string>>(
+    () => new Set(["block-exam-question", "block-open-question", "block-true-false"])
+  );
+  const [selectedGameOptionId, setSelectedGameOptionId] = useState<string>("flashcard");
+  const [blockFormats, setBlockFormats] = useState<Map<string, string>>(new Map());
+  const [blockAccents, setBlockAccents] = useState<Map<string, string>>(new Map());
   const [blockToggles, setBlockToggles] = useState<Map<string, Record<string, boolean>>>(new Map());
-  // Tracks which format-selection cards are manually open
   const [openBlocks, setOpenBlocks] = useState<Set<string>>(new Set());
-  const [visualizeBlock, setVisualizeBlock] = useState<BlockDef | null>(null);
+  const [visualizeTarget, setVisualizeTarget] = useState<{ origId: string | null; block: BlockDef } | null>(null);
   const [pagePreview, setPagePreview] = useState<{ template: Template; layoutIndex: number; viewIndex: number } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const allBlocks = useMemo(() => builtInBlocks().filter((b) => !EXCLUDED_BLOCK_IDS.has(b.id)), []);
+  const allBlocks = useMemo(() => builtInBlocks(), []);
 
-  const byCategory = useMemo(() => {
-    const map = new Map<CatId, BlockDef[]>();
-    for (const cat of CATEGORIES) map.set(cat.id, []);
-    for (const block of allBlocks) map.get(uiCat(block))?.push(block);
-    return map;
-  }, [allBlocks]);
-
-  // Ordered selections; question options default to ALL ON
-  const selectedBlocks = useMemo(() => {
-    const out: { block: BlockDef; accent: AccentPreset; toggles: Record<string, boolean> }[] = [];
-    for (const cat of CATEGORIES) {
-      for (const block of byCategory.get(cat.id) || []) {
-        if (!selectedBlockIds.has(block.id)) continue;
-        const isInteractive = block.category !== "structure";
-        const defaults = Object.fromEntries(
-          (block.options || []).map((o) => [o.key, isInteractive ? true : o.default])
-        );
-        const toggles = { ...defaults, ...(blockToggles.get(block.id) || {}) };
-        const accentId = blockAccents.get(block.id) || "blue";
-        const accent = ACCENT_PRESETS.find((a) => a.id === accentId) || ACCENT_PRESETS[0];
-        out.push({ block, accent, toggles });
-      }
+  const resolvedSelections = useMemo(() => {
+    const out: { origId: string; block: BlockDef; accent: AccentPreset; toggles: Record<string, boolean>; isFixed: boolean }[] = [];
+    function addBlock(origId: string, isFixed: boolean) {
+      const currentId = blockFormats.get(origId) || origId;
+      const block = findBlock(currentId) || findBlock(origId);
+      if (!block) return;
+      const accent = isFixed ? ACCENT_PRESETS[0] : accentOf(origId, blockAccents);
+      const isInteractive = block.category !== "structure";
+      const toggles = { ...defaultToggles(block, isInteractive), ...(blockToggles.get(origId) || {}) };
+      out.push({ origId, block, accent, toggles, isFixed });
+    }
+    if (structureType === "quiz") {
+      for (const id of QUIZ_FIXED_IDS) addBlock(id, true);
+      for (const q of [...QUIZ_QUESTIONS, ...QUIZ_WORKSHEETS]) if (selectedInteractiveIds.has(q.id)) addBlock(q.id, false);
+    } else if (structureType === "document") {
+      for (const id of DOCUMENT_BLOCK_IDS) addBlock(id, false);
+    } else {
+      for (const id of GAME_FIXED_IDS) addBlock(id, true);
+      const gameOpt = GAME_OPTIONS.find((g) => g.id === selectedGameOptionId);
+      if (gameOpt?.primaryBlockId) addBlock(gameOpt.primaryBlockId, false);
     }
     return out;
-  }, [selectedBlockIds, blockToggles, blockAccents, byCategory]);
+  }, [structureType, selectedInteractiveIds, selectedGameOptionId, blockFormats, blockAccents, blockToggles]);
 
-  const nonStructureSelected = useMemo(
-    () => selectedBlocks.filter((s) => s.block.category !== "structure"),
-    [selectedBlocks]
-  );
+  const stylableBlocks = useMemo(() => resolvedSelections.filter((s) => !s.isFixed), [resolvedSelections]);
+  const requiredBlocks = useMemo(() => structureType === "document" ? [] : stylableBlocks, [structureType, stylableBlocks]);
+  const allFormatted = useMemo(() => requiredBlocks.length === 0 || requiredBlocks.every((s) => blockAccents.has(s.origId)), [requiredBlocks, blockAccents]);
+  const canvasW = structureType === "game" ? 148 : 210;
+  const canvasH = structureType === "game" ? 105 : 297;
 
-  const allFormatted = useMemo(
-    () => nonStructureSelected.length === 0 || nonStructureSelected.every((s) => blockAccents.has(s.block.id)),
-    [nonStructureSelected, blockAccents]
-  );
+  const assembledTemplate = useMemo(() => {
+    if (!resolvedSelections.length) return null;
+    return assembleTemplate(name || "Untitled", canvasW, canvasH, resolvedSelections.map(({ block, accent, toggles }) => ({ block, accent, toggles })));
+  }, [resolvedSelections, name, canvasW, canvasH]);
 
-  const assembledTemplate = useMemo(
-    () => selectedBlocks.length ? assembleTemplate(name || "Untitled", templateType, selectedBlocks) : null,
-    [selectedBlocks, name, templateType]
-  );
+  const canProceedStep2 = structureType === "quiz" ? selectedInteractiveIds.size > 0 : structureType === "document" ? true : !!selectedGameOptionId;
 
-  function toggleBlock(id: string) {
-    setSelectedBlockIds((cur) => { const next = new Set(cur); next.has(id) ? next.delete(id) : next.add(id); return next; });
+  function selectFormat(origId: string, blockId: string) { setBlockFormats((c) => new Map(c).set(origId, blockId)); }
+  function selectColor(origId: string, accentId: string) {
+    setBlockAccents((c) => new Map(c).set(origId, accentId));
+    setOpenBlocks((c) => { const n = new Set(c); n.delete(origId); return n; });
   }
-
-  function setToggle(blockId: string, key: string, val: boolean) {
-    setBlockToggles((cur) => {
-      const prev = cur.get(blockId) || {};
-      return new Map(cur).set(blockId, { ...prev, [key]: val });
-    });
+  function applyColorToAll(accentId: string) {
+    setBlockAccents((c) => { const n = new Map(c); for (const s of resolvedSelections) n.set(s.origId, accentId); return n; });
+    setOpenBlocks(new Set());
   }
-
-  function selectFormat(blockId: string, accentId: string) {
-    setBlockAccents((cur) => new Map(cur).set(blockId, accentId));
-    setOpenBlocks((cur) => { const next = new Set(cur); next.delete(blockId); return next; });
+  function toggleOption(origId: string, key: string, val: boolean) {
+    setBlockToggles((c) => { const prev = c.get(origId) || {}; return new Map(c).set(origId, { ...prev, [key]: val }); });
   }
-
-  function toggleOpen(blockId: string) {
-    setOpenBlocks((cur) => {
-      const next = new Set(cur);
-      next.has(blockId) ? next.delete(blockId) : next.add(blockId);
-      return next;
-    });
+  function toggleOpen(origId: string) {
+    setOpenBlocks((c) => { const n = new Set(c); n.has(origId) ? n.delete(origId) : n.add(origId); return n; });
   }
-
-  function visualizeModalFor(block: BlockDef) {
-    const accentId = blockAccents.get(block.id) || "blue";
-    const accent = ACCENT_PRESETS.find((a) => a.id === accentId) || ACCENT_PRESETS[0];
-    const isInteractive = block.category !== "structure";
-    const toggles = {
-      ...Object.fromEntries((block.options || []).map((o) => [o.key, isInteractive ? true : o.default])),
-      ...(blockToggles.get(block.id) || {}),
-    };
-    return { block, accent, toggles };
+  function handleVisualizeConfirm(blockId: string, accentId: string) {
+    if (!visualizeTarget?.origId) return;
+    const origId = visualizeTarget.origId;
+    setBlockFormats((c) => new Map(c).set(origId, blockId));
+    setBlockAccents((c) => new Map(c).set(origId, accentId));
+    setOpenBlocks((c) => { const n = new Set(c); n.delete(origId); return n; });
   }
-
   async function handleSave() {
     if (!assembledTemplate) return;
     setSaving(true);
     try { await onSave(assembledTemplate, editTemplate?.savedId); } finally { setSaving(false); }
   }
 
-  /* ─── Step 1 ──────────────────────────────────────────────────────── */
+  /* ─── Step 1 ─────────────────────────────────────────────────────── */
   if (step === 1) {
     return (
-      <div className={`${card} mx-auto max-w-2xl p-8`}>
+      <div className={`${card} tw-scope mx-auto max-w-2xl p-8`}>
         <button type="button" onClick={onCancel} className={`${ghostBtn} mb-6 px-3 text-sm`}>‹ Back to templates</button>
         <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">New template</span>
         <h2 className="m-0 mt-4 text-3xl font-bold tracking-tight text-ink">Create a template</h2>
-        <p className="m-0 mt-1 text-sm text-soft-ink">A template defines which component types the AI can produce and how they look.</p>
-
+        <p className="m-0 mt-1 text-sm text-soft-ink">Templates tell the AI how to format and present its output.</p>
         <label className="mt-6 block">
           <span className="mb-1.5 block text-sm font-semibold text-ink">Template name</span>
-          <input
-            className={`${fieldBase} w-full text-base`}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Year 7 Maths Exam, Vocabulary Flashcards…"
-            autoFocus
-          />
+          <input className={`${fieldBase} w-full text-base`} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Year 7 Maths Exam, Vocabulary Flashcards…" autoFocus />
         </label>
-
         <div className="mt-6">
-          <span className="mb-2 block text-sm font-semibold text-ink">What kind of output?</span>
-          <div className="grid grid-cols-2 gap-3">
-            {([
-              { id: "document", emoji: "📄", label: "Document / Presentation", desc: "A4, Letter or slides — great for exams, worksheets and guides." },
-              { id: "cards",    emoji: "🃏", label: "Cards / Flashcards / Game", desc: "Compact cards, flashcard decks and learning games." },
-            ] as const).map((opt) => (
-              <button key={opt.id} type="button" onClick={() => setTemplateType(opt.id)}
-                className={`flex flex-col items-start gap-3 rounded-2xl border-2 p-5 text-left transition ${templateType === opt.id ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md" : "border-ink/10 bg-white hover:border-[var(--accent)]/40 hover:shadow"}`}>
-                <span className="text-3xl">{opt.emoji}</span>
+          <span className="mb-2 block text-sm font-semibold text-ink">Output type</span>
+          <div className="grid gap-3">
+            {STRUCTURE_TYPES.map((t) => (
+              <button key={t.id} type="button" onClick={() => setStructureType(t.id)}
+                className={`flex items-center gap-4 rounded-2xl border-2 p-5 text-left transition ${structureType === t.id ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md" : "border-ink/10 bg-white hover:border-[var(--accent)]/40"}`}>
+                <span className="text-3xl">{t.emoji}</span>
                 <div className="flex-1">
-                  <span className="block text-[14px] font-bold text-ink">{opt.label}</span>
-                  <span className="mt-0.5 block text-[12px] text-soft-ink">{opt.desc}</span>
+                  <span className="block text-[14px] font-bold text-ink">{t.label}</span>
+                  <span className="mt-0.5 block text-[12px] text-soft-ink">{t.desc}</span>
                 </div>
-                <span className={`grid size-5 place-items-center rounded-full border-2 transition ${templateType === opt.id ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>
-                  {templateType === opt.id ? <span className="text-[10px] font-bold text-white">✓</span> : null}
+                <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${structureType === t.id ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>
+                  {structureType === t.id ? <span className="text-[10px] font-bold text-white">✓</span> : null}
                 </span>
               </button>
             ))}
           </div>
         </div>
-
         <div className="mt-6 flex justify-end">
-          <button type="button" disabled={!name.trim()} onClick={() => setStep(2)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>
-            Next: Pick components ›
-          </button>
+          <button type="button" disabled={!name.trim()} onClick={() => setStep(2)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>Next ›</button>
         </div>
       </div>
     );
   }
 
-  /* ─── Step 2: component selection ─────────────────────────────────── */
+  /* ─── Step 2 ─────────────────────────────────────────────────────── */
   if (step === 2) {
     return (
       <div className="tw-scope mx-auto max-w-2xl">
-        <WizardHeader step={2} title="What can the agent produce?" subtitle="Tick each component type you want. Structure is always included." onBack={() => setStep(1)} />
-        <div className={`${card} mt-3 p-5`}>
-          {CATEGORIES.map((cat) => {
-            const blocks = byCategory.get(cat.id) || [];
-            if (!blocks.length) return null;
-            const activeCnt = blocks.filter((b) => selectedBlockIds.has(b.id)).length;
-            return (
-              <div key={cat.id} className="mb-4 last:mb-0">
-                <div className="mb-2 flex items-center gap-2 rounded-xl px-3 py-2" style={{ background: cat.bg, border: `1px solid ${cat.border}` }}>
-                  <span className="text-base">{cat.emoji}</span>
-                  <span className="flex-1 text-[13px] font-bold" style={{ color: cat.ink }}>{cat.label}</span>
-                  {cat.locked
-                    ? <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ borderColor: cat.border, color: cat.ink }}>Always included</span>
-                    : activeCnt > 0 ? <span className="rounded-full border px-2 py-0.5 text-[10px] font-semibold" style={{ borderColor: cat.border, color: cat.ink }}>{activeCnt} selected</span> : null}
-                </div>
-                <div className="grid gap-1.5 pl-2">
-                  {blocks.map((block) => {
-                    const active = selectedBlockIds.has(block.id);
-                    const locked = cat.locked;
-                    return (
-                      <button key={block.id} type="button" disabled={locked} onClick={() => !locked && toggleBlock(block.id)}
-                        className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${active ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : locked ? "border-ink/10 bg-[var(--surface-soft)] opacity-75" : "border-ink/10 bg-white hover:border-ink/25 hover:bg-[var(--surface-soft)]"}`}>
-                        {/* Icon badge */}
-                        <span className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold"
-                          style={{ background: active ? cat.bg : "var(--surface-soft)", color: active ? cat.ink : "#6b7280", border: active ? `1px solid ${cat.border}` : "1px solid transparent" }}>
-                          {block.icon || cat.emoji}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[13px] font-semibold text-ink">{blockLabel(block)}</span>
-                          <span className="line-clamp-1 block text-[11px] text-soft-ink">{block.description}</span>
-                        </span>
-                        <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>
-                          {active ? <span className="text-[10px] font-bold text-white">✓</span> : null}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+        <WizardHeader step={2} onBack={() => setStep(1)} />
+
+        {/* Quiz */}
+        {structureType === "quiz" && (
+          <>
+            <div className={`${card} mt-3 p-5`}>
+              <div className="mb-4 flex items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5">
+                <span className="text-sm">📝</span>
+                <span className="text-[12px] font-semibold text-green-800">Always included: Exam header (title, name, date) · Page footer</span>
               </div>
-            );
-          })}
-        </div>
-        <div className="mt-4 flex justify-end">
-          <button type="button" className={`${primaryBtn} px-8 py-2.5`} onClick={() => setStep(3)}>
-            Next: Choose style ›
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* ─── Step 3: per-component format gallery ─────────────────────────── */
-  if (step === 3) {
-    const remaining = nonStructureSelected.filter((s) => !blockAccents.has(s.block.id)).length;
-    return (
-      <div className="tw-scope mx-auto max-w-2xl">
-        <WizardHeader step={3} title="How should it look?" subtitle="Pick a color style for each component — all must be chosen to continue." onBack={() => setStep(2)} />
-
-        {nonStructureSelected.map(({ block, toggles }) => {
-          const selectedAccentId = blockAccents.get(block.id);
-          const isFormatted = !!selectedAccentId;
-          const isOpen = openBlocks.has(block.id) || !isFormatted;
-          const selectedAccent = ACCENT_PRESETS.find((a) => a.id === selectedAccentId) || null;
-
-          return (
-            <div key={block.id} className={`${card} mt-3 overflow-hidden transition-all`}
-              style={{ border: isFormatted ? "2px solid #16a34a" : undefined }}>
-              {/* Card header / toggle */}
-              <button type="button" onClick={() => toggleOpen(block.id)}
-                className="flex w-full items-center gap-3 px-5 py-4 text-left">
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{block.family}</span>
-                  <span className="block text-[15px] font-bold text-ink">{blockLabel(block)}</span>
-                </span>
-                {isFormatted && selectedAccent ? (
-                  <span className="flex shrink-0 items-center gap-1.5 rounded-full border-2 border-green-600 bg-green-50 px-3 py-1 text-[12px] font-semibold text-green-700">
-                    <span className="size-3 rounded-full" style={{ background: selectedAccent.main }} />
-                    {selectedAccent.label} ✓
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-full border border-ink/15 px-3 py-1 text-[11px] text-soft-ink">Pick a style</span>
-                )}
-                <span className="text-[10px] text-soft-ink">{isOpen ? "▲" : "▼"}</span>
-              </button>
-
-              {isOpen ? (
-                <div className="border-t border-ink/10 px-5 pb-5 pt-4">
-                  {/* Scrollable color gallery */}
-                  <p className={`${kicker} mb-3`}>Choose a color style</p>
-                  <div className="flex gap-2.5 overflow-x-auto pb-2">
-                    {ACCENT_PRESETS.map((preset) => {
-                      const sel = selectedAccentId === preset.id;
-                      return (
-                        <button key={preset.id} type="button" onClick={() => selectFormat(block.id, preset.id)}
-                          className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-green-600 shadow-md" : "border-transparent hover:border-ink/20"}`}
-                          style={{ background: sel ? preset.tint : "var(--surface-soft)" }}>
-                          <BlockThumbnail block={block} accent={preset} toggles={toggles} scale={0.28} maxW={110} />
-                          <div className="flex items-center gap-1">
-                            <span className="size-2.5 rounded-full" style={{ background: preset.main }} />
-                            <span className="text-[10px] font-semibold" style={{ color: sel ? preset.main : "#6b7280" }}>{preset.label}</span>
-                            {sel ? <span className="text-[10px] text-green-600">✓</span> : null}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Options */}
-                  {(block.options || []).length > 0 && (
-                    <div className="mt-4">
-                      <p className={`${kicker} mb-2`}>Options</p>
-                      <div className="grid gap-1.5">
-                        {(block.options || []).map((opt) => {
-                          const val = blockToggles.get(block.id)?.[opt.key] ?? (block.category !== "structure" ? true : opt.default);
-                          return (
-                            <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-[13px] text-ink">
-                              <input type="checkbox" checked={val} onChange={(e) => setToggle(block.id, opt.key, e.target.checked)} className="accent-[var(--accent)]" />
-                              {opt.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedAccent && (
-                    <div className="mt-4 flex justify-end">
-                      <button type="button" onClick={() => setVisualizeBlock(block)}
-                        className="rounded-full border border-ink/15 px-4 py-1.5 text-[12px] font-semibold text-soft-ink hover:border-[var(--accent)]/50 hover:text-[var(--accent-ink)]">
-                        Visualize full size ↗
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : null}
+              <p className={`${kicker} mb-3`}>Questions</p>
+              <div className="grid gap-1.5">
+                {QUIZ_QUESTIONS.map((q) => {
+                  const active = selectedInteractiveIds.has(q.id);
+                  return (
+                    <button key={q.id} type="button" onClick={() => setSelectedInteractiveIds((c) => { const n = new Set(c); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${active ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 bg-white hover:border-ink/25"}`}>
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ background: active ? "#dbeafe" : "var(--surface-soft)", color: active ? "#1d4ed8" : "#6b7280" }}>{q.icon}</span>
+                      <span className="flex-1"><span className="block text-[13px] font-semibold text-ink">{q.label}</span><span className="block text-[11px] text-soft-ink">{q.desc}</span></span>
+                      <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>{active && <span className="text-[10px] font-bold text-white">✓</span>}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className={`${kicker} mb-3 mt-5`}>Worksheets</p>
+              <div className="grid gap-1.5">
+                {QUIZ_WORKSHEETS.map((q) => {
+                  const active = selectedInteractiveIds.has(q.id);
+                  return (
+                    <button key={q.id} type="button" onClick={() => setSelectedInteractiveIds((c) => { const n = new Set(c); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
+                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${active ? "border-orange-400/50 bg-orange-50" : "border-ink/10 bg-white hover:border-ink/25"}`}>
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ background: active ? "#fff7ed" : "var(--surface-soft)", color: active ? "#9a3412" : "#6b7280" }}>{q.icon}</span>
+                      <span className="flex-1"><span className="block text-[13px] font-semibold text-ink">{q.label}</span><span className="block text-[11px] text-soft-ink">{q.desc}</span></span>
+                      <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${active ? "border-orange-400 bg-orange-400" : "border-ink/25 bg-white"}`}>{active && <span className="text-[10px] font-bold text-white">✓</span>}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          );
-        })}
-
-        {nonStructureSelected.length === 0 && (
-          <div className={`${card} mt-3 p-5`}>
-            <p className="m-0 text-sm text-soft-ink">Only structure components selected — nothing to style here.</p>
-          </div>
+            <div className="mt-4 flex items-center justify-end gap-3">
+              {selectedInteractiveIds.size === 0 && <span className="text-[12px] text-soft-ink">Select at least one component</span>}
+              <button type="button" disabled={!canProceedStep2} onClick={() => setStep(3)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>Next: Style ›</button>
+            </div>
+          </>
         )}
 
-        <div className="mt-4 flex items-center justify-end gap-3">
-          {!allFormatted && remaining > 0 && (
-            <span className="text-[12px] text-soft-ink">{remaining} component{remaining !== 1 ? "s" : ""} still need a style</span>
-          )}
-          <button type="button" disabled={!allFormatted} onClick={() => setStep(4)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>
-            Next: Preview ›
-          </button>
-        </div>
+        {/* Document */}
+        {structureType === "document" && (
+          <>
+            <div className={`${card} mt-3 p-5`}>
+              <p className="m-0 mb-4 text-sm text-soft-ink">All these components are automatically included. Click Next to customize how each one looks.</p>
+              <div className="grid gap-1.5">
+                {DOCUMENT_BLOCK_IDS.map((id) => {
+                  const block = findBlock(id);
+                  if (!block) return null;
+                  return (
+                    <div key={id} className="flex items-center gap-3 rounded-xl border border-ink/8 bg-[var(--surface-soft)] px-4 py-2.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-green-50 text-sm font-bold text-green-700">{block.icon || "▔"}</span>
+                      <span className="flex-1"><span className="block text-[13px] font-semibold text-ink">{block.variant || block.name}</span><span className="block text-[11px] text-soft-ink">{block.description}</span></span>
+                      <span className="text-[11px] font-semibold text-green-600">Included ✓</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button type="button" onClick={() => setStep(3)} className={`${primaryBtn} px-8 py-2.5`}>Next: Style ›</button>
+            </div>
+          </>
+        )}
 
-        {visualizeBlock && (() => {
-          const { block, accent, toggles } = visualizeModalFor(visualizeBlock);
-          return <VisualizeModal block={block} accent={accent} toggles={toggles} onClose={() => setVisualizeBlock(null)} />;
-        })()}
+        {/* Game */}
+        {structureType === "game" && (
+          <>
+            <div className={`${card} mt-3 p-5`}>
+              <div className="mb-4 flex items-center gap-2 rounded-xl bg-green-50 px-4 py-2.5">
+                <span className="text-sm">🃏</span>
+                <span className="text-[12px] font-semibold text-green-800">Always included: Game header (topic, name, date)</span>
+              </div>
+              <p className={`${kicker} mb-3`}>Choose one game format</p>
+              <div className="grid gap-3">
+                {GAME_OPTIONS.map((opt) => {
+                  const sel = selectedGameOptionId === opt.id;
+                  return (
+                    <button key={opt.id} type="button" disabled={opt.disabled} onClick={() => !opt.disabled && setSelectedGameOptionId(opt.id)}
+                      className={`flex items-center gap-4 rounded-2xl border-2 p-5 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)] shadow-md" : "border-ink/10 bg-white hover:border-[var(--accent)]/40"}`}>
+                      <span className="text-3xl">{opt.emoji}</span>
+                      <div className="flex-1"><span className="block text-[14px] font-bold text-ink">{opt.label}</span><span className="block text-[12px] text-soft-ink">{opt.desc}</span></div>
+                      <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>{sel && <span className="text-[10px] font-bold text-white">✓</span>}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end">
+              <button type="button" disabled={!canProceedStep2} onClick={() => setStep(3)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>Next: Style ›</button>
+            </div>
+          </>
+        )}
       </div>
     );
   }
 
-  /* ─── Step 4: preview gallery + matrix + save ──────────────────────── */
+  /* ─── Step 3 ─────────────────────────────────────────────────────── */
+  if (step === 3) {
+    const remaining = requiredBlocks.filter((s) => !blockAccents.has(s.origId)).length;
+    return (
+      <div className="tw-scope mx-auto max-w-2xl">
+        <WizardHeader step={3} onBack={() => setStep(2)} />
+        <div className={`${card} mt-3 p-4`}>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-[12px] font-semibold text-soft-ink">Apply one color to all:</span>
+            <div className="flex flex-wrap gap-1.5">
+              {ACCENT_PRESETS.map((preset) => (
+                <button key={preset.id} type="button" onClick={() => applyColorToAll(preset.id)}
+                  className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]">
+                  <span className="size-2.5 rounded-full" style={{ background: preset.main }} />{preset.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        {stylableBlocks.map(({ origId, block }) => (
+          <FormatCard key={origId} origId={origId} block={block} allBlocks={allBlocks}
+            blockFormats={blockFormats} blockAccents={blockAccents} blockToggles={blockToggles} openBlocks={openBlocks}
+            onSelectFormat={selectFormat} onSelectColor={selectColor} onToggleOption={toggleOption} onToggleOpen={toggleOpen}
+            onVisualize={(id, b) => setVisualizeTarget({ origId: id, block: b })} />
+        ))}
+        {stylableBlocks.length === 0 && (
+          <div className={`${card} mt-3 p-5`}><p className="m-0 text-sm text-soft-ink">No styleable components — go back to add some.</p></div>
+        )}
+        <div className="mt-4 flex items-center justify-end gap-3">
+          {!allFormatted && remaining > 0 && <span className="text-[12px] text-soft-ink">{remaining} component{remaining !== 1 ? "s" : ""} still need a style</span>}
+          <button type="button" disabled={!allFormatted} onClick={() => setStep(4)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>Next: Preview ›</button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ─── Step 4 ─────────────────────────────────────────────────────── */
   const views = assembledTemplate?.layouts[0]?.views || [];
-  const hasInteractive = selectedBlocks.some((s) => s.block.category !== "structure");
+  const hasInteractive = resolvedSelections.some((s) => s.block.category !== "structure");
+  const previewFormats = structureType === "game"
+    ? [{ label: "Cards", i: 0 }]
+    : [{ label: "A4", i: 0 }, { label: "Letter", i: 1 }, { label: "Slides 16:9", i: 2 }];
 
   return (
     <div className="tw-scope mx-auto max-w-4xl">
-      <WizardHeader step={4} title="Preview your template" subtitle="Review each component, then see how the full document looks." onBack={() => setStep(3)} />
+      <WizardHeader step={4} onBack={() => setStep(3)} />
 
-      {/* Component gallery — bigger thumbnails */}
       <div className={`${card} mt-3 p-5`}>
-        <p className={`${kicker} mb-3`}>Components — {selectedBlocks.length} selected</p>
+        <p className={`${kicker} mb-3`}>Components — {resolvedSelections.length} total</p>
         <div className="flex flex-wrap gap-5">
-          {selectedBlocks.map(({ block, accent: a, toggles }) => (
-            <div key={block.id} className="flex flex-col items-center gap-2">
-              <div className="group relative cursor-pointer" onClick={() => setVisualizeBlock(block)}>
-                <BlockThumbnail block={block} accent={a} toggles={toggles} scale={0.52} maxW={240} />
+          {resolvedSelections.map(({ origId, block, accent, toggles, isFixed }) => (
+            <div key={origId} className="flex flex-col items-center gap-2">
+              <div className="group relative cursor-pointer" onClick={() => setVisualizeTarget({ origId: null, block })}>
+                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.52} maxW={240} />
                 <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition group-hover:bg-black/10">
                   <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-sm transition group-hover:opacity-100">Visualize ↗</span>
                 </div>
+                {isFixed && <span className="absolute -right-1 -top-1 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Fixed</span>}
               </div>
-              <span className="max-w-[240px] truncate text-center text-[12px] font-semibold text-ink">{blockLabel(block)}</span>
+              <span className="max-w-[240px] truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
             </div>
           ))}
         </div>
       </div>
 
-      {/* Preview matrix: views × formats */}
       {assembledTemplate && (
         <div className={`${card} mt-3 p-5`}>
           <p className={`${kicker} mb-1`}>Full document preview</p>
@@ -646,11 +680,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
               <thead>
                 <tr>
                   <th className="w-36 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink" />
-                  {PREVIEW_FORMATS.map((fmt) => (
-                    <th key={fmt.id} className="py-2 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">
-                      {fmt.emoji} {fmt.label}
-                    </th>
-                  ))}
+                  {previewFormats.map((fmt) => <th key={fmt.label} className="py-2 text-center text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{fmt.label}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -659,12 +689,11 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
                   return (
                     <tr key={view.id}>
                       <td className="py-1.5 pr-3 text-[13px] font-semibold text-ink">{view.name}</td>
-                      {PREVIEW_FORMATS.map((fmt, fmtIdx) => (
-                        <td key={fmt.id} className="text-center">
-                          <button type="button"
-                            onClick={() => setPagePreview({ template: assembledTemplate, layoutIndex: fmtIdx, viewIndex: viewIdx })}
+                      {previewFormats.map((fmt) => (
+                        <td key={fmt.label} className="text-center">
+                          <button type="button" onClick={() => setPagePreview({ template: assembledTemplate, layoutIndex: fmt.i, viewIndex: viewIdx })}
                             className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 bg-white px-4 py-2 text-[12px] font-semibold text-ink transition hover:border-[var(--accent)]/60 hover:bg-[var(--accent-soft)] hover:shadow-md">
-                            <span>📄</span> Preview
+                            📄 Preview
                           </button>
                         </td>
                       ))}
@@ -677,34 +706,30 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
         </div>
       )}
 
-      {/* Save */}
       <div className={`${card} mt-3 p-5`}>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="m-0 text-base font-bold text-ink">{name || "Untitled template"}</p>
             <p className="m-0 text-[12px] text-soft-ink">
-              {templateType === "cards" ? "Cards / Games" : "Document / Presentation"} · {selectedBlocks.length} component{selectedBlocks.length !== 1 ? "s" : ""} · {views.length} view{views.length !== 1 ? "s" : ""}
+              {STRUCTURE_TYPES.find((t) => t.id === structureType)?.label} · {resolvedSelections.length} component{resolvedSelections.length !== 1 ? "s" : ""} · {views.length} view{views.length !== 1 ? "s" : ""}
             </p>
           </div>
-          <button type="button" disabled={saving || !selectedBlocks.length} onClick={handleSave}
-            className={`${primaryBtn} shrink-0 px-8 py-2.5 text-base disabled:opacity-50`}>
+          <button type="button" disabled={saving || !resolvedSelections.length} onClick={handleSave} className={`${primaryBtn} shrink-0 px-8 py-2.5 text-base disabled:opacity-50`}>
             {saving ? "Saving…" : editTemplate ? "Save changes" : "Save template"}
           </button>
         </div>
       </div>
 
-      {visualizeBlock && (() => {
-        const { block, accent, toggles } = visualizeModalFor(visualizeBlock);
-        return <VisualizeModal block={block} accent={accent} toggles={toggles} onClose={() => setVisualizeBlock(null)} />;
+      {visualizeTarget && (() => {
+        const origId = visualizeTarget.origId;
+        const block = visualizeTarget.block;
+        const accentId = origId ? (blockAccents.get(origId) || "blue") : "blue";
+        const isInteractive = block.category !== "structure";
+        const defs = defaultToggles(block, isInteractive);
+        const toggles = origId ? { ...defs, ...(blockToggles.get(origId) || {}) } : defs;
+        return <VisualizeModal block={block} accentId={accentId} toggles={toggles} allBlocks={allBlocks} onClose={() => setVisualizeTarget(null)} onConfirm={origId ? handleVisualizeConfirm : undefined} />;
       })()}
-      {pagePreview && (
-        <PagePreviewModal
-          template={pagePreview.template}
-          layoutIndex={pagePreview.layoutIndex}
-          viewIndex={pagePreview.viewIndex}
-          onClose={() => setPagePreview(null)}
-        />
-      )}
+      {pagePreview && <PagePreviewModal template={pagePreview.template} layoutIndex={pagePreview.layoutIndex} viewIndex={pagePreview.viewIndex} onClose={() => setPagePreview(null)} />}
     </div>
   );
 }

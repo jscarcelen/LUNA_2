@@ -193,14 +193,28 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
 
   const [wizardOpen, setWizardOpen] = useState(false);
 
+  async function saveTemplate(tpl: Template) {
+    const saveHandler = contextRef.current?.onSaveDocumentBlockTemplate;
+    if (typeof saveHandler !== "function") return;
+    setBusy(true);
+    try {
+      const compiled = { ...compileForSave(tpl, ""), folderId: "tpl-folder-root" };
+      const saved = await saveHandler(compiled);
+      setStatus(`Template "${tpl.name}" saved.`);
+      if (Array.isArray(saved?.templates)) setRows(saved.templates); else refresh();
+      setWizardOpen(false);
+    } catch (error) {
+      setStatus(String((error as Error).message || error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!template || !layout) {
     if (wizardOpen) {
       return (
         <section className="tw-scope grid gap-3">
-          <TemplateWizard
-            onBuilt={(generated, note) => { store.open(generated); setStatus(note); setWizardOpen(false); }}
-            onCancel={() => setWizardOpen(false)}
-          />
+          <TemplateWizard onSave={saveTemplate} onCancel={() => setWizardOpen(false)} />
         </section>
       );
     }

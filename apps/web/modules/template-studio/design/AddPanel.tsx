@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { listComponents } from "../engine/registry";
 import { ACCENT_PRESETS, blockFamilies, builtInBlocks, readBlockLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { card, fieldBase, kicker } from "../ui";
 import { ComponentChat } from "./ComponentChat";
@@ -12,6 +11,10 @@ export interface AddPanelProps {
   onAddBlock: (block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }) => void;
   onPublishBlock?: (block: BlockDef) => void;
   onRemoveBlock?: (block: BlockDef) => void;
+  /** IDs of blocks currently in the template (from origin.blockId). */
+  selectedBlockIds?: string[];
+  /** Toggle a block on/off — active=false means remove it from the template. */
+  onToggleBlock?: (block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }, active: boolean) => void;
   hint: string;
   libraryVersion?: number;
   /** Composer: components + AI fields + document data (no static elements). */
@@ -20,139 +23,325 @@ export interface AddPanelProps {
   onAddDataField?: (name: string) => void;
 }
 
-const BASIC_ORDER = ["text", "heading", "image", "rect", "line", "table"];
-const AI_ORDER = ["field", "field_image"];
+/* ─── UI Category mapping ─────────────────────────────────── */
+const CATEGORIES = [
+  { id: "structure",  label: "Structure",     emoji: "▔", bg: "#f0fdf4", ink: "#166534", border: "#bbf7d0" },
+  { id: "questions",  label: "Questions",     emoji: "❶", bg: "#dbeafe", ink: "#1d4ed8", border: "#bfdbfe" },
+  { id: "worksheets", label: "Worksheets",    emoji: "✍", bg: "#fff7ed", ink: "#9a3412", border: "#fed7aa" },
+  { id: "games",      label: "Cards & Games", emoji: "🃏", bg: "#fdf4ff", ink: "#7e22ce", border: "#e9d5ff" },
+] as const;
 
-function Tile({ icon, label, onClick, tone = "static", disabled = false, title }: { icon: string; label: string; onClick: () => void; tone?: "static" | "ai"; disabled?: boolean; title?: string }) {
+type CatId = typeof CATEGORIES[number]["id"];
+
+const WORKSHEET_FAMILIES = new Set(["Fill in the blanks", "Match the pairs", "Math practice set", "Cut and paste", "Tracing"]);
+
+function uiCat(block: BlockDef): CatId {
+  if (block.category === "structure") return "structure";
+  if (block.category === "questions" || (block.category === "kids" && block.family === "Question card")) return "questions";
+  if (WORKSHEET_FAMILIES.has(block.family || "")) return "worksheets";
+  return "games";
+}
+
+/** Default accent and toggles for a block when first added. */
+function defaultOptions(block: BlockDef): { accent: AccentPreset; toggles: Record<string, boolean> } {
+  const accent = ACCENT_PRESETS[0];
+  const toggles = Object.fromEntries((block.options || []).map((o) => [o.key, o.key === "answer" ? false : o.default]));
+  return { accent, toggles };
+}
+
+/* ─── Variant card ────────────────────────────────────────── */
+function VariantCard({
+  block,
+  active,
+  catInk,
+  catBg,
+  catBorder,
+  onToggle,
+}: {
+  block: BlockDef;
+  active: boolean;
+  catInk: string;
+  catBg: string;
+  catBorder: string;
+  onToggle: (active: boolean) => void;
+}) {
   return (
-    <button type="button" disabled={disabled} title={title} onClick={onClick} className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-center transition hover:bg-[var(--surface-soft)] disabled:opacity-40 ${tone === "ai" ? "text-[var(--accent-ink)]" : "text-ink"}`}>
-      <span className={`grid size-9 place-items-center rounded-lg text-sm font-bold ${tone === "ai" ? "bg-[var(--accent-soft)]" : "bg-[var(--surface-soft)]"}`}>{icon}</span>
-      <span className="text-[11px] font-semibold">{label}</span>
+    <button
+      type="button"
+      onClick={() => onToggle(!active)}
+      className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition ${
+        active
+          ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] shadow-[0_2px_8px_rgba(0,0,0,0.06)]"
+          : "border-ink/10 bg-white hover:border-ink/20 hover:bg-[var(--surface-soft)]"
+      }`}
+      title={block.description}
+    >
+      {/* Colour swatch + icon */}
+      <span
+        className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold"
+        style={{ background: active ? catBg : "var(--surface-soft)", color: active ? catInk : "#6b7280", border: active ? `1px solid ${catBorder}` : "1px solid transparent" }}
+      >
+        {block.icon}
+      </span>
+
+      {/* Label */}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12px] font-semibold leading-tight text-ink">
+          {block.variant || block.name}
+        </span>
+        {block.description ? (
+          <span className="line-clamp-1 block text-[10px] leading-snug text-soft-ink">
+            {block.description}
+          </span>
+        ) : null}
+      </span>
+
+      {/* Checkbox */}
+      <span
+        className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${
+          active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"
+        }`}
+      >
+        {active ? <span className="text-[10px] font-bold text-white">✓</span> : null}
+      </span>
     </button>
   );
 }
 
-function BlockPreview({ block, accent }: { block: BlockDef; accent: AccentPreset }) {
-  return (
-    <span className="relative grid h-12 w-full place-items-center overflow-hidden rounded-lg border" style={{ background: accent.tint, borderColor: `${accent.main}33` }}>
-      <span className="absolute left-2 top-2 h-1 w-8 rounded-full" style={{ background: accent.main }} />
-      <span className="absolute left-2 top-4 h-0.5 w-12 rounded-full bg-ink/15" />
-      <span className="absolute left-2 top-[22px] h-0.5 w-10 rounded-full bg-ink/10" />
-      <span className="text-base font-bold" style={{ color: accent.main }}>{block.icon}</span>
-    </span>
-  );
-}
+/* ─── Family group ────────────────────────────────────────── */
+function FamilyGroup({
+  family,
+  variants,
+  selectedBlockIds,
+  cat,
+  onToggle,
+}: {
+  family: string;
+  variants: BlockDef[];
+  selectedBlockIds: Set<string>;
+  cat: (typeof CATEGORIES)[number];
+  onToggle: (block: BlockDef, active: boolean) => void;
+}) {
+  const activeCount = variants.filter((b) => selectedBlockIds.has(b.id)).length;
+  const [open, setOpen] = useState(activeCount > 0);
 
-function Section({ title, children, badge }: { title: string; children: React.ReactNode; badge?: string }) {
+  // Re-open when a variant becomes active externally (e.g. from AI generation)
+  useEffect(() => { if (activeCount > 0 && !open) setOpen(true); }, [activeCount]);
+
   return (
     <div className="min-w-0">
-      <p className="m-0 mb-1 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{title}{badge ? <span className="rounded-full bg-[var(--accent-soft)] px-1.5 text-[9px] normal-case tracking-normal text-[var(--accent-ink)]">{badge}</span> : null}</p>
-      {children}
+      {/* Family header row */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left transition hover:bg-[var(--surface-soft)]"
+      >
+        <span className="min-w-0 flex-1 text-[12px] font-semibold text-ink">{family}</span>
+        {activeCount > 0 ? (
+          <span className="rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: cat.bg, color: cat.ink }}>
+            {activeCount} selected
+          </span>
+        ) : null}
+        <span className="text-[10px] text-soft-ink">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {/* Variants */}
+      {open ? (
+        <div className="mt-1 grid gap-1 pl-1">
+          {variants.map((block) => (
+            <VariantCard
+              key={block.id}
+              block={block}
+              active={selectedBlockIds.has(block.id)}
+              catInk={cat.ink}
+              catBg={cat.bg}
+              catBorder={cat.border}
+              onToggle={(active) => onToggle(block, active)}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
 
-/** Add: Basic · AI fields · Premium · Custom — one scrolling panel with search. */
-export function AddPanel({ onAdd, onOpenSequence, onAddBlock, onPublishBlock, onRemoveBlock, hint, libraryVersion = 0, blocksOnly = false, onAddDataField }: AddPanelProps) {
-  const [customData, setCustomData] = useState("");
-  const [query, setQuery] = useState("");
-  const [accentId, setAccentId] = useState(ACCENT_PRESETS[0].id);
-  const [active, setActive] = useState<BlockDef | null>(null);
-  const [variantByFamily, setVariantByFamily] = useState<Record<string, string>>({});
-  const [toggles, setToggles] = useState<Record<string, boolean>>({});
-  const [library, setLibrary] = useState<BlockDef[]>([]);
-  useEffect(() => { setLibrary(readBlockLibrary()); }, [libraryVersion]);
-  const accent = ACCENT_PRESETS.find((item) => item.id === accentId) || ACCENT_PRESETS[0];
-  const components = listComponents();
-  const q = query.trim().toLowerCase();
-  const match = (text: string) => !q || text.toLowerCase().includes(q);
-  const basic = BASIC_ORDER.map((type) => components.find((c) => c.type === type)).filter((c): c is NonNullable<typeof c> => Boolean(c) && match(c!.label));
-  const ai = AI_ORDER.map((type) => components.find((c) => c.type === type)).filter((c): c is NonNullable<typeof c> => Boolean(c) && match(c!.label));
-  const premium = useMemo(() => blockFamilies(builtInBlocks().filter((b) => match(`${b.family || ""} ${b.name} ${b.description} ${b.variant || ""}`))), [q]);
-  const custom = library.filter((b) => match(`${b.name} ${b.description}`));
+/* ─── Category accordion ──────────────────────────────────── */
+function CategoryAccordion({
+  cat,
+  families,
+  selectedBlockIds,
+  onToggle,
+}: {
+  cat: (typeof CATEGORIES)[number];
+  families: { family: string; variants: BlockDef[] }[];
+  selectedBlockIds: Set<string>;
+  onToggle: (block: BlockDef, active: boolean) => void;
+}) {
+  const totalActive = families.reduce((n, f) => n + f.variants.filter((b) => selectedBlockIds.has(b.id)).length, 0);
+  const [open, setOpen] = useState(totalActive > 0 || cat.id === "structure");
 
-  function pick(block: BlockDef) {
-    setActive(block);
-    setToggles(Object.fromEntries((block.options || []).map((option) => [option.key, option.default])));
-  }
-
-  const familyRow = ({ family, variants }: { family: string; variants: BlockDef[] }) => {
-    const chosen = variants.find((b) => b.id === variantByFamily[family]) || variants[0];
-    return blockRow(chosen, family, variants);
-  };
-
-  const blockRow = (block: BlockDef, family?: string, variants: BlockDef[] = []) => {
-    const open = active?.id === block.id;
-    return (
-      <div key={block.id} className={`rounded-xl border transition ${open ? "border-[var(--accent)]/40 bg-white shadow-[0_4px_14px_rgba(0,0,0,0.06)]" : "border-transparent hover:bg-[var(--surface-soft)]"}`}>
-        <button type="button" onClick={() => (open ? setActive(null) : pick(block))} className="flex w-full min-w-0 items-center gap-2 overflow-hidden px-2 py-1.5 text-left">
-          <span className="w-12 shrink-0"><BlockPreview block={block} accent={accent} /></span>
-          <span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold leading-tight text-ink">{family || block.name}</span><span className="line-clamp-2 block text-[10.5px] leading-snug text-soft-ink">{block.description}</span></span>
-          {variants.length > 1 ? <span className="shrink-0 rounded-full bg-[var(--surface-soft)] px-1.5 text-[9px] font-semibold text-soft-ink">{variants.length} designs</span> : null}
-        </button>
-        {open ? (
-          <div className="grid gap-1.5 px-2 pb-2">
-            {variants.length > 1 ? (
-              <label className="grid gap-0.5 text-[10px] font-semibold text-soft-ink">Design
-                <select className={`${fieldBase} w-full py-1 text-xs`} value={block.id} onChange={(event) => { const next = variants.find((b) => b.id === event.target.value)!; setVariantByFamily((prev) => ({ ...prev, [family!]: next.id })); pick(next); }}>
-                  {variants.map((b) => <option key={b.id} value={b.id}>{b.variant || b.name}</option>)}
-                </select>
-              </label>
-            ) : null}
-            <div className="flex items-center gap-1">
-              {ACCENT_PRESETS.map((preset) => <button key={preset.id} type="button" title={preset.label} onClick={() => setAccentId(preset.id)} className={`size-4.5 rounded-full border-2 transition ${accentId === preset.id ? "scale-110 border-ink" : "border-white"}`} style={{ background: preset.main, boxShadow: "0 0 0 1px rgba(0,0,0,0.08)", width: 18, height: 18 }} />)}
-            </div>
-            {(block.options || []).length ? (
-              <div className="flex flex-wrap gap-1">
-                {(block.options || []).map((option) => (
-                  <label key={option.key} className={`inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10.5px] font-semibold ${toggles[option.key] ? "border-[var(--accent)]/40 bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/10 text-soft-ink"}`}>
-                    <input type="checkbox" className="sr-only" checked={Boolean(toggles[option.key])} onChange={(event) => setToggles((prev) => ({ ...prev, [option.key]: event.target.checked }))} />{option.label}
-                  </label>
-                ))}
-              </div>
-            ) : null}
-            <div className="flex flex-wrap gap-1">
-              <button type="button" className="rounded-full bg-[var(--accent)] px-3 py-1 text-[11px] font-semibold text-white hover:bg-[#0077ed]" onClick={() => onAddBlock(block, { accent, toggles })}>Insert</button>
-              {!block.builtIn && onPublishBlock ? <button type="button" className="rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-ink hover:bg-[var(--surface-soft)]" onClick={() => onPublishBlock(block)}>Sell in Marketplace</button> : null}
-              {!block.builtIn && onRemoveBlock ? <button type="button" className="rounded-full px-2 py-1 text-[11px] font-semibold text-[var(--color-danger)]" onClick={() => onRemoveBlock(block)}>Remove</button> : null}
-            </div>
-          </div>
-        ) : null}
-      </div>
-    );
-  };
+  useEffect(() => { if (totalActive > 0 && !open) setOpen(true); }, [totalActive]);
 
   return (
-    <div className={`${card} min-w-0 overflow-hidden p-3`}>
-      <p className={`${kicker} px-1`}>Add</p>
-      <input className={`${fieldBase} mt-2 w-full py-1.5 text-xs`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search elements…" />
-      <p className="m-0 mt-1.5 px-1 text-[10.5px] text-soft-ink">{hint}</p>
-      <div className="mt-3 grid max-h-[58vh] min-w-0 gap-4 overflow-y-auto overflow-x-hidden pr-0.5" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        {basic.length && !blocksOnly ? <Section title="Basic"><div className="grid grid-cols-3 gap-0.5">{basic.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} disabled={c.type === "table"} title={c.type === "table" ? "Coming soon" : undefined} onClick={() => onAdd(c.type)} />)}</div></Section> : null}
-        {onAddDataField && (!q || "document data date topic course teacher class".includes(q)) ? (
-          <Section title="Document data" badge="user">
-            <p className="m-0 mb-1 px-1 text-[10.5px] text-soft-ink">Values the user types when running the agent (not generated) — reused wherever the template needs them.</p>
-            <div className="flex flex-wrap gap-1 px-1">
-              {["Date", "Topic", "Course", "Teacher", "Class"].map((name) => <button key={name} type="button" className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[11px] font-semibold text-ink hover:bg-[var(--surface-soft)]" onClick={() => onAddDataField(name)}>＋ {name}</button>)}
-            </div>
-            <div className="mt-1.5 flex gap-1 px-1">
-              <input className={`${fieldBase} min-w-0 flex-1 py-1 text-xs`} value={customData} onChange={(event) => setCustomData(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && customData.trim()) { onAddDataField(customData.trim()); setCustomData(""); } }} placeholder="Other, e.g. School" />
-              <button type="button" className="rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40" disabled={!customData.trim()} onClick={() => { onAddDataField(customData.trim()); setCustomData(""); }}>Add</button>
-            </div>
-          </Section>
+    <div className="min-w-0">
+      {/* Category header */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2.5 rounded-2xl border px-3 py-2.5 text-left transition"
+        style={{
+          background: open ? cat.bg : "white",
+          borderColor: open ? cat.border : "rgba(0,0,0,0.08)",
+        }}
+      >
+        <span className="text-base">{cat.emoji}</span>
+        <span className="flex-1 text-[13px] font-bold" style={{ color: cat.ink }}>{cat.label}</span>
+        {totalActive > 0 ? (
+          <span className="rounded-full border px-2 py-0.5 text-[10px] font-bold" style={{ background: "white", color: cat.ink, borderColor: cat.border }}>
+            {totalActive}
+          </span>
         ) : null}
-        {ai.length ? <Section title="AI fields" badge="content"><div className="grid grid-cols-3 gap-0.5">{ai.map((c) => <Tile key={c.type} icon={c.icon} label={c.label} tone="ai" onClick={() => onAdd(c.type)} />)}</div><p className="m-0 mt-1 px-1 text-[10.5px] text-soft-ink">Where generated content goes: a name, a type, and whether it repeats. A <strong>list</strong> is a field with many elements — a repeating block draws them one after another.</p></Section> : null}
-        {onOpenSequence && (!q || "agent order content sequence".includes(q)) ? (
-          <Section title="Agent order" badge="⇅">
-            <button type="button" onClick={onOpenSequence} className="w-full rounded-xl border border-dashed border-[var(--accent)]/50 bg-[var(--accent-soft)]/50 px-3 py-2.5 text-left transition hover:bg-[var(--accent-soft)]">
-              <span className="block text-[12px] font-semibold text-[var(--accent-ink)]">Content in the agent's order</span>
-              <span className="block text-[10.5px] leading-snug text-soft-ink">You choose which designs may appear (titles, question styles, callouts…); the agent decides the order.</span>
-            </button>
-          </Section>
-        ) : null}
-        {premium.length ? <Section title="Premium" badge="★"><div className="grid gap-1">{premium.map(familyRow)}</div></Section> : null}
-        <Section title="Custom"><div className="grid gap-1"><ComponentChat onBuilt={(block) => { setLibrary(readBlockLibrary()); pick(block); }} />{custom.map((b) => blockRow(b))}{!custom.length ? <p className="m-0 px-1 text-[10.5px] text-soft-ink">Select elements on the canvas → <strong>Save as block</strong> to reuse them here.</p> : null}</div></Section>
+        <span className="text-[10px]" style={{ color: cat.ink }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {/* Families */}
+      {open ? (
+        <div className="mt-2 grid gap-2 pl-1">
+          {families.map((f) => (
+            <FamilyGroup
+              key={f.family}
+              family={f.family}
+              variants={f.variants}
+              selectedBlockIds={selectedBlockIds}
+              cat={cat}
+              onToggle={onToggle}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/* ─── Main component ──────────────────────────────────────── */
+export function AddPanel({
+  onAdd: _onAdd,
+  onOpenSequence: _onOpenSequence,
+  onAddBlock,
+  onPublishBlock: _onPublishBlock,
+  onRemoveBlock,
+  selectedBlockIds: selectedBlockIdsProp = [],
+  onToggleBlock,
+  hint: _hint,
+  libraryVersion = 0,
+  blocksOnly = false,
+  onAddDataField,
+}: AddPanelProps) {
+  const [library, setLibrary] = useState<BlockDef[]>([]);
+  const [customData, setCustomData] = useState("");
+  useEffect(() => { setLibrary(readBlockLibrary()); }, [libraryVersion]);
+
+  const selectedIds = useMemo(() => new Set(selectedBlockIdsProp), [selectedBlockIdsProp]);
+
+  // Group built-in blocks by UI category → family
+  const byCategory = useMemo(() => {
+    const all = builtInBlocks();
+    const map = new Map<CatId, Map<string, BlockDef[]>>();
+    for (const cat of CATEGORIES) map.set(cat.id, new Map());
+    for (const block of all) {
+      const catId = uiCat(block);
+      const catMap = map.get(catId)!;
+      const fam = block.family || block.name;
+      if (!catMap.has(fam)) catMap.set(fam, []);
+      catMap.get(fam)!.push(block);
+    }
+    return map;
+  }, []);
+
+  function handleToggle(block: BlockDef, active: boolean) {
+    const opts = defaultOptions(block);
+    if (onToggleBlock) {
+      onToggleBlock(block, opts, active);
+    } else if (active) {
+      onAddBlock(block, opts);
+    }
+  }
+
+  return (
+    <div className={`${card} min-w-0 overflow-hidden p-3`} style={{ maxHeight: "calc(100vh - 140px)", overflowY: "auto" }}>
+      <p className={`${kicker} px-1 mb-3`}>Components</p>
+      <p className="m-0 mb-3 px-1 text-[10.5px] text-soft-ink leading-snug">
+        Select the formats you want. The agent uses only what you pick here — it decides the order and how many of each.
+      </p>
+
+      {/* 4 category accordions */}
+      <div className="grid gap-2">
+        {CATEGORIES.map((cat) => {
+          const catMap = byCategory.get(cat.id)!;
+          const families = [...catMap.entries()].map(([family, variants]) => ({ family, variants }));
+          if (!families.length) return null;
+          return (
+            <CategoryAccordion
+              key={cat.id}
+              cat={cat}
+              families={families}
+              selectedBlockIds={selectedIds}
+              onToggle={handleToggle}
+            />
+          );
+        })}
       </div>
+
+      {/* Document data (for composer) */}
+      {onAddDataField ? (
+        <div className="mt-4 min-w-0">
+          <p className="m-0 mb-1 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">
+            Document data
+            <span className="rounded-full bg-[var(--accent-soft)] px-1.5 text-[9px] normal-case tracking-normal text-[var(--accent-ink)]">user</span>
+          </p>
+          <p className="m-0 mb-2 px-1 text-[10.5px] text-soft-ink">Values the user types when running the agent — date, topic, course.</p>
+          <div className="flex flex-wrap gap-1 px-1">
+            {["Date", "Topic", "Course", "Teacher", "Class"].map((name) => (
+              <button key={name} type="button" className="rounded-full border border-ink/10 px-2.5 py-0.5 text-[11px] font-semibold text-ink hover:bg-[var(--surface-soft)]" onClick={() => onAddDataField(name)}>＋ {name}</button>
+            ))}
+          </div>
+          <div className="mt-1.5 flex gap-1 px-1">
+            <input className={`${fieldBase} min-w-0 flex-1 py-1 text-xs`} value={customData} onChange={(e) => setCustomData(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && customData.trim()) { onAddDataField(customData.trim()); setCustomData(""); } }} placeholder="Other, e.g. School" />
+            <button type="button" className="rounded-full bg-[var(--accent)] px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40" disabled={!customData.trim()} onClick={() => { onAddDataField(customData.trim()); setCustomData(""); }}>Add</button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Custom / library blocks */}
+      {library.length > 0 ? (
+        <div className="mt-4 min-w-0">
+          <p className="m-0 mb-1.5 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">My blocks</p>
+          <div className="grid gap-1">
+            {library.map((block) => (
+              <VariantCard
+                key={block.id}
+                block={block}
+                active={selectedIds.has(block.id)}
+                catInk="#6b7280"
+                catBg="var(--surface-soft)"
+                catBorder="rgba(0,0,0,0.08)"
+                onToggle={(active) => {
+                  if (active) onAddBlock(block, defaultOptions(block));
+                  else if (onRemoveBlock) onRemoveBlock(block);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Custom block builder */}
+      {!blocksOnly ? (
+        <div className="mt-4 min-w-0">
+          <p className="m-0 mb-1.5 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Custom block</p>
+          <ComponentChat onBuilt={(block) => { setLibrary(readBlockLibrary()); onAddBlock(block, defaultOptions(block)); }} />
+        </div>
+      ) : null}
     </div>
   );
 }

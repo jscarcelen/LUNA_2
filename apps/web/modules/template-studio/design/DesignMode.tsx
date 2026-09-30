@@ -277,6 +277,28 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
     setLibraryVersion((v) => v + 1);
   }
 
+  /** IDs of all blocks currently placed in the template (via origin.blockId). */
+  const selectedBlockIds = useMemo(() => {
+    const ids: string[] = [];
+    const walk = (list: Element[]) => list.forEach((el) => {
+      if (el.type === "group" && (el as GroupElement).origin?.blockId) ids.push((el as GroupElement).origin!.blockId);
+      if (el.type === "group") walk((el as GroupElement).children);
+    });
+    walk(pg.elements);
+    return ids;
+  }, [pg.elements]);
+
+  /** Toggle a block on (add) or off (remove all elements from that block). */
+  function toggleBlock(block: BlockDef, options: { accent: AccentPreset; toggles: Record<string, boolean> }, active: boolean) {
+    if (active) {
+      addBlock(block, options);
+    } else {
+      // Remove all top-level elements that came from this block
+      const toRemove = pg.elements.filter((el) => el.type === "group" && (el as GroupElement).origin?.blockId === block.id).map((el) => el.id);
+      if (toRemove.length) deleteElements(toRemove);
+    }
+  }
+
   function arrayField(): FieldDef | null {
     return template.fields.find((item) => item.type === "array") || null;
   }
@@ -373,9 +395,9 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
   const addHint = simple ? "Added at the end of the list." : selected.element?.type === "group" ? `Added inside “${selected.element.name || "Group"}”.` : parentChain.length ? `Added inside “${parentChain[parentChain.length - 1].name || "Group"}”.` : "Added inside the page margins.";
 
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-[248px_minmax(0,1fr)_320px]">
+    <div className={`grid items-start gap-3 ${simple && !composer ? "lg:grid-cols-[280px_minmax(0,1fr)]" : "lg:grid-cols-[248px_minmax(0,1fr)_320px]"}`}>
       <aside className="grid min-w-0 gap-3" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
-        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} hint={addHint} libraryVersion={libraryVersion} blocksOnly={composer} onAddDataField={composer && onDataField ? addDataField : undefined} />
+        <AddPanel onAdd={addElement} onOpenSequence={() => setSequenceOpen({ addTo: "" })} onAddBlock={addBlock} onPublishBlock={onPublishBlock} onRemoveBlock={removeBlock} selectedBlockIds={selectedBlockIds} onToggleBlock={toggleBlock} hint={addHint} libraryVersion={libraryVersion} blocksOnly={composer} onAddDataField={composer && onDataField ? addDataField : undefined} />
         {composer ? null : <PagesPanel layout={layout} pages={pages} activeId={pg.id} onSelect={(id) => store.dispatch({ type: "setPage", id })} onAdd={store.addPage} onRemove={(id) => { updateLayout((current) => ({ ...current, pages: current.pages.filter((item) => item.id !== id) })); store.dispatch({ type: "setPage", id: pages.find((item) => item.id !== id)!.id }); }} />}
         {composer ? null : <LayersPanel
           page={pg}
@@ -400,30 +422,6 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
           })}
         />}
       </aside>
-      {simple ? (
-        <SimpleDesign
-          layout={layout}
-          page={pg}
-          fields={template.fields}
-          selection={state.selection}
-          onSelect={select}
-          onReorder={(orderedIds) => updatePage((current) => ({ ...current, elements: stackElements(orderedIds.map((id) => current.elements.find((element) => element.id === id)!).filter(Boolean), layout!) }))}
-          onDuplicate={(id) => { select([id]); const found = findElement(pg.elements, id).element; if (!found) return; const copy = cloneElement(found); updatePage((current) => { const index = current.elements.findIndex((element) => element.id === id); const next = [...current.elements]; next.splice(index + 1, 0, copy); return { ...current, elements: next }; }); select([copy.id]); }}
-          onDelete={(id) => deleteElements([id])}
-          onSetRepeat={(id, mode) => updateElements(id, (element) => {
-            const group = element as GroupElement;
-            if (mode === "none") return { ...group, repeat: null } as Element;
-            const list = group.repeat?.fieldId || arrayField()?.id || "";
-            return { ...group, repeat: { fieldId: list, mode, columns: mode === "grid" ? group.repeat?.columns || 2 : undefined }, layout: mode === "grid" ? { ...group.layout, mode: "grid", columns: group.repeat?.columns || 2 } : group.layout } as Element;
-          })}
-          onChangeElement={(id, updater) => updateElements(id, updater)}
-          onAgentOrder={setAgentOrder}
-          onExtractFromSet={extractFromSet}
-          onAddToSet={(setId) => setSequenceOpen({ addTo: setId })}
-          onAdvanced={() => update((current) => ({ ...current, editorMode: "advanced" }))}
-          composer={composer}
-        />
-      ) : (
       <Canvas
         layout={layout}
         page={pg}
@@ -440,7 +438,6 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
           const nextW = Math.round(w * 2) / 2;
           const nextH = Math.round(h * 2) / 2;
           if (element.type !== "group" || !element.frame.w || !element.frame.h) return { ...element, frame: { ...element.frame, w: nextW, h: nextH } };
-          // Resizing a group scales everything inside it (positions, sizes and font sizes) so the design stays proportional.
           const rx = nextW / element.frame.w;
           const ry = nextH / element.frame.h;
           const scaleChild = (child: Element): Element => {
@@ -454,8 +451,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
         }, transient)}
         toolbar={{ canUngroup: selected.element?.type === "group", onGroup: groupSelection, onUngroup: ungroup, onAlign: align, onDuplicate: duplicate, onDelete: () => deleteElements(state.selection), onSaveBlock: saveSelectionAsBlock }}
       />
-      )}
-      {composer ? <ComponentPreview element={selected.element || simpleOrder(pg.elements, layout)[0] || null} fields={template.fields} sampleValues={sampleValues} hovered={hoveredField} onHover={setHoveredField} onRename={renameField} /> : <Inspector
+      {composer ? <ComponentPreview element={selected.element || simpleOrder(pg.elements, layout)[0] || null} fields={template.fields} sampleValues={sampleValues} hovered={hoveredField} onHover={setHoveredField} onRename={renameField} /> : (!simple ? <Inspector
         layout={layout}
         page={pg}
         views={layout.views}
@@ -473,7 +469,7 @@ export function DesignMode({ store, sampleValues, onPublishBlock, composer = fal
         onRenameField={renameField}
         onRetypeField={retypeField}
         onSetRepeat={setFieldRepeat}
-      />}
+      /> : null)}
       {blockDialog ? <BlockDialog onClose={() => setBlockDialog(null)} onSave={confirmSaveBlock} /> : null}
       {sequenceOpen ? <SequenceDialog onClose={() => setSequenceOpen(false)} onInsert={(block, choices) => { if (sequenceOpen.addTo) addToSet(sequenceOpen.addTo, choices); else addBlock(block, { accent: ACCENT_PRESETS[0], toggles: {} }); setSequenceOpen(false); }} /> : null}
     </div>

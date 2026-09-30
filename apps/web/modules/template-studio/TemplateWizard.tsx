@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./engine/blocks";
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
@@ -55,13 +55,35 @@ function findBlock(id: string): BlockDef | undefined {
   return builtInBlocks().find((b) => b.id === id);
 }
 
-/** Never auto-enable "answer" — it is controlled by view (student view hides it, answer key shows it). */
+/** Never auto-enable "answer" — it is controlled by view (student view hides it, answer key shows it).
+ * All other options default to ON so teachers see the richest preview first. */
 function defaultToggles(block: BlockDef): Record<string, boolean> {
-  return Object.fromEntries((block.options || []).map((o) => [o.key, o.key === "answer" ? false : (o.default ?? true)]));
+  return Object.fromEntries((block.options || []).map((o) => [o.key, o.key === "answer" ? false : true]));
 }
 
-/** Families where siblings are genuine visual-design variants of the same component (not different question types). */
-const VISUAL_FORMAT_FAMILIES = new Set(["Flashcard"]);
+/**
+ * Maps each block ID to the list of block IDs that are genuine visual-design alternatives
+ * (same concept / same AI fields, different visual style).
+ * Siblings share the same entry — both point to the same array.
+ */
+const DESIGN_VARIANTS: Record<string, string[]> = {
+  // Multiple choice question: standard card vs. kids playful card
+  "block-exam-question":    ["block-exam-question", "block-mc-kids"],
+  "block-mc-kids":          ["block-exam-question", "block-mc-kids"],
+  // Compact MC: no kids variant yet, single entry keeps the UI consistent
+  "block-question-compact": ["block-question-compact"],
+  // Open answer
+  "block-open-question":    ["block-open-question"],
+  // True / False
+  "block-true-false":       ["block-true-false"],
+  // Section + questions (combined block)
+  "block-section-questions":["block-section-questions"],
+  // Mixed question (agent picks type)
+  "block-question-mixed":   ["block-question-mixed"],
+  // Flashcard: grid view vs. one-per-page
+  "block-flashcard":        ["block-flashcard", "block-flashcard-single"],
+  "block-flashcard-single": ["block-flashcard", "block-flashcard-single"],
+};
 
 function accentOf(id: string, map: Map<string, string>): AccentPreset {
   return ACCENT_PRESETS.find((a) => a.id === (map.get(id) || "blue")) || ACCENT_PRESETS[0];
@@ -167,12 +189,16 @@ function VisualizeModal({ block: initialBlock, accentId: initialAccentId, toggle
 }) {
   const [localBlockId, setLocalBlockId] = useState(initialBlock.id);
   const [localAccentId, setLocalAccentId] = useState(initialAccentId || "blue");
+  // Sync with parent when the selected format/color changes outside the modal
+  useEffect(() => { setLocalBlockId(initialBlock.id); }, [initialBlock.id]);
+  useEffect(() => { setLocalAccentId(initialAccentId || "blue"); }, [initialAccentId]);
   const block = allBlocks.find((b) => b.id === localBlockId) || initialBlock;
   const accent = ACCENT_PRESETS.find((a) => a.id === localAccentId) || ACCENT_PRESETS[0];
-  // Only show format variants when family members are genuine visual-design alternatives
-  const familyVariants = VISUAL_FORMAT_FAMILIES.has(block.family || "")
-    ? allBlocks.filter((b) => b.family === block.family && b.category === block.category)
-    : [];
+  // Show format variants using the DESIGN_VARIANTS map (same logic as FormatCard)
+  const designIds = DESIGN_VARIANTS[initialBlock.id];
+  const familyVariants: BlockDef[] = designIds
+    ? designIds.map((id) => allBlocks.find((b) => b.id === id)).filter(Boolean) as BlockDef[]
+    : allBlocks.filter((b) => b.family === block.family && b.category === block.category);
   const { fields, elements } = useMemo(() => instantiateBlock(block, [], { accent, toggles }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [localBlockId, localAccentId, JSON.stringify(toggles)]);
@@ -311,11 +337,12 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
   const previewAccent = selectedAccent || ACCENT_PRESETS[0];
   const defToggles = defaultToggles(currentBlock);
   const toggles = { ...defToggles, ...(blockToggles.get(origId) || {}) };
-  // Only show format design variants for families where siblings are genuine visual designs (not different question types)
-  const showFormatDesign = VISUAL_FORMAT_FAMILIES.has(origBlock.family || "");
-  const variants = showFormatDesign
-    ? allBlocks.filter((b) => b.family === origBlock.family && b.category === origBlock.category)
-    : [];
+  // Show format design gallery for all blocks; use DESIGN_VARIANTS map when available,
+  // otherwise fall back to all blocks in the same family (for future-proofing).
+  const designIds = DESIGN_VARIANTS[origId];
+  const variants: BlockDef[] = designIds
+    ? designIds.map((id) => allBlocks.find((b) => b.id === id)).filter(Boolean) as BlockDef[]
+    : allBlocks.filter((b) => b.family === origBlock.family && b.category === origBlock.category);
 
   return (
     <div className={`${card} mt-3 overflow-hidden transition-all`} style={{ border: isFormatted ? "2px solid #16a34a" : undefined }}>
@@ -331,23 +358,27 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
       </button>
       {isOpen ? (
         <div className="border-t border-ink/10 px-5 pb-5 pt-4">
-          {variants.length > 1 && (
-            <div className="mb-4">
-              <p className={`${kicker} mb-2`}>Format design</p>
-              <div className="flex gap-2.5 overflow-x-auto pb-1">
-                {variants.map((v) => {
-                  const sel = v.id === currentBlockId;
-                  return (
-                    <button key={v.id} type="button" onClick={() => onSelectFormat(origId, v.id)}
-                      className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-transparent bg-[var(--surface-soft)] hover:border-ink/20"}`}>
-                      <BlockThumbnail block={v} accent={previewAccent} toggles={toggles} scale={0.25} maxW={100} />
-                      <span className="text-[10px] font-semibold" style={{ color: sel ? "var(--accent-ink)" : "#6b7280" }}>{v.variant || v.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="mb-4">
+            <div className="mb-2 flex items-center justify-between">
+              <p className={`${kicker}`}>Format design</p>
+              {variants.length === 1 && (
+                <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] text-soft-ink">More designs coming soon</span>
+              )}
             </div>
-          )}
+            <div className="flex gap-2.5 overflow-x-auto pb-1">
+              {variants.map((v) => {
+                const sel = v.id === currentBlockId;
+                return (
+                  <button key={v.id} type="button" onClick={() => onSelectFormat(origId, v.id)}
+                    className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-transparent bg-[var(--surface-soft)] hover:border-ink/20"}`}>
+                    <BlockThumbnail block={v} accent={previewAccent} toggles={toggles} scale={0.25} maxW={100} />
+                    <span className="text-[10px] font-semibold" style={{ color: sel ? "var(--accent-ink)" : "#6b7280" }}>{v.variant || v.name}</span>
+                    {sel && <span className="text-[9px] font-bold text-[var(--accent)]">✓ Selected</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <p className={`${kicker} mb-2`}>Color style</p>
           <div className="flex flex-wrap gap-2">
             {ACCENT_PRESETS.map((preset) => {
@@ -628,15 +659,50 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
       <div className="tw-scope mx-auto max-w-2xl">
         <WizardHeader step={3} onBack={() => setStep(2)} />
         <div className={`${card} mt-3 p-4`}>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="text-[12px] font-semibold text-soft-ink">Apply one color to all:</span>
-            <div className="flex flex-wrap gap-1.5">
-              {ACCENT_PRESETS.map((preset) => (
-                <button key={preset.id} type="button" onClick={() => applyColorToAll(preset.id)}
-                  className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]">
-                  <span className="size-2.5 rounded-full" style={{ background: preset.main }} />{preset.label}
-                </button>
-              ))}
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[12px] font-semibold text-soft-ink">Apply one color to all:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {ACCENT_PRESETS.map((preset) => (
+                  <button key={preset.id} type="button" onClick={() => applyColorToAll(preset.id)}
+                    className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]">
+                    <span className="size-2.5 rounded-full" style={{ background: preset.main }} />{preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="border-t border-ink/8 pt-3 flex flex-wrap items-center gap-3">
+              <span className="text-[12px] font-semibold text-soft-ink">Force one format for all question types:</span>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: "standard", label: "Standard", icon: "❶", desc: "Classic numbered question card" },
+                  { id: "kids",     label: "Kids style", icon: "🎨", desc: "Larger options, playful layout" },
+                  { id: "compact",  label: "Compact",    icon: "❶❶", desc: "Smaller, two columns — fits more per page" },
+                ].map((style) => {
+                  const MAP: Record<string, Record<string, string>> = {
+                    standard: { "block-exam-question": "block-exam-question", "block-mc-kids": "block-exam-question", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
+                    kids:     { "block-exam-question": "block-mc-kids", "block-mc-kids": "block-mc-kids", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
+                    compact:  { "block-exam-question": "block-question-compact", "block-mc-kids": "block-question-compact", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
+                  };
+                  return (
+                    <button key={style.id} type="button" title={style.desc}
+                      onClick={() => {
+                        const mapping = MAP[style.id] || {};
+                        setBlockFormats((c) => {
+                          const n = new Map(c);
+                          for (const [from, to] of Object.entries(mapping)) {
+                            const entry = resolvedSelections.find((s) => s.origId === from || s.block.id === from);
+                            if (entry) n.set(entry.origId, to);
+                          }
+                          return n;
+                        });
+                      }}
+                      className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-purple-300 hover:bg-purple-50">
+                      <span>{style.icon}</span>{style.label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -669,18 +735,23 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
       <WizardHeader step={4} onBack={() => setStep(3)} />
 
       <div className={`${card} mt-3 p-5`}>
-        <p className={`${kicker} mb-3`}>Components — {resolvedSelections.length} total</p>
-        <div className="flex flex-wrap gap-5">
+        <div className="mb-4 flex items-center justify-between">
+          <p className={`${kicker}`}>Components — {resolvedSelections.length} total</p>
+          <button type="button" onClick={() => setStep(3)} className={`${ghostBtn} px-4 py-1.5 text-[12px]`}>✏ Edit components</button>
+        </div>
+        <div className="flex flex-wrap gap-6">
           {resolvedSelections.map(({ origId, block, accent, toggles, isFixed }) => (
             <div key={origId} className="flex flex-col items-center gap-2">
-              <div className="group relative cursor-pointer" onClick={() => setVisualizeTarget({ origId: null, block })}>
-                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.52} maxW={240} />
+              <div className="group relative cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); setVisualizeTarget({ origId: null, block }); }}>
+                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.65} maxW={300} />
                 <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-black/0 transition group-hover:bg-black/10">
-                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-sm transition group-hover:opacity-100">Visualize ↗</span>
+                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-semibold text-ink opacity-0 shadow-sm transition group-hover:opacity-100">View ↗</span>
                 </div>
                 {isFixed && <span className="absolute -right-1 -top-1 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Fixed</span>}
               </div>
-              <span className="max-w-[240px] truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
+              <span className="max-w-[300px] truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
+              <span className="text-[10px] text-soft-ink">{block.family}</span>
             </div>
           ))}
         </div>
@@ -706,7 +777,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
                       <td className="py-1.5 pr-3 text-[13px] font-semibold text-ink">{view.name}</td>
                       {previewFormats.map((fmt) => (
                         <td key={fmt.label} className="text-center">
-                          <button type="button" onClick={() => setPagePreview({ template: assembledTemplate, layoutIndex: fmt.i, viewIndex: viewIdx })}
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setPagePreview({ template: assembledTemplate, layoutIndex: fmt.i, viewIndex: viewIdx }); }}
                             className="inline-flex items-center gap-1.5 rounded-xl border border-ink/15 bg-white px-4 py-2 text-[12px] font-semibold text-ink transition hover:border-[var(--accent)]/60 hover:bg-[var(--accent-soft)] hover:shadow-md">
                             📄 Preview
                           </button>
@@ -737,7 +808,9 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
 
       {visualizeTarget && (() => {
         const origId = visualizeTarget.origId;
-        const block = visualizeTarget.block;
+        // Always show the CURRENT block (reflects format changes made in the FormatCard while modal is open)
+        const currentId = origId ? (blockFormats.get(origId) || origId) : visualizeTarget.block.id;
+        const block = allBlocks.find((b) => b.id === currentId) || visualizeTarget.block;
         const accentId = origId ? (blockAccents.get(origId) || "blue") : "blue";
         const defs = defaultToggles(block);
         const toggles = origId ? { ...defs, ...(blockToggles.get(origId) || {}) } : defs;

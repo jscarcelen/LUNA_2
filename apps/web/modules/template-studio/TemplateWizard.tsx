@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./engine/blocks";
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
-import { createId, createPage, createTemplate, createView } from "./engine/model";
+import { createId, createTemplate, createView } from "./engine/model";
 import type { Template } from "./engine/types";
 import { ElementView } from "./design/canvas/ElementView";
 import { card, kicker, primaryBtn, ghostBtn, fieldBase } from "./ui";
@@ -55,15 +55,22 @@ function findBlock(id: string): BlockDef | undefined {
   return builtInBlocks().find((b) => b.id === id);
 }
 
-function defaultToggles(block: BlockDef, isInteractive = true): Record<string, boolean> {
-  return Object.fromEntries((block.options || []).map((o) => [o.key, isInteractive ? true : o.default]));
+/** Never auto-enable "answer" — it is controlled by view (student view hides it, answer key shows it). */
+function defaultToggles(block: BlockDef): Record<string, boolean> {
+  return Object.fromEntries((block.options || []).map((o) => [o.key, o.key === "answer" ? false : (o.default ?? true)]));
 }
+
+/** Families where siblings are genuine visual-design variants of the same component (not different question types). */
+const VISUAL_FORMAT_FAMILIES = new Set(["Flashcard"]);
 
 function accentOf(id: string, map: Map<string, string>): AccentPreset {
   return ACCENT_PRESETS.find((a) => a.id === (map.get(id) || "blue")) || ACCENT_PRESETS[0];
 }
 
-/* ─── assembleTemplate (page-break aware) ────────────────────────── */
+/* ─── assembleTemplate ───────────────────────────────────────────── */
+// All blocks go on ONE tall page (no page-break splitting — the renderer handles CSS pagination).
+// Blocks with an "answer" toggle produce two element sets: student view (answer=false) and
+// answer key view (answer=true), each restricted via element.visibility.views.
 function assembleTemplate(
   name: string,
   canvasW: number,
@@ -71,60 +78,66 @@ function assembleTemplate(
   selections: { block: BlockDef; accent: AccentPreset; toggles: Record<string, boolean> }[]
 ): Template {
   let template = createTemplate(name);
-  template = {
-    ...template,
-    layouts: template.layouts.map((l, i) =>
-      i === 0 ? { ...l, canvas: { ...l.canvas, width: canvasW, height: canvasH } } : l
-    ),
-  };
   const margins = template.layouts[0].margins;
   const contentW = canvasW - margins.left - margins.right;
-  const maxY = canvasH - margins.bottom;
-  let pageIdx = 0;
+
+  const hasAnswerToggle = selections.some((s) => (s.block.options || []).some((o) => o.key === "answer"));
+  const studentView = { ...template.layouts[0].views[0], name: "Student view" };
+  const answerKey = hasAnswerToggle ? createView("Answer key") : null;
+  const views = answerKey ? [studentView, answerKey] : [studentView];
+
   let curY = margins.top;
+  const allElements: ReturnType<typeof instantiateBlock>["elements"] = [];
+  let currentFields = template.fields;
 
   for (const { block, accent, toggles } of selections) {
-    const { fields, elements } = instantiateBlock(block, template.fields, { accent, toggles });
-    const blockH = elements.reduce((sum, el) => sum + el.frame.h + 4, 0);
-    if (curY > margins.top + 4 && curY + blockH > maxY) {
-      template = {
-        ...template,
-        layouts: template.layouts.map((l, li) =>
-          li === 0 ? { ...l, pages: [...l.pages, createPage()] } : l
-        ),
-      };
-      pageIdx++;
-      curY = margins.top;
+    const blockHasAnswer = (block.options || []).some((o) => o.key === "answer");
+
+    if (blockHasAnswer && answerKey) {
+      // Student view: answer hidden, element visible only in student view
+      const studentResult = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: false } });
+      currentFields = studentResult.fields;
+      let yOff = curY;
+      const studentPlaced = studentResult.elements.map((el) => {
+        const y = yOff; yOff += el.frame.h + 4;
+        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [studentView.id] } };
+      });
+      allElements.push(...studentPlaced);
+
+      // Answer key: answer shown, element visible only in answer key view
+      const keyResult = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: true } });
+      let yOff2 = curY;
+      const keyPlaced = keyResult.elements.map((el) => {
+        const y = yOff2; yOff2 += el.frame.h + 4;
+        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [answerKey.id] } };
+      });
+      allElements.push(...keyPlaced);
+
+      curY = yOff + 4;
+    } else {
+      const result = instantiateBlock(block, currentFields, { accent, toggles });
+      currentFields = result.fields;
+      let yOff = curY;
+      const placed = result.elements.map((el) => {
+        const y = yOff; yOff += el.frame.h + 4;
+        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
+      });
+      allElements.push(...placed);
+      curY = yOff + 4;
     }
-    let yOff = curY;
-    const placed = elements.map((el) => {
-      const y = yOff; yOff += el.frame.h + 4;
-      return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
-    });
-    template = {
-      ...template,
-      fields,
-      layouts: template.layouts.map((l, li) =>
-        li === 0
-          ? { ...l, pages: l.pages.map((p, pi) => pi === pageIdx ? { ...p, elements: [...p.elements, ...placed] } : p) }
-          : l
-      ),
-    };
-    curY = yOff + 4;
   }
 
-  const hasInteractive = selections.some((s) => s.block.category !== "structure");
-  const studentView = { ...template.layouts[0].views[0], name: "Student view" };
-  const views = hasInteractive ? [studentView, createView("Answer key")] : [studentView];
+  const totalH = Math.max(canvasH, curY + margins.bottom);
+  const page = { ...template.layouts[0].pages[0], elements: allElements };
   const fmts = canvasW < 200
-    ? [{ label: "Cards", w: canvasW, h: canvasH }]
-    : [{ label: "A4", w: 210, h: 297 }, { label: "Letter", w: 216, h: 279 }, { label: "Slides 16:9", w: 254, h: 143 }];
-  const baseLayout = { ...template.layouts[0], views };
+    ? [{ label: "Cards", w: canvasW, h: totalH }]
+    : [{ label: "A4", w: 210, h: totalH }, { label: "Letter", w: 216, h: totalH }, { label: "Slides 16:9", w: 254, h: totalH }];
+  const baseLayout = { ...template.layouts[0], views, pages: [page] };
   const layouts = fmts.map((fmt, i) => {
     if (i === 0) return { ...baseLayout, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
     return { ...baseLayout, id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
   });
-  return { ...template, layouts };
+  return { ...template, fields: currentFields, layouts };
 }
 
 /* ─── BlockThumbnail ─────────────────────────────────────────────── */
@@ -156,7 +169,10 @@ function VisualizeModal({ block: initialBlock, accentId: initialAccentId, toggle
   const [localAccentId, setLocalAccentId] = useState(initialAccentId || "blue");
   const block = allBlocks.find((b) => b.id === localBlockId) || initialBlock;
   const accent = ACCENT_PRESETS.find((a) => a.id === localAccentId) || ACCENT_PRESETS[0];
-  const familyVariants = allBlocks.filter((b) => (b.family || b.id) === (block.family || block.id) && b.category === block.category);
+  // Only show format variants when family members are genuine visual-design alternatives
+  const familyVariants = VISUAL_FORMAT_FAMILIES.has(block.family || "")
+    ? allBlocks.filter((b) => b.family === block.family && b.category === block.category)
+    : [];
   const { fields, elements } = useMemo(() => instantiateBlock(block, [], { accent, toggles }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [localBlockId, localAccentId, JSON.stringify(toggles)]);
@@ -293,10 +309,13 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
   const isOpen = openBlocks.has(origId) || !isFormatted;
   const selectedAccent = ACCENT_PRESETS.find((a) => a.id === selectedAccentId) || null;
   const previewAccent = selectedAccent || ACCENT_PRESETS[0];
-  const isInteractive = origBlock.category !== "structure";
-  const defToggles = Object.fromEntries((currentBlock.options || []).map((o) => [o.key, isInteractive ? true : o.default]));
+  const defToggles = defaultToggles(currentBlock);
   const toggles = { ...defToggles, ...(blockToggles.get(origId) || {}) };
-  const variants = allBlocks.filter((b) => (b.family || b.id) === (origBlock.family || origBlock.id) && b.category === origBlock.category);
+  // Only show format design variants for families where siblings are genuine visual designs (not different question types)
+  const showFormatDesign = VISUAL_FORMAT_FAMILIES.has(origBlock.family || "");
+  const variants = showFormatDesign
+    ? allBlocks.filter((b) => b.family === origBlock.family && b.category === origBlock.category)
+    : [];
 
   return (
     <div className={`${card} mt-3 overflow-hidden transition-all`} style={{ border: isFormatted ? "2px solid #16a34a" : undefined }}>
@@ -307,7 +326,7 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
         </span>
         {isFormatted && selectedAccent
           ? <span className="flex shrink-0 items-center gap-1.5 rounded-full border-2 border-green-600 bg-green-50 px-3 py-1 text-[12px] font-semibold text-green-700"><span className="size-3 rounded-full" style={{ background: selectedAccent.main }} />{selectedAccent.label} ✓</span>
-          : <span className="shrink-0 rounded-full border border-ink/15 px-3 py-1 text-[11px] text-soft-ink">{isInteractive ? "Pick a style" : "Optional style"}</span>}
+          : <span className="shrink-0 rounded-full border border-ink/15 px-3 py-1 text-[11px] text-soft-ink">Pick a style</span>}
         <span className="text-[10px] text-soft-ink">{isOpen ? "▲" : "▼"}</span>
       </button>
       {isOpen ? (
@@ -330,29 +349,26 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
             </div>
           )}
           <p className={`${kicker} mb-2`}>Color style</p>
-          <div className="flex gap-2.5 overflow-x-auto pb-2">
+          <div className="flex flex-wrap gap-2">
             {ACCENT_PRESETS.map((preset) => {
               const sel = selectedAccentId === preset.id;
               return (
                 <button key={preset.id} type="button" onClick={() => onSelectColor(origId, preset.id)}
-                  className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-green-600 shadow-md" : "border-transparent hover:border-ink/20"}`}
-                  style={{ background: sel ? preset.tint : "var(--surface-soft)" }}>
-                  <BlockThumbnail block={currentBlock} accent={preset} toggles={toggles} scale={0.28} maxW={110} />
-                  <div className="flex items-center gap-1">
-                    <span className="size-2.5 rounded-full" style={{ background: preset.main }} />
-                    <span className="text-[10px] font-semibold" style={{ color: sel ? preset.main : "#6b7280" }}>{preset.label}</span>
-                    {sel && <span className="text-[10px] text-green-600">✓</span>}
-                  </div>
+                  className={`flex items-center gap-2 rounded-full border-2 px-4 py-2 text-[12px] font-semibold transition ${sel ? "border-green-600 shadow-sm" : "border-ink/15 hover:border-ink/30"}`}
+                  style={{ background: sel ? preset.tint : "white" }}>
+                  <span className="size-3 rounded-full" style={{ background: preset.main }} />
+                  {preset.label}
+                  {sel && <span className="text-green-600">✓</span>}
                 </button>
               );
             })}
           </div>
-          {(currentBlock.options || []).length > 0 && (
+          {(currentBlock.options || []).filter((o) => o.key !== "answer").length > 0 && (
             <div className="mt-4">
               <p className={`${kicker} mb-2`}>Options</p>
               <div className="grid gap-1.5">
-                {(currentBlock.options || []).map((opt) => {
-                  const val = blockToggles.get(origId)?.[opt.key] ?? (isInteractive ? true : opt.default);
+                {(currentBlock.options || []).filter((o) => o.key !== "answer").map((opt) => {
+                  const val = blockToggles.get(origId)?.[opt.key] ?? defaultToggles(currentBlock)[opt.key];
                   return (
                     <label key={opt.key} className="flex cursor-pointer items-center gap-2 text-[13px] text-ink">
                       <input type="checkbox" checked={val} onChange={(e) => onToggleOption(origId, opt.key, e.target.checked)} className="accent-[var(--accent)]" />
@@ -404,8 +420,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
       const block = findBlock(currentId) || findBlock(origId);
       if (!block) return;
       const accent = isFixed ? ACCENT_PRESETS[0] : accentOf(origId, blockAccents);
-      const isInteractive = block.category !== "structure";
-      const toggles = { ...defaultToggles(block, isInteractive), ...(blockToggles.get(origId) || {}) };
+      const toggles = { ...defaultToggles(block), ...(blockToggles.get(origId) || {}) };
       out.push({ origId, block, accent, toggles, isFixed });
     }
     if (structureType === "quiz") {
@@ -724,8 +739,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
         const origId = visualizeTarget.origId;
         const block = visualizeTarget.block;
         const accentId = origId ? (blockAccents.get(origId) || "blue") : "blue";
-        const isInteractive = block.category !== "structure";
-        const defs = defaultToggles(block, isInteractive);
+        const defs = defaultToggles(block);
         const toggles = origId ? { ...defs, ...(blockToggles.get(origId) || {}) } : defs;
         return <VisualizeModal block={block} accentId={accentId} toggles={toggles} allBlocks={allBlocks} onClose={() => setVisualizeTarget(null)} onConfirm={origId ? handleVisualizeConfirm : undefined} />;
       })()}

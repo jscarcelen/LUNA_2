@@ -149,8 +149,7 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
       const block = findBlock(id);
       if (!block) continue;
       const accent = ACCENT_PRESETS[0];
-      const isInteractive = block.category !== "structure";
-      const toggles = Object.fromEntries((block.options || []).map((o) => [o.key, isInteractive ? true : o.default]));
+      const toggles = Object.fromEntries((block.options || []).map((o) => [o.key, o.key === "answer" ? false : (o.default ?? true)]));
       const result = instantiateBlock(block, fields, { accent, toggles });
       fields = result.fields;
       elements.push(...result.elements);

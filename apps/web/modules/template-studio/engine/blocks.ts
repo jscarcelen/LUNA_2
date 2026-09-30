@@ -89,10 +89,10 @@ function tickBox(accent: ReturnType<typeof palette>, x: number, y: number, word:
 function examQuestion(): BlockDef {
   const accent = palette("blue");
   const question = createField("Question", "rich_text", { description: "The question text." });
-  const option = createField("Option", "text");
+  const option = createField("Option", "text", { description: "One answer option text, e.g. 'Absorbs light energy for photosynthesis'" });
   const options = createField("Options", "array", { children: [option] });
-  const answer = createField("Answer", "text", { description: "The correct option." });
-  const points = createField("Points", "number");
+  const answer = createField("Answer", "text", { description: "The letter of the correct option: A, B, C or D" });
+  const points = createField("Points", "number", { description: "Point value for this question, e.g. 2" });
   // Classification: used by the platform to measure mistakes by skill and difficulty (never printed).
   const skill = createField("Skill", "text", { description: "What this question tests: concept, definition, vocabulary, calculation, problem solving, application, comprehension, recall or analysis", options: ["concept", "definition", "vocabulary", "calculation", "problem solving", "application", "comprehension", "recall", "analysis"], required: false });
   const difficulty = createField("Difficulty", "text", { description: "easy, medium or hard", options: ["easy", "medium", "hard"], required: false });
@@ -144,8 +144,8 @@ function examQuestion(): BlockDef {
 
 function openQuestion(): BlockDef {
   const accent = palette("blue");
-  const question = createField("Question", "rich_text");
-  const points = createField("Points", "number");
+  const question = createField("Question", "rich_text", { description: "The question text" });
+  const points = createField("Points", "number", { description: "Point value for this question, e.g. 2" });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, points] })] });
   const W = PAGE.width;
   const group = createGroup({
@@ -185,7 +185,7 @@ function openQuestion(): BlockDef {
 
 function trueFalse(): BlockDef {
   const accent = palette("blue");
-  const statement = createField("Statement", "rich_text");
+  const statement = createField("Statement", "rich_text", { description: "A declarative sentence that is either factually correct or incorrect" });
   const answer = createField("Answer", "boolean", { description: "true when the statement is correct." });
   const statements = createField("Statements", "array", { children: [createField("item", "object", { children: [statement, answer] })] });
   const W = PAGE.width;
@@ -366,8 +366,8 @@ function documentStructure(): BlockDef {
 
 function keyPoints(): BlockDef {
   const accent = palette("orange");
-  const title = createField("Title", "text");
-  const point = createField("Point", "rich_text");
+  const title = createField("Title", "text", { description: "Title for the key-points box, e.g. 'Three things to remember'" });
+  const point = createField("Point", "rich_text", { description: "One key point, concise, may use **bold** for emphasis" });
   const points = createField("Points", "array", { children: [createField("item", "object", { children: [point] })] });
   const W = PAGE.width;
   const group = createGroup({
@@ -497,10 +497,10 @@ function sectionWithQuestions(): BlockDef {
   const accent = palette("blue");
   const title = createField("Section title", "text");
   const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
-  const question = createField("Question", "rich_text");
-  const option = createField("Option", "text");
+  const question = createField("Question", "rich_text", { description: "The question text" });
+  const option = createField("Option", "text", { description: "One answer option text" });
   const options = createField("Options", "array", { children: [option] });
-  const answer = createField("Answer", "text", { description: "The correct option" });
+  const answer = createField("Answer", "text", { description: "The letter of the correct option: A, B, C or D" });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
   const sections = createField("Sections", "array", { description: "One element per section: its title, intro and its own questions", children: [createField("item", "object", { children: [title, intro, questions] })] });
   const W = PAGE.width;
@@ -563,8 +563,8 @@ function callout(): BlockDef {
 
 function answerBox(): BlockDef {
   const green = palette("green");
-  const answer = createField("Answer", "text");
-  const explanation = createField("Explanation", "rich_text");
+  const answer = createField("Answer", "text", { description: "The correct answer, e.g. 'B · Absorbs light energy for photosynthesis'" });
+  const explanation = createField("Explanation", "rich_text", { description: "Why the answer is correct, 1–2 sentences" });
   const items = createField("Answers", "array", { children: [createField("item", "object", { children: [answer, explanation] })] });
   const W = PAGE.width;
   const group = createGroup({
@@ -611,8 +611,8 @@ function flashcardSingle(): BlockDef {
 
 function compactQuestion(): BlockDef {
   const accent = palette("blue");
-  const question = createField("Question", "rich_text");
-  const option = createField("Option", "text");
+  const question = createField("Question", "rich_text", { description: "The question text" });
+  const option = createField("Option", "text", { description: "One answer option text" });
   const options = createField("Options", "array", { children: [option] });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options] })] });
   const W = PAGE.width;
@@ -882,7 +882,7 @@ function kidsMultipleChoice(): BlockDef {
   const question = createField("Question", "rich_text");
   const option = createField("Option", "text");
   const options = createField("Options", "array", { children: [option] });
-  const answer = createField("Answer", "text", { description: "The correct option" });
+  const answer = createField("Answer", "text", { description: "The exact text of the correct option, matching one of the Options above" });
   const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
   const group = createGroup({
     name: "Multiple choice (kids)",

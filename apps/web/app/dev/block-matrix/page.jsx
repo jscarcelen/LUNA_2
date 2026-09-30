@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { builtInBlocks } from "../../modules/template-studio/engine/blocks";
+import { builtInBlocks } from "../../../modules/template-studio/engine/blocks";
 
 export const dynamic = "force-dynamic";
 

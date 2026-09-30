@@ -8,7 +8,7 @@
  */
 
 import { useMemo, useState } from "react";
-import { builtInBlocks } from "../../modules/template-studio/engine/blocks";
+import { builtInBlocks } from "../../../modules/template-studio/engine/blocks";
 
 // Re-export runtime so it's a Node route (not Edge)
 export const dynamic = "force-dynamic";

@@ -106,8 +106,8 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   function openRow(row: SavedTemplateRow) {
     const migrated = normalizeTemplate(migrateToV3(row));
     setFolderId(row.folderId && row.folderId !== "tpl-folder-root" ? row.folderId : "");
-    store.open(migrated, row.id);
-    setStatus(row.templateV3 ? "" : "Upgraded from the previous editor — check the layout, then save.");
+    setEditWizardTemplate({ template: migrated, savedId: row.id });
+    setWizardOpen(true);
   }
   async function upload(file: File) {
     setBusy(true);
@@ -192,17 +192,19 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
   }
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [editWizardTemplate, setEditWizardTemplate] = useState<{ template: Template; savedId: string } | null>(null);
 
-  async function saveTemplate(tpl: Template) {
+  async function saveTemplate(tpl: Template, savedId?: string) {
     const saveHandler = contextRef.current?.onSaveDocumentBlockTemplate;
     if (typeof saveHandler !== "function") return;
     setBusy(true);
     try {
-      const compiled = { ...compileForSave(tpl, ""), folderId: "tpl-folder-root" };
+      const compiled = { ...compileForSave(tpl, savedId || ""), folderId: "tpl-folder-root" };
       const saved = await saveHandler(compiled);
       setStatus(`Template "${tpl.name}" saved.`);
       if (Array.isArray(saved?.templates)) setRows(saved.templates); else refresh();
       setWizardOpen(false);
+      setEditWizardTemplate(null);
     } catch (error) {
       setStatus(String((error as Error).message || error));
     } finally {
@@ -214,7 +216,11 @@ export function TemplateStudio({ toolContext }: { toolContext?: ToolContext }) {
     if (wizardOpen) {
       return (
         <section className="tw-scope grid gap-3">
-          <TemplateWizard onSave={saveTemplate} onCancel={() => setWizardOpen(false)} />
+          <TemplateWizard
+            onSave={saveTemplate}
+            onCancel={() => { setWizardOpen(false); setEditWizardTemplate(null); }}
+            editTemplate={editWizardTemplate ?? undefined}
+          />
         </section>
       );
     }

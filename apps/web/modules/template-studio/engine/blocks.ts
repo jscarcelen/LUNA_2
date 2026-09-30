@@ -708,6 +708,7 @@ function matchPairs(): BlockDef {
     frame: { x: 12, y: 12, w: 186, h: 34 },
     layout: { mode: "vertical", gap: 2 },
     repeat: null,
+    pagination: { breakBefore: false, breakAfter: false, keepTogether: false, allowSplit: true, overflow: "continue" as const },
     children: [
       tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
       tx(instruction.id, "Draw a line to connect each pair.", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 10, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
@@ -720,14 +721,17 @@ function matchPairs(): BlockDef {
           createShape("rect", { frame: { x: 8, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.pink, stroke: "#f4c6d3", strokeWidth: 0.3, radius: 3 }) }),
           tx(left.id, "Apple", { x: 12, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" }),
           createShape("ellipse", { frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
+          createShape("ellipse", { name: "opt:answer|Left dot filled", frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: KID.main, stroke: KID.main, strokeWidth: 0.5 }) }),
+          createShape("line", { name: "opt:answer|Connection line", frame: { x: 74, y: 6.5, w: 38, h: 0.1 }, style: defaultStyle({ stroke: KID.main, strokeWidth: 0.8 }) }),
           createShape("ellipse", { frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
+          createShape("ellipse", { name: "opt:answer|Right dot filled", frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: KID.main, stroke: KID.main, strokeWidth: 0.5 }) }),
           createShape("rect", { frame: { x: 112, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.blue, stroke: "#bcd9f5", strokeWidth: 0.3, radius: 3 }) }),
           tx(right.id, "Manzana", { x: 122, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" })
         ]
       })
     ]
   });
-  return { id: "block-match-pairs", family: "Match the pairs", variant: "Two columns with dots", name: "Match the pairs", description: "Two columns to connect with a line — words, translations, pictures. Interactive: the child picks each match.", category: "kids", icon: "⋯", fields: [title, instruction, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction line", default: true }], accent: A, builtIn: true };
+  return { id: "block-match-pairs", family: "Match the pairs", variant: "Two columns with dots", name: "Match the pairs", description: "Two columns to connect with a line — words, translations, pictures. Interactive: the child picks each match.", category: "kids", icon: "⋯", fields: [title, instruction, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction line", default: true }, { key: "answer", label: "Show answer key", default: false }], accent: A, builtIn: true };
 }
 
 function fillBlanks(): BlockDef {

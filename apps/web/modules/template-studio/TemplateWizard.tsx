@@ -123,7 +123,7 @@ function assembleTemplate(
       const studentPlaced = studentResult.elements.map((el) => {
         const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
         if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [studentView.id] } };
-        const y = yOff; yOff += el.frame.h + 4;
+        const y = yOff; yOff += el.frame.h + 2;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [studentView.id] } };
       });
       allElements.push(...studentPlaced);
@@ -134,12 +134,12 @@ function assembleTemplate(
       const keyPlaced = keyResult.elements.map((el) => {
         const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
         if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [answerKey.id] } };
-        const y = yOff2; yOff2 += el.frame.h + 4;
+        const y = yOff2; yOff2 += el.frame.h + 2;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [answerKey.id] } };
       });
       allElements.push(...keyPlaced);
 
-      curY = yOff + 4;
+      curY = yOff + 2;
     } else {
       const result = instantiateBlock(block, currentFields, { accent, toggles });
       currentFields = result.fields;
@@ -149,25 +149,27 @@ function assembleTemplate(
         // and do NOT advance the flow cursor — the renderer repeats them on every page.
         const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
         if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW } };
-        const y = yOff; yOff += el.frame.h + 4;
+        const y = yOff; yOff += el.frame.h + 2;
         return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
       });
       allElements.push(...placed);
       // Only advance curY for non-pageScope elements
       const hasFlowEl = result.elements.some((el) => !(el.type === "group" && (el as GroupElement).pageScope?.mode === "every"));
-      if (hasFlowEl) curY = yOff + 4;
+      if (hasFlowEl) curY = yOff + 2;
     }
   }
 
   const totalH = Math.max(canvasH, curY + margins.bottom);
   const page = { ...template.layouts[0].pages[0], elements: allElements };
-  const fmts = canvasW < 200
+  const fmts: { label: string; w: number; h: number; isSlides?: boolean }[] = canvasW < 200
     ? [{ label: "Cards", w: canvasW, h: totalH }]
-    : [{ label: "A4", w: 210, h: totalH }, { label: "Letter", w: 216, h: totalH }, { label: "Slides 16:9", w: 254, h: totalH }];
+    : [{ label: "A4", w: 210, h: totalH }, { label: "Letter", w: 216, h: totalH }, { label: "Slides 16:9", w: 254, h: 143, isSlides: true }];
   const baseLayout = { ...template.layouts[0], views, pages: [page] };
   const layouts = fmts.map((fmt, i) => {
-    if (i === 0) return { ...baseLayout, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
-    return { ...baseLayout, id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
+    const base = i === 0
+      ? { ...baseLayout, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } }
+      : { ...baseLayout, id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
+    return fmt.isSlides ? { ...base, class: "slides" as const } : base;
   });
   return { ...template, fields: currentFields, layouts };
 }
@@ -668,6 +670,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
   if (step === 3) {
     const remaining = requiredBlocks.filter((s) => !blockAccents.has(s.origId)).length;
     return (
+      <>
       <div className="tw-scope mx-auto max-w-2xl">
         <WizardHeader step={3} onBack={() => setStep(2)} />
         <div className={`${card} mt-3 p-4`}>
@@ -752,6 +755,16 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
           <button type="button" disabled={!allFormatted} onClick={() => setStep(4)} className={`${primaryBtn} px-8 py-2.5 disabled:opacity-40`}>Next: Preview ›</button>
         </div>
       </div>
+      {visualizeTarget && (() => {
+        const origId = visualizeTarget.origId;
+        const currentId = origId ? (blockFormats.get(origId) || origId) : visualizeTarget.block.id;
+        const block = allBlocks.find((b) => b.id === currentId) || visualizeTarget.block;
+        const accentId = origId ? (blockAccents.get(origId) || "blue") : "blue";
+        const defs = defaultToggles(block);
+        const tgls = origId ? { ...defs, ...(blockToggles.get(origId) || {}) } : defs;
+        return <VisualizeModal block={block} accentId={accentId} toggles={tgls} allBlocks={allBlocks} onClose={() => setVisualizeTarget(null)} onConfirm={origId ? handleVisualizeConfirm : undefined} />;
+      })()}
+      </>
     );
   }
 

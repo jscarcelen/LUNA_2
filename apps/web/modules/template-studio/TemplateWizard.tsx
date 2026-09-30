@@ -5,7 +5,7 @@ import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, typ
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
 import { createId, createTemplate, createView } from "./engine/model";
-import type { GroupElement, Template } from "./engine/types";
+import type { Element, GroupElement, Template } from "./engine/types";
 import { ElementView } from "./design/canvas/ElementView";
 import { card, kicker, primaryBtn, ghostBtn, fieldBase } from "./ui";
 
@@ -89,6 +89,45 @@ function accentOf(id: string, map: Map<string, string>): AccentPreset {
   return ACCENT_PRESETS.find((a) => a.id === (map.get(id) || "blue")) || ACCENT_PRESETS[0];
 }
 
+/* ─── Layout scaling helpers ─────────────────────────────────────── */
+// All block child elements are built against PAGE.width = 186 (A4 content width).
+// When assembling for Letter (192mm) or Slides (230mm), the outer group frame is already
+// overridden to contentW, but child elements inside each group keep their A4 coordinates.
+// These helpers recursively scale inner x-positions and widths so every format looks right.
+
+const A4_CONTENT_W = 186; // PAGE.width — the reference all blocks are built against
+
+function scaleElement(el: Element, ratio: number): Element {
+  const scaled: Element = {
+    ...el,
+    frame: {
+      ...el.frame,
+      x: +(el.frame.x * ratio).toFixed(2),
+      w: +(el.frame.w * ratio).toFixed(2),
+    },
+  };
+  if (scaled.type === "group") {
+    return {
+      ...scaled,
+      children: (scaled as GroupElement).children.map((child) => scaleElement(child, ratio)),
+    } as GroupElement;
+  }
+  return scaled;
+}
+
+/**
+ * Scales only the *children* of a top-level group element to the new content width.
+ * The outer group frame is already set correctly by assembleTemplate; we must not touch it.
+ */
+function scaleGroupChildren(el: Element, toContentW: number): Element {
+  if (el.type !== "group" || Math.abs(toContentW - A4_CONTENT_W) < 0.5) return el;
+  const ratio = toContentW / A4_CONTENT_W;
+  return {
+    ...el,
+    children: (el as GroupElement).children.map((child) => scaleElement(child, ratio)),
+  } as GroupElement;
+}
+
 /* ─── assembleTemplate ───────────────────────────────────────────── */
 // All blocks go on ONE tall page (no page-break splitting — the renderer handles CSS pagination).
 // Blocks with an "answer" toggle produce two element sets: student view (answer=false) and
@@ -160,15 +199,24 @@ function assembleTemplate(
   }
 
   const totalH = Math.max(canvasH, curY + margins.bottom);
-  const page = { ...template.layouts[0].pages[0], elements: allElements };
-  const fmts: { label: string; w: number; h: number; isSlides?: boolean }[] = canvasW < 200
+  const fmts: { label: string; w: number; h: number; isSlides?: boolean; class?: "paged" | "slides" }[] = canvasW < 200
     ? [{ label: "Cards", w: canvasW, h: totalH }]
-    : [{ label: "A4", w: 210, h: totalH }, { label: "Letter", w: 216, h: totalH }, { label: "Slides 16:9", w: 254, h: 143, isSlides: true }];
-  const baseLayout = { ...template.layouts[0], views, pages: [page] };
+    : [
+        { label: "A4",          w: 210, h: totalH },
+        { label: "Letter",      w: 216, h: totalH },
+        { label: "Slides 16:9", w: 254, h: 143, isSlides: true },
+      ];
+  const baseLayout = { ...template.layouts[0], views };
   const layouts = fmts.map((fmt, i) => {
+    // Scale inner element coordinates to match this format's content width.
+    // Outer group frames are already set to contentW in the placement loop above;
+    // child elements need their x-positions and widths scaled proportionally.
+    const fmtContentW = fmt.w - margins.left - margins.right;
+    const scaledElements = allElements.map((el) => scaleGroupChildren(el, fmtContentW));
+    const page = { ...template.layouts[0].pages[0], elements: scaledElements };
     const base = i === 0
-      ? { ...baseLayout, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } }
-      : { ...baseLayout, id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
+      ? { ...baseLayout, pages: [page], canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } }
+      : { ...baseLayout, pages: [page], id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
     return fmt.isSlides ? { ...base, class: "slides" as const } : base;
   });
   return { ...template, fields: currentFields, layouts };

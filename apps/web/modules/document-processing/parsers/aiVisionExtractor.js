@@ -13,12 +13,52 @@
 import JSZip from "jszip";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { fileURLToPath } from "url";
 import path from "path";
 
 const execFileAsync = promisify(execFile);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+
+// Resolve worker path robustly — Next.js/webpack rewrites import.meta.url,
+// so we try multiple strategies in order.
+import { existsSync } from "fs";
+
+function resolveWorkerPath() {
+  const WORKER_REL = "modules/document-processing/parsers/pdfTextWorker.mjs";
+
+  // Strategy 1: CJS __dirname (available when Next.js compiles as CJS)
+  try {
+    if (typeof __dirname !== "undefined") {
+      const p = path.join(__dirname, "pdfTextWorker.mjs");
+      if (existsSync(p)) return p;
+    }
+  } catch { /* ignore */ }
+
+  // Strategy 2: process.cwd() = apps/web (when `next dev` runs from apps/web)
+  {
+    const p = path.join(process.cwd(), WORKER_REL);
+    if (existsSync(p)) return p;
+  }
+
+  // Strategy 3: cwd() = repo root (when `npm run dev:web` runs from root)
+  {
+    const p = path.join(process.cwd(), "apps/web", WORKER_REL);
+    if (existsSync(p)) return p;
+  }
+
+  // Strategy 4: hardcoded relative to this source file's known location
+  // __filename should resolve even if import.meta.url is rewritten by webpack
+  try {
+    // eslint-disable-next-line no-undef
+    const p = path.join(path.dirname(__filename), "pdfTextWorker.mjs");
+    if (existsSync(p)) return p;
+  } catch { /* ignore */ }
+
+  // Fallback — will log a clear error at runtime
+  console.error("[aiVisionExtractor] Cannot locate pdfTextWorker.mjs — cwd:", process.cwd());
+  return path.join(process.cwd(), WORKER_REL);
+}
+
+const WORKER_PATH = resolveWorkerPath();
+console.log("[aiVisionExtractor] WORKER_PATH resolved to:", WORKER_PATH);
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -441,7 +481,8 @@ const PDF_CHUNK_SIZE = 12000;
  * Returns { text, pageCount }.
  */
 async function extractPdfText(buf) {
-  const workerPath = path.resolve(__dirname, "pdfTextWorker.mjs");
+  const workerPath = WORKER_PATH;
+  console.log(`[aiVisionExtractor] pdfTextWorker path: ${workerPath}`);
   const b64 = buf.toString("base64");
 
   try {
@@ -455,15 +496,25 @@ async function extractPdfText(buf) {
       }
     );
 
-    if (stderr && !stderr.includes("Warning:")) {
-      // Non-warning stderr = real error
-      console.warn("[aiVisionExtractor] pdfTextWorker stderr:", stderr.slice(0, 300));
+    // Log any stderr (warnings are fine, errors are not)
+    if (stderr) {
+      const lines = stderr.split("\n").filter(l => l && !l.includes("Warning:"));
+      if (lines.length) console.error("[aiVisionExtractor] pdfTextWorker stderr:", lines.join(" | ").slice(0, 500));
+    }
+
+    if (!stdout || !stdout.trim()) {
+      throw new Error("pdfTextWorker returned empty stdout");
     }
 
     const result = JSON.parse(stdout);
     if (result.error) throw new Error(result.error);
+    console.log(`[aiVisionExtractor] pdfTextWorker success: ${result.pageCount} pages, ${String(result.text||"").length} chars`);
     return { text: String(result.text || ""), pageCount: Number(result.pageCount || 1) };
   } catch (err) {
+    // Log full detail so the dev server console shows exactly what went wrong
+    console.error("[aiVisionExtractor] pdfTextWorker FAILED:", err.message);
+    if (err.stderr) console.error("[aiVisionExtractor] pdfTextWorker stderr:", String(err.stderr).slice(0, 500));
+    if (err.stdout) console.error("[aiVisionExtractor] pdfTextWorker stdout:", String(err.stdout).slice(0, 200));
     throw new Error(`pdfTextWorker failed: ${err.message}`);
   }
 }

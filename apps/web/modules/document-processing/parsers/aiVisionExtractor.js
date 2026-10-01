@@ -13,52 +13,98 @@
 import JSZip from "jszip";
 import { execFile } from "child_process";
 import { promisify } from "util";
+import { writeFileSync, existsSync } from "fs";
+import { tmpdir } from "os";
 import path from "path";
+// Note: zlib import removed — extraction handled by pdfjs in child process
 
 const execFileAsync = promisify(execFile);
 
-// Resolve worker path robustly — Next.js/webpack rewrites import.meta.url,
-// so we try multiple strategies in order.
-import { existsSync } from "fs";
-
-function resolveWorkerPath() {
-  const WORKER_REL = "modules/document-processing/parsers/pdfTextWorker.mjs";
-
-  // Strategy 1: CJS __dirname (available when Next.js compiles as CJS)
+// ─── locate pdfjs-dist at startup ────────────────────────────────────────────
+// Try candidate locations relative to process.cwd() (which is apps/web when
+// Next.js runs, or the repo root when run from root with --workspace).
+function findPdfjsPath() {
+  const candidates = [
+    path.join(process.cwd(), "node_modules/pdfjs-dist/legacy/build/pdf.mjs"),
+    path.join(process.cwd(), "apps/web/node_modules/pdfjs-dist/legacy/build/pdf.mjs"),
+    "/node_modules/pdfjs-dist/legacy/build/pdf.mjs", // Vercel Lambda root
+  ];
+  // CJS __dirname is reliable even under webpack
   try {
     if (typeof __dirname !== "undefined") {
-      const p = path.join(__dirname, "pdfTextWorker.mjs");
-      if (existsSync(p)) return p;
+      candidates.unshift(path.resolve(__dirname, "../../../node_modules/pdfjs-dist/legacy/build/pdf.mjs"));
     }
-  } catch { /* ignore */ }
+  } catch { /* ESM context, skip */ }
 
-  // Strategy 2: process.cwd() = apps/web (when `next dev` runs from apps/web)
-  {
-    const p = path.join(process.cwd(), WORKER_REL);
-    if (existsSync(p)) return p;
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
   }
-
-  // Strategy 3: cwd() = repo root (when `npm run dev:web` runs from root)
-  {
-    const p = path.join(process.cwd(), "apps/web", WORKER_REL);
-    if (existsSync(p)) return p;
-  }
-
-  // Strategy 4: hardcoded relative to this source file's known location
-  // __filename should resolve even if import.meta.url is rewritten by webpack
-  try {
-    // eslint-disable-next-line no-undef
-    const p = path.join(path.dirname(__filename), "pdfTextWorker.mjs");
-    if (existsSync(p)) return p;
-  } catch { /* ignore */ }
-
-  // Fallback — will log a clear error at runtime
-  console.error("[aiVisionExtractor] Cannot locate pdfTextWorker.mjs — cwd:", process.cwd());
-  return path.join(process.cwd(), WORKER_REL);
+  return candidates[0]; // best guess fallback
 }
 
-const WORKER_PATH = resolveWorkerPath();
-console.log("[aiVisionExtractor] WORKER_PATH resolved to:", WORKER_PATH);
+const PDFJS_PATH = findPdfjsPath();
+console.log("[aiVisionExtractor] PDFJS_PATH:", PDFJS_PATH, "exists:", existsSync(PDFJS_PATH));
+
+// ─── generate + cache worker in /tmp ─────────────────────────────────────────
+// The worker is written to /tmp so it runs as a plain Node.js process outside
+// webpack, which means pdfjs-dist ESM imports are handled by Node.js natively.
+let _workerPath = null;
+
+function ensureWorker() {
+  if (_workerPath) return _workerPath;
+  _workerPath = path.join(tmpdir(), "luna-pdfTextWorker.mjs");
+  // Embed the absolute pdfjs path directly in the worker so it works from any cwd.
+  const code = `
+import path from "path";
+
+if (typeof globalThis.DOMMatrix === "undefined") {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(){this.a=1;this.b=0;this.c=0;this.d=1;this.e=0;this.f=0;this.m11=1;this.m22=1;this.m33=1;this.m44=1;this.is2D=true;this.isIdentity=true;}
+    multiply(){return new DOMMatrix();}translate(tx=0,ty=0){const m=new DOMMatrix();m.e=tx;m.f=ty;return m;}
+    scale(sx=1,sy=sx){const m=new DOMMatrix();m.a=sx;m.d=sy;return m;}inverse(){return new DOMMatrix();}
+    rotateAxisAngle(){return new DOMMatrix();}static fromMatrix(){return new DOMMatrix();}
+    transformPoint(p={x:0,y:0}){return {x:p.x*this.a+p.y*this.c+this.e,y:p.x*this.b+p.y*this.d+this.f};}
+  };
+}
+if (typeof globalThis.DOMPoint === "undefined") globalThis.DOMPoint = class DOMPoint {constructor(x=0,y=0,z=0,w=1){this.x=x;this.y=y;this.z=z;this.w=w;}static fromPoint(p={}){return new DOMPoint(p.x,p.y,p.z,p.w);}};
+if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class ImageData {constructor(w,h){this.width=w;this.height=h;this.data=new Uint8ClampedArray(w*h*4);}};
+if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D {rect(){}moveTo(){}lineTo(){}arc(){}closePath(){}addPath(){}};
+
+async function main() {
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  const b64 = Buffer.concat(chunks).toString("utf8").trim();
+  if (!b64) { process.stdout.write(JSON.stringify({error:"No input"})); process.exit(1); }
+
+  const buf = Buffer.from(b64, "base64");
+  // Absolute pdfjs path embedded at worker-write time:
+  const { getDocument } = await import(${JSON.stringify(PDFJS_PATH)});
+
+  const pdf = await getDocument({
+    data: new Uint8Array(buf), disableFontFace: true, isEvalSupported: false,
+    useWorkerFetch: false, disableRange: true, disableStream: true, stopAtErrors: false,
+  }).promise;
+
+  let text = "";
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    text += tc.items.map(i => i.str + (i.hasEOL ? "\\n" : "")).join("") + "\\n\\n";
+  }
+  process.stdout.write(JSON.stringify({ text: text.trim(), pageCount: pdf.numPages }));
+  process.exit(0);
+}
+
+main().catch(err => {
+  process.stderr.write(String(err.message || err));
+  process.stdout.write(JSON.stringify({ error: String(err.message || err) }));
+  process.exit(1);
+});
+`;
+  writeFileSync(_workerPath, code, "utf8");
+  console.log("[aiVisionExtractor] Worker written to:", _workerPath);
+  return _workerPath;
+}
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -471,53 +517,37 @@ function mimeTypeFor(sourceType) {
 const PDF_CHUNK_SIZE = 12000;
 
 /**
- * Extract all text from a PDF buffer using pdfjs-dist running in a child process.
- *
- * Why a child process? Next.js/webpack intercepts dynamic `import()` calls and
- * rewrites them at bundle time. This breaks pdfjs-dist's ESM entry point silently
- * at runtime (getDocument becomes undefined). Spawning a plain Node.js child process
- * bypasses webpack entirely — pdfjs-dist is confirmed to work fine in plain Node.js.
- *
- * Returns { text, pageCount }.
+ * Extract PDF text by running pdfjs-dist in a child process (plain Node.js, outside webpack).
+ * The worker script is written to /tmp with the absolute pdfjs path embedded — works on
+ * local dev, Vercel Lambda, and any Node.js environment.
  */
 async function extractPdfText(buf) {
-  const workerPath = WORKER_PATH;
-  console.log(`[aiVisionExtractor] pdfTextWorker path: ${workerPath}`);
+  const workerPath = ensureWorker();
   const b64 = buf.toString("base64");
-
+  console.log(`[aiVisionExtractor] Running pdfTextWorker (pdfjs: ${existsSync(PDFJS_PATH) ? "found" : "MISSING"})`);
   try {
     const { stdout, stderr } = await execFileAsync(
-      process.execPath, // current node binary
+      process.execPath,
       [workerPath],
-      {
-        input: b64,
-        maxBuffer: 50 * 1024 * 1024, // 50 MB stdout buffer
-        timeout: 60_000,             // 60s max
-      }
+      { input: b64, maxBuffer: 50 * 1024 * 1024, timeout: 60_000 }
     );
-
-    // Log any stderr (warnings are fine, errors are not)
     if (stderr) {
-      const lines = stderr.split("\n").filter(l => l && !l.includes("Warning:"));
-      if (lines.length) console.error("[aiVisionExtractor] pdfTextWorker stderr:", lines.join(" | ").slice(0, 500));
+      const errLines = stderr.split("\n").filter(l => l && !l.startsWith("Warning:"));
+      if (errLines.length) console.error("[aiVisionExtractor] worker stderr:", errLines.join("|").slice(0, 500));
     }
-
-    if (!stdout || !stdout.trim()) {
-      throw new Error("pdfTextWorker returned empty stdout");
-    }
-
+    if (!stdout?.trim()) throw new Error("worker returned empty stdout");
     const result = JSON.parse(stdout);
     if (result.error) throw new Error(result.error);
-    console.log(`[aiVisionExtractor] pdfTextWorker success: ${result.pageCount} pages, ${String(result.text||"").length} chars`);
+    console.log(`[aiVisionExtractor] worker success: ${result.pageCount} pages, ${String(result.text||"").length} chars`);
     return { text: String(result.text || ""), pageCount: Number(result.pageCount || 1) };
   } catch (err) {
-    // Log full detail so the dev server console shows exactly what went wrong
-    console.error("[aiVisionExtractor] pdfTextWorker FAILED:", err.message);
-    if (err.stderr) console.error("[aiVisionExtractor] pdfTextWorker stderr:", String(err.stderr).slice(0, 500));
-    if (err.stdout) console.error("[aiVisionExtractor] pdfTextWorker stdout:", String(err.stdout).slice(0, 200));
-    throw new Error(`pdfTextWorker failed: ${err.message}`);
+    console.error("[aiVisionExtractor] worker FAILED:", err.message);
+    if (err.stderr) console.error("stderr:", String(err.stderr).slice(0, 400));
+    if (err.stdout) console.error("stdout:", String(err.stdout).slice(0, 200));
+    throw err;
   }
 }
+
 
 async function extractPdf(file) {
   const buf = base64ToBuffer(file.contentBase64);

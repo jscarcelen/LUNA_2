@@ -2428,12 +2428,17 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
     };
   }
 
-  if ((requestedFormat === "original" || !requestedFormat) && sourceContentBase64) {
-    const extension = getExtensionFromName(document.name, "bin");
+  // "original" OR the file's own extension (e.g. "pdf", "pptx") → return the raw uploaded bytes
+  const sourceFileExtension = getExtensionFromName(document.name, "bin");
+  const isSourceFormatRequest = requestedFormat === "original"
+    || !requestedFormat
+    || requestedFormat === sourceFileExtension;
+
+  if (isSourceFormatRequest && sourceContentBase64) {
     return {
-      format: extension,
-      fileName: document.name || `document.${extension}`,
-      mimeType: sourceMimeType || getMimeTypeForExtension(extension),
+      format: sourceFileExtension,
+      fileName: document.name || `document.${sourceFileExtension}`,
+      mimeType: sourceMimeType || getMimeTypeForExtension(sourceFileExtension),
       contentBase64: sourceContentBase64
     };
   }

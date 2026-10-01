@@ -745,9 +745,11 @@ export async function extractWithAIVision(file, { detectedType } = {}) {
     issues: canonicalDocument.confidence < 0.72 ? ["low-confidence-extraction"] : [],
     riskMarkers: [],
     text,
-    markdown: "",    // will be filled by render stage
-    sourceRenderHtml: "",  // will be filled by render stage
+    markdown: "",         // filled by render stage in index.js
+    sourceRenderHtml: "", // filled by render stage in index.js
     sourceMimeType: file.mimeType || "",
+    // Original file bytes — required for "Download original" / re-processing
+    sourceContentBase64: file.contentBase64 || "",
     sourcePreview: text.slice(0, 500)
   };
 }

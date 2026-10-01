@@ -16,6 +16,51 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const field = "rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-sm text-ink";
 const chip = "inline-flex max-w-[11rem] items-center truncate whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold";
 
+/**
+ * Wrap raw CDM HTML in a minimal full document with KaTeX CSS so the preview
+ * iframe renders math and has basic readable styling.
+ * `sandbox="allow-same-origin"` (no allow-scripts) lets CSS load but blocks JS.
+ */
+function wrapPreviewHtml(html = "") {
+  const body = String(html || "").trim();
+  if (!body) return "<html><body><p style='color:#999;padding:24px'>No preview available.</p></body></html>";
+  // Already a full document — inject KaTeX CSS into <head> if not present
+  if (/<html[\s>]/i.test(body)) {
+    if (!body.includes("katex")) {
+      return body.replace(/<head[^>]*>/i, (m) => `${m}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">`);
+    }
+    return body;
+  }
+  // Raw CDM fragment — wrap it
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; margin: 0; padding: 24px 28px; color: #1d1d1f; background: #fff; font-size: 15px; }
+  h1,h2,h3,h4,h5,h6 { color: #1d1d1f; margin: 1.2em 0 0.4em; font-weight: 700; }
+  p { margin: 0 0 0.9em; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  td, th { border: 1px solid #d2d2d7; padding: 8px 12px; vertical-align: top; }
+  th { background: #f5f5f7; font-weight: 600; }
+  ul, ol { padding-left: 1.5em; margin: 0.5em 0 0.9em; }
+  li { margin: 0.3em 0; }
+  figure { margin: 1.2em 0; }
+  figcaption { font-size: 0.85em; color: #6e6e73; margin-top: 4px; }
+  .cdm-alt-text { font-style: italic; color: #6e6e73; font-size: 0.9em; }
+  pre { background: #f5f5f7; border-radius: 8px; padding: 12px 16px; overflow-x: auto; font-size: 13px; }
+  code { font-family: "SF Mono", "Fira Code", monospace; }
+  .math-display.nicer-latex, .math-inline.nicer-latex { background: #f5f5f7; border-radius: 6px; padding: 2px 6px; }
+  .math-display.nicer-latex { display: block; padding: 10px 14px; margin: 1em 0; overflow-x: auto; }
+  .katex-display { margin: 0.5em 0; overflow-x: auto; }
+</style>
+</head>
+<body>${body}</body>
+</html>`;
+}
+
 /** What a processed document can be exported as — the point of having parsed it in the first place. */
 const FORMATS = {
   uploaded: [["original", "Original file"], ["html", "HTML"], ["editable-html", "HTML (editable)"], ["markdown", "Markdown"], ["blocks-json", "JSON (structure)"], ["txt", "Plain text"]],
@@ -692,7 +737,12 @@ export function WorkspaceBrowser({
               </div>
             </div>
             {preview.sourceRenderHtml
-              ? <iframe title="Preview" sandbox="" srcDoc={preview.sourceRenderHtml} className="mt-3 h-[70vh] w-full rounded-xl border border-ink/10 bg-white" />
+              ? <iframe
+                  title="Preview"
+                  sandbox="allow-same-origin"
+                  srcDoc={wrapPreviewHtml(preview.sourceRenderHtml)}
+                  className="mt-3 h-[70vh] w-full rounded-xl border border-ink/10 bg-white"
+                />
               : <pre className="mt-3 max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--surface-soft)] p-4 text-xs text-ink">{preview.content || preview.preview || "No preview available."}</pre>}
           </div>
         </div>

@@ -9,7 +9,7 @@
 const MODEL = process.env.LUNA_CONCEPT_MODEL || process.env.LUNA_AGENT_MODEL || "gpt-4o-mini";
 
 const MAX_CONCEPTS = 20;
-const MAX_DEPTH = 5;
+const MAX_DEPTH = 6;
 
 const EXTRACTION_SCHEMA = {
   type: "object",
@@ -40,27 +40,59 @@ const EXTRACTION_SCHEMA = {
   required: ["concepts"],
 };
 
-const SYSTEM_PROMPT = `You are a curriculum analyst. Turn an educational document into a CONCEPT TREE: an outline of the subject, exactly like a table of contents where each idea sits under the broader idea it belongs to.
+const SYSTEM_PROMPT = `You are a curriculum analyst. Turn an educational document into a CONCEPT TREE: a MECE decomposition of the subject into knowledge and skills a student can be tested on and whose mastery can be tracked.
+
+WHAT COUNTS AS A CONCEPT (the "tracking test"):
+Every node must be a real unit of knowledge or skill. Ask: "Could a teacher write a question about this, and could a student get it right or wrong?" If not, it is NOT a concept: leave it out.
+- Valid: "Revenue recognition", "Current ratio", "Double-entry bookkeeping", "Variance", "Depreciation".
+- Invalid, never output these: document-structure or filler labels such as "Examples", "Key elements", "Key accounts", "Overview", "Introduction", "Summary", "Definitions", "Account structure", "Case study", "Exercises", "Notes", "Other", "Miscellaneous", "Basics", "Fundamentals". Also not concepts: a worked example, a company name, a page or chapter title that names no idea, or a vague heading. Where the document has such a heading, skip it and use the real ideas inside it.
+- Names must make sense on their own, outside their parent: "Revenue recognition" not "Recognition"; "Current ratio" not "Ratio".
 
 THE TREE (hard rules):
 1. Exactly ONE root: the overall subject. Its "parent" is null. It is the first item.
-2. Every other concept has exactly ONE "parent": the exact name of a concept that appears EARLIER in the list. No exceptions, no cycles, no concept without a parent.
-3. Depth: up to ${MAX_DEPTH} levels counting the root (root = level 1). Use the depth the material actually needs: most branches 3-4 levels, a few can reach 5 when the document drills down (e.g. a technique with a specific variant).
-4. Level 2 = the 3-6 major areas of the subject. Level 3+ = the specific ideas, methods, formulas and skills inside each area.
-5. A parent is a BROADER idea that CONTAINS its children ("Volatility" contains "Variance"). It is NOT "something you must learn first". Never use a sibling as a parent.
-6. Group related things under one parent instead of listing them side by side. Do NOT make a flat list: if a parent would have more than 5 children, introduce an intermediate grouping concept.
-7. At most ${MAX_CONCEPTS} concepts in total, including the root. Fewer is better; keep only distinct, testable ideas. Follow the document's own headings and structure when they exist.
-   Spend the budget on DEPTH where the document drills down: the 2-3 richest areas should reach level 4 (and level 5 for a specialised variant) instead of every area stopping at level 3 with many siblings. Minor areas can stay short.
-8. Names are short and specific ("Variance", not "Variance as a measure of data dispersion") and unique.
+2. Every other concept has exactly ONE "parent": the exact name of a concept that appears EARLIER in the list. No cycles, no concept without a parent.
+3. A parent is a BROADER concept that CONTAINS its children ("Cost" contains "Expense recognition"). It is not "something you must learn first". Never use a sibling as a parent.
+4. MECE at every level. The children of any node must be:
+   - Mutually exclusive: no overlap between siblings, and the same idea never appears twice anywhere in the tree.
+   - Collectively exhaustive: together they cover the whole of the parent as far as the document treats it. Think "what are the complete, non-overlapping parts of this parent?" and use the natural split of the domain (for example an income statement splits into Revenue and Cost; an equation splits into its terms; a process into its stages; a classification into its classes).
+   Siblings must be at the same level of abstraction. Never put a specific item next to its own category.
+5. Depth: up to ${MAX_DEPTH} levels counting the root (root = level 1). Keep splitting a concept into its MECE parts for as long as the document treats those parts as separate ideas. Prefer a deeper tree with 2-5 children per node over a wide flat one: if a node would have more than 5 children, group them under intermediate concepts. A node with a single child is a smell: merge them or add the missing sibling.
+6. Level 2 = the 3-6 major areas of the subject. Deeper levels = progressively more specific ideas, methods, formulas and skills.
+7. At most ${MAX_CONCEPTS} concepts in total, including the root. Spend them where the document goes deepest; leave out minor material rather than adding vague nodes. Follow the document's own structure when it is sound.
+8. Names are short and specific, in the document's language, and unique.
 9. Output in PRE-ORDER: root, then the first level-2 area, then everything under it (depth first), then the next level-2 area, and so on.
 10. "topic" = the name of the level-2 area the concept belongs to (for the root and for level-2 concepts, the root's own name).
 
-EXAMPLE (Statistics) - this is the shape and depth expected:
+The examples below show STRUCTURE and DEPTH only. Use only concepts that the document actually covers; never copy example content.
+
+EXAMPLE 1 (Financial Statements) - MECE splits, deep where the material is rich:
+  Financial Statements
+    Income Statement
+      Revenue
+        Revenue recognition
+        Sales returns and discounts
+      Cost
+        Expense recognition
+        Depreciation and amortization
+        Cost of goods sold
+      Cash vs accrual basis
+    Balance Sheet
+      Assets
+        Current assets
+        Non-current assets
+      Liabilities
+      Equity
+        Retained earnings
+    Financial Ratios
+      Liquidity
+        Current ratio
+
+EXAMPLE 2 (Statistics):
   Statistics
-    Sample explanation
+    Central tendency
       Mean
       Median
-    Volatility
+    Dispersion
       Variance
       Standard deviation
     Variable correlation
@@ -79,18 +111,26 @@ As JSON, "Pivot table" has parent "Conditional probabilities", which has parent 
  * concept, unique names, depth <= MAX_DEPTH, at most MAX_CONCEPTS. Because parents always precede
  * children, truncating the list can never orphan a node.
  */
+const GENERIC_LABEL = /^(examples?|key (elements?|points?|accounts?|terms?)|overview|introduction|summary|conclusions?|definitions?|account structure|case stud(y|ies)|exercises?|notes?|other|others|miscellaneous|basics|fundamentals)$/i;
+
 function normalizeTree(items) {
   const out = [];
   const indexByName = new Map();
   const depth = [];
+  const redirect = new Map(); // dropped generic label -> its parent name, so its children re-attach upward
   for (const item of items) {
     const name = String(item?.name || "").trim();
     const key = name.toLowerCase();
     if (!name || indexByName.has(key)) continue;
+    if (out.length > 0 && GENERIC_LABEL.test(name)) {
+      redirect.set(key, String(item?.parent || "").trim().toLowerCase());
+      continue;
+    }
 
     let parentIdx = -1;
     if (out.length > 0) {
-      const wanted = String(item?.parent || "").trim().toLowerCase();
+      let wanted = String(item?.parent || "").trim().toLowerCase();
+      for (let hops = 0; redirect.has(wanted) && hops < 5; hops++) wanted = redirect.get(wanted);
       parentIdx = indexByName.has(wanted) ? indexByName.get(wanted) : 0;
       while (depth[parentIdx] >= MAX_DEPTH) parentIdx = indexByName.get(String(out[parentIdx].parent || "").toLowerCase()) ?? 0;
     }

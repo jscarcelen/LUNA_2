@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newGoal, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
@@ -10,6 +10,7 @@ import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { ensurePlanFolders, linkMaterial } from "./folders";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
+import { KnowledgeGraph } from "./KnowledgeGraph.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -17,6 +18,37 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 const field = "w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm text-ink";
 const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
+
+/** Concept mastery list — sorted weakest first, with a bar each. */
+function ConceptMasteryList({ concepts = [], masteryByConceptId = {} }) {
+  if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">No concept data yet. Upload reference material to populate.</p>;
+  const sorted = [...concepts].sort((a, b) => {
+    const ma = masteryByConceptId[a.id] ?? -1;
+    const mb = masteryByConceptId[b.id] ?? -1;
+    return ma - mb;
+  });
+  const color = (m) => m === undefined ? "#9ca3af" : m < 0.4 ? "#ff3b30" : m < 0.7 ? "#ff9500" : "#34c759";
+  return (
+    <div className="mt-3 grid gap-2 max-h-[360px] overflow-y-auto pr-1">
+      {sorted.map((c) => {
+        const m = masteryByConceptId[c.id];
+        const pct = m !== undefined ? Math.round(m * 100) : null;
+        return (
+          <div key={c.id} className="grid gap-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-ink truncate" title={c.name}>{c.name}</span>
+              <span className="text-xs font-semibold shrink-0" style={{ color: color(m) }}>{pct !== null ? `${pct}%` : "—"}</span>
+            </div>
+            <div className="h-1 rounded-full bg-ink/8 overflow-hidden">
+              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct ?? 0}%`, background: color(m) }} />
+            </div>
+            {c.topic && <span className="text-[10px] text-soft-ink leading-none">{c.topic}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Ring showing how much of a plan is done — the one number a plan is judged on. */
 function Ring({ ratio, colour, size = 56 }) {
@@ -51,6 +83,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null); // { activity, documentId, itemId, planDocumentId }
 
+  // Knowledge graph + student model state
+  const [graphConcepts, setGraphConcepts] = useState([]);
+  const [graphPrereqs, setGraphPrereqs] = useState([]);
+  const [masteryByConceptId, setMasteryByConceptId] = useState({});
+
   const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
   const resources = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
   const attempts = useMemo(() => joinAttempts(documents), [documents]);
@@ -58,6 +95,25 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const alerts = useMemo(() => upcoming(plans, attempts, 10), [plans, attempts]);
   const open = plans.find((row) => row.document.id === openId) || null;
   const roots = plans.filter((row) => !row.plan.parentPlanId || !plans.some((other) => other.document.id === row.plan.parentPlanId));
+
+  // Fetch concept graph + mastery whenever the open plan or workspace changes
+  useEffect(() => {
+    if (!open || !selectedWorkspaceId) return;
+    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
+
+    Promise.all([
+      fetch(`/api/concepts?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
+      fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
+    ]).then(([conceptData, masteryData]) => {
+      setGraphConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
+      setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
+      const byId = {};
+      for (const s of (masteryData.states || [])) {
+        if (s.concept_id) byId[s.concept_id] = s.mastery ?? 0;
+      }
+      setMasteryByConceptId(byId);
+    });
+  }, [open?.document?.id, selectedWorkspaceId]);
 
   async function save(plan, documentId) {
     const content = JSON.stringify({ ...plan, updatedAt: new Date().toISOString() }, null, 2);
@@ -359,6 +415,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             </section>
 
             <section className={`${card} p-5`}>
+              <p className={kicker}>Student model</p>
+              <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept — weakest first. Updated live after each activity.</p>
+              <ConceptMasteryList concepts={graphConcepts} masteryByConceptId={masteryByConceptId} />
+            </section>
+
+            <section className={`${card} p-5`}>
               <p className={kicker}>Plan settings</p>
               <div className="mt-2 grid gap-2">
                 <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input className={field} value={plan.name} onChange={(event) => updateOpen((current) => ({ ...current, name: event.target.value }))} /></label>
@@ -372,6 +434,22 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             </section>
           </div>
         </div>
+
+        {/* Full-width knowledge graph */}
+        <section className={`${card} p-5`}>
+          <p className={kicker}>Concept map</p>
+          <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">
+            All concepts from your reference material — sized by importance, coloured by mastery.
+            Arrows show prerequisites. Drag to rearrange, scroll to zoom, click to highlight a concept{"'"}s chain.
+          </p>
+          <KnowledgeGraph
+            concepts={graphConcepts}
+            prerequisites={graphPrereqs}
+            masteryByConceptId={masteryByConceptId}
+            height={520}
+          />
+        </section>
+
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
         {playing ? (

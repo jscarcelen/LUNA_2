@@ -295,6 +295,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [output, setOutput] = useState(null);
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
+  const [replanSuggestion, setReplanSuggestion] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
@@ -837,7 +838,23 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       }).catch(() => { /* attempt stays local on network error */ });
     }
 
-    // 2. Legacy JSON blob save (kept for backward compat)
+    // 2. Check if study plan needs adjustment
+    if (learnerId && workspaceId && toolContext?.planDocumentId) {
+      fetch("/api/plans/replan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planDocumentId: toolContext.planDocumentId, learnerId, ownerUserId, workspaceId }),
+      })
+        .then((r) => r.json())
+        .then((result) => {
+          if (result?.shouldReplan && Array.isArray(result.suggestedItems) && result.suggestedItems.length > 0) {
+            setReplanSuggestion(result);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // 3. Legacy JSON blob save (kept for backward compat)
     if (!onSaveGeneratedQuizDocument) return;
     try {
       const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId, activityId: attempt.activityId, learner: toolContext?.profileName || "" }, null, 2);
@@ -1264,6 +1281,24 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           onSave={saveResource}
         />
       ) : null}
+      {replanSuggestion && (
+        <div className="rounded-2xl border-l-4 border-[var(--accent)] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="m-0 text-sm font-semibold text-ink">Study plan adjusted</p>
+            <p className="m-0 mt-0.5 text-xs text-soft-ink">{replanSuggestion.reasons?.[0]?.message || "Your study plan has been updated based on this attempt."}</p>
+            {(replanSuggestion.suggestedItems || []).map((item, i) => (
+              <p key={i} className="m-0 mt-1.5 text-xs text-ink">
+                <span className="font-semibold">+ {item.title}</span>
+                <span className="text-soft-ink"> · {item.kind.replace(/_/g, " ")} · {item.minutes} min · due {item.dueDate}</span>
+              </p>
+            ))}
+            {replanSuggestion.suggestedItems?.[0]?.reason && (
+              <p className="m-0 mt-1 text-xs text-soft-ink italic">{replanSuggestion.suggestedItems[0].reason}</p>
+            )}
+          </div>
+          <button type="button" className="shrink-0 text-soft-ink hover:text-ink text-xs" onClick={() => setReplanSuggestion(null)}>✕</button>
+        </div>
+      )}
       {playing ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
           <ActivityPlayer activity={playing.activity} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />

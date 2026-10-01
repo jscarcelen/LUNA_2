@@ -417,8 +417,8 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       y = cursor;
     }
     if (isFlowGroup(element)) {
-      // Slides with a title slide: each flow group begins on a new slide (slide 2+), never on the title slide.
-      if (hasTitleSlide && onFirstPage) {
+      // Slides: each flow group begins on its own slide so different block types never share a slide.
+      if (isSlides && current.items.length > 0) {
         newPage(element);
         y = cursor;
       }

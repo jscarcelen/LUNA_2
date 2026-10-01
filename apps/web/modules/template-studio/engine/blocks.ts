@@ -159,7 +159,7 @@ function openQuestion(): BlockDef {
       ...numberBadge(accent, 6, 6),
       ...pointsPill(accent, points.id, W - 20, 6.6),
       field(question.id, "Explain why the median resists outliers.", { x: 17, y: 6.4, w: W - 40, h: 9 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
-      ...[0, 1, 2, 3].map((row) => writingLine(20 + row * 7.5, 17, W - 24)),
+      ...[0, 1, 2, 3].map((row) => writingLine(20 + row * 7.5, 17, W - 28)),
       ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17))
     ]
   });
@@ -338,7 +338,7 @@ function examHeader(): BlockDef {
       createShape("rect", { frame: { x: 0, y: 0, w: 2, h: 22 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 1 }) }),
       createShape("ellipse", { name: "opt:logo|Logo mark", frame: { x: 7, y: 4.2, w: 4.6, h: 4.6 }, style: defaultStyle({ fill: accent.main, stroke: "" }) }),
       label("LUNA", { x: 13, y: 4.2, w: 26, h: 5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep }, { name: "opt:logo|Logo" }),
-      field(subtitle.id, "Biology · Grade 10", { x: W - 76, y: 4.4, w: 69, h: 5 }, { fontSize: TYPE.meta, color: INK.muted, align: "right" }, { name: "opt:subtitle|Subtitle" }),
+      field(subtitle.id, "Biology · Grade 10", { x: 42, y: 4.4, w: W - 49, h: 5 }, { fontSize: TYPE.meta, color: INK.muted, align: "right" }, { name: "opt:subtitle|Subtitle" }),
       field(title.id, "Biology Midterm Exam", { x: 7, y: 11, w: W - 14, h: 10 }, { fontSize: TYPE.title, fontWeight: "bold", color: INK.strong }),
       label("Name", { x: 0, y: 26, w: 12, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: "opt:namedate|Name label" }),
       writingLine(30.5, 12, 76),
@@ -540,7 +540,7 @@ function matchPairs(): BlockDef {
     repeat: null,
     pagination: { breakBefore: false, breakAfter: false, keepTogether: false, allowSplit: true, overflow: "continue" as const },
     children: [
-      tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
+      tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: A.main }),
       tx(instruction.id, "Draw a line to connect each pair.", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 10, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
       createGroup({
         name: "Pair row",

@@ -86,9 +86,10 @@ async function main() {
   // Absolute pdfjs path embedded at worker-write time:
   const pdfjsLib = await import(${JSON.stringify(PDFJS_PATH)});
   const { getDocument } = pdfjsLib;
-  // Disable the browser worker thread — Node.js has no Worker global and pdfjs
-  // will crash trying to spawn one unless we explicitly disable the worker source.
-  if (pdfjsLib.GlobalWorkerOptions) pdfjsLib.GlobalWorkerOptions.workerSrc = "";
+  // pdfjs runs a "fake worker" in Node and throws if workerSrc is falsy (an empty string
+  // counts), so point it at the real pdf.worker.mjs that sits beside pdf.mjs.
+  const { pathToFileURL } = await import("url");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(path.dirname(${JSON.stringify(PDFJS_PATH)}), "pdf.worker.mjs")).href;
 
   const pdf = await getDocument({
     data: new Uint8Array(buf), disableFontFace: true, isEvalSupported: false,

@@ -7,7 +7,6 @@ import { BlockRenderer } from "../../blocks/BlockRenderer.js";
 import { BLOCKS, BLOCK_COLORS } from "../../blocks/blockRegistry.js";
 import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
 import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
-import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
 import { applyOutputCustomization, defaultBrand, escapeHtml, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
@@ -1317,7 +1316,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-                {[{ id: "fields", label: "Output fields" }, ...(isBlockOutput ? [] : [{ id: "layout", label: "Template" }, { id: "style", label: "Styling" }])].map((tab) => (
+                {[{ id: "fields", label: "Output fields" }, ...(isBlockOutput ? [] : [{ id: "layout", label: "Template" }])].map((tab) => (
                   <button key={tab.id} type="button" onClick={() => setOutputTab(tab.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${outputTab === tab.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>{tab.label}</button>
                 ))}
               </div>
@@ -1461,11 +1460,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                     </div>
                   ) : null}
                 </div>
-              ) : (
-                <div className="mt-4">
-                  <OutputCustomizerPanel fields={fields} fieldTypeByName={fieldTypeByName} onFieldTypeChange={setFieldType} customization={customization} onChange={setCustomization} hasTemplate={Boolean(activeTemplate)} />
-                </div>
-              )}
+              ) : null}
               <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-ink/8 pt-4">
                 {agentDocument ? <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button> : <span />}
                 <button type="button" onClick={() => { rememberLink(); persistAgent(); setFlowStep(3); }} disabled={!hasOutput || !mappingReady} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>

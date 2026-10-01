@@ -256,6 +256,12 @@ function Ring({ ratio, colour, size = 56 }) {
  * calendar puts every plan on the same weeks so a collision is visible before it happens, and the
  * alert panel says what is due now.
  */
+// Sort by importance desc and take the top N concepts — keeps the graph readable.
+function capConcepts(concepts, max = 20) {
+  if (!Array.isArray(concepts) || concepts.length <= max) return concepts;
+  return [...concepts].sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0)).slice(0, max);
+}
+
 export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
@@ -312,7 +318,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       fetch(`/api/concepts?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
       fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
     ]).then(([conceptData, masteryData]) => {
-      const fetchedConcepts = Array.isArray(conceptData.concepts) ? conceptData.concepts : [];
+      const fetchedConcepts = capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
       setGraphConcepts(fetchedConcepts);
       setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
       const byId = {};
@@ -343,7 +349,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       );
       // Reload concepts after extraction
       const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
-      setGraphConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
+      setGraphConcepts(capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []));
       setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
     } finally {
       setExtracting(false);
@@ -370,7 +376,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         )
       );
       const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
-      const newConcepts = Array.isArray(conceptData.concepts) ? conceptData.concepts : [];
+      const newConcepts = capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
       const newPrereqs = Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : [];
       setRebuildPreview({ newConcepts, newPrereqs, prevConcepts, prevPrereqs });
     } finally {

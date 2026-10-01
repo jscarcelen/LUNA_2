@@ -112,8 +112,7 @@ export const BLOCKS = {
       lines:        { type: 'number', description: 'Number of answer lines to show (3–8)',   required: false, example: 4 },
     },
     formats: [
-      { id: 'card',  label: 'Card',  description: 'Question in card with lined answer space below' },
-      { id: 'lined', label: 'Lined', description: 'Simple lined page style' },
+      { id: 'card', label: 'Card', description: 'Question in card with lined answer space below' },
     ],
     defaultFormat: 'card',
   },
@@ -131,8 +130,7 @@ export const BLOCKS = {
       points:      { type: 'number',  description: 'Points for this question',                required: true,  example: 1 },
     },
     formats: [
-      { id: 'card',   label: 'Card',   description: 'Statement in card with T / F buttons' },
-      { id: 'inline', label: 'Inline', description: 'Compact single-line style with T/F checkbox' },
+      { id: 'card', label: 'Card', description: 'Statement in card with T / F buttons' },
     ],
     defaultFormat: 'card',
   },
@@ -149,8 +147,7 @@ export const BLOCKS = {
       points:   { type: 'number', description: 'Points for this question',                     required: true,  example: 1 },
     },
     formats: [
-      { id: 'card',   label: 'Card',   description: 'Sentence in a card with styled blank line' },
-      { id: 'inline', label: 'Inline', description: 'Plain text with underline blank' },
+      { id: 'card', label: 'Card', description: 'Sentence in a card with styled blank line' },
     ],
     defaultFormat: 'card',
   },
@@ -168,7 +165,6 @@ export const BLOCKS = {
     },
     formats: [
       { id: 'classic', label: 'Classic', description: 'White card, term on front, definition on back' },
-      { id: 'split',   label: 'Split',   description: 'Both sides shown side-by-side in study mode' },
     ],
     defaultFormat: 'classic',
   },

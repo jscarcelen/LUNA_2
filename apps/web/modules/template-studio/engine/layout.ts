@@ -327,6 +327,21 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   const anchored = (element: Element) => element.pageScope.mode !== "page" || element.placement === "fixed";
   const staticElements = elements.filter((element) => anchored(element) && !isFlowGroup(element));
   const flowing = elements.filter((element) => !anchored(element) || isFlowGroup(element));
+
+  // Compute effective content area by inspecting every-page static elements (headers/footers).
+  // Headers sit in the upper half of the page; footers sit in the lower half.
+  const everyEls = staticElements.filter((el) => el.pageScope.mode === "every");
+  const headerBottom = everyEls
+    .filter((el) => el.frame.y + el.frame.h <= height / 2)
+    .reduce((max, el) => Math.max(max, el.frame.y + el.frame.h), layout.margins.top);
+  const footerTop = everyEls
+    .filter((el) => el.frame.y >= height / 2)
+    .reduce((min, el) => Math.min(min, el.frame.y), limit);
+  // contentTop: where flowing content begins (3 mm gap after any header)
+  const contentTop = headerBottom > layout.margins.top ? headerBottom + 3 : layout.margins.top;
+  // contentLimit: flowing content must not cross into the footer band
+  const contentLimit = Math.min(limit, footerTop);
+
   const stamp = (target: LaidOutPage, continuation: boolean) => {
     for (const element of staticElements) {
       const header = continuation ? element.pageScope.mode === "every" : true;
@@ -344,26 +359,30 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   // Fixed blocks cap whatever flows above them on the first page (the flow continues on the next page).
   const fixedTops = elements.filter((element) => element.placement === "fixed" && !isFlowGroup(element)).map((element) => element.frame.y);
   const capFor = (element: Element, onFirstPage: boolean) => {
-    if (!onFirstPage) return limit;
+    if (!onFirstPage) return contentLimit;
     const below = fixedTops.filter((top) => top >= element.frame.y + element.frame.h);
-    return below.length ? Math.min(limit, Math.min(...below)) : limit;
+    return below.length ? Math.min(contentLimit, Math.min(...below)) : contentLimit;
   };
 
   // Sequential flow: each flowing element starts where the previous one ended, keeping the designed spacing.
-  let cursor = layout.margins.top;
+  // Start below any header so content never overlaps the header band.
+  let cursor = contentTop;
   let previousDesignedBottom = layout.margins.top;
   let onFirstPage = true;
   let firstFlowing = true;
-  const newPage = (element: Element) => {
+  const newPage = (_element: Element) => {
     current = makePage(true);
     stamp(current, true);
     onFirstPage = false;
-    cursor = Math.max(layout.margins.top, element.type === "group" ? continuationTop(page, element as GroupElement, layout) : layout.margins.top);
+    // Always restart below the header band so continuation pages match page 1.
+    cursor = contentTop;
   };
   for (const element of flowing) {
     if (!isShown(element, scopes, ctx)) continue;
     const designedGap = Math.max(0, element.frame.y - previousDesignedBottom);
-    let y = firstFlowing ? element.frame.y : cursor + designedGap;
+    // Use cursor for the first flowing element too (not element.frame.y) so content
+    // always starts below the header rather than at the raw designed position.
+    let y = firstFlowing ? cursor : cursor + designedGap;
     firstFlowing = false;
     const group = element.type === "group" ? element : null;
     if (((group && group.pagination.breakBefore) || element.placement === "new_page") && current.items.length) {

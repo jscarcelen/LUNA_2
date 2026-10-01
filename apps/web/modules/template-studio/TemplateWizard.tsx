@@ -431,7 +431,7 @@ function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, blockAc
                 return (
                   <button key={v.id} type="button" onClick={() => onSelectFormat(origId, v.id)}
                     className={`flex shrink-0 flex-col items-center gap-1.5 rounded-xl border-2 p-2 transition ${sel ? "border-[var(--accent)] bg-[var(--accent-soft)]" : "border-transparent bg-[var(--surface-soft)] hover:border-ink/20"}`}>
-                    <BlockThumbnail block={v} accent={previewAccent} toggles={toggles} scale={0.25} maxW={100} />
+                    <BlockThumbnail block={v} accent={previewAccent} toggles={toggles} scale={0.4} maxW={160} />
                     <span className="text-[10px] font-semibold" style={{ color: sel ? "var(--accent-ink)" : "#6b7280" }}>{v.variant || v.name}</span>
                     {sel && <span className="text-[9px] font-bold text-[var(--accent)]">✓ Selected</span>}
                   </button>
@@ -832,11 +832,11 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
           <p className={`${kicker}`}>Components — {resolvedSelections.length} total</p>
           <button type="button" onClick={() => setStep(3)} className={`${ghostBtn} px-4 py-1.5 text-[12px]`}>✏ Edit components</button>
         </div>
-        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
           {resolvedSelections.map(({ origId, block, accent, toggles, isFixed }) => (
             <div key={origId} className="flex flex-col items-center gap-2">
               <div className="relative">
-                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.55} maxW={340} />
+                <BlockThumbnail block={block} accent={accent} toggles={toggles} scale={0.7} maxW={420} />
                 {isFixed && <span className="absolute -right-1 -top-1 rounded-full bg-green-600 px-1.5 py-0.5 text-[9px] font-bold text-white">Fixed</span>}
               </div>
               <span className="max-w-full truncate text-center text-[12px] font-semibold text-ink">{block.variant || block.name}</span>

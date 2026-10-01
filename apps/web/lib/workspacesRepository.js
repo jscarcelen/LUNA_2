@@ -723,31 +723,67 @@ function htmlToMarkdownDocument(html = "", fallbackText = "") {
   }
 }
 
+function renderKatexSafe(latex, displayMode) {
+  const clean = String(latex || "").trim();
+  if (!clean) return "";
+  try {
+    return katex.renderToString(clean, { displayMode, throwOnError: false, output: "html" });
+  } catch {
+    return displayMode ? `<pre class="math-display">$$\n${escapeHtml(clean)}\n$$</pre>` : `<code class="math-inline">$${escapeHtml(clean)}$</code>`;
+  }
+}
+
 function renderLatexWithKatex(html = "") {
   let rendered = String(html || "");
   if (!rendered.trim()) return rendered;
 
+  // ── CDM renderer output (from htmlRenderer.js) ─────────────────────────
+  // Display math: <div class="cdm-display-math" data-latex="LATEX">$$ LATEX $$</div>
+  rendered = rendered.replace(/<div\b[^>]*class=["'][^"']*cdm-display-math[^"']*["'][^>]*data-latex="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi, (_, latexAttr) => {
+    const latex = decodeHtmlEntities(latexAttr);
+    const result = renderKatexSafe(latex, true);
+    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
+  });
+  // Also handle data-latex before class (attribute order may vary)
+  rendered = rendered.replace(/<div\b[^>]*data-latex="([^"]*)"[^>]*class=["'][^"']*cdm-display-math[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, (_, latexAttr) => {
+    const latex = decodeHtmlEntities(latexAttr);
+    const result = renderKatexSafe(latex, true);
+    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
+  });
+
+  // Inline math: <span class="cdm-inline-math" data-latex="LATEX">$LATEX$</span>
+  rendered = rendered.replace(/<span\b[^>]*class=["'][^"']*cdm-inline-math[^"']*["'][^>]*data-latex="([^"]*)"[^>]*>[\s\S]*?<\/span>/gi, (_, latexAttr) => {
+    const latex = decodeHtmlEntities(latexAttr);
+    const result = renderKatexSafe(latex, false);
+    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
+  });
+  rendered = rendered.replace(/<span\b[^>]*data-latex="([^"]*)"[^>]*class=["'][^"']*cdm-inline-math[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, (_, latexAttr) => {
+    const latex = decodeHtmlEntities(latexAttr);
+    const result = renderKatexSafe(latex, false);
+    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
+  });
+
+  // ── Legacy / DOCX auxiliary output ─────────────────────────────────────
   rendered = rendered.replace(/<pre\b[^>]*class=["'][^"']*math-display[^"']*["'][^>]*>\s*\$\$([\s\S]*?)\$\$\s*<\/pre>/gi, (_, expr) => {
-    const latex = String(expr || "").trim();
-    if (!latex) return "";
-    try {
-      return `<div class="math-display nicer-latex">${katex.renderToString(latex, { displayMode: true, throwOnError: false })}</div>`;
-    } catch {
-      return `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
-    }
+    const result = renderKatexSafe(expr, true);
+    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(expr)}\n$$</pre>`;
   });
 
   rendered = rendered.replace(/<code\b[^>]*class=["'][^"']*math-inline[^"']*["'][^>]*>\s*\$([^$\n]+?)\$\s*<\/code>/gi, (_, expr) => {
-    const latex = String(expr || "").trim();
-    if (!latex) return "";
-    try {
-      return `<span class="math-inline nicer-latex">${katex.renderToString(latex, { displayMode: false, throwOnError: false })}</span>`;
-    } catch {
-      return `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
-    }
+    const result = renderKatexSafe(expr, false);
+    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(expr)}$</code>`;
   });
 
   return rendered;
+}
+
+function decodeHtmlEntities(str = "") {
+  return String(str || "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
 }
 
 function wrapDownloadedHtmlDocument(html = "") {
@@ -1440,7 +1476,8 @@ async function persistTextDocuments(subjectId, files, options = {}) {
     if (hasDocumentSourceVisualFields) {
       row.source_mime_type = String(file?.extraction?.sourceMimeType || "").trim().toLowerCase() || null;
       row.source_content_base64 = String(file?.extraction?.sourceContentBase64 || "") || null;
-      row.source_render_html = String(file?.extraction?.sourceRenderHtml || "") || null;
+      // Run KaTeX on CDM math tags (cdm-inline-math, cdm-display-math) before storing
+      row.source_render_html = renderLatexWithKatex(String(file?.extraction?.sourceRenderHtml || "")) || null;
     }
 
     if (hasDocumentReviewFields) {

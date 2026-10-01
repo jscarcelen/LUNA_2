@@ -126,7 +126,7 @@ OUTPUT SCHEMA (return ONLY this JSON, no extra keys, no markdown fences):
           "type": "list",
           "list_type": "bullet",
           "level": 0,
-          "items": [{ "children": [{ "type": "text", "text": "..." }] }],
+          "list_items": [{ "children": [{ "type": "text", "text": "..." }] }],
           "confidence": 0.95
         },
         {
@@ -233,23 +233,25 @@ function normalizeBlock(block) {
       return {
         ...base,
         equation_id: String(block.equation_id || ""),
-        latex: String(block.latex || "")
+        // Strip \[...\] or \(...\) wrappers GPT sometimes includes in the latex string itself
+        latex: stripLatexDelimiters(String(block.latex || ""))
       };
 
     case "table":
       return {
         ...base,
-        rows: normalizeTaleRows(block.rows)
+        rows: normalizeTableRows(block.rows)
       };
 
     case "list":
+      // Renderer checks `list_items` (proper path); accept both `list_items` and `items` from GPT
       return {
         ...base,
         list_type: String(block.list_type || "bullet"),
         level: Number(block.level) || 0,
-        items: Array.isArray(block.items) ? block.items.map((item) => ({
-          children: normalizeChildren(item.children)
-        })) : []
+        list_items: (Array.isArray(block.list_items) ? block.list_items : Array.isArray(block.items) ? block.items : []).map((item) => ({
+          children: normalizeChildren(item.children || item.text ? [{ type: "text", text: String(item.text || "") }] : [])
+        }))
       };
 
     case "figure":
@@ -284,42 +286,95 @@ function normalizeBlock(block) {
 
 function normalizeChildren(children) {
   if (!Array.isArray(children)) return [];
-  return children.map((child) => {
+  const nodes = [];
+  for (const child of children) {
     const type = String(child?.type || "text");
     if (type === "inline_math") {
-      return {
+      nodes.push({
         type: "inline_math",
         equation_id: String(child.equation_id || ""),
-        latex: String(child.latex || ""),
+        latex: stripLatexDelimiters(String(child.latex || "")),
         source: "ai-vision",
         confidence: Number.isFinite(child.confidence) ? child.confidence : 0.88
-      };
-    }
-    return {
-      type: "text",
-      text: String(child?.text || ""),
-      formatting: {
+      });
+    } else {
+      const rawText = String(child?.text || "");
+      const formatting = {
         bold: Boolean(child?.formatting?.bold),
         italic: Boolean(child?.formatting?.italic),
         underline: Boolean(child?.formatting?.underline),
         font: child?.formatting?.font || null,
         color: child?.formatting?.color || null,
         highlight: child?.formatting?.highlight || null
-      },
-      source: "ai-vision",
-      confidence: Number.isFinite(child?.confidence) ? child.confidence : 0.9
-    };
-  });
+      };
+      // Split text on $...$ or \(...\) inline math that GPT embedded as plain text
+      const parts = splitInlineMath(rawText);
+      for (const part of parts) {
+        if (part.type === "inline_math") {
+          nodes.push({ type: "inline_math", equation_id: "", latex: part.latex, source: "ai-vision", confidence: 0.88 });
+        } else {
+          nodes.push({ type: "text", text: part.text, formatting, source: "ai-vision", confidence: Number.isFinite(child?.confidence) ? child.confidence : 0.9 });
+        }
+      }
+    }
+  }
+  return nodes;
 }
 
-function normalizeTaleRows(rows) {
+/**
+ * Split a string on inline math delimiters ($...$  or \(...\)),
+ * returning an array of {type:"text",text} | {type:"inline_math",latex} parts.
+ */
+function splitInlineMath(text) {
+  if (!text) return [{ type: "text", text: "" }];
+  // Match $...$ (non-greedy, no newlines) or \(...\)
+  const INLINE_MATH_RE = /\$([^$\n]+?)\$|\\\((.+?)\\\)/g;
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = INLINE_MATH_RE.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ type: "text", text: text.slice(lastIndex, match.index) });
+    }
+    const latex = stripLatexDelimiters(match[1] || match[2] || "");
+    parts.push({ type: "inline_math", latex });
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push({ type: "text", text: text.slice(lastIndex) });
+  }
+  return parts.length > 0 ? parts : [{ type: "text", text }];
+}
+
+/**
+ * Strip outer LaTeX delimiters that GPT sometimes wraps the content in.
+ * e.g. "\[E=mc^2\]" → "E=mc^2", "\(x\)" → "x"
+ */
+function stripLatexDelimiters(latex = "") {
+  let s = latex.trim();
+  if (s.startsWith("\\[") && s.endsWith("\\]")) s = s.slice(2, -2).trim();
+  else if (s.startsWith("\\(") && s.endsWith("\\)")) s = s.slice(2, -2).trim();
+  else if (s.startsWith("$$") && s.endsWith("$$")) s = s.slice(2, -2).trim();
+  else if (s.startsWith("$") && s.endsWith("$")) s = s.slice(1, -1).trim();
+  return s;
+}
+
+function normalizeTableRows(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => {
     if (!Array.isArray(row)) return [];
     return row.map((cell) => ({
+      // Renderer requires type === "table_cell" to use the proper TableCell path
+      type: "table_cell",
       blocks: Array.isArray(cell?.blocks) ? cell.blocks.map(normalizeBlock) : [
-        // If cell has plain text
-        ...(cell?.text ? [{ type: "paragraph", children: [{ type: "text", text: String(cell.text), formatting: {} }], confidence: 0.88, source: "ai-vision" }] : [])
+        // GPT returned a plain-text cell
+        {
+          type: "paragraph",
+          children: [{ type: "text", text: String(cell?.text || cell || ""), formatting: {}, source: "ai-vision", confidence: 0.88 }],
+          equation_ids: [],
+          confidence: 0.88,
+          source: "ai-vision"
+        }
       ]
     }));
   });
@@ -364,6 +419,9 @@ function mimeTypeFor(sourceType) {
 
 // ─── PDF extraction ──────────────────────────────────────────────────────────
 
+// Characters per chunk — roughly 5-6 pages of dense academic text per GPT-4o call
+const PDF_CHUNK_SIZE = 12000;
+
 async function extractPdf(file) {
   const buf = base64ToBuffer(file.contentBase64);
 
@@ -379,30 +437,138 @@ async function extractPdf(file) {
     console.warn("[aiVisionExtractor] pdf-parse failed:", err.message);
   }
 
-  const isScanned = rawText.trim().length < 50 && pageCount > 0;
+  const isScanned = rawText.trim().length < 50;
 
-  // 2. Send to GPT-4o for structured extraction
   const systemPrompt = buildSystemPrompt("PDF");
-  const userContent = isScanned
-    ? `This appears to be a scanned or image-based PDF (${pageCount} page(s), little/no extractable text). Please note that visual content cannot be read from this format — extract what you can from the text provided and flag figures as needed.
 
-File: ${file.name}
-Pages: ${pageCount}`
-    : `Extract all content from this PDF document. Pay special attention to mathematical formulas (convert to LaTeX), tables, and document structure.
+  if (isScanned) {
+    // Scanned PDF — no text to chunk; single call with note
+    const userContent = `This appears to be a scanned/image-based PDF (${pageCount} page(s)). No text could be extracted. Return an empty structure or describe that the document is image-based.
 
-File: ${file.name}
-Pages: ${pageCount}
+File: ${file.name}`;
+    const aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);
+    return buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name });
+  }
+
+  // 2. Chunk large documents — process each chunk, merge sections
+  const chunks = chunkText(rawText, PDF_CHUNK_SIZE);
+  console.log(`[aiVisionExtractor] PDF "${file.name}": ${pageCount} pages, ${chunks.length} chunk(s), ${rawText.length} chars`);
+
+  if (chunks.length === 1) {
+    // Small document — single call
+    const userContent = buildPdfUserPrompt(file.name, pageCount, chunks[0], 1, 1);
+    const aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);
+    return buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name });
+  }
+
+  // Large document — parallel chunk calls, then merge
+  const chunkPromises = chunks.map((chunk, i) => {
+    const userContent = buildPdfUserPrompt(file.name, pageCount, chunk, i + 1, chunks.length);
+    return callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }])
+      .catch((err) => {
+        console.warn(`[aiVisionExtractor] chunk ${i + 1}/${chunks.length} failed:`, err.message);
+        return null;
+      });
+  });
+
+  const chunkResults = await Promise.all(chunkPromises);
+
+  // Merge: gather equations globally, concatenate sections from each chunk
+  const mergedEquations = [];
+  const mergedSections = [];
+  const eqIdSet = new Set();
+
+  for (const result of chunkResults) {
+    if (!result) continue;
+    if (Array.isArray(result.equations)) {
+      for (const eq of result.equations) {
+        if (!eqIdSet.has(eq.id)) {
+          eqIdSet.add(eq.id);
+          mergedEquations.push(eq);
+        }
+      }
+    }
+    if (Array.isArray(result.sections)) {
+      mergedSections.push(...result.sections);
+    } else if (Array.isArray(result.blocks)) {
+      mergedSections.push({ blocks: result.blocks });
+    }
+  }
+
+  // Build merged CDM directly
+  const docId = crypto.randomUUID();
+  const sections = mergedSections.map((sec) => ({
+    blocks: Array.isArray(sec.blocks) ? sec.blocks.map(normalizeBlock) : []
+  }));
+  const equations = mergedEquations.map((eq, i) => ({
+    id: String(eq.id || `eq-${i + 1}`),
+    latex: stripLatexDelimiters(String(eq.latex || "")),
+    display: Boolean(eq.display),
+    confidence: Number.isFinite(eq.confidence) ? eq.confidence : 0.88,
+    source: "ai-vision"
+  }));
+
+  let blockCount = 0, tableCount = 0;
+  for (const sec of sections) { blockCount += sec.blocks.length; tableCount += sec.blocks.filter((b) => b.type === "table").length; }
+
+  // Use first non-empty title
+  let title = file.name;
+  for (const result of chunkResults) {
+    if (result?.title && String(result.title).trim() && String(result.title) !== "Untitled") {
+      title = String(result.title).trim();
+      break;
+    }
+  }
+
+  return {
+    schemaVersion: "2.0",
+    schema_version: "cdm.v2",
+    document_id: docId,
+    metadata: { title, source_type: "pdf", mime_type: "application/pdf", extraction_method: `ai-vision-${VISION_MODEL}` },
+    equations,
+    sections,
+    stats: { section_count: sections.length, block_count: blockCount, equation_count: equations.length, table_count: tableCount, text_length: rawText.length },
+    confidence: computeDocConfidence(sections, equations),
+    debug: { source: "aiVisionExtractor", chunks: chunks.length }
+  };
+}
+
+function buildPdfUserPrompt(fileName, pageCount, chunkText, chunkIndex, totalChunks) {
+  const chunkNote = totalChunks > 1
+    ? `\n\nNOTE: This is chunk ${chunkIndex} of ${totalChunks}. Extract only the content in this chunk. Use equation IDs like "eq-${chunkIndex}-1", "eq-${chunkIndex}-2", etc. to avoid collisions.`
+    : "";
+  return `Extract all content from this PDF document. Pay special attention to mathematical formulas (output as clean LaTeX without delimiters), tables, and document structure.
+
+File: ${fileName}
+Total pages: ${pageCount}${chunkNote}
 
 EXTRACTED TEXT:
-${rawText.slice(0, 50000)}`; // GPT-4o context limit buffer
+${chunkText}`;
+}
 
-  const messages = [
-    { role: "system", content: systemPrompt },
-    { role: "user", content: userContent }
-  ];
-
-  const aiJson = await callOpenAI(messages, { model: TEXT_MODEL });
-  return buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name });
+/**
+ * Split text into chunks at natural boundaries (paragraphs, newlines).
+ * Tries not to cut mid-formula or mid-sentence.
+ */
+function chunkText(text, maxChars) {
+  if (text.length <= maxChars) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > 0) {
+    if (remaining.length <= maxChars) {
+      chunks.push(remaining);
+      break;
+    }
+    // Find a good split point near maxChars — prefer double-newline (paragraph break)
+    let splitAt = maxChars;
+    const doubleNewline = remaining.lastIndexOf("\n\n", maxChars);
+    const singleNewline = remaining.lastIndexOf("\n", maxChars);
+    if (doubleNewline > maxChars * 0.6) splitAt = doubleNewline + 2;
+    else if (singleNewline > maxChars * 0.6) splitAt = singleNewline + 1;
+    chunks.push(remaining.slice(0, splitAt));
+    remaining = remaining.slice(splitAt);
+  }
+  return chunks;
 }
 
 // ─── Image extraction ────────────────────────────────────────────────────────

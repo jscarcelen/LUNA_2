@@ -2,7 +2,7 @@
  * AI Vision Extractor
  *
  * Uses OpenAI GPT-4o (vision) to extract rich content from:
- *   - PDF files       → text via pdf-parse + GPT-4o structuring
+ *   - PDF files       → text via pdfjs-dist (no canvas needed) + GPT-4o structuring
  *   - PPTX files      → OOXML text + embedded images → GPT-4o
  *   - Image files     → base64 direct to GPT-4o vision
  *   - Handwritten notes (images) → GPT-4o vision
@@ -422,19 +422,68 @@ function mimeTypeFor(sourceType) {
 // Characters per chunk — roughly 5-6 pages of dense academic text per GPT-4o call
 const PDF_CHUNK_SIZE = 12000;
 
+/**
+ * Extract all text from a PDF buffer using pdfjs-dist (legacy Node build).
+ * Does NOT require @napi-rs/canvas — text extraction works without canvas rendering.
+ * Returns { text, pageCount }.
+ */
+async function extractPdfText(buf) {
+  // Apply minimal browser-API polyfills pdfjs needs at module-load time
+  if (typeof globalThis.DOMMatrix === "undefined") {
+    globalThis.DOMMatrix = class DOMMatrix {
+      constructor() { this.a=1;this.b=0;this.c=0;this.d=1;this.e=0;this.f=0;this.m11=1;this.m22=1;this.m33=1;this.m44=1;this.is2D=true;this.isIdentity=true; }
+      multiply(){return new DOMMatrix();} translate(tx=0,ty=0){const m=new DOMMatrix();m.e=tx;m.f=ty;return m;}
+      scale(sx=1,sy=sx){const m=new DOMMatrix();m.a=sx;m.d=sy;return m;} inverse(){return new DOMMatrix();}
+      rotateAxisAngle(){return new DOMMatrix();} static fromMatrix(){return new DOMMatrix();}
+    };
+  }
+  if (typeof globalThis.DOMPoint === "undefined") globalThis.DOMPoint = class DOMPoint { constructor(x=0,y=0){this.x=x;this.y=y;this.z=0;this.w=1;} };
+  if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class ImageData { constructor(w,h){this.width=w;this.height=h;this.data=new Uint8ClampedArray(w*h*4);} };
+  if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D { rect(){}moveTo(){}lineTo(){}arc(){}closePath(){} };
+
+  // Import pdfjs-dist legacy build (works in Node without canvas for text extraction)
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+
+  const pdf = await getDocument({
+    data: new Uint8Array(buf),
+    disableFontFace: true,
+    isEvalSupported: false,
+    useWorkerFetch: false,
+    disableRange: true,
+    disableStream: true,
+    stopAtErrors: false
+    // Note: intentionally not setting workerSrc — pdfjs uses main-thread mode
+  }).promise;
+
+  const pageCount = pdf.numPages;
+  let text = "";
+
+  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const tc = await page.getTextContent();
+    // Reconstruct text preserving line breaks from hasEOL markers
+    const pageText = tc.items
+      .map((item) => item.str + (item.hasEOL ? "\n" : ""))
+      .join("");
+    text += pageText + "\n\n";
+  }
+
+  return { text: text.trim(), pageCount };
+}
+
 async function extractPdf(file) {
   const buf = base64ToBuffer(file.contentBase64);
 
-  // 1. Extract raw text with pdf-parse
+  // 1. Extract raw text using pdfjs-dist directly (pdf-parse v2 requires @napi-rs/canvas which isn't available)
   let rawText = "";
   let pageCount = 1;
   try {
-    const pdfParse = (await import("pdf-parse")).default;
-    const parsed = await pdfParse(buf);
-    rawText = parsed.text || "";
-    pageCount = parsed.numpages || 1;
+    const result = await extractPdfText(buf);
+    rawText = result.text;
+    pageCount = result.pageCount;
+    console.log(`[aiVisionExtractor] pdfjs extracted ${rawText.length} chars from ${pageCount} pages`);
   } catch (err) {
-    console.warn("[aiVisionExtractor] pdf-parse failed:", err.message);
+    console.warn("[aiVisionExtractor] pdfjs text extraction failed:", err.message);
   }
 
   const isScanned = rawText.trim().length < 50;
@@ -442,8 +491,8 @@ async function extractPdf(file) {
   const systemPrompt = buildSystemPrompt("PDF");
 
   if (isScanned) {
-    // Scanned PDF — no text to chunk; single call with note
-    const userContent = `This appears to be a scanned/image-based PDF (${pageCount} page(s)). No text could be extracted. Return an empty structure or describe that the document is image-based.
+    // Genuinely scanned PDF — no extractable text
+    const userContent = `This is a scanned/image-based PDF (${pageCount} page(s)) with no extractable text. Return a minimal structure indicating the document could not be parsed as text.
 
 File: ${file.name}`;
     const aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);

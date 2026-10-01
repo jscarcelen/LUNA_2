@@ -409,7 +409,13 @@ ${JSON.stringify(blockSchema, null, 2)}`;
         json_schema: {
           name: "block_array_result",
           strict: false,
-          schema: blockSchema
+          // OpenAI json_schema top-level must be an object — wrap the array inside.
+          schema: {
+            type: "object",
+            properties: { items: blockSchema },
+            required: ["items"],
+            additionalProperties: false
+          }
         }
       },
       messages: [
@@ -439,7 +445,9 @@ ${JSON.stringify(blockSchema, null, 2)}`;
   let parsed = null;
   try {
     const text = String(content || "").trim();
-    parsed = JSON.parse(text);
+    const obj = JSON.parse(text);
+    // Response may be wrapped { items: [...] } (json_schema object wrapper) or a bare array.
+    parsed = Array.isArray(obj) ? obj : (Array.isArray(obj?.items) ? obj.items : null);
   } catch {
     const match = String(content || "").match(/\[[\s\S]*\]/);
     if (match) {

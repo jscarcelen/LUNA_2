@@ -14,7 +14,8 @@ const EXTRACTION_SCHEMA = {
   properties: {
     concepts: {
       type: "array",
-      description: "All distinct, testable concepts found in the document.",
+      description: "The most important distinct, testable concepts found in the document — maximum 25.",
+      maxItems: 25,
       items: {
         type: "object",
         additionalProperties: false,
@@ -49,7 +50,7 @@ Rules:
 4. Each concept name should be specific and unique — "Sample variance formula" not "Statistics", "Newton's Third Law" not "Physics laws".
 5. difficulty and importance are 0.0–1.0 floats.
 6. prerequisites: use EXACT names of concepts earlier in the list. Every non-root concept needs at least one.
-7. Aim for 8–25 concepts per document. Do not over-fragment or under-fragment.
+7. Generate AT MOST 25 concepts — strictly no more than 25. Pick the most important ones if the document is large. Do not over-fragment or under-fragment.
 8. source_pages: use 1-indexed page numbers. If unknown, use an empty array.
 
 EXAMPLE TREE (for a Statistics document):
@@ -104,7 +105,7 @@ export async function extractConcepts(documentText, opts = {}) {
   }
 
   const raw = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
-  const rawConcepts = Array.isArray(raw.concepts) ? raw.concepts : [];
+  const rawConcepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 25);
 
   // Build a name → index map for resolving prerequisite names to indices
   const nameToIndex = {};

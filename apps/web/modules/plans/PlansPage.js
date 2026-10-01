@@ -50,6 +50,26 @@ function inferSkillTags(item, resource) {
   return tags;
 }
 
+// ─── Concept name fuzzy-matcher ──────────────────────────────────────────────
+
+/**
+ * Tries to find the best match for `oldName` among `newNames`.
+ * Returns the matched new name, or null if no suitable match found.
+ */
+function fuzzyMatchConceptName(oldName, newNames) {
+  const oldNorm = String(oldName || "").toLowerCase().trim();
+  if (!oldNorm) return null;
+  // Exact match
+  const exact = newNames.find((n) => String(n || "").toLowerCase().trim() === oldNorm);
+  if (exact) return exact;
+  // Partial match: one name fully contains the other (min 4 chars to avoid false positives)
+  const partial = newNames.find((n) => {
+    const nNorm = String(n || "").toLowerCase().trim();
+    return nNorm.length > 3 && oldNorm.length > 3 && (nNorm.includes(oldNorm) || oldNorm.includes(nNorm));
+  });
+  return partial || null;
+}
+
 // ─── Material picker modal ──────────────────────────────────────────────────
 
 /** Flat folders array → tree with .children arrays. */
@@ -255,6 +275,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [replanning, setReplanning] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
+  const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
+  const [rebuildPreview, setRebuildPreview] = useState(null); // { newConcepts, newPrereqs, prevConcepts, prevPrereqs }
 
   // Knowledge graph + student model state
   const [graphConcepts, setGraphConcepts] = useState([]);
@@ -326,6 +348,78 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     } finally {
       setExtracting(false);
     }
+  }
+
+  /**
+   * Rebuilds the concept map with a preview step before applying changes.
+   * Saves current concepts as "previous" so the user can review the diff.
+   */
+  async function doRebuildConceptMap(materialIds, workspaceId, ownerUserId) {
+    if (!materialIds?.length || !workspaceId) return;
+    const prevConcepts = graphConcepts;
+    const prevPrereqs = graphPrereqs;
+    setExtracting(true);
+    try {
+      await Promise.allSettled(
+        materialIds.map((docId) =>
+          fetch("/api/concepts/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentId: docId, workspaceId, ownerUserId }),
+          }).then((r) => r.json())
+        )
+      );
+      const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
+      const newConcepts = Array.isArray(conceptData.concepts) ? conceptData.concepts : [];
+      const newPrereqs = Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : [];
+      setRebuildPreview({ newConcepts, newPrereqs, prevConcepts, prevPrereqs });
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  /**
+   * Accepts the new concept map from a rebuild preview:
+   * - Updates the displayed concepts and prerequisites
+   * - Prunes mastery entries for concepts that no longer exist
+   * - Updates concept name tags on plan items via fuzzy match
+   */
+  function handleAcceptRebuild() {
+    if (!rebuildPreview) return;
+    const { newConcepts, newPrereqs } = rebuildPreview;
+    setGraphConcepts(newConcepts);
+    setGraphPrereqs(newPrereqs);
+    // Prune mastery for removed concepts (keep only concept IDs still in the new map)
+    const newConceptIds = new Set(newConcepts.map((c) => c.id));
+    setMasteryByConceptId((prev) => {
+      const updated = {};
+      for (const [id, mastery] of Object.entries(prev)) {
+        if (newConceptIds.has(id)) updated[id] = mastery;
+      }
+      return updated;
+    });
+    // Update plan items' concept tags using fuzzy name matching
+    if (open) {
+      const newConceptNames = newConcepts.map((c) => c.name);
+      const updatedItems = open.plan.items.map((item) => {
+        if (!Array.isArray(item.concepts) || !item.concepts.length) return item;
+        const updatedConcepts = item.concepts
+          .map((oldName) => fuzzyMatchConceptName(oldName, newConceptNames))
+          .filter(Boolean);
+        return { ...item, concepts: updatedConcepts };
+      });
+      updateOpen((current) => ({ ...current, items: updatedItems }));
+    }
+    setRebuildPreview(null);
+    setStatus("Concept map rebuilt — student model and activity tags updated.");
+  }
+
+  /** Discards the preview and restores the previous concept map in the UI. */
+  function handleGoBackRebuild() {
+    if (!rebuildPreview) return;
+    setGraphConcepts(rebuildPreview.prevConcepts);
+    setGraphPrereqs(rebuildPreview.prevPrereqs);
+    setRebuildPreview(null);
   }
 
   async function save(plan, documentId) {
@@ -486,6 +580,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const wholeProgress = planProgress(whole, attempts);
     const weeks = planWeeks(plan);
     const parent = plans.find((row) => row.document.id === plan.parentPlanId) || null;
+
+    // Precompute concept diff for the rebuild-preview modal
+    const addedConcepts = rebuildPreview
+      ? rebuildPreview.newConcepts.filter((nc) => !rebuildPreview.prevConcepts.some((pc) => pc.name === nc.name))
+      : [];
+    const removedConcepts = rebuildPreview
+      ? rebuildPreview.prevConcepts.filter((pc) => !rebuildPreview.newConcepts.some((nc) => nc.name === pc.name))
+      : [];
 
     return (
       <section className="tw-scope grid gap-4">
@@ -806,10 +908,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 type="button"
                 className={ghostBtn}
                 disabled={extracting}
-                onClick={() => {
-                  const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
-                  triggerExtraction(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
-                }}
+                onClick={() => setRebuildConfirmOpen(true)}
               >
                 {extracting ? "Extracting concepts…" : "↺ Rebuild concept map"}
               </button>
@@ -832,6 +931,94 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
         {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
+
+        {/* ── Rebuild confirmation modal ── */}
+        {rebuildConfirmOpen && (
+          <div className="tw-scope fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={() => setRebuildConfirmOpen(false)}>
+            <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
+              <h4 className="m-0 text-lg font-bold text-ink">Rebuild concept map?</h4>
+              <p className="m-0 mt-2 text-sm text-soft-ink">
+                Rebuilding the concept map may change your performance tracking data. Concepts that no longer exist will be removed from the student model and their mastery scores will be lost.
+              </p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">
+                You will be shown a preview of the changes before they are applied.
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" className={ghostBtn} onClick={() => setRebuildConfirmOpen(false)}>Cancel</button>
+                <button
+                  type="button"
+                  className={primaryBtn}
+                  onClick={() => {
+                    setRebuildConfirmOpen(false);
+                    const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+                    doRebuildConceptMap(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Rebuild preview modal ── */}
+        {rebuildPreview && (
+          <div className="tw-scope fixed inset-0 z-50 flex flex-col overflow-hidden bg-black/40 p-4">
+            <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)]">
+              {/* Header */}
+              <div className="border-b border-ink/8 px-6 py-4">
+                <h4 className="m-0 text-lg font-bold text-ink">New concept map preview</h4>
+                <p className="m-0 mt-0.5 text-xs text-soft-ink">Review the changes before applying. Click Accept to update the student model and activity tags, or Go back to keep the old map.</p>
+              </div>
+              {/* Diff strip */}
+              <div className="flex flex-wrap gap-6 border-b border-ink/8 px-6 py-3">
+                {addedConcepts.length > 0 && (
+                  <div>
+                    <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "#2f9e5b" }}>
+                      {`Added (${addedConcepts.length})`}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {addedConcepts.slice(0, 10).map((c) => (
+                        <span key={c.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(47,158,91,0.1)", color: "#1d7a44" }}>{c.name}</span>
+                      ))}
+                      {addedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{`+${addedConcepts.length - 10} more`}</span>}
+                    </div>
+                  </div>
+                )}
+                {removedConcepts.length > 0 && (
+                  <div>
+                    <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-danger)]">
+                      {`Removed (${removedConcepts.length})`}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {removedConcepts.slice(0, 10).map((c) => (
+                        <span key={c.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(255,59,48,0.08)", color: "var(--color-danger)" }}>{c.name}</span>
+                      ))}
+                      {removedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{`+${removedConcepts.length - 10} more`}</span>}
+                    </div>
+                  </div>
+                )}
+                {addedConcepts.length === 0 && removedConcepts.length === 0 && (
+                  <p className="m-0 text-xs text-soft-ink">No concept names changed — internal structure may have been reorganised.</p>
+                )}
+              </div>
+              {/* New graph */}
+              <div className="flex-1 overflow-auto px-6 py-4">
+                <KnowledgeGraph
+                  concepts={rebuildPreview.newConcepts}
+                  prerequisites={rebuildPreview.newPrereqs}
+                  masteryByConceptId={masteryByConceptId}
+                  height={360}
+                />
+              </div>
+              {/* Footer */}
+              <div className="flex justify-end gap-2 border-t border-ink/8 px-6 py-4">
+                <button type="button" className={ghostBtn} onClick={handleGoBackRebuild}>← Go back</button>
+                <button type="button" className={primaryBtn} onClick={handleAcceptRebuild}>Accept new map</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Material picker modal ── */}
         {materialPickerOpen && (

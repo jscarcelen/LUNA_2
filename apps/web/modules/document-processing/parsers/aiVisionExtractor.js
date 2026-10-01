@@ -13,7 +13,7 @@
 import JSZip from "jszip";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFileSync, existsSync } from "fs";
+import { writeFileSync, existsSync, unlinkSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 // Note: zlib import removed — extraction handled by pdfjs in child process
@@ -50,9 +50,12 @@ console.log("[aiVisionExtractor] PDFJS_PATH:", PDFJS_PATH, "exists:", existsSync
 // webpack, which means pdfjs-dist ESM imports are handled by Node.js natively.
 let _workerPath = null;
 
+// Version tag — bump when the worker code changes so the stale file is never reused.
+const WORKER_VERSION = "v2";
+
 function ensureWorker() {
   if (_workerPath) return _workerPath;
-  _workerPath = path.join(tmpdir(), "luna-pdfTextWorker.mjs");
+  _workerPath = path.join(tmpdir(), `luna-pdfTextWorker-${WORKER_VERSION}.mjs`);
   // Embed the absolute pdfjs path directly in the worker so it works from any cwd.
   const code = `
 import path from "path";
@@ -71,10 +74,13 @@ if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class Im
 if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D {rect(){}moveTo(){}lineTo(){}arc(){}closePath(){}addPath(){}};
 
 async function main() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  const b64 = Buffer.concat(chunks).toString("utf8").trim();
-  if (!b64) { process.stdout.write(JSON.stringify({error:"No input"})); process.exit(1); }
+  // Read from temp file path passed as argv[2]. async execFile does not support the
+  // "input" option for piping stdin the way execSync/spawnSync do.
+  const inputFile = process.argv[2];
+  if (!inputFile) { process.stdout.write(JSON.stringify({error:"No input file provided"})); process.exit(1); }
+  const { readFileSync } = await import("fs");
+  const b64 = readFileSync(inputFile, "utf8").trim();
+  if (!b64) { process.stdout.write(JSON.stringify({error:"Empty input file"})); process.exit(1); }
 
   const buf = Buffer.from(b64, "base64");
   // Absolute pdfjs path embedded at worker-write time:
@@ -524,12 +530,19 @@ const PDF_CHUNK_SIZE = 12000;
 async function extractPdfText(buf) {
   const workerPath = ensureWorker();
   const b64 = buf.toString("base64");
+
+  // Write PDF data to a unique temp file.
+  // async execFile does NOT support the `input` option for writing to a child process's
+  // stdin (unlike execSync / spawnSync). Passing the data via a temp file is reliable.
+  const tmpInputPath = path.join(tmpdir(), `luna-pdf-in-${Date.now()}-${Math.random().toString(36).slice(2)}.b64`);
+  writeFileSync(tmpInputPath, b64, "utf8");
+
   console.log(`[aiVisionExtractor] Running pdfTextWorker (pdfjs: ${existsSync(PDFJS_PATH) ? "found" : "MISSING"})`);
   try {
     const { stdout, stderr } = await execFileAsync(
       process.execPath,
-      [workerPath],
-      { input: b64, maxBuffer: 50 * 1024 * 1024, timeout: 60_000 }
+      [workerPath, tmpInputPath],
+      { maxBuffer: 50 * 1024 * 1024, timeout: 60_000 }
     );
     if (stderr) {
       const errLines = stderr.split("\n").filter(l => l && !l.startsWith("Warning:"));
@@ -545,6 +558,8 @@ async function extractPdfText(buf) {
     if (err.stderr) console.error("stderr:", String(err.stderr).slice(0, 400));
     if (err.stdout) console.error("stdout:", String(err.stdout).slice(0, 200));
     throw err;
+  } finally {
+    try { unlinkSync(tmpInputPath); } catch { /* ignore cleanup errors */ }
   }
 }
 
@@ -570,12 +585,36 @@ async function extractPdf(file) {
   const systemPrompt = buildSystemPrompt("PDF");
 
   if (isScanned) {
-    // Genuinely scanned PDF — no extractable text
-    const userContent = `This is a scanned/image-based PDF (${pageCount} page(s)) with no extractable text. Return a minimal structure indicating the document could not be parsed as text.
-
-File: ${file.name}`;
-    const aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);
-    return buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name });
+    // Genuinely scanned / image-based PDF with no extractable text.
+    // Build a minimal CDM directly — calling GPT-4o without the actual page images would
+    // just hallucinate a placeholder and waste tokens.
+    console.log(`[aiVisionExtractor] PDF "${file.name}" has no extractable text (${pageCount} page(s)) — scanned-PDF fallback`);
+    const docId = crypto.randomUUID();
+    const pageLabel = `${pageCount} page${pageCount !== 1 ? "s" : ""}`;
+    return {
+      schemaVersion: "2.0",
+      schema_version: "cdm.v2",
+      document_id: docId,
+      metadata: {
+        title: file.name || "Untitled",
+        source_type: "pdf",
+        mime_type: "application/pdf",
+        extraction_method: "scanned-pdf-no-text"
+      },
+      equations: [],
+      sections: [{
+        blocks: [{
+          type: "paragraph",
+          children: [{ type: "text", text: `This PDF (${pageLabel}) does not contain selectable text. It may be a scanned or image-based document. Upload a text-based PDF or DOCX for full content extraction.` }],
+          equation_ids: [],
+          confidence: 0.5,
+          source: "scanned-fallback"
+        }]
+      }],
+      stats: { section_count: 1, block_count: 1, equation_count: 0, table_count: 0, text_length: 0 },
+      confidence: 0.5,
+      debug: { source: "aiVisionExtractor", fallback: "scanned-pdf", pageCount }
+    };
   }
 
   // 2. Chunk large documents — process each chunk, merge sections

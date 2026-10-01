@@ -15,13 +15,22 @@ import { useState } from 'react';
 import { BLOCK_COLORS } from './blockRegistry.js';
 
 function getConfig(templateConfig, blockId) {
-  const entry = (templateConfig?.selectedBlocks || []).find((e) => e.blockId === blockId);
-  const colorId = entry?.color || 'default';
-  const colorObj = BLOCK_COLORS.find((c) => c.id === colorId) || BLOCK_COLORS[0];
+  const entry = (templateConfig?.selectedBlocks || []).find((e) => (e.blockId ?? e.type) === blockId);
+  const colorRaw = entry?.color || 'default';
+  // Accept both color IDs ('default', 'purple') and hex values ('#0071e3') — the RunAgentPage
+  // blockConfigs state stores hex values while the saved agent spec stores IDs.
+  let colorValue;
+  if (colorRaw.startsWith('#')) {
+    colorValue = colorRaw;
+  } else {
+    colorValue = (BLOCK_COLORS.find((c) => c.id === colorRaw) || BLOCK_COLORS[0]).value;
+  }
   return {
     formatId: entry?.formatId || 'default',
-    color: colorObj.value,
-    colorId,
+    color: colorValue,
+    colorId: colorRaw.startsWith('#')
+      ? (BLOCK_COLORS.find((c) => c.value === colorRaw)?.id || 'default')
+      : colorRaw,
   };
 }
 

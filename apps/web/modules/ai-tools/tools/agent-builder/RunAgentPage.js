@@ -1146,7 +1146,9 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const blockTemplateConfig = outputBlocks
     ? {
         selectedBlocks: outputBlocks.map((block, i) => ({
-          type: block.type,
+          // BlockRenderer.getConfig() looks up entries by `blockId` — the block type IS the blockId
+          // in the flat block registry (e.g. 'question_mc', 'flashcard').
+          blockId: String(block?.type || ''),
           formatId: blockConfigs[i]?.formatId || BLOCKS[block?.type]?.defaultFormat || 'default',
           color: blockConfigs[i]?.color || '#0071e3',
         }))

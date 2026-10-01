@@ -18,9 +18,7 @@ export const BLOCKS = {
       level: { type: 'number',  description: 'Heading level: 1 (largest), 2, or 3', required: true, example: 1 },
     },
     formats: [
-      { id: 'default',   label: 'Default',   description: 'Clean heading with subtle bottom border' },
-      { id: 'bold',      label: 'Bold',      description: 'Heavy weight, accent colour underline' },
-      { id: 'minimal',   label: 'Minimal',   description: 'Plain text, no decorations' },
+      { id: 'default', label: 'Default', description: 'Clean heading with subtle bottom border' },
     ],
     defaultFormat: 'default',
   },
@@ -35,7 +33,6 @@ export const BLOCKS = {
     },
     formats: [
       { id: 'default', label: 'Default', description: 'Regular body text, comfortable line height' },
-      { id: 'lead',    label: 'Lead',    description: 'Slightly larger intro paragraph' },
     ],
     defaultFormat: 'default',
   },
@@ -50,9 +47,7 @@ export const BLOCKS = {
       items: { type: 'string[]', description: 'List items, 1–8 entries (use 1 when each bullet is a standalone point separated by dividers)',   required: true,  example: ['First point', 'Second point'] },
     },
     formats: [
-      { id: 'default',   label: 'Default',   description: 'Standard bullet dots' },
-      { id: 'checkmark', label: 'Checklist', description: 'Checkmark icons instead of dots' },
-      { id: 'numbered',  label: 'Numbered',  description: 'Numbered list (1. 2. 3.)' },
+      { id: 'default', label: 'Default', description: 'Standard bullet dots' },
     ],
     defaultFormat: 'default',
   },
@@ -67,8 +62,7 @@ export const BLOCKS = {
       type: { type: 'string', description: 'Callout type: info, tip, warning, or note', required: true, example: 'tip' },
     },
     formats: [
-      { id: 'card',   label: 'Card',   description: 'Filled background card with icon' },
-      { id: 'border', label: 'Border', description: 'Left accent border, light background' },
+      { id: 'card', label: 'Card', description: 'Filled background card with icon' },
     ],
     defaultFormat: 'card',
   },
@@ -80,8 +74,7 @@ export const BLOCKS = {
     icon: '—',
     aiFields: {},
     formats: [
-      { id: 'line',  label: 'Line',  description: 'Thin horizontal rule' },
-      { id: 'space', label: 'Space', description: 'Extra vertical spacing only' },
+      { id: 'line', label: 'Line', description: 'Thin horizontal rule' },
     ],
     defaultFormat: 'line',
   },
@@ -101,9 +94,7 @@ export const BLOCKS = {
       explanation:  { type: 'string',   description: 'Brief explanation of the answer',     required: false, example: 'Osmosis is specifically the movement of water through a semipermeable membrane.' },
     },
     formats: [
-      { id: 'card',    label: 'Card',    description: 'Question in a card, options as labelled buttons (A B C D)' },
-      { id: 'list',    label: 'List',    description: 'Question text above a vertical option list with radio style' },
-      { id: 'compact', label: 'Compact', description: 'Minimal spacing, good for dense exams' },
+      { id: 'card', label: 'Card', description: 'Question in a card, options as labelled buttons (A B C D)' },
     ],
     defaultFormat: 'card',
   },

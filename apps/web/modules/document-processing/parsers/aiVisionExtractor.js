@@ -569,14 +569,76 @@ async function extractPdfText(buf) {
 
 
 /**
- * Fallback for scanned/image-based PDFs.
- * Server-side canvas is not available so we cannot render PDF pages to images.
- * Returns null to fall through to the honest "no extractable text" CDM.
+ * Fallback for scanned/image-based PDFs: sends the raw PDF to Anthropic's API,
+ * which reads PDFs natively (including scanned/image-based ones) via Claude vision.
+ * Returns a CDM object, or null if the key is missing or the call fails.
  */
 async function extractPdfWithAnthropic(file, pageCount) {
-  // No server-side image rendering available — scanned PDF can't be processed further.
-  console.log(`[aiVisionExtractor] Scanned PDF fallback: "${file.name}" has no selectable text (${pageCount} pages). Returning null.`);
-  return null;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) {
+    console.log("[aiVisionExtractor] ANTHROPIC_API_KEY not set — skipping Anthropic PDF fallback");
+    return null;
+  }
+
+  console.log(`[aiVisionExtractor] Anthropic PDF fallback: sending "${file.name}" to Claude`);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": anthropicKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: file.contentBase64
+            }
+          },
+          {
+            type: "text",
+            text: "Extract the full text content of this PDF document. Return ALL text exactly as written, preserving:\n- Headings (mark with ## or ###)\n- Lists (use - for bullets)\n- Tables (use markdown table format)\n- Mathematical formulas (use LaTeX: $...$ for inline, $$...$$ for display)\n- Paragraph breaks\n\nDo not add commentary. Return only the extracted content."
+          }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Anthropic API error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const extractedText = data?.content?.[0]?.text || "";
+  console.log(`[aiVisionExtractor] Anthropic extracted ${extractedText.length} chars from "${file.name}"`);
+
+  if (extractedText.length < 50) return null;
+
+  // Structure the extracted text into a CDM via OpenAI
+  const systemPrompt = buildSystemPrompt("PDF");
+  let aiJson;
+  try {
+    aiJson = await callOpenAI([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `File: ${file.name} (${pageCount} page(s), extracted via Anthropic vision)\n\nCONTENT:\n\n${extractedText.slice(0, 12000)}` }
+    ]);
+  } catch (err) {
+    console.warn("[aiVisionExtractor] OpenAI structuring after Anthropic fallback failed:", err.message);
+    return buildRawTextCdm(extractedText, file.name, pageCount);
+  }
+
+  const cdm = aiJson ? buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name }) : null;
+  const hasContent = cdm && Array.isArray(cdm.sections) && cdm.sections.some((s) => s.blocks?.length > 0);
+  if (!hasContent) return buildRawTextCdm(extractedText, file.name, pageCount);
+  return cdm;
 }
 
 async function extractPdf(file) {

@@ -10,7 +10,7 @@ import { InputSchemaBuilder } from "./steps/InputSchemaBuilder";
 import { ContextBuilder } from "./steps/ContextBuilder";
 import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
 import { OutputComposer as LegacyOutputComposer } from "./steps/OutputComposer";
-// @ts-expect-error plain JS module — no types needed
+// @ts-ignore plain JS module — no types needed
 import { OutputComposer as BlockOutputComposer } from "../ai-tools/blocks/OutputComposer.js";
 import { GeneratedTemplate } from "./steps/GeneratedTemplate";
 import { TestStep } from "./test/TestStep";

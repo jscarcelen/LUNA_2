@@ -83,6 +83,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null); // { activity, documentId, itemId, planDocumentId }
   const [deletingPlan, setDeletingPlan] = useState(null); // plan row to confirm-delete
+  const [planView, setPlanView] = useState("list"); // "list" | "calendar" inside the open plan
+  const [replanResult, setReplanResult] = useState(null);
+  const [replanning, setReplanning] = useState(false);
 
   // Knowledge graph + student model state
   const [graphConcepts, setGraphConcepts] = useState([]);
@@ -93,6 +96,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const resources = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
   const attempts = useMemo(() => joinAttempts(documents), [documents]);
   const concepts = useMemo(() => conceptIndex(resources), [resources]);
+  const conceptsByResourceId = useMemo(() => {
+    const map = new Map();
+    for (const { document, resource } of resources) {
+      const names = resourceConcepts(resource).map((c) => c.name);
+      if (names.length) map.set(document.id, names);
+    }
+    return map;
+  }, [resources]);
   const alerts = useMemo(() => upcoming(plans, attempts, 10), [plans, attempts]);
   const open = plans.find((row) => row.document.id === openId) || null;
   const roots = plans.filter((row) => !row.plan.parentPlanId || !plans.some((other) => other.document.id === row.plan.parentPlanId));
@@ -254,6 +265,38 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Checks current performance and suggests plan adjustments. */
+  async function triggerReplan() {
+    if (!open) return;
+    setReplanning(true);
+    try {
+      const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
+      const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+      const result = await fetch("/api/plans/replan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ planDocumentId: open.document.id, learnerId, ownerUserId, workspaceId: selectedWorkspaceId }),
+      }).then((r) => r.json());
+      setReplanResult(result);
+      if (!result.shouldReplan) setStatus("Plan looks good — no changes needed based on your current performance.");
+    } catch (err) {
+      setStatus(String(err.message || err));
+    } finally {
+      setReplanning(false);
+    }
+  }
+
+  /** Links a new document as reference material for this plan and auto-triggers concept extraction. */
+  function addMaterialToPlan(docId) {
+    if (!open) return;
+    const current = open.plan.materialIds || [];
+    if (current.includes(docId)) return;
+    updateOpen((p) => ({ ...p, materialIds: [...current, docId] }));
+    const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+    triggerExtraction([docId], selectedWorkspaceId, ownerUserId);
+    setStatus("Reference material added — rebuilding concept map…");
   }
 
   /** Dropping an item on a day of the calendar moves its due date, whichever plan it belongs to. */

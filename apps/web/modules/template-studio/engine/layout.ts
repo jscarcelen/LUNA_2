@@ -328,19 +328,30 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   const staticElements = elements.filter((element) => anchored(element) && !isFlowGroup(element));
   const flowing = elements.filter((element) => !anchored(element) || isFlowGroup(element));
 
-  // Compute effective content area by inspecting every-page static elements (headers/footers).
-  // Headers sit in the upper half of the page; footers sit in the lower half.
+  // Compute effective content area by inspecting static elements.
+  // "every"-scoped elements define headers (upper half) and footers (lower half) that repeat on every page.
+  // "first"-scoped elements (exam header, title panel) sit in the header band on the FIRST page only.
   const everyEls = staticElements.filter((el) => el.pageScope.mode === "every");
+  const firstPageHeaderEls = staticElements.filter((el) => el.pageScope.mode === "every" || el.pageScope.mode === "first");
   const headerBottom = everyEls
+    .filter((el) => el.frame.y + el.frame.h <= height / 2)
+    .reduce((max, el) => Math.max(max, el.frame.y + el.frame.h), layout.margins.top);
+  // On the first page, "first"-scoped elements also occupy the header band, so content must start below them.
+  const firstPageHeaderBottom = firstPageHeaderEls
     .filter((el) => el.frame.y + el.frame.h <= height / 2)
     .reduce((max, el) => Math.max(max, el.frame.y + el.frame.h), layout.margins.top);
   const footerTop = everyEls
     .filter((el) => el.frame.y >= height / 2)
     .reduce((min, el) => Math.min(min, el.frame.y), limit);
-  // contentTop: where flowing content begins (3 mm gap after any header)
+  // contentTop: where flowing content begins on continuation pages (3 mm gap after any "every" header)
   const contentTop = headerBottom > layout.margins.top ? headerBottom + 3 : layout.margins.top;
+  // firstPageContentTop: where flowing content begins on the first page — must clear "first"-scoped headers too
+  const firstPageContentTop = firstPageHeaderBottom > layout.margins.top ? firstPageHeaderBottom + 3 : layout.margins.top;
   // contentLimit: flowing content must not cross into the footer band
   const contentLimit = Math.min(limit, footerTop);
+  // Slides-specific rules: one item per slide; a "first"-scoped element creates a standalone title slide.
+  const isSlides = layout.class === "slides";
+  const hasTitleSlide = isSlides && staticElements.some((el) => el.pageScope.mode === "first");
 
   const stamp = (target: LaidOutPage, continuation: boolean) => {
     for (const element of staticElements) {
@@ -365,8 +376,9 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   };
 
   // Sequential flow: each flowing element starts where the previous one ended, keeping the designed spacing.
-  // Start below any header so content never overlaps the header band.
-  let cursor = contentTop;
+  // On the first page, start below any "first"-scoped header so content never overlaps the title band.
+  // On continuation pages, start below any "every"-scoped header.
+  let cursor = firstPageContentTop;
   let previousDesignedBottom = layout.margins.top;
   let onFirstPage = true;
   let firstFlowing = true;
@@ -374,7 +386,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
     current = makePage(true);
     stamp(current, true);
     onFirstPage = false;
-    // Always restart below the header band so continuation pages match page 1.
+    // Continuation pages start below the "every"-scoped header band.
     cursor = contentTop;
   };
   for (const element of flowing) {
@@ -390,6 +402,11 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       y = cursor;
     }
     if (isFlowGroup(element)) {
+      // Slides with a title slide: each flow group begins on a new slide (slide 2+), never on the title slide.
+      if (hasTitleSlide && onFirstPage) {
+        newPage(element);
+        y = cursor;
+      }
       const gap = element.layout.gap ?? 0;
       let pageLimit = capFor(element, onFirstPage) - (fixedTops.length ? gap : 0);
       let onPage = 0;
@@ -397,7 +414,8 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       for (const record of repeatRecords(element, scopes, ctx)) {
         const recordScopes = [record, ...scopes];
         let laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
-        const tooMany = element.pagination.maxItemsPerPage ? onPage >= element.pagination.maxItemsPerPage : false;
+        // Slides enforce exactly one flow item per slide; maxItemsPerPage does the same for paged layouts.
+        const tooMany = element.pagination.maxItemsPerPage ? onPage >= element.pagination.maxItemsPerPage : isSlides ? onPage >= 1 : false;
         if ((laid.bottom > pageLimit && c > layout.margins.top && element.pagination.overflow === "continue") || tooMany) {
           newPage(element);
           c = cursor;

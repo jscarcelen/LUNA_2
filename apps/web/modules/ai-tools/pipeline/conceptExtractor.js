@@ -8,71 +8,100 @@
 
 const MODEL = process.env.LUNA_CONCEPT_MODEL || process.env.LUNA_AGENT_MODEL || "gpt-4o-mini";
 
+const MAX_CONCEPTS = 20;
+const MAX_DEPTH = 5;
+
 const EXTRACTION_SCHEMA = {
   type: "object",
   additionalProperties: false,
   properties: {
     concepts: {
       type: "array",
-      description: "The most important distinct, testable concepts — maximum 15, forming a 3-4 level tree.",
-      maxItems: 15,
+      description: `Concept TREE in pre-order (every concept appears AFTER its parent). First item is the single root. Maximum ${MAX_CONCEPTS}.`,
+      maxItems: MAX_CONCEPTS,
       items: {
         type: "object",
         additionalProperties: false,
         properties: {
-          name:           { type: "string",  description: "Short, precise concept name (max 60 chars)." },
+          name:           { type: "string",  description: "Short, precise concept name (max 60 chars). Unique within the list." },
+          parent:         { type: ["string", "null"], description: "EXACT name of this concept's single parent concept (the broader idea it is a part of). null ONLY for the root (first item)." },
           description:    { type: "string",  description: "One sentence: what this concept is." },
-          topic:          { type: "string",  description: "The broader topic this concept belongs to (use headings from the document)." },
+          topic:          { type: "string",  description: "Name of the level-2 branch this concept sits under (the root's own name for the root and for level-2 concepts)." },
           bloom_level:    { type: "string",  enum: ["remember", "understand", "apply", "analyse", "evaluate", "create"], description: "Highest Bloom's taxonomy level typically tested for this concept." },
           difficulty:     { type: "number",  description: "Estimated difficulty 0.0 (trivial) to 1.0 (expert-level)." },
           importance:     { type: "number",  description: "How central is this concept to the subject 0.0 to 1.0." },
           question_types: { type: "array",   items: { type: "string", enum: ["multiple_choice", "true_false", "open_text", "calculation", "matching", "fill_blanks", "flashcard"] }, description: "Question types that make sense for this concept." },
           source_pages:   { type: "array",   items: { type: "number" }, description: "Page numbers in the source document that cover this concept (empty if unknown)." },
-          prerequisites:  { type: "array",   items: { type: "string" }, description: "Names of OTHER concepts in this list that must be understood first. Use exact names." },
         },
-        required: ["name", "description", "topic", "bloom_level", "difficulty", "importance", "question_types", "source_pages", "prerequisites"],
+        required: ["name", "parent", "description", "topic", "bloom_level", "difficulty", "importance", "question_types", "source_pages"],
       },
     },
   },
   required: ["concepts"],
 };
 
-const SYSTEM_PROMPT = `You are a curriculum analyst. Extract a small, clean TREE of concepts from an educational document.
+const SYSTEM_PROMPT = `You are a curriculum analyst. Turn an educational document into a CONCEPT TREE: an outline of the subject, exactly like a table of contents where each idea sits under the broader idea it belongs to.
 
-STRICT RULES:
-1. Return AT MOST 15 concepts total — fewer is better. Choose only the most essential.
-2. EXACTLY 3-4 levels deep: Root → 2-4 broad topics → specific skills/formulas (leaves).
-   Never put more than 4 levels. Never more than 4-5 children per node.
-3. ROOT (concept 0): the overall subject name. NO prerequisites. All topics connect to it.
-4. LEVEL 2 (topics): broad subject areas, each a direct child of root. Aim for 2-4 topics.
-5. LEVEL 3-4 (leaves): specific testable skills. Each has one parent topic as prerequisite.
-6. prerequisites: use EXACT names from earlier concepts. Every non-root concept needs exactly 1-2 prerequisites.
-7. No isolated nodes — every node must connect back to root via prerequisite chain.
-8. Concept names: short and specific. "Mean" not "Mean as a measure of central tendency".
+THE TREE (hard rules):
+1. Exactly ONE root: the overall subject. Its "parent" is null. It is the first item.
+2. Every other concept has exactly ONE "parent": the exact name of a concept that appears EARLIER in the list. No exceptions, no cycles, no concept without a parent.
+3. Depth: up to ${MAX_DEPTH} levels counting the root (root = level 1). Use the depth the material actually needs: most branches 3-4 levels, a few can reach 5 when the document drills down (e.g. a technique with a specific variant).
+4. Level 2 = the 3-6 major areas of the subject. Level 3+ = the specific ideas, methods, formulas and skills inside each area.
+5. A parent is a BROADER idea that CONTAINS its children ("Volatility" contains "Variance"). It is NOT "something you must learn first". Never use a sibling as a parent.
+6. Group related things under one parent instead of listing them side by side. Do NOT make a flat list: if a parent would have more than 5 children, introduce an intermediate grouping concept.
+7. At most ${MAX_CONCEPTS} concepts in total, including the root. Fewer is better; keep only distinct, testable ideas. Follow the document's own headings and structure when they exist.
+   Spend the budget on DEPTH where the document drills down: the 2-3 richest areas should reach level 4 (and level 5 for a specialised variant) instead of every area stopping at level 3 with many siblings. Minor areas can stay short.
+8. Names are short and specific ("Variance", not "Variance as a measure of data dispersion") and unique.
+9. Output in PRE-ORDER: root, then the first level-2 area, then everything under it (depth first), then the next level-2 area, and so on.
+10. "topic" = the name of the level-2 area the concept belongs to (for the root and for level-2 concepts, the root's own name).
 
-TARGET SHAPE for a 12-concept tree:
-  Root (1)
-  ├── Topic A (1 child of root)
-  │   ├── Skill A1 (leaf)
-  │   └── Skill A2 (leaf)
-  ├── Topic B (1 child of root)
-  │   ├── Skill B1 (leaf)
-  │   ├── Skill B2 (leaf)
-  │   └── Skill B3 (leaf)
-  └── Topic C (1 child of root)
-      ├── Skill C1 (leaf)
-      └── Skill C2 (leaf)
+EXAMPLE (Statistics) - this is the shape and depth expected:
+  Statistics
+    Sample explanation
+      Mean
+      Median
+    Volatility
+      Variance
+      Standard deviation
+    Variable correlation
+      Correlation
+      Covariance
+      Conditional probabilities
+        Pivot table
+    Data transformation
+      Log transformation
+        Natural logarithm
 
-EXAMPLE (Statistics):
-  0. "Statistics" (root)
-  1. "Central tendency" → ["Statistics"]
-  2. "Mean" → ["Central tendency"]
-  3. "Median" → ["Central tendency"]
-  4. "Data spread" → ["Statistics"]
-  5. "Variance" → ["Data spread"]
-  6. "Standard deviation" → ["Data spread"]
-  7. "Correlation" → ["Statistics"]
-  8. "Covariance" → ["Correlation"]`;
+As JSON, "Pivot table" has parent "Conditional probabilities", which has parent "Variable correlation", which has parent "Statistics" (the root, parent null).`;
+
+/**
+ * Guarantees a valid tree whatever the model returned: one root, one existing earlier parent per
+ * concept, unique names, depth <= MAX_DEPTH, at most MAX_CONCEPTS. Because parents always precede
+ * children, truncating the list can never orphan a node.
+ */
+function normalizeTree(items) {
+  const out = [];
+  const indexByName = new Map();
+  const depth = [];
+  for (const item of items) {
+    const name = String(item?.name || "").trim();
+    const key = name.toLowerCase();
+    if (!name || indexByName.has(key)) continue;
+
+    let parentIdx = -1;
+    if (out.length > 0) {
+      const wanted = String(item?.parent || "").trim().toLowerCase();
+      parentIdx = indexByName.has(wanted) ? indexByName.get(wanted) : 0;
+      while (depth[parentIdx] >= MAX_DEPTH) parentIdx = indexByName.get(String(out[parentIdx].parent || "").toLowerCase()) ?? 0;
+    }
+
+    indexByName.set(key, out.length);
+    depth.push(parentIdx < 0 ? 1 : depth[parentIdx] + 1);
+    out.push({ ...item, name, parent: parentIdx < 0 ? null : out[parentIdx].name });
+    if (out.length >= MAX_CONCEPTS) break;
+  }
+  return out;
+}
 
 /**
  * Extract concepts from a document's text content.
@@ -117,34 +146,10 @@ export async function extractConcepts(documentText, opts = {}) {
   }
 
   const raw = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
-  const rawConcepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 15);
+  const rawConcepts = normalizeTree(Array.isArray(raw.concepts) ? raw.concepts : []);
 
-  // Build a name → index map for resolving prerequisite names to indices
-  const nameToIndex = {};
-  rawConcepts.forEach((c, i) => { nameToIndex[c.name?.toLowerCase().trim()] = i; });
-
-  // ── ENFORCE CONNECTED TREE ───────────────────────────────────────────────────
-  // The root is concept[0]. Any concept with no valid prerequisites (other than
-  // the root itself) gets connected to the root, so the graph stays a single tree.
-  const rootName = rawConcepts[0]?.name || "";
-  for (let i = 1; i < rawConcepts.length; i++) {
-    const c = rawConcepts[i];
-    const validPrereqs = (c.prerequisites || []).filter((p) => {
-      const key = String(p || "").toLowerCase().trim();
-      return key && nameToIndex[key] !== undefined && nameToIndex[key] !== i;
-    });
-    if (validPrereqs.length === 0) {
-      // Isolated node — connect to root
-      rawConcepts[i] = { ...c, prerequisites: [rootName] };
-    } else {
-      rawConcepts[i] = { ...c, prerequisites: validPrereqs };
-    }
-  }
-  // Root has no prerequisites
-  if (rawConcepts[0]) rawConcepts[0] = { ...rawConcepts[0], prerequisites: [] };
-  // ─────────────────────────────────────────────────────────────────────────────
-
-  // Shape into DB-ready rows (prerequisite IDs resolved after insert, stored as names for now)
+  // Shape into DB-ready rows (parent -> child edges are written after insert as
+  // concept_prerequisites: prerequisite = parent, concept = child).
   const concepts = rawConcepts.map((c) => ({
     source_document_id: opts.documentId || null,
     workspace_id:       opts.workspaceId || null,
@@ -157,8 +162,7 @@ export async function extractConcepts(documentText, opts = {}) {
     importance:         Math.min(1, Math.max(0, Number(c.importance) || 0.5)),
     question_types:     Array.isArray(c.question_types) ? c.question_types : [],
     source_pages:       Array.isArray(c.source_pages) ? c.source_pages.map(Number).filter(Boolean) : [],
-    // prerequisite names carried forward; resolved to UUIDs after DB insert
-    _prerequisite_names: Array.isArray(c.prerequisites) ? c.prerequisites : [],
+    _prerequisite_names: c.parent ? [c.parent] : [],
   }));
 
   return { concepts, raw };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
@@ -11,6 +11,7 @@ import { executePlan } from "./execute";
 import { ensurePlanFolders, linkMaterial } from "./folders";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
+import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -188,24 +189,13 @@ function MaterialPickerModal({ documents, folders, resources, initialPicked, onC
 }
 
 /** Concept mastery list — hierarchical (mirrors concept map), with mastery bar each. */
-function ConceptMasteryList({ concepts = [], masteryByConceptId = {} }) {
+function ConceptMasteryList({ concepts = [], prerequisites = [], masteryByConceptId = {} }) {
   if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">No concept data yet. Upload reference material to populate.</p>;
 
   const color = (m) => m === undefined ? "#9ca3af" : m < 0.4 ? "#ff3b30" : m < 0.7 ? "#ff9500" : "#34c759";
 
-  // Build parent→children map using c.topic as the parent name.
-  // Roots are concepts whose topic doesn't match any other concept's name.
-  const byName = new Map(concepts.map((c) => [c.name, c]));
-  const children = new Map(concepts.map((c) => [c.id, []]));
-  const roots = [];
-  for (const c of concepts) {
-    const parent = c.topic ? byName.get(c.topic) : null;
-    if (parent) {
-      children.get(parent.id).push(c);
-    } else {
-      roots.push(c);
-    }
-  }
+  // Same tree as the concept map: parent = prerequisite edge.
+  const { roots, childrenById: children } = buildConceptForest(concepts, prerequisites);
 
   function ConceptRow({ concept, depth = 0 }) {
     const m = masteryByConceptId[concept.id];
@@ -256,10 +246,16 @@ function Ring({ ratio, colour, size = 56 }) {
  * calendar puts every plan on the same weeks so a collision is visible before it happens, and the
  * alert panel says what is due now.
  */
-// Sort by importance desc and take the top N concepts — keeps the graph readable.
-function capConcepts(concepts, max = 20) {
-  if (!Array.isArray(concepts) || concepts.length <= max) return concepts;
-  return [...concepts].sort((a, b) => (b.importance ?? 0) - (a.importance ?? 0)).slice(0, max);
+// The map only shows concepts from the resource materials linked to the plan.
+function conceptsUrl(workspaceId, materialIds) {
+  return `/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent((materialIds || []).join(","))}`;
+}
+
+// Cap the concept map without orphaning nodes (a child is only kept if its parent is kept).
+function normalizeConceptGraph(conceptData) {
+  const concepts = Array.isArray(conceptData?.concepts) ? conceptData.concepts : [];
+  const prerequisites = Array.isArray(conceptData?.prerequisites) ? conceptData.prerequisites : [];
+  return capConceptTree(concepts, prerequisites);
 }
 
 export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
@@ -306,6 +302,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const roots = plans.filter((row) => !row.plan.parentPlanId || !plans.some((other) => other.document.id === row.plan.parentPlanId));
 
   const [extracting, setExtracting] = useState(false);
+  const extractingRef = useRef(false);
 
   // Fetch concept graph + mastery whenever the open plan or workspace changes.
   // If no concepts exist yet but the plan has linked material, auto-trigger extraction.
@@ -315,12 +312,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
 
     Promise.all([
-      fetch(`/api/concepts?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
+      fetch(conceptsUrl(selectedWorkspaceId, open.plan.materialIds)).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
       fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
     ]).then(([conceptData, masteryData]) => {
-      const fetchedConcepts = capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
+      const graph = normalizeConceptGraph(conceptData);
+      const fetchedConcepts = graph.concepts;
       setGraphConcepts(fetchedConcepts);
-      setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
+      setGraphPrereqs(graph.prerequisites);
       const byId = {};
       for (const s of (masteryData.states || [])) {
         if (s.concept_id) byId[s.concept_id] = s.mastery ?? 0;
@@ -328,15 +326,16 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       setMasteryByConceptId(byId);
 
       // Auto-extract for plan-linked documents that haven't been processed yet
-      if (fetchedConcepts.length === 0 && open?.plan?.materialIds?.length > 0) {
+      if (fetchedConcepts.length === 0 && open?.plan?.materialIds?.length > 0 && !extractingRef.current) {
         triggerExtraction(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
       }
     });
-  }, [open?.document?.id, selectedWorkspaceId]);
+  }, [open?.document?.id, selectedWorkspaceId, (open?.plan?.materialIds || []).join(",")]);
 
   async function triggerExtraction(materialIds, workspaceId, ownerUserId) {
     if (!materialIds?.length || !workspaceId) return;
     setExtracting(true);
+    extractingRef.current = true;
     try {
       await Promise.allSettled(
         materialIds.map((docId) =>
@@ -348,10 +347,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         )
       );
       // Reload concepts after extraction
-      const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
-      setGraphConcepts(capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []));
-      setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
+      const conceptData = await fetch(conceptsUrl(workspaceId, materialIds)).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
+      const graph = normalizeConceptGraph(conceptData);
+      setGraphConcepts(graph.concepts);
+      setGraphPrereqs(graph.prerequisites);
     } finally {
+      extractingRef.current = false;
       setExtracting(false);
     }
   }
@@ -365,6 +366,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const prevConcepts = graphConcepts;
     const prevPrereqs = graphPrereqs;
     setExtracting(true);
+    extractingRef.current = true;
     try {
       await Promise.allSettled(
         materialIds.map((docId) =>
@@ -375,11 +377,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           }).then((r) => r.json())
         )
       );
-      const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
-      const newConcepts = capConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
-      const newPrereqs = Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : [];
+      const conceptData = await fetch(conceptsUrl(workspaceId, materialIds)).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
+      const { concepts: newConcepts, prerequisites: newPrereqs } = normalizeConceptGraph(conceptData);
       setRebuildPreview({ newConcepts, newPrereqs, prevConcepts, prevPrereqs });
     } finally {
+      extractingRef.current = false;
       setExtracting(false);
     }
   }
@@ -871,7 +873,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <section className={`${card} p-5`}>
           <p className={kicker}>Student model</p>
           <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept, ordered by concept map hierarchy. Updated live after each activity.</p>
-          <ConceptMasteryList concepts={graphConcepts} masteryByConceptId={masteryByConceptId} />
+          <ConceptMasteryList concepts={graphConcepts} prerequisites={graphPrereqs} masteryByConceptId={masteryByConceptId} />
         </section>
 
         {/* ── Sub-plans ── */}

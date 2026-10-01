@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { buildConceptForest } from "./conceptTree.js";
 
 const TOPIC_COLORS = [
   "#0071e3", "#2f9e5b", "#b25e00", "#8e44ad",
@@ -70,42 +71,21 @@ export function KnowledgeGraph({
     topics.forEach((t, i) => { topicColor[t] = TOPIC_COLORS[i % TOPIC_COLORS.length]; });
 
     // ── build tree data structure ───────────────────────────────────────────────
-    // Edge: prerequisite_id → concept_id  (parent → child)
-    const childrenById = {};
-    for (const p of prerequisites) {
-      if (!p.prerequisite_id || !p.concept_id) continue;
-      if (!childrenById[p.prerequisite_id]) childrenById[p.prerequisite_id] = [];
-      if (!childrenById[p.prerequisite_id].includes(p.concept_id)) {
-        childrenById[p.prerequisite_id].push(p.concept_id);
-      }
+    // Same forest the student-model list uses: edge prerequisite_id → concept_id is parent → child.
+    // Several roots (one per document) hang under a synthetic subject node so no branch is flattened.
+    const { roots, childrenById } = buildConceptForest(concepts, prerequisites);
+
+    function makeNode(concept) {
+      return { id: concept.id, concept, children: (childrenById.get(concept.id) || []).map(makeNode) };
     }
 
-    // Root = concept that never appears as a child (concept_id) in any prerequisite edge
-    const hasParent = new Set(prerequisites.map((p) => p.concept_id));
-    const conceptById = {};
-    concepts.forEach((c) => { conceptById[c.id] = c; });
-
-    let rootId = concepts.find((c) => !hasParent.has(c.id))?.id || concepts[0]?.id;
-
-    // Build recursive tree node, protecting against cycles
-    const visited = new Set();
-    function makeNode(id) {
-      if (visited.has(id)) return null;
-      visited.add(id);
-      const c = conceptById[id];
-      if (!c) return null;
-      const children = (childrenById[id] || []).map(makeNode).filter(Boolean);
-      return { id, concept: c, children };
-    }
-
-    const treeData = makeNode(rootId);
-    if (!treeData) return;
-
-    // Attach any disconnected nodes (not reachable from root) as children of root
-    const orphans = concepts.filter((c) => !visited.has(c.id));
-    for (const c of orphans) {
-      treeData.children.push({ id: c.id, concept: c, children: [] });
-    }
+    const treeData = roots.length === 1
+      ? makeNode(roots[0])
+      : {
+          id: "__subject__",
+          concept: { id: "__subject__", name: "Subject", topic: "", importance: 0.6, difficulty: 0.5 },
+          children: roots.map(makeNode),
+        };
 
     // ── d3 hierarchy + tree layout ──────────────────────────────────────────────
     const root = d3.hierarchy(treeData, (d) => d.children);

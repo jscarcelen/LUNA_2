@@ -14,8 +14,8 @@ const EXTRACTION_SCHEMA = {
   properties: {
     concepts: {
       type: "array",
-      description: "The most important distinct, testable concepts found in the document — maximum 25.",
-      maxItems: 25,
+      description: "The most important distinct, testable concepts — maximum 15, forming a 3-4 level tree.",
+      maxItems: 15,
       items: {
         type: "object",
         additionalProperties: false,
@@ -37,30 +37,42 @@ const EXTRACTION_SCHEMA = {
   required: ["concepts"],
 };
 
-const SYSTEM_PROMPT = `You are a curriculum analyst. You read an educational document and identify the distinct, testable concepts it covers, organised as a CONNECTED TREE.
+const SYSTEM_PROMPT = `You are a curriculum analyst. Extract a small, clean TREE of concepts from an educational document.
 
-Rules:
-1. TREE STRUCTURE — CRITICAL: Every concept (except the root) MUST have at least one prerequisite. No isolated nodes are allowed.
-   - The first concept in the list is the ROOT (the overall subject / document title). It has NO prerequisites.
-   - Every other concept must list at least one prerequisite using exact names of other concepts in the list.
-   - The result must form a single connected tree (or DAG) rooted at concept 0. A student must be able to follow prerequisite edges from any concept back to the root.
-2. HIERARCHY: Organise concepts from broad to specific. Topic headings become mid-level nodes; specific skills and formulas are leaves.
-   - Example structure: Root → Topic A, Topic B → Subtopic A1, Subtopic A2 → Specific formula
-3. A concept is something a student could be directly tested on (not a chapter title or administrative heading).
-4. Each concept name should be specific and unique — "Sample variance formula" not "Statistics", "Newton's Third Law" not "Physics laws".
-5. difficulty and importance are 0.0–1.0 floats.
-6. prerequisites: use EXACT names of concepts earlier in the list. Every non-root concept needs at least one.
-7. Generate AT MOST 25 concepts — strictly no more than 25. Pick the most important ones if the document is large. Do not over-fragment or under-fragment.
-8. source_pages: use 1-indexed page numbers. If unknown, use an empty array.
+STRICT RULES:
+1. Return AT MOST 15 concepts total — fewer is better. Choose only the most essential.
+2. EXACTLY 3-4 levels deep: Root → 2-4 broad topics → specific skills/formulas (leaves).
+   Never put more than 4 levels. Never more than 4-5 children per node.
+3. ROOT (concept 0): the overall subject name. NO prerequisites. All topics connect to it.
+4. LEVEL 2 (topics): broad subject areas, each a direct child of root. Aim for 2-4 topics.
+5. LEVEL 3-4 (leaves): specific testable skills. Each has one parent topic as prerequisite.
+6. prerequisites: use EXACT names from earlier concepts. Every non-root concept needs exactly 1-2 prerequisites.
+7. No isolated nodes — every node must connect back to root via prerequisite chain.
+8. Concept names: short and specific. "Mean" not "Mean as a measure of central tendency".
 
-EXAMPLE TREE (for a Statistics document):
-  0. "Statistics overview" (root, no prerequisites)
-  1. "Central tendency" → prerequisites: ["Statistics overview"]
-  2. "Mean" → prerequisites: ["Central tendency"]
-  3. "Median" → prerequisites: ["Central tendency"]
-  4. "Sample variance" → prerequisites: ["Mean"]
-  5. "Correlation" → prerequisites: ["Sample variance"]
-  ... etc. Every node connects back to the root.`;
+TARGET SHAPE for a 12-concept tree:
+  Root (1)
+  ├── Topic A (1 child of root)
+  │   ├── Skill A1 (leaf)
+  │   └── Skill A2 (leaf)
+  ├── Topic B (1 child of root)
+  │   ├── Skill B1 (leaf)
+  │   ├── Skill B2 (leaf)
+  │   └── Skill B3 (leaf)
+  └── Topic C (1 child of root)
+      ├── Skill C1 (leaf)
+      └── Skill C2 (leaf)
+
+EXAMPLE (Statistics):
+  0. "Statistics" (root)
+  1. "Central tendency" → ["Statistics"]
+  2. "Mean" → ["Central tendency"]
+  3. "Median" → ["Central tendency"]
+  4. "Data spread" → ["Statistics"]
+  5. "Variance" → ["Data spread"]
+  6. "Standard deviation" → ["Data spread"]
+  7. "Correlation" → ["Statistics"]
+  8. "Covariance" → ["Correlation"]`;
 
 /**
  * Extract concepts from a document's text content.
@@ -105,7 +117,7 @@ export async function extractConcepts(documentText, opts = {}) {
   }
 
   const raw = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
-  const rawConcepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 25);
+  const rawConcepts = (Array.isArray(raw.concepts) ? raw.concepts : []).slice(0, 15);
 
   // Build a name → index map for resolving prerequisite names to indices
   const nameToIndex = {};

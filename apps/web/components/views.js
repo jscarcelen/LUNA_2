@@ -1513,6 +1513,7 @@ export function WorkspacesManagerView({
   const [previewDownloads, setPreviewDownloads] = useState({});
   const [previewLoadingMode, setPreviewLoadingMode] = useState("");
   const [previewError, setPreviewError] = useState("");
+  const [isReprocessingPreview, setIsReprocessingPreview] = useState(false);
   const [tagColorDraftByName, setTagColorDraftByName] = useState({});
   const editContentDragIndexRef = useRef(-1);
 
@@ -5594,7 +5595,30 @@ export function WorkspacesManagerView({
           <div className="modal-card">
             <div className="modal-head">
               <h4>{previewDoc.name}</h4>
-              <button className="table-btn" onClick={() => setPreviewDoc(null)} type="button">Close</button>
+              <div className="inline-actions">
+                {previewDoc.sourceType !== "generated" && previewDoc.sourceContentBase64 && onReprocessDocument ? (
+                  <button
+                    className="table-btn"
+                    type="button"
+                    disabled={isReprocessingPreview}
+                    onClick={async () => {
+                      setIsReprocessingPreview(true);
+                      setPreviewError("");
+                      try {
+                        const refreshed = await onReprocessDocument(previewDoc.id, { subjectId: selectedSubjectId, minConfidence: 0.72 });
+                        if (refreshed?.document) setPreviewDoc((prev) => ({ ...prev, ...refreshed.document }));
+                      } catch (err) {
+                        setPreviewError(String(err?.message || "Re-processing failed"));
+                      } finally {
+                        setIsReprocessingPreview(false);
+                      }
+                    }}
+                  >
+                    {isReprocessingPreview ? "Re-processing…" : "↻ Re-process"}
+                  </button>
+                ) : null}
+                <button className="table-btn" onClick={() => { setPreviewDoc(null); setIsReprocessingPreview(false); }} type="button">Close</button>
+              </div>
             </div>
             <p className="hint">{previewDoc.sizeLabel} · Preview</p>
 

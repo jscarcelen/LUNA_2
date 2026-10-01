@@ -51,7 +51,7 @@ console.log("[aiVisionExtractor] PDFJS_PATH:", PDFJS_PATH, "exists:", existsSync
 let _workerPath = null;
 
 // Version tag — bump when the worker code changes so the stale file is never reused.
-const WORKER_VERSION = "v2";
+const WORKER_VERSION = "v3";
 
 function ensureWorker() {
   if (_workerPath) return _workerPath;
@@ -84,7 +84,11 @@ async function main() {
 
   const buf = Buffer.from(b64, "base64");
   // Absolute pdfjs path embedded at worker-write time:
-  const { getDocument } = await import(${JSON.stringify(PDFJS_PATH)});
+  const pdfjsLib = await import(${JSON.stringify(PDFJS_PATH)});
+  const { getDocument } = pdfjsLib;
+  // Disable the browser worker thread — Node.js has no Worker global and pdfjs
+  // will crash trying to spawn one unless we explicitly disable the worker source.
+  if (pdfjsLib.GlobalWorkerOptions) pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
   const pdf = await getDocument({
     data: new Uint8Array(buf), disableFontFace: true, isEvalSupported: false,
@@ -564,6 +568,80 @@ async function extractPdfText(buf) {
 }
 
 
+/**
+ * Fallback for scanned/image-based PDFs: send the raw PDF bytes to Anthropic's API,
+ * which natively reads PDFs (including scanned ones) via Claude's vision.
+ * Returns a CDM object, or null if the key is missing or the call fails.
+ */
+async function extractPdfWithAnthropic(file, pageCount) {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if (!anthropicKey) {
+    console.log("[aiVisionExtractor] ANTHROPIC_API_KEY not set — skipping Anthropic PDF fallback");
+    return null;
+  }
+
+  console.log(`[aiVisionExtractor] Anthropic PDF fallback: sending ${file.name} to Claude`);
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": anthropicKey,
+      "anthropic-version": "2023-06-01"
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
+      messages: [{
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: file.contentBase64
+            }
+          },
+          {
+            type: "text",
+            text: `Extract the full text content of this PDF document. Return ALL text exactly as written, preserving:\n- Headings (mark with ## or ###)\n- Lists (use - for bullets)\n- Tables (use markdown table format)\n- Mathematical formulas (use LaTeX: $...$ or $$...$$)\n- Paragraph breaks\n\nDo not add commentary. Return only the extracted content.`
+          }
+        ]
+      }]
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`Anthropic API error ${res.status}: ${errText.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const extractedText = data?.content?.[0]?.text || "";
+  console.log(`[aiVisionExtractor] Anthropic extracted ${extractedText.length} chars from PDF`);
+
+  if (extractedText.length < 50) return null;
+
+  // Parse the markdown-ish text into a CDM via OpenAI
+  const systemPrompt = buildSystemPrompt("PDF");
+  let aiJson;
+  try {
+    aiJson = await callOpenAI([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: `File: ${file.name} (${pageCount} page(s), extracted via OCR)\n\nCONTENT:\n\n${extractedText.slice(0, 12000)}` }
+    ]);
+  } catch (err) {
+    console.warn("[aiVisionExtractor] OpenAI structuring after Anthropic fallback failed:", err.message);
+    // Fall back to raw-text CDM
+    return buildRawTextCdm(extractedText, file.name, pageCount);
+  }
+
+  const cdm = aiJson ? buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name }) : null;
+  const hasContent = cdm && Array.isArray(cdm.sections) && cdm.sections.some((s) => s.blocks?.length > 0);
+  if (!hasContent) return buildRawTextCdm(extractedText, file.name, pageCount);
+  return cdm;
+}
+
 async function extractPdf(file) {
   const buf = base64ToBuffer(file.contentBase64);
 
@@ -585,10 +663,15 @@ async function extractPdf(file) {
   const systemPrompt = buildSystemPrompt("PDF");
 
   if (isScanned) {
-    // Genuinely scanned / image-based PDF with no extractable text.
-    // Build a minimal CDM directly — calling GPT-4o without the actual page images would
-    // just hallucinate a placeholder and waste tokens.
-    console.log(`[aiVisionExtractor] PDF "${file.name}" has no extractable text (${pageCount} page(s)) — scanned-PDF fallback`);
+    // pdfjs found no selectable text — try Anthropic API which natively reads PDFs (including scanned).
+    console.log(`[aiVisionExtractor] PDF "${file.name}" has no extractable text — trying Anthropic vision fallback`);
+    try {
+      const anthropicCdm = await extractPdfWithAnthropic(file, pageCount);
+      if (anthropicCdm) return anthropicCdm;
+    } catch (err) {
+      console.warn("[aiVisionExtractor] Anthropic fallback failed:", err.message);
+    }
+    // Final fallback: honest "no text" message
     const docId = crypto.randomUUID();
     const pageLabel = `${pageCount} page${pageCount !== 1 ? "s" : ""}`;
     return {

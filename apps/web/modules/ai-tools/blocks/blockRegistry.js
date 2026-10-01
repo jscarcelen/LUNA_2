@@ -1,9 +1,12 @@
 /**
  * Block Registry — canonical source of truth for all LUNA content blocks.
- * Each block defines: category, label, description, icon, aiFields, formats.
+ * Each block defines: category, label, description, icon, aiFields — what the AI must produce.
+ *
+ * How a block LOOKS (its formats and colours) is not decided here: Template Studio is the only
+ * catalog of components, formats and colours. `template-studio/output/outputDocument.ts` maps each
+ * block type to its Template Studio component (COMPONENT_FOR_BLOCK).
  *
  * aiFields: { fieldName: { type, description, required, example } }
- * formats: [{ id, label, description }]
  */
 
 export const BLOCKS = {
@@ -17,10 +20,6 @@ export const BLOCKS = {
       text:  { type: 'string',  description: 'The heading text', required: true,  example: 'Introduction to Osmosis' },
       level: { type: 'number',  description: 'Heading level: 1 (largest), 2, or 3', required: true, example: 1 },
     },
-    formats: [
-      { id: 'default', label: 'Default', description: 'Clean heading with subtle bottom border' },
-    ],
-    defaultFormat: 'default',
   },
 
   paragraph: {
@@ -31,10 +30,6 @@ export const BLOCKS = {
     aiFields: {
       text: { type: 'string', description: 'The paragraph text', required: true, example: 'Osmosis is the movement of water molecules through a selectively permeable membrane...' },
     },
-    formats: [
-      { id: 'default', label: 'Default', description: 'Regular body text, comfortable line height' },
-    ],
-    defaultFormat: 'default',
   },
 
   bullet_list: {
@@ -46,10 +41,6 @@ export const BLOCKS = {
       title: { type: 'string',   description: 'Optional list title/label', required: false, example: 'Key points:' },
       items: { type: 'string[]', description: 'List items, 1–8 entries (use 1 when each bullet is a standalone point separated by dividers)',   required: true,  example: ['First point', 'Second point'] },
     },
-    formats: [
-      { id: 'default', label: 'Default', description: 'Standard bullet dots' },
-    ],
-    defaultFormat: 'default',
   },
 
   callout: {
@@ -61,10 +52,6 @@ export const BLOCKS = {
       text: { type: 'string', description: 'The callout text', required: true, example: 'Remember: osmosis only applies to water molecules, not solutes.' },
       type: { type: 'string', description: 'Callout type: info, tip, warning, or note', required: true, example: 'tip' },
     },
-    formats: [
-      { id: 'card', label: 'Card', description: 'Filled background card with icon' },
-    ],
-    defaultFormat: 'card',
   },
 
   divider: {
@@ -73,10 +60,6 @@ export const BLOCKS = {
     description: 'Visual section separator',
     icon: '—',
     aiFields: {},
-    formats: [
-      { id: 'line', label: 'Line', description: 'Thin horizontal rule' },
-    ],
-    defaultFormat: 'line',
   },
 
   // ── QUESTIONS ──────────────────────────────────────────────
@@ -93,10 +76,6 @@ export const BLOCKS = {
       points:       { type: 'number',   description: 'Points awarded for correct answer',   required: true,  example: 2 },
       explanation:  { type: 'string',   description: 'Brief explanation of the answer',     required: false, example: 'Osmosis is specifically the movement of water through a semipermeable membrane.' },
     },
-    formats: [
-      { id: 'card', label: 'Card', description: 'Question in a card, options as labelled buttons (A B C D)' },
-    ],
-    defaultFormat: 'card',
   },
 
   question_open: {
@@ -111,10 +90,6 @@ export const BLOCKS = {
       points:       { type: 'number', description: 'Points for this question',               required: true,  example: 4 },
       lines:        { type: 'number', description: 'Number of answer lines to show (3–8)',   required: false, example: 4 },
     },
-    formats: [
-      { id: 'card', label: 'Card', description: 'Question in card with lined answer space below' },
-    ],
-    defaultFormat: 'card',
   },
 
   question_tf: {
@@ -129,10 +104,6 @@ export const BLOCKS = {
       explanation: { type: 'string',  description: 'Brief explanation',                       required: false, example: 'Osmosis is a passive process and does not require ATP.' },
       points:      { type: 'number',  description: 'Points for this question',                required: true,  example: 1 },
     },
-    formats: [
-      { id: 'card', label: 'Card', description: 'Statement in card with T / F buttons' },
-    ],
-    defaultFormat: 'card',
   },
 
   question_fill: {
@@ -146,10 +117,6 @@ export const BLOCKS = {
       answer:   { type: 'string', description: 'The correct word/phrase for the blank',        required: true,  example: 'water' },
       points:   { type: 'number', description: 'Points for this question',                     required: true,  example: 1 },
     },
-    formats: [
-      { id: 'card', label: 'Card', description: 'Sentence in a card with styled blank line' },
-    ],
-    defaultFormat: 'card',
   },
 
   // ── GAMES ──────────────────────────────────────────────────
@@ -163,26 +130,13 @@ export const BLOCKS = {
       back:  { type: 'string', description: 'Back of card — definition or answer', required: true, example: 'The passive movement of water molecules from a region of higher water concentration to lower through a semipermeable membrane.' },
       hint:  { type: 'string', description: 'Optional hint shown before revealing back', required: false, example: 'Think about water and membranes...' },
     },
-    formats: [
-      { id: 'classic', label: 'Classic', description: 'White card, term on front, definition on back' },
-    ],
-    defaultFormat: 'classic',
   },
 };
 
 export const BLOCK_CATEGORIES = [
-  { id: 'structure', label: 'Document Structure', icon: '📄', blocks: ['heading','paragraph','bullet_list','callout','divider'] },
+  { id: 'structure', label: 'Document Structure', icon: '📄', blocks: ['heading','paragraph','bullet_list','callout'] },
   { id: 'questions', label: 'Questions',          icon: '❓', blocks: ['question_mc','question_open','question_tf','question_fill'] },
   { id: 'games',     label: 'Games & Cards',       icon: '🎮', blocks: ['flashcard'] },
-];
-
-export const BLOCK_COLORS = [
-  { id: 'default', label: 'Blue',   value: '#0071e3' },
-  { id: 'purple',  label: 'Purple', value: '#6f42c1' },
-  { id: 'green',   label: 'Green',  value: '#28a745' },
-  { id: 'orange',  label: 'Orange', value: '#fd7e14' },
-  { id: 'red',     label: 'Red',    value: '#dc3545' },
-  { id: 'gray',    label: 'Gray',   value: '#6c757d' },
 ];
 
 export function getBlock(id) { return BLOCKS[id]; }

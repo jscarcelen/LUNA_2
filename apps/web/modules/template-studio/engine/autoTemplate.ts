@@ -53,6 +53,8 @@ function headerFields(fields: FieldDef[]): FieldDef[] {
 
 export interface AutoTemplateOptions {
   name?: string;
+  /** Template Studio accent (id irrelevant here) used for the header rule, number badge and chips. */
+  accent?: { main: string; tint: string };
   /** "document" = A4 pages of cards; "slides" = one item per 16:9 slide. */
   kind?: "document" | "slides";
 }
@@ -60,6 +62,8 @@ export interface AutoTemplateOptions {
 /** Builds a complete template for these output fields. */
 export function templateFromFields(fields: FieldDef[], options: AutoTemplateOptions = {}): Template {
   const kind = options.kind === "slides" ? "slides" : "document";
+  const accentMain = options.accent?.main || ACCENT;
+  const accentTint = options.accent?.tint || "#eaf3fd";
   const template = createTemplate(options.name || "Generated template");
   template.fields = fields.length ? fields : [createField("Content", "text")];
   template.editorMode = "simple";
@@ -100,7 +104,7 @@ export function templateFromFields(fields: FieldDef[], options: AutoTemplateOpti
   otherHeads.slice(0, 3).forEach((field, index) => {
     headerChildren.push(tx(field.id, sampleFor(field), { x: index === 0 ? 0 : width * 0.68, y: index === 0 ? headerY : 2, w: index === 0 ? width * 0.66 : width * 0.32, h: 6 }, { fontSize: 9.5, color: SOFT, align: index === 0 ? "left" : "right" }));
   });
-  headerChildren.push(createShape("line", { frame: { x: 0, y: headerY + 8, w: width, h: 0.5 }, style: defaultStyle({ stroke: ACCENT, strokeWidth: 0.5 }) }));
+  headerChildren.push(createShape("line", { frame: { x: 0, y: headerY + 8, w: width, h: 0.5 }, style: defaultStyle({ stroke: accentMain, strokeWidth: 0.5 }) }));
   const headerHeight = headerY + 10;
   elements.push(createGroup({
     name: "Header", frame: { x: left, y: layout.margins.top, w: width, h: headerHeight },
@@ -118,8 +122,8 @@ export function templateFromFields(fields: FieldDef[], options: AutoTemplateOpti
 
     let y = 5;
     // Number badge, so items are countable however they are laid out.
-    cardChildren.push(createShape("ellipse", { frame: { x: 5, y: 5, w: 8, h: 8 }, style: defaultStyle({ fill: "#eaf3fd", stroke: "" }) }));
-    cardChildren.push(st("{{n}}", { x: 5, y: 6.6, w: 8, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: ACCENT, align: "center" }));
+    cardChildren.push(createShape("ellipse", { frame: { x: 5, y: 5, w: 8, h: 8 }, style: defaultStyle({ fill: accentTint, stroke: "" }) }));
+    cardChildren.push(st("{{n}}", { x: 5, y: 6.6, w: 8, h: 5 }, { fontSize: 8.5, fontWeight: "bold", color: accentMain, align: "center" }));
     const textLeft = 15;
     const textWidth = width - textLeft - 5;
 

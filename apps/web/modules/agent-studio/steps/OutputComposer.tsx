@@ -35,7 +35,7 @@ const STRUCTURE_TYPES: { id: StructureType; emoji: string; label: string; desc: 
 ];
 
 const QUIZ_FIXED_IDS     = ["block-header-exam", "block-footer"];
-const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-document", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
+const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-paragraph", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
 const GAME_FIXED_IDS     = ["block-header-minimal"];
 
 const QUIZ_QUESTIONS: { id: string; label: string; icon: string; desc: string }[] = [

@@ -11,7 +11,7 @@ export const QUIZ_AGENT = {
   howItWorks: [
     { title: "Choose your material", text: "Pick the documents the questions should come from. Optionally add a past paper so the AI copies its style and difficulty." },
     { title: "Answer a few questions", text: "How many questions, how hard, which types. No prompts to write — the agent already knows how to build a quiz." },
-    { title: "Pick a layout", text: "Choose a template (worksheet, answer key, flashcards…) or keep the clean default. The questions stay the same; only the look changes." },
+    { title: "Pick formats and colors", text: "Style each component (questions, header, footer) with Template Studio's formats and colors, or apply a saved template. The questions stay the same; only the look changes." },
     { title: "Export or assign", text: "Download as PDF, Word or HTML, save it to your workspace, or share it with students." }
   ],
   instructions: "You are an expert teacher writing assessment questions. Using ONLY the reference material, write clear, unambiguous questions at the requested difficulty and of the requested types. For multiple-choice give 4 options with exactly one correct answer and plausible distractors; for true/false give the two options; for short-answer give an empty options list and a model answer. Every item needs a one-sentence explanation of why the answer is correct and a short topic tag. Never repeat a question. Spread questions across the material rather than clustering on one passage.",

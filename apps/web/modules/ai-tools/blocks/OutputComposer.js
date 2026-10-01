@@ -1,15 +1,29 @@
 /**
  * OutputComposer — Step 4 of the Agent Builder.
- * Lets the agent creator select which block types the AI may use,
- * and choose a visual format + color for each.
+ * Lets the agent creator select which block types the AI may use, and the default format + colour
+ * of each. Formats and colours are Template Studio's — each block type renders as a Template Studio
+ * component (see COMPONENT_FOR_BLOCK), so nothing can be chosen here that Template Studio lacks.
  *
  * Props:
- *   value:    { selectedBlocks: [{blockId, formatId, color}] }
+ *   value:    { selectedBlocks: [{blockId, formatId, color}] }   formatId = Template Studio format
+ *             (block id), color = Template Studio accent id
  *   onChange: (newValue) => void
  */
 'use client';
 import { useState } from 'react';
-import { BLOCKS, BLOCK_CATEGORIES, BLOCK_COLORS } from './blockRegistry.js';
+import { BLOCKS, BLOCK_CATEGORIES } from './blockRegistry.js';
+import { ACCENT_PRESETS } from '../../template-studio/engine/blocks';
+import { findBlock } from '../../template-studio/engine/outputTemplate';
+import { COMPONENT_FOR_BLOCK, formatsOf, nativeAccentId, normalizeSelectedBlock } from '../../template-studio/output/outputDocument';
+
+/** The Template Studio component a block type renders as, with its formats and native colour. */
+function componentOf(blockId) {
+  const key = COMPONENT_FOR_BLOCK[blockId];
+  const base = key ? findBlock(key) : null;
+  return { key, base, formats: key ? formatsOf(key) : [], accentId: base ? nativeAccentId(base) : ACCENT_PRESETS[0].id };
+}
+
+const normalizeEntry = normalizeSelectedBlock;
 
 const pillBtn = {
   display: 'inline-flex',
@@ -44,7 +58,7 @@ function ColorDot({ color, active, onClick }) {
         width: 20,
         height: 20,
         borderRadius: '50%',
-        background: color.value,
+        background: color.main,
         border: 'none',
         cursor: 'pointer',
         outline: active ? '2px solid var(--ink,#1d1d1f)' : '2px solid transparent',
@@ -57,6 +71,8 @@ function ColorDot({ color, active, onClick }) {
 }
 
 function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, onColorChange }) {
+  const component = componentOf(blockId);
+  const formats = component.formats;
   return (
     <div
       style={{
@@ -128,6 +144,11 @@ function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, 
           <div style={{ fontSize: 11, color: 'rgba(29,29,31,0.5)', marginTop: 2, lineHeight: 1.4 }}>
             {block.description}
           </div>
+          {component.base ? (
+            <div style={{ fontSize: 10, color: 'rgba(29,29,31,0.4)', marginTop: 3 }}>
+              Template Studio · {component.base.family}{component.base.variant ? ` · ${component.base.variant}` : ''}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -135,13 +156,13 @@ function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, 
       {selected && (
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(29,29,31,0.08)' }}>
           {/* Format selector */}
-          {block.formats.length > 1 && (
+          {formats.length > 1 && (
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(29,29,31,0.4)', marginBottom: 5 }}>
                 Format
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {block.formats.map((fmt) => (
+                {formats.map((fmt) => (
                   <button
                     key={fmt.id}
                     type="button"
@@ -149,7 +170,7 @@ function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, 
                     onClick={() => onFormatChange(blockId, fmt.id)}
                     style={entry.formatId === fmt.id ? pillBtnActive : pillBtn}
                   >
-                    {fmt.label}
+                    {fmt.variant || fmt.name}
                   </button>
                 ))}
               </div>
@@ -162,7 +183,7 @@ function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, 
               Color
             </div>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {BLOCK_COLORS.map((color) => (
+              {ACCENT_PRESETS.map((color) => (
                 <ColorDot
                   key={color.id}
                   color={color}
@@ -179,7 +200,7 @@ function BlockCard({ blockId, block, selected, entry, onToggle, onFormatChange, 
 }
 
 export function OutputComposer({ value, onChange }) {
-  const selectedBlocks = Array.isArray(value?.selectedBlocks) ? value.selectedBlocks : [];
+  const selectedBlocks = (Array.isArray(value?.selectedBlocks) ? value.selectedBlocks : []).map(normalizeEntry);
   const [activeCategory, setActiveCategory] = useState(BLOCK_CATEGORIES[0].id);
 
   const selectedMap = new Map(selectedBlocks.map((entry) => [entry.blockId, entry]));
@@ -194,7 +215,7 @@ export function OutputComposer({ value, onChange }) {
         ...value,
         selectedBlocks: [
           ...selectedBlocks,
-          { blockId, formatId: block.defaultFormat || block.formats[0]?.id || 'default', color: 'default' },
+          { blockId, formatId: componentOf(blockId).key || blockId, color: componentOf(blockId).accentId },
         ],
       });
     }
@@ -267,7 +288,7 @@ export function OutputComposer({ value, onChange }) {
             const block = BLOCKS[blockId];
             if (!block) return null;
             const selected = selectedMap.has(blockId);
-            const entry = selectedMap.get(blockId) || { blockId, formatId: block.defaultFormat || 'default', color: 'default' };
+            const entry = selectedMap.get(blockId) || { blockId, formatId: componentOf(blockId).key || blockId, color: componentOf(blockId).accentId };
             return (
               <BlockCard
                 key={blockId}
@@ -318,7 +339,7 @@ export function OutputComposer({ value, onChange }) {
             {selectedBlocks.map((entry) => {
               const block = BLOCKS[entry.blockId];
               if (!block) return null;
-              const colorObj = BLOCK_COLORS.find((c) => c.id === entry.color) || BLOCK_COLORS[0];
+              const colorObj = ACCENT_PRESETS.find((c) => c.id === entry.color) || ACCENT_PRESETS[0];
               return (
                 <div
                   key={entry.blockId}
@@ -336,7 +357,7 @@ export function OutputComposer({ value, onChange }) {
                       width: 10,
                       height: 10,
                       borderRadius: '50%',
-                      background: colorObj.value,
+                      background: colorObj.main,
                       flexShrink: 0,
                     }}
                   />
@@ -344,7 +365,7 @@ export function OutputComposer({ value, onChange }) {
                     {block.label}
                   </span>
                   <span style={{ fontSize: 10, color: 'rgba(29,29,31,0.4)', flexShrink: 0 }}>
-                    {entry.formatId}
+                    {colorObj.label}
                   </span>
                 </div>
               );

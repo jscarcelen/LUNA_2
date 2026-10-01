@@ -708,3 +708,12 @@
 - `modules/performance/errors.js`: the eight-type taxonomy with a classifier that reads the answer given against the expected one and the learner's other evidence on the topic (close numeric answer on a topic they otherwise pass → calculation; the same wrong answer repeatedly → conceptual; blank on a weak topic → knowledge gap; a single miss on a strong topic → careless), plus `analyseErrors` (shares overall and per topic) and `errorSummary`.
 - `modules/performance/dashboard/`: shared parts (KPI, mastery map, error breakdown, mastery trend, next actions, heatmap, class topic bars) and the three screens — `StudentDashboard`, `ParentDashboard` (plain-language "What is happening" paragraph first) and `TeacherDashboard` (class × subject, student × subject, students × subjects, with the attention filters). The previous KPI grid and detail sections are kept under an "All the numbers" disclosure.
 - Verified on real data: student screen shows 35% mastery across 7 topics with "conceptual 47% / application 29% / knowledge gap 24%" and next actions naming the reason per topic; the teacher's class view builds the class × topic heatmap and flags both learners; the parent's paragraph reads as prose.
+
+## 2026-10-01 — One "Configure output" step for every agent
+- Template Studio is the single source of components, formats and colours. Run page step 2 now shows the
+  wizard's component cards (format + colour, one colour / format for all, apply a saved template) beside a
+  views × page-size preview matrix; the Output fields, Template and Styling tabs are gone.
+- Quiz items, flashcards and block agents are all planned into Template Studio components
+  (`template-studio/output/outputDocument.ts`); a Paragraph component was added to Template Studio.
+- `blockRegistry.js` keeps only what the AI needs; `BlockRenderer`, `LivePreviewPane`, `OutputCustomizerPanel`
+  and the field-mapping helpers were removed. Saved agents are upgraded on load (`normalizeSelectedBlock`).

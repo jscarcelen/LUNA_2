@@ -452,6 +452,24 @@ function sectionWithQuestions(): BlockDef {
   return { id: "block-section-questions", family: "Section header", variant: "Section with question cards", name: "Section + questions", description: "Sections in the agent's order, each with its title and its own question cards.", category: "questions", icon: "§❶", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }, { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }, { key: "answer", label: "Show answer", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
+function bodyText(): BlockDef {
+  const accent = palette("blue");
+  const text = createField("Text", "rich_text", { description: "One paragraph of body text; may use **bold** for emphasis" });
+  const paragraphs = createField("Paragraphs", "array", { children: [createField("item", "object", { children: [text] })] });
+  const W = PAGE.width;
+  const group = createGroup({
+    name: "Paragraph",
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 16 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: paragraphs.id, mode: "flow" },
+    children: [
+      accentEdge(accent, 16),
+      field(text.id, "Photosynthesis converts light energy into chemical energy stored in glucose.", { x: 6, y: 2, w: W - 10, h: 12 }, { fontSize: TYPE.body, color: INK.body, lineHeight: 1.5 }, { format: "rich" })
+    ]
+  });
+  return { id: "block-paragraph", family: "Text", variant: "Body paragraph", name: "Paragraph", description: "A paragraph of body text with a slim accent edge.", category: "structure", icon: "¶", fields: [paragraphs], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+}
+
 function callout(): BlockDef {
   const accent = palette("orange");
   const note = createField("Note", "rich_text", { description: "Important information, tip or reminder" });
@@ -619,7 +637,7 @@ function mathPractice(): BlockDef {
 
 
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), openQuestion(), trueFalse(), answerBox(), flashcardSingle(), vocabularyRow(), callout(), keyPoints(), matchPairs(), fillBlanks(), mathPractice(), footer()];
+  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), openQuestion(), trueFalse(), answerBox(), flashcardSingle(), vocabularyRow(), callout(), keyPoints(), bodyText(), matchPairs(), fillBlanks(), mathPractice(), footer()];
 }
 
 /** Blocks grouped by family, in library order. */
@@ -744,7 +762,7 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
 
   const instantiated = remapElements(elements);
   // Remember the source block on the top-level group so the simple editor can rebuild or regroup it.
-  for (const element of instantiated) if (element.type === "group" && !element.origin) element.origin = { blockId: block.id };
+  for (const element of instantiated) if (element.type === "group" && !element.origin) element.origin = { blockId: block.id, ...(options.accent ? { accentId: options.accent.id } : {}) };
   return { fields, elements: instantiated };
 }
 

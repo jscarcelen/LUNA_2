@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
-import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
-import { BlockRenderer } from "../../blocks/BlockRenderer.js";
-import { BLOCKS, BLOCK_COLORS } from "../../blocks/blockRegistry.js";
-import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
-import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
-import { applyOutputCustomization, defaultBrand, escapeHtml, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
+import { GenerationProgress } from "./GenerationProgress";
+import { OutputPreviewPane, OutputStylePanel, renderOutputHtml } from "../../../template-studio/output/OutputDesigner";
+import { blocksToActivityItems, buildAutoDocument, buildOutputDocument, itemsToBlocks, planOutput, stylesFromSelectedBlocks } from "../../../template-studio/output/outputDocument";
+import { renderPlainOutputText } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
 import { chargeRun, readCredits } from "../../../credits/credits";
@@ -18,10 +16,7 @@ import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
 import { buildResource, parseResource } from "../../../resources/resource";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
-const FIELD_FREQUENCY_LABELS = {
-  once: "Once per document",
-  loop: "Looped per AI item"
-};
+const OUTPUT_STYLES_KEY = "luna.outputStyles.v1";
 
 function toggleInList(value, setter) {
   setter((previous) => (
@@ -57,48 +52,40 @@ function writeTemplatesToStorage(templates = []) {
   }
 }
 
-function normalizeFrequency(scope = "") {
-  return scope === "once" ? "once" : "loop";
+function readStoredStyles(key) {
+  if (typeof window === "undefined" || !key) return null;
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(`${OUTPUT_STYLES_KEY}:${key}`) || "null");
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
-function inferTemplateFieldFrequencies(template = {}) {
-  const inferred = {};
-  const markFrequency = (fieldName, scope) => {
-    const name = String(fieldName || "").trim();
-    if (!name) return;
-    const normalized = normalizeFrequency(scope);
-    if (inferred[name] === "loop" || normalized === "loop") inferred[name] = "loop";
-    else inferred[name] = inferred[name] || "once";
-  };
-  const normalizeScope = (scope = "") => (scope === "once" ? "once" : "per-output");
-  const collectFromBlock = (block, fallbackScope = "once") => {
-    if (!block) return;
-    const scope = normalizeScope(block.repeatScope || fallbackScope);
-    if (block.bindField) markFrequency(block.bindField, scope);
-    if (block.repeatField) markFrequency(block.repeatField, "per-output");
-  };
-  const componentsById = Object.fromEntries((Array.isArray(template.components) ? template.components : []).map((component) => [component.id, component]));
-  const pageBlocks = Array.isArray(template.pageLayouts)
-    ? template.pageLayouts.flatMap((page) => page.blocks || [])
-    : [];
-  const canvasBlocks = pageBlocks.length ? pageBlocks : (Array.isArray(template.canvasBlocks) ? template.canvasBlocks : []);
-  for (const block of canvasBlocks) {
-    if (block?.componentRefId) {
-      const component = componentsById[block.componentRefId];
-      for (const child of component?.blocks || []) {
-        collectFromBlock(child, block.repeatScope || "once");
-      }
-      continue;
-    }
-    collectFromBlock(block, block?.repeatScope || "once");
-  }
-  for (const field of Array.isArray(template.dataFields) ? template.dataFields : []) {
-    const name = String(field?.name || "").trim();
-    if (!name) continue;
-    const scope = field?.repeatScope || inferred[name] || "once";
-    markFrequency(name, scope);
-  }
-  return inferred;
+/**
+ * Format and colour per component. Newest source wins: styles saved with the agent, then the ones
+ * remembered on this device, then the ones an older version stored on the agent's selected blocks
+ * (converted to Template Studio's formats and colours).
+ */
+function initialOutputStyles(agent, key) {
+  const legacy = stylesFromSelectedBlocks(agent?.output?.selectedBlocks || agent?.spec?.output?.selectedBlocks);
+  const saved = agent?.outputStyles && typeof agent.outputStyles === "object" ? agent.outputStyles : readStoredStyles(key);
+  return { ...legacy, ...(saved || {}) };
+}
+
+/** Plain-text reading of typed blocks, for the Raw tab and the saved document's preview. */
+function blocksToText(blocks = []) {
+  return blocks.map((block) => {
+    if (!block) return "";
+    const type = String(block.type || "").toLowerCase();
+    if (type === "heading" || type === "paragraph" || type === "callout") return String(block.text || "");
+    if (type === "bullet_list") return [block.title, ...(Array.isArray(block.items) ? block.items : [])].filter(Boolean).join("\n");
+    if (type === "question_mc" || type === "question_open") return String(block.question || "");
+    if (type === "question_tf") return String(block.statement || "");
+    if (type === "question_fill") return String(block.sentence || "");
+    if (type === "flashcard") return `${block.front || ""}: ${block.back || ""}`;
+    return "";
+  }).filter(Boolean).join("\n\n");
 }
 
 
@@ -109,100 +96,9 @@ const primaryBtn = "inline-flex items-center justify-center gap-2 rounded-full b
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
 
-/**
- * Adds a simple output field to the agent so it can fill a template slot it was not built for —
- * a title, a question number, a topic. Complex structures still belong in Agent Studio.
- */
-function AddOutputField({ onAdd, existing = [] }) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [type, setType] = useState("text");
-  const [frequency, setFrequency] = useState("loop");
-  const taken = existing.some((field) => String(field.name).toLowerCase() === name.trim().toLowerCase());
-  if (!open) {
-    return <button type="button" className="justify-self-start text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpen(true)}>＋ Add an output field to this agent</button>;
-  }
-  return (
-    <div className="grid gap-2 rounded-xl border border-ink/12 bg-[var(--surface-soft)]/60 p-3">
-      <p className="m-0 text-xs text-soft-ink">Something the template needs and the agent does not produce yet — a title, a question number, a topic.</p>
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-36 flex-1"><input className={fieldClass} value={name} placeholder="e.g. Title" onChange={(event) => setName(event.target.value)} /></div>
-        <select className={`${fieldClass} w-auto`} value={type} onChange={(event) => setType(event.target.value)}>
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="list">List of values</option>
-        </select>
-        <select className={`${fieldClass} w-auto`} value={frequency} onChange={(event) => setFrequency(event.target.value)}>
-          <option value="loop">Per item</option>
-          <option value="once">Once for the document</option>
-        </select>
-        <button type="button" className={primaryBtn} disabled={!name.trim() || taken} onClick={() => { onAdd({ name: name.trim(), type, frequency }); setName(""); setOpen(false); }}>Add</button>
-        <button type="button" className={ghostBtn} onClick={() => { setOpen(false); setName(""); }}>Cancel</button>
-      </div>
-      {taken ? <p className="m-0 text-xs text-[var(--color-warn)]">This agent already has a field with that name.</p> : null}
-    </div>
-  );
-}
-
-function BlockConfigRow({ block, index, blockConfigs, onConfigChange }) {
-  const [open, setOpen] = useState(false);
-  const type = String(block?.type || '');
-  const blockDef = BLOCKS[type];
-  const config = blockConfigs[index] || { formatId: blockDef?.defaultFormat || 'default', color: '#0071e3' };
-  const ICONS = { heading: 'H', paragraph: '¶', bullet_list: '•', divider: '—', callout: '!', question_mc: 'MC', question_open: 'OA', question_tf: 'T/F', question_fill: '___', flashcard: '🃏' };
-  const preview = type === 'heading' ? String(block.text || '').slice(0, 50)
-    : type === 'bullet_list' ? (Array.isArray(block.items) && block.items.length ? String(block.items[0]).slice(0, 40) + (block.items.length > 1 ? ` +${block.items.length - 1}` : '') : String(block.title || ''))
-    : type === 'paragraph' ? String(block.text || '').slice(0, 50)
-    : type === 'divider' ? '──────'
-    : String(block.text || block.question || block.front || block.statement || '').slice(0, 50);
-  return (
-    <li className="overflow-hidden rounded-xl border border-ink/8 bg-white">
-      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
-        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent-ink)]">{ICONS[type] || '?'}</span>
-        <div className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold text-ink">{type.replace(/_/g, ' ')}</span>
-          {preview ? <span className="block truncate text-[11px] text-soft-ink">{preview}</span> : null}
-        </div>
-        <span className="mr-1 text-[11px] font-medium text-soft-ink">{config.formatId}</span>
-        <span className="size-3 shrink-0 rounded-full border border-ink/20" style={{ background: config.color }} />
-        <span className={`text-xs text-soft-ink transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
-      </button>
-      {open ? (
-        <div className="grid gap-2 border-t border-ink/8 px-3 pb-3 pt-2">
-          {blockDef?.formats?.length > 1 ? (
-            <div>
-              <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">Format</p>
-              <div className="flex flex-wrap gap-1.5">
-                {blockDef.formats.map((fmt) => (
-                  <button key={fmt.id} type="button" title={fmt.description}
-                    onClick={() => onConfigChange(index, { ...config, formatId: fmt.id })}
-                    className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${config.formatId === fmt.id ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-ink/15 bg-white text-ink hover:bg-[var(--surface-soft)]'}`}>
-                    {fmt.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          <div>
-            <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">Color</p>
-            <div className="flex gap-1.5">
-              {BLOCK_COLORS.map((c) => (
-                <button key={c.id} type="button" title={c.label}
-                  onClick={() => onConfigChange(index, { ...config, color: c.value })}
-                  className={`size-6 rounded-full border-2 transition ${config.color === c.value ? 'scale-110 border-ink/60' : 'border-transparent hover:border-ink/30'}`}
-                  style={{ background: c.value }} />
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </li>
-  );
-}
-
 const FLOW_STEPS = [
   { id: 1, title: "Configure questions", text: "Material and a few choices" },
-  { id: 2, title: "Configure output", text: "Layout and styling" },
+  { id: 2, title: "Configure output", text: "Components, formats and colors" },
   { id: 3, title: "Export", text: "Download, save or share" }
 ];
 
@@ -248,7 +144,7 @@ function HowItWorks({ agent, open, onToggle }) {
   const steps = Array.isArray(agent.howItWorks) && agent.howItWorks.length ? agent.howItWorks : [
     { title: "Choose your material", text: "Pick the documents the agent should learn from." },
     { title: "Answer a few questions", text: "The agent asks only what it needs to tailor the result." },
-    { title: "Pick a layout", text: "Any template works with any agent." },
+    { title: "Pick formats and colors", text: "Style each component with Template Studio's formats and colors, or apply a saved template." },
     { title: "Export or save", text: "PDF, Word, HTML — or straight into your workspace." }
   ];
   return (
@@ -328,8 +224,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const folders = selectedSubject?.folders || [];
 
   const [agentConfig, setAgentConfig] = useState(null);
-  /** Saved configuration per template: { [templateId]: { fieldMappingByTemplateField, fieldTypeByName, customization } }. */
-  const [templateLinks, setTemplateLinks] = useState({});
   const [loadError, setLoadError] = useState("");
   const [flowStep, setFlowStep] = useState(1);
   const [howOpen, setHowOpen] = useState(true);
@@ -343,17 +237,12 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [answersByQuestionId, setAnswersByQuestionId] = useState({});
 
   const [templates, setTemplates] = useState([]);
-  const [templateId, setTemplateId] = useState("");
-  const [fieldTypeByName, setFieldTypeByName] = useState({});
-  const [fieldMappingByTemplateField, setFieldMappingByTemplateField] = useState({});
-  const [customization, setCustomization] = useState({ brand: defaultBrand(), hiddenFields: [], fieldOrder: [] });
-  const [outputTab, setOutputTab] = useState("fields");
+  /** Format + colour per Template Studio component: { [componentKey]: { blockId, accentId, toggles } }. */
+  const [outputStyles, setOutputStyles] = useState({});
+  const [autoAccentId, setAutoAccentId] = useState("blue");
+  const [selection, setSelection] = useState({ layoutIndex: 0, viewIndex: 0 });
 
   const [output, setOutput] = useState(null);
-  const [showAnswers, setShowAnswers] = useState(true);
-  const [previewMode, setPreviewMode] = useState('answers'); // 'answers' | 'student' | 'practice'
-  const [blockConfigs, setBlockConfigs] = useState({}); // { [blockIndex]: { formatId, color } }
-  const [applyTemplateId, setApplyTemplateId] = useState("");
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -368,6 +257,16 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const resumeDocument = toolContext?.resumeResourceDocumentId ? (toolContext?.workspaces || []).flatMap((w) => w.subjects || []).flatMap((s) => s.documents || []).find((d) => d.id === toolContext.resumeResourceDocumentId) : null;
   const resume = resumeDocument ? parseResource(resumeDocument) : null;
   const resumedRef = useRef("");
+
+  const stylesStorageKey = String(builtinAgent?.id || agentDocumentId || "");
+  const updateOutputStyles = useCallback((next) => {
+    setOutputStyles(next);
+    try {
+      if (stylesStorageKey) window.localStorage.setItem(`${OUTPUT_STYLES_KEY}:${stylesStorageKey}`, JSON.stringify(next));
+    } catch {
+      // Remembering the look on this device is a convenience only.
+    }
+  }, [stylesStorageKey]);
 
   useEffect(() => {
     let parsed = null;
@@ -385,7 +284,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (parsed.installedFrom?.listingId) {
       try {
         const listing = (JSON.parse(window.localStorage.getItem("luna.agentMarketplaceListings.v1") || "[]")).find((item) => item.id === parsed.installedFrom.listingId);
-        if (listing?.agent) parsed = { ...listing.agent, name: parsed.name || listing.agent.name, installedFrom: parsed.installedFrom, outputMapping: parsed.outputMapping || listing.agent.outputMapping };
+        if (listing?.agent) parsed = { ...listing.agent, name: parsed.name || listing.agent.name, installedFrom: parsed.installedFrom, outputStyles: parsed.outputStyles || listing.agent.outputStyles };
       } catch {
         // keep the installed snapshot
       }
@@ -395,23 +294,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       try {
         const { spec, ...rest } = parsed;
         const fresh = runConfigFromSpec(spec);
-        parsed = { ...rest, ...fresh, scope: { ...fresh.scope, ...(rest.scope || {}) }, installedFrom: rest.installedFrom, outputMapping: rest.outputMapping, savedOutput: rest.savedOutput };
+        parsed = { ...rest, ...fresh, scope: { ...fresh.scope, ...(rest.scope || {}) }, installedFrom: rest.installedFrom, outputStyles: rest.outputStyles, savedOutput: rest.savedOutput };
       } catch {
         // keep the stored compiled config
       }
     }
     setAgentConfig(parsed);
-    // An agent is used with several templates; each one keeps its own mapping and styling, so
-    // linking a template is a one-off job (`outputMappings`), while `outputMapping` is the last used.
-    setTemplateLinks(parsed.outputMappings && typeof parsed.outputMappings === "object" ? parsed.outputMappings : {});
-    setFieldTypeByName(parsed.outputMapping?.fieldTypeByName || {});
-    setFieldMappingByTemplateField(parsed.outputMapping?.fieldMappingByTemplateField || {});
-    setTemplateId(String(parsed.outputMapping?.templateId || ""));
-    setCustomization({
-      brand: { ...defaultBrand(parsed.name), ...(parsed.outputMapping?.customization?.brand || {}) },
-      hiddenFields: parsed.outputMapping?.customization?.hiddenFields || [],
-      fieldOrder: parsed.outputMapping?.customization?.fieldOrder || []
-    });
+    setOutputStyles(initialOutputStyles(parsed, stylesStorageKey));
     setReferenceDocumentIds(Array.isArray(parsed.scope?.documentIds) ? parsed.scope.documentIds : []);
     setStyleDocumentIds(Array.isArray(parsed.scope?.styleDocumentIds) ? parsed.scope.styleDocumentIds : []);
     setContextPromptDraft(String(parsed.contextPrompt || ""));
@@ -427,7 +316,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     } catch {
       // ignore
     }
-  }, [agentDocument, builtinAgent]);
+  }, [agentDocument, builtinAgent, stylesStorageKey]);
 
   // Template loading is decoupled from the handler's identity (AppShell recreates it on every
   // render) so an in-flight request is never cancelled; it re-runs when the output step opens.
@@ -470,198 +359,24 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
   const fields = useMemo(() => (Array.isArray(agentConfig?.template?.fields) ? agentConfig.template.fields : []), [agentConfig]);
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
-  const activeTemplate = templates.find((template) => template.id === templateId) || null;
-  const templateFieldFrequencyByName = useMemo(
-    () => (activeTemplate ? inferTemplateFieldFrequencies(activeTemplate) : {}),
-    [activeTemplate]
-  );
-  const templateFields = useMemo(() => {
-    if (!activeTemplate) return [];
-    const explicit = Array.isArray(activeTemplate.dataFields) ? activeTemplate.dataFields : [];
-    const inferredNames = Object.keys(templateFieldFrequencyByName);
-    if (explicit.length) {
-      return explicit.map((field) => ({
-        id: field.id || field.name,
-        name: field.name,
-        label: field.label || field.name,
-        dataType: field.dataType || "string",
-        frequency: templateFieldFrequencyByName[field.name] || normalizeFrequency(field.repeatScope || "once")
-      }));
-    }
-    return inferredNames.map((name) => ({
-      id: `inferred-${name}`,
-      name,
-      label: name,
-      dataType: "string",
-      frequency: templateFieldFrequencyByName[name] || "once"
-    }));
-  }, [activeTemplate, templateFieldFrequencyByName]);
-  const agentFields = useMemo(
-    () => fields.map((field) => ({ ...field, frequency: normalizeFrequency(field.repeatScope || "per-output"), importance: importanceOf(field) })),
-    [fields]
-  );
-  /**
-   * Templates repeat the same slot (four question designs all needing "Question", plus the list
-   * "Questions" that holds them). They mean one thing, so they are one row: the choice is written
-   * to every slot behind it.
-   */
-  const mappingRows = useMemo(() => buildMappingRows(templateFields), [templateFields]);
-  /** The agent field a row is mapped to — any of the slots behind it answers for all of them. */
-  const rowMapping = useCallback((row) => (row?.names || [row?.name]).map((name) => fieldMappingByTemplateField[name]).find(Boolean) || "", [fieldMappingByTemplateField]);
   const requiredUnanswered = questions.filter((question) => {
     if (!question.required) return false;
     const answer = answersByQuestionId[question.id];
     return Array.isArray(answer) ? answer.length === 0 : !String(answer || "").trim();
   }).length;
-  const mappingIssues = useMemo(() => {
-    if (!activeTemplate) return [];
-    const issues = [];
-    const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
-    // An empty slot is not a reason to stop: the user may be adapting the template. Only a mapping
-    // that points at a field this agent does not have is genuinely broken.
-    for (const templateField of mappingRows) {
-      const mappedAgentFieldName = rowMapping(templateField);
-      if (!mappedAgentFieldName) continue;
-      const mappedAgentField = agentFieldsByName[mappedAgentFieldName];
-      if (!mappedAgentField) {
-        issues.push(`"${mappedAgentFieldName}" does not exist in this agent.`);
-        continue;
-      }
-    }
-    return issues;
-  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
-  const mappingWarnings = useMemo(() => {
-    if (!activeTemplate) return [];
-    const agentFieldsByName = Object.fromEntries(agentFields.map((field) => [field.name, field]));
-    return mappingRows.flatMap((templateField) => {
-      const mapped = agentFieldsByName[rowMapping(templateField)];
-      if (!mapped || mapped.frequency === templateField.frequency) return [];
-      return [`"${templateField.label || templateField.name}" appears ${templateField.frequency === "loop" ? "per item" : "once"} in the template but "${mapped.label || mapped.name}" is ${mapped.frequency === "loop" ? "per item — only the first item will show there" : "once — it will repeat the same value"}.`];
-    });
-  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
-  const mappingReady = !activeTemplate || (templateFields.length > 0 && mappingIssues.length === 0);
-  /** What this template does with what the agent produces — essential fields decide the verdict. */
-  const fit = useMemo(() => {
-    if (!activeTemplate) return null;
-    const mapped = mappingRows.map((row) => rowMapping(row)).filter(Boolean);
-    const empty = mappingRows.filter((row) => !rowMapping(row)).map((row) => row.label || row.name);
-    return templateFit(agentFields, mapped, empty);
-  }, [activeTemplate, agentFields, mappingRows, rowMapping]);
-  const fitByTemplateId = useMemo(() => {
-    // Every template in the list judged against this agent, so the choice is informed.
-    const out = {};
-    for (const template of templates) {
-      const names = Object.keys(inferTemplateFieldFrequencies(template));
-      const slots = (Array.isArray(template.dataFields) && template.dataFields.length ? template.dataFields.map((f) => f.name) : names);
-      const keys = new Set(slots.map(mergeKey));
-      out[template.id] = templateFit(agentFields, agentFields.filter((field) => keys.has(mergeKey(field.name)) || keys.has(mergeKey(field.label || field.name))).map((field) => field.name));
-    }
-    return out;
-  }, [templates, agentFields]);
-  // Field the user is inspecting: every place it fills is outlined in the preview.
-  const [highlightRowKey, setHighlightRowKey] = useState("");
-  const highlightFields = useMemo(() => {
-    const row = mappingRows.find((item) => item.name === highlightRowKey);
-    return row ? row.names : [];
-  }, [mappingRows, highlightRowKey]);
 
-  // When the template changes: drop mappings that don't belong to it and auto-map by name
-  // (matching frequency preferred, any frequency accepted) so the preview refreshes immediately.
-  const templateFieldKey = templateFields.map((field) => field.name).join("|");
-  // A template that was configured before comes back exactly as it was left.
-  const restoredRef = useRef("");
-  useEffect(() => {
-    if (!templateId || restoredRef.current === templateId) return;
-    const link = templateLinks[templateId];
-    restoredRef.current = templateId;
-    if (!link) return;
-    if (link.fieldMappingByTemplateField) setFieldMappingByTemplateField(link.fieldMappingByTemplateField);
-    if (link.fieldTypeByName) setFieldTypeByName(link.fieldTypeByName);
-    if (link.customization) setCustomization((current) => ({ ...current, ...link.customization, brand: { ...current.brand, ...(link.customization.brand || {}) } }));
-  }, [templateId, templateLinks]);
-  useEffect(() => {
-    setFieldMappingByTemplateField((previous) => {
-      const next = {};
-      for (const templateField of templateFields) if (previous[templateField.name]) next[templateField.name] = previous[templateField.name];
-      const used = new Set(Object.values(next));
-      for (const row of mappingRows) {
-        const already = row.names.map((name) => next[name]).find(Boolean);
-        if (already) {
-          for (const name of row.names) next[name] = already;
-          continue;
-        }
-        const candidates = agentFields.filter((agentField) => !used.has(agentField.name) && [agentField.name, agentField.label].map(mergeKey).includes(mergeKey(row.name)));
-        const match = candidates.find((agentField) => agentField.frequency === row.frequency) || candidates[0];
-        if (match) {
-          for (const name of row.names) next[name] = match.name;
-          used.add(match.name);
-        }
-      }
-      return next;
-    });
-  }, [templateId, templateFieldKey, agentFields, templateFields, mappingRows]);
-
-  /**
-   * Remembers how this agent is wired to this template. Kept on the agent so the pairing survives:
-   * the next run with the same template needs no mapping at all, and the set of linked templates
-   * is what makes a template "viable" for the agent.
-   */
-  const rememberLink = useCallback(() => {
-    if (!templateId) return templateLinks;
-    const link = { fieldMappingByTemplateField, fieldTypeByName, customization, at: new Date().toISOString() };
-    const next = { ...templateLinks, [templateId]: link };
-    setTemplateLinks(next);
-    return next;
-  }, [templateId, templateLinks, fieldMappingByTemplateField, fieldTypeByName, customization]);
-
-  /** Writes the agent document so its template links (and any added output field) survive the session. */
+  /** Writes the agent document so its output look (and the choices made here) survive the session. */
   const persistAgent = useCallback(async (extra = {}) => {
     if (!agentDocument || typeof onUpdateGeneratedDocument !== "function") return;
-    const links = rememberLink();
-    const nextConfig = {
-      ...agentConfig,
-      ...extra,
-      outputMappings: links,
-      outputMapping: { templateId, fieldTypeByName, fieldMappingByTemplateField, customization }
-    };
+    const nextConfig = { ...agentConfig, ...extra, outputStyles };
     const textContent = JSON.stringify(nextConfig, null, 2);
     try {
       await onUpdateGeneratedDocument(agentDocument.id, { file: { name: agentDocument.name, content: textContent, sizeBytes: textContent.length } });
       setAgentConfig(nextConfig);
     } catch {
-      // Saving the pairing is a convenience; a failure must not interrupt the run.
+      // Saving the look is a convenience; a failure must not interrupt the run.
     }
-  }, [agentDocument, onUpdateGeneratedDocument, rememberLink, agentConfig, templateId, fieldTypeByName, fieldMappingByTemplateField, customization]);
-
-  function setFieldType(name, type) {
-    setFieldTypeByName((previous) => ({ ...previous, [name]: type }));
-  }
-
-  function setTemplateFieldMapping(row, agentFieldName) {
-    // A row stands for every slot that means the same thing — they all take the same agent field.
-    const names = Array.isArray(row?.names) && row.names.length ? row.names : [String(row?.name ?? row)];
-    setFieldMappingByTemplateField((previous) => {
-      const next = { ...previous };
-      for (const [targetField, mappedAgentField] of Object.entries(next)) {
-        if (!names.includes(targetField) && mappedAgentField === agentFieldName) delete next[targetField];
-      }
-      for (const name of names) {
-        if (!agentFieldName) delete next[name];
-        else next[name] = agentFieldName;
-      }
-      return next;
-    });
-  }
-
-  /** Template asks for something the agent does not produce — add it to the agent and map it. */
-  function addFieldToAgent(row) {
-    const name = String(row?.label || row?.name || "").trim();
-    if (!name) return;
-    const type = row?.dataType === "number" ? "number" : row?.dataType === "list" || row?.dataType === "array" ? "list" : "text";
-    setAgentConfig((current) => addOutputField(current, { name, type, frequency: row.frequency === "once" ? "once" : "loop", description: `Fills the "${name}" slot of the template.` }));
-    setTemplateFieldMapping(row, name);
-    setStatusMessage(`Added “${name}” to this agent's output. Generate again to fill it — “Save as my default” keeps it for next time.`);
-  }
+  }, [agentDocument, onUpdateGeneratedDocument, agentConfig, outputStyles]);
 
   function setAnswer(questionId, value) {
     setAnswersByQuestionId((previous) => ({ ...previous, [questionId]: value }));
@@ -765,11 +480,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (typeof request.contextPromptDraft === "string") setContextPromptDraft(request.contextPromptDraft);
     if (Array.isArray(request.referenceDocumentIds)) setReferenceDocumentIds(request.referenceDocumentIds);
     if (Array.isArray(request.styleDocumentIds)) setStyleDocumentIds(request.styleDocumentIds);
-    if (request.templateId !== undefined) setTemplateId(request.templateId);
-    if (request.fieldMappingByTemplateField) setFieldMappingByTemplateField(request.fieldMappingByTemplateField);
-    if (request.fieldTypeByName) setFieldTypeByName(request.fieldTypeByName);
-    if (request.customization) setCustomization((current) => ({ ...current, ...request.customization }));
-    // Re-templating only: the previous output is kept so the user can just pick a new template and export.
+    if (request.outputStyles && typeof request.outputStyles === "object") setOutputStyles(request.outputStyles);
+    // Re-styling only: the previous output is kept so the user can just pick another look and export.
     if (resume.data) setOutput({ ...resume.data, items: resume.data.items || [], data: resume.data });
     setFlowStep(2);
   }, [resume, agentConfig, resumeDocument]);
@@ -778,7 +490,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!runConfig || generation.isGenerating) return;
     setStatusMessage("");
     setFlowStep(2);
-    setOutputTab("fields");
+    setSelection({ layoutIndex: 0, viewIndex: 0 });
     try {
       const data = await generation.generate(runConfig);
       chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
@@ -810,132 +522,56 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return Object.fromEntries(Object.entries(output).filter(([key]) => !meta.has(key)));
   }, [output]);
 
-  /** Converts a flat block array to an HTML fragment for export / save-to-workspace. */
-  function renderBlocksAsHtml(blocks = [], configs = {}, withAnswers = true) {
-    return blocks.map((block, i) => {
-      const type = String(block?.type || '').toLowerCase().trim();
-      const cfg = configs[i] || {};
-      const fmt = cfg.formatId || BLOCKS[type]?.defaultFormat || 'default';
-      const color = cfg.color || '#0071e3';
-      if (type === 'heading') {
-        const level = Math.min(3, Math.max(1, Number(block.level) || 1));
-        const border = fmt === 'bold' ? `;border-bottom:3px solid ${color};padding-bottom:6px` : fmt === 'minimal' ? '' : `;border-bottom:1px solid rgba(0,0,0,0.1);padding-bottom:6px`;
-        return `<h${level} style="margin:0 0 12px;font-weight:${fmt === 'bold' ? 800 : 700};line-height:1.25;color:#1d1d1f${border}">${escapeHtml(String(block.text || ''))}</h${level}>`;
-      }
-      if (type === 'bullet_list') {
-        const items = Array.isArray(block.items) ? block.items : [];
-        const titleHtml = block.title ? `<p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.title))}</p>` : '';
-        if (fmt === 'numbered') return `${titleHtml}<ol style="margin:0 0 10px;padding:0 0 0 20px">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('')}</ol>`;
-        if (fmt === 'checkmark') return `${titleHtml}<ul style="margin:0 0 10px;padding:0;list-style:none">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5;display:flex;gap:6px"><span style="color:${color};font-weight:700">✓</span>${escapeHtml(String(item || ''))}</li>`).join('')}</ul>`;
-        return `${titleHtml}<ul style="margin:0 0 10px;padding:0 0 0 20px">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('')}</ul>`;
-      }
-      if (type === 'divider') {
-        if (fmt === 'space') return '<div style="margin:20px 0"></div>';
-        return '<hr style="border:none;border-top:1px solid rgba(29,29,31,0.1);margin:12px 0" />';
-      }
-      if (type === 'paragraph') {
-        const lead = fmt === 'lead';
-        return `<p style="margin:0 0 10px;line-height:1.7;color:#1d1d1f;font-size:${lead ? 16 : 14}px">${escapeHtml(String(block.text || ''))}</p>`;
-      }
-      if (type === 'callout') {
-        const bg = fmt === 'card' ? `${color}18` : 'transparent';
-        return `<div style="border-left:4px solid ${color};padding:10px 14px;margin:0 0 10px;background:${bg};border-radius:${fmt === 'card' ? '0 8px 8px 0' : '0'}"><p style="margin:0;line-height:1.6;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p></div>`;
-      }
-      if (type === 'question_mc') {
-        const opts = Array.isArray(block.options) ? block.options : [];
-        const optHtml = opts.map((opt, oi) => {
-          const letter = String.fromCharCode(65 + oi);
-          const correct = withAnswers && oi === Number(block.answer_index ?? -1);
-          return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;padding:6px 10px;border-radius:8px;background:${correct ? `${color}18` : 'rgba(0,0,0,0.03)'}"><span style="font-weight:700;color:${correct ? color : '#888'};min-width:18px">${letter}.</span><span style="font-size:13px;color:#1d1d1f">${escapeHtml(String(opt || ''))}</span>${correct ? `<span style="margin-left:auto;color:${color};font-weight:700">✓</span>` : ''}</div>`;
-        }).join('');
-        const expHtml = withAnswers && block.explanation ? `<p style="margin:8px 0 0;font-size:12px;color:#666;font-style:italic">${escapeHtml(String(block.explanation))}</p>` : '';
-        const ptsHtml = block.points != null ? `<p style="margin:6px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
-        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:16px 18px;margin:0 0 12px;background:white"><p style="margin:0 0 10px;font-weight:700;font-size:14px;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.question || ''))}</p>${optHtml}${expHtml}${ptsHtml}</div>`;
-      }
-      if (type === 'question_open') {
-        const lines = Math.min(8, Math.max(2, Number(block.lines) || 4));
-        const linesHtml = Array.from({ length: lines }).map(() => '<div style="border-bottom:1px solid rgba(0,0,0,0.15);height:28px;margin:2px 0"></div>').join('');
-        const ansHtml = withAnswers && block.answer_guide ? `<p style="margin:10px 0 0;font-size:12px;color:${color};font-weight:600">Answer guide: ${escapeHtml(String(block.answer_guide))}</p>` : '';
-        const ptsHtml = block.points != null ? `<p style="margin:4px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
-        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:16px 18px;margin:0 0 12px;background:white"><p style="margin:0 0 12px;font-weight:700;font-size:14px;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.question || ''))}</p>${linesHtml}${ansHtml}${ptsHtml}</div>`;
-      }
-      if (type === 'question_tf') {
-        const ans = withAnswers ? block.is_true : null;
-        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px 18px;margin:0 0 10px;background:white;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px;color:#1d1d1f;flex:1;min-width:200px">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.statement || ''))}</span><div style="display:flex;gap:6px"><span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;background:${ans === true ? `${color}18` : 'rgba(0,0,0,0.05)'};color:${ans === true ? color : '#888'};border:1px solid ${ans === true ? color : 'transparent'}">True${ans === true ? ' ✓' : ''}</span><span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;background:${ans === false ? '#dc354518' : 'rgba(0,0,0,0.05)'};color:${ans === false ? '#dc3545' : '#888'};border:1px solid ${ans === false ? '#dc3545' : 'transparent'}">False${ans === false ? ' ✓' : ''}</span></div></div>`;
-      }
-      if (type === 'question_fill') {
-        const escapedSentence = escapeHtml(String(block.sentence || ''));
-        const blankHtml = `<span style="display:inline-block;min-width:80px;border-bottom:2px solid ${color};color:${color};font-weight:600">${withAnswers && block.answer ? escapeHtml(String(block.answer)) : '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>`;
-        const sentHtml = escapedSentence.replace(/___/g, blankHtml);
-        const ptsHtml = block.points != null ? `<p style="margin:4px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
-        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px 18px;margin:0 0 10px;background:white"><p style="margin:0;font-size:14px;line-height:1.9;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${sentHtml}</p>${ptsHtml}</div>`;
-      }
-      if (type === 'flashcard') {
-        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:16px;padding:20px 24px;margin:0 0 12px;background:white;display:grid;grid-template-columns:1fr 1fr;gap:16px"><div><p style="margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888">Front</p><p style="margin:0;font-size:14px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.front || ''))}</p></div><div style="border-left:2px solid ${color};padding-left:16px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888">Back</p><p style="margin:0;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.back || ''))}</p></div></div>`;
-      }
-      return `<p style="color:rgba(29,29,31,0.4);font-size:12px;margin:0 0 4px">[${escapeHtml(type || 'unknown')}]</p>`;
-    }).join('\n');
-  }
-
-  function buildDocumentHtml(forPrint = false) {
-    // Block-based output: render blocks directly to HTML instead of the legacy field/card path.
-    if (isBlockOutput && Array.isArray(output?.blocks) && output.blocks.length) {
-      const blockHtml = renderBlocksAsHtml(output.blocks, blockConfigs, showAnswers);
-      const textContent = output.blocks.map((b) => {
-        if (!b) return '';
-        const type = String(b.type || '').toLowerCase();
-        if (type === 'heading' || type === 'paragraph') return String(b.text || '');
-        if (type === 'bullet_list') return [b.title, ...(Array.isArray(b.items) ? b.items : [])].filter(Boolean).join('\n');
-        if (type === 'question_mc' || type === 'question_open') return String(b.question || '');
-        if (type === 'question_tf') return String(b.statement || '');
-        if (type === 'question_fill') return String(b.sentence || '');
-        if (type === 'flashcard') return `${b.front || ''}: ${b.back || ''}`;
-        return '';
-      }).filter(Boolean).join('\n\n');
-      return {
-        visible: { items: output.blocks, fields: [] },
-        textContent,
-        plainFragment: `<div class="plain-output"><section class="item" style="padding:20px 24px">${blockHtml || '<p class="empty">No content.</p>'}</section></div>`,
-        wrap: (fragment, { header = true } = {}) => wrapPreviewDocument(fragment, customization.brand, { forPrint, header })
-      };
+  /* ── The output, as Template Studio components ───────────────────────────────────────────
+   * Block agents return typed blocks; quiz and flashcard agents return items that read as the same
+   * blocks. Both are planned into runs of components and assembled by Template Studio, so the
+   * preview, the page-size × view matrix and every export come from one place. Everything here
+   * must stay above the early returns below (hook order).
+   */
+  const outputIsBlocks = Boolean(output?.isBlockOutput);
+  const outputBlocks = outputIsBlocks && Array.isArray(output?.blocks) ? output.blocks : null;
+  const plan = useMemo(() => {
+    if (!output) return null;
+    const blocks = outputBlocks || (outputIsBlocks ? null : itemsToBlocks(output.items));
+    if (!blocks) return null;
+    return planOutput({ blocks, title: agentConfig?.name || "", subtitle: String(rootData?.subtitle || ""), framed: !outputBlocks });
+  }, [output, outputBlocks, outputIsBlocks, agentConfig?.name, rootData]);
+  const doc = useMemo(() => {
+    if (!output) return null;
+    try {
+      if (plan) return buildOutputDocument(plan, outputStyles);
+      const items = outputIsBlocks ? [] : (Array.isArray(output.items) ? output.items : []);
+      if (items.length) return buildAutoDocument({ fields, items, rootData, title: agentConfig?.name || "", accentId: autoAccentId });
+    } catch (error) {
+      console.error("[RunAgentPage] could not build the output document", error);
     }
-    const visible = applyOutputCustomization(output?.items || [], fields, customization);
-    return {
-      visible,
-      textContent: renderPlainOutputText(visible.items, visible.fields, fieldTypeByName),
-      plainFragment: renderPlainOutputHtml(visible.items, visible.fields, fieldTypeByName, customization.brand, rootData, fields.filter((field) => field.repeatScope === "once")),
-      wrap: (fragment, { header = true } = {}) => wrapPreviewDocument(fragment, customization.brand, { forPrint, header })
-    };
-  }
+    return null;
+  }, [output, outputIsBlocks, plan, outputStyles, autoAccentId, fields, rootData, agentConfig?.name]);
+  useEffect(() => {
+    if (doc && (selection.layoutIndex >= doc.layouts.length || selection.viewIndex >= doc.views.length)) setSelection({ layoutIndex: 0, viewIndex: 0 });
+  }, [doc, selection.layoutIndex, selection.viewIndex]);
+  const dataJson = useMemo(() => JSON.stringify(outputBlocks || output?.items || [], null, 2), [outputBlocks, output]);
+  const rawText = useMemo(() => (outputBlocks ? blocksToText(outputBlocks) : renderPlainOutputText(Array.isArray(output?.items) ? output.items : [], fields, {})), [outputBlocks, output, fields]);
 
-  async function renderFinalHtml(forPrint) {
-    const { visible, textContent, plainFragment, wrap } = buildDocumentHtml(forPrint);
-    let fragment = plainFragment;
-    if (activeTemplate) {
-      const templateData = buildTemplateData(visible.items, templateFields, fieldMappingByTemplateField, activeTemplate, rootData);
-      const response = await fetch("/api/templates/render-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ template: activeTemplate, sampleData: templateData, format: "html" })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.error || "Template rendering failed");
-      fragment = result.html || "";
-    }
-    return { html: wrap(fragment, { header: !activeTemplate }), textContent };
-  }
-
-  /** Interactive activity derived from the agent's output structure and this run's data. */
+  /** Interactive activity derived from the output: questions the student can answer on Luna. */
   const activity = useMemo(() => {
     if (!output || typeof output !== "object") return null;
-    const schemaFields = Array.isArray(agentConfig?.spec?.outputSchema) && agentConfig.spec.outputSchema.length ? agentConfig.spec.outputSchema : legacyToFieldDefs(fields);
-    const data = { ...(output.data || {}), items: Array.isArray(output.items) ? output.items : [] };
+    const items = outputBlocks ? blocksToActivityItems(outputBlocks) : (Array.isArray(output.items) ? output.items : []);
+    const schemaFields = outputBlocks
+      ? legacyToFieldDefs(Object.keys(Object.assign({}, ...items)).map((name) => ({ name, type: items.some((item) => Array.isArray(item[name])) ? "array" : "text", repeatScope: "per-output" })))
+      : (Array.isArray(agentConfig?.spec?.outputSchema) && agentConfig.spec.outputSchema.length ? agentConfig.spec.outputSchema : legacyToFieldDefs(fields));
+    const data = { ...(output.data || {}), items };
     try {
-      const built = buildActivity(schemaFields, data, { title: customization.brand?.title || agentConfig?.name, agentId: agentDocument?.id || "", agentName: agentConfig?.name });
+      const built = buildActivity(schemaFields, data, { title: agentConfig?.name, agentId: agentDocument?.id || "", agentName: agentConfig?.name });
       // Link each question to the passage its answer came from.
       return attachSources(built, Array.isArray(output.sources) ? output.sources : []);
     } catch { return null; }
-  }, [output, agentConfig, fields, customization.brand?.title, agentDocument?.id]);
+  }, [output, outputBlocks, agentConfig, fields, agentDocument?.id]);
+
+  async function renderFinalHtml(forPrint) {
+    if (!doc) throw new Error("There is nothing to export yet.");
+    return { html: await renderOutputHtml(doc, selection, forPrint), textContent: rawText };
+  }
 
   async function handleDoOnLuna() {
     if (!activity || !activity.questions.length) return;
@@ -1018,10 +654,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       contextPromptDraft,
       referenceDocumentIds,
       styleDocumentIds,
-      templateId,
-      fieldMappingByTemplateField,
-      fieldTypeByName,
-      customization
+      outputStyles
     };
   }
   async function saveResource({ name, folderId, tags, difficulty, favourite, openAfter }) {
@@ -1032,13 +665,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const payload = buildResource({
         name,
         activity: activity && activity.questions.length ? { ...activity, title: name } : null,
-        data: { ...(output?.data || {}), items: output?.items || [] },
+        data: { ...(output?.data || {}), items: output?.items || [], ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
         request: currentRequest(),
         meta: {
           agentId: agentDocument?.id || "",
           agentName: agentConfig?.name || "",
-          templateId,
-          templateName: activeTemplate?.name || "",
+          templateId: "",
+          templateName: "",
           sourceDocumentIds: referenceDocumentIds,
           sourceNames,
           difficulty,
@@ -1062,16 +695,12 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   }
 
   async function handleSaveAsDocument() {
-    if (!onSaveGeneratedQuizDocument || !Array.isArray(output?.items)) return;
-    if (!mappingReady) {
-      setStatusMessage(`Finish the template mapping first. ${mappingIssues[0] || ""}`);
-      return;
-    }
+    if (!onSaveGeneratedQuizDocument || !doc) return;
     setIsSavingDocument(true);
     setStatusMessage("");
     try {
       const { html, textContent } = await renderFinalHtml(true);
-      const name = `${customization.brand?.title || agentConfig?.name || "Agent Output"}.html`;
+      const name = `${agentConfig?.name || "Agent Output"}.html`;
       const saved = await onSaveGeneratedQuizDocument({ folderIds: saveFolderId ? [saveFolderId] : [], tags: [], file: { name, content: html, preview: textContent, sizeBytes: html.length } });
       if (!saved) throw new Error("Output could not be saved to the workspace.");
       setStatusMessage(`Saved "${name}" to your workspace.`);
@@ -1088,7 +717,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
       const anchor = document.createElement("a");
       anchor.href = url;
-      anchor.download = `${customization.brand?.title || agentConfig?.name || "output"}.html`;
+      anchor.download = `${agentConfig?.name || "output"}.html`;
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
@@ -1128,88 +757,36 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       </div>
     );
   }
-
-  // Block-based output: when the agent uses the new block registry, output.isBlockOutput is true
-  // and output.blocks is a flat array. Fall back to the legacy items path for classic agents.
-  const isBlockOutput = Boolean(output?.isBlockOutput);
-  const outputBlocks = isBlockOutput && Array.isArray(output?.blocks) ? output.blocks : null;
-  const outputItems = Array.isArray(output?.items) && !isBlockOutput ? output.items : [];
-  const hasOutput = isBlockOutput ? (outputBlocks?.length > 0) : (outputItems.length > 0);
+  const outputItems = Array.isArray(output?.items) && !outputIsBlocks ? output.items : [];
+  const hasOutput = outputIsBlocks ? (outputBlocks?.length > 0) : (outputItems.length > 0);
   const materialOptional = Array.isArray(agentConfig.materialSlots) && (!agentConfig.materialSlots.length || agentConfig.materialSlots.every((slot) => !slot.required));
   const knowledgeReady = materialOptional || (knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0);
   const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
   const unlockedStep = hasOutput ? 3 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
 
-  const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
-  const blockTemplateConfig = outputBlocks
-    ? {
-        selectedBlocks: outputBlocks.map((block, i) => ({
-          // BlockRenderer.getConfig() looks up entries by `blockId` — the block type IS the blockId
-          // in the flat block registry (e.g. 'question_mc', 'flashcard').
-          blockId: String(block?.type || ''),
-          formatId: blockConfigs[i]?.formatId || BLOCKS[block?.type]?.defaultFormat || 'default',
-          color: blockConfigs[i]?.color || '#0071e3',
-        }))
-      }
-    : (agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] });
 
-  const blockOutputPane = isBlockOutput ? (
-    <div>
-      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
-        {[
-          { id: 'answers', label: 'With Answers' },
-          { id: 'student', label: 'Student View' },
-          { id: 'practice', label: '⚡ Practice' },
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => { setPreviewMode(id); if (id !== 'practice') setShowAnswers(id === 'answers'); }}
-            style={{ ...pillButtonBase, background: previewMode === id ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: previewMode === id ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: previewMode === id ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-      {previewMode === 'practice' && (
-        <p style={{ fontSize:12, color:'rgba(29,29,31,0.5)', margin:'0 0 12px 0' }}>
-          Click options to answer · Fill in blanks · Click flashcards to flip
-        </p>
-      )}
-      {(outputBlocks && outputBlocks.length > 0) ? (
-        <BlockRenderer
-          key={previewMode}
-          blocks={outputBlocks}
-          templateConfig={blockTemplateConfig}
-          showAnswers={previewMode === 'answers'}
-          exportMode="screen"
-          interactive={previewMode === 'practice'}
+  const previewPane = (
+    <OutputPreviewPane
+      doc={doc}
+      selection={selection}
+      onSelection={setSelection}
+      dataJson={dataJson}
+      rawText={rawText}
+      filename={agentConfig.name || "output"}
+      onError={setStatusMessage}
+      emptyHint="Generate in step 1 and your result appears here, laid out with Template Studio's components."
+      overlay={generation.isGenerating || generation.error ? (
+        <GenerationProgress
+          steps={generation.steps}
+          tokenChars={generation.tokenChars}
+          tokenTail={generation.tokenTail}
+          elapsedMs={generation.elapsedMs}
+          isGenerating={generation.isGenerating}
+          error={generation.error}
+          onCancel={generation.cancel}
         />
-      ) : (
-        <p style={{ color:'rgba(29,29,31,0.4)', fontSize:13, textAlign:'center', padding:'32px 0' }}>
-          No blocks to preview. Generate in step 1 first.
-        </p>
-      )}
-    </div>
-  ) : null;
-
-  const previewPane = isBlockOutput ? blockOutputPane : (
-    <LivePreviewPane
-      items={outputItems}
-      rootData={rootData}
-      fields={fields}
-      fieldTypeByName={fieldTypeByName}
-      customization={customization}
-      template={activeTemplate}
-      templateFields={templateFields}
-      fieldMappingByTemplateField={fieldMappingByTemplateField}
-      highlightFields={highlightFields}
-      mappingReady={mappingReady}
-      generation={generation}
-      onCancelGeneration={generation.cancel}
-      agentName={customization.brand?.title || agentConfig.name}
-      emptyHint="Generate in step 1 and your result appears here. Then choose a layout and styling."
+      ) : null}
     />
   );
 
@@ -1310,160 +887,25 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
 
-      {/* Step 2: configure output */}
+      {/* Step 2: configure output — components, format and colour (Template Studio's) */}
       {flowStep === 2 ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
+            <OutputStylePanel
+              plan={plan}
+              styles={outputStyles}
+              onStylesChange={updateOutputStyles}
+              autoAccentId={autoAccentId}
+              onAutoAccentChange={setAutoAccentId}
+              savedTemplates={templates}
+              templatesLoading={templatesLoading}
+              onRefreshTemplates={loadTemplates}
+              onOpenTemplateStudio={typeof onOpenTool === "function" ? () => onOpenTool("template-builder") : undefined}
+            />
             <section className={cardClass}>
-              <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-                {[{ id: "fields", label: "Output fields" }, ...(isBlockOutput ? [] : [{ id: "layout", label: "Template" }])].map((tab) => (
-                  <button key={tab.id} type="button" onClick={() => setOutputTab(tab.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${outputTab === tab.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>{tab.label}</button>
-                ))}
-              </div>
-              {outputTab === "fields" ? (
-                <div className="mt-4 grid gap-3">
-                  {isBlockOutput ? (
-                    <div className="grid gap-2">
-                      <div>
-                        <p className={kicker}>Block output</p>
-                        <p className="m-0 mt-1 text-xs text-soft-ink">Expand each block to choose its visual format and color. The preview updates instantly.</p>
-                      </div>
-                      {outputBlocks && outputBlocks.length > 0 ? (
-                        <ul className="m-0 grid list-none gap-1.5 p-0">
-                          {outputBlocks.map((block, i) => (
-                            <BlockConfigRow
-                              key={i}
-                              block={block}
-                              index={i}
-                              blockConfigs={blockConfigs}
-                              onConfigChange={(idx, cfg) => setBlockConfigs((prev) => ({ ...prev, [idx]: cfg }))}
-                            />
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="m-0 text-xs text-soft-ink">Generate in step 1 to see the output blocks here.</p>
-                      )}
-                      {templates.length > 0 ? (
-                        <div className="mt-1 grid gap-2 rounded-xl border border-ink/8 bg-[var(--surface-soft)] p-3">
-                          <p className={kicker}>Base on template</p>
-                          <p className="m-0 text-xs text-soft-ink">Apply a template's color scheme to all blocks at once.</p>
-                          <div className="flex gap-2">
-                            <select className={`${fieldClass} flex-1`} value={applyTemplateId} onChange={(e) => setApplyTemplateId(e.target.value)}>
-                              <option value="">Choose a template…</option>
-                              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                            <button type="button" className={ghostBtn} disabled={!applyTemplateId || !outputBlocks?.length} onClick={() => {
-                              const idx = templates.findIndex((t) => t.id === applyTemplateId);
-                              const color = BLOCK_COLORS[idx % BLOCK_COLORS.length]?.value || '#0071e3';
-                              setBlockConfigs((prev) => {
-                                const next = { ...prev };
-                                (outputBlocks || []).forEach((_, bi) => { next[bi] = { ...(prev[bi] || {}), color }; });
-                                return next;
-                              });
-                            }}>Apply</button>
-                          </div>
-                        </div>
-                      ) : null}
-                      <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setFlowStep(3)} disabled={!hasOutput}>Next: Export →</button>
-                    </div>
-                  ) : null}
-                  {!isBlockOutput && outputTab === "fields" ? (
-                    <div className="grid gap-3">
-                      <div>
-                        <p className={kicker}>What this agent produces</p>
-                        <p className="m-0 mt-1 text-xs text-soft-ink">Each item the agent returns has these fields. They are fixed for this agent and are the names a template must use.</p>
-                      </div>
-                      <ul className="m-0 grid list-none gap-1.5 p-0">
-                        {agentFields.map((field) => {
-                          const slots = mappingRows.filter((row) => rowMapping(row) === field.name);
-                          const active = slots.some((row) => row.name === highlightRowKey);
-                          return (
-                          <li key={field.name} className={`rounded-xl border bg-white px-3 py-2 transition ${active ? "border-[var(--accent)]/50 bg-[var(--accent-soft)]/50" : "border-ink/8"}`} onMouseEnter={() => slots[0] && setHighlightRowKey(slots[0].name)} onMouseLeave={() => setHighlightRowKey("")}>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-xs text-[var(--accent-ink)]">{field.name}</span>
-                              <span className="text-sm font-semibold text-ink">{field.label || field.name}</span>
-                              <span className={chipClass}>{field.type === "array" ? "list of values" : field.type}</span>
-                              <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
-                            </div>
-                            {field.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{field.description}</p> : null}
-                            {activeTemplate && slots.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">Fills {slots.map((row) => `"${row.label || row.name}"`).join(", ")} in {activeTemplate.name}{slots.some((row) => row.count > 1) ? " — every design that uses it" : ""}.</p> : null}
-                          </li>
-                          );
-                        })}
-                      </ul>
-                      <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added "${draft.name}" to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
-                      <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setOutputTab("layout")}>Choose a template →</button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              {outputTab === "layout" ? (
-                <div className="mt-4 grid gap-3">
-                  <div>
-                    <p className={kicker}>Template</p>
-                    <div className="mt-2 grid gap-1.5">
-                      <label className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${!templateId ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
-                        <input className="sr-only" type="radio" name="template" checked={!templateId} onChange={() => setTemplateId("")} />
-                        <span className="grid size-9 place-items-center rounded-lg bg-white text-base shadow-[0_1px_2px_rgba(0,0,0,0.08)]">▤</span>
-                        <span className="min-w-0"><span className="block text-sm font-semibold text-ink">Clean default</span><span className="block text-xs text-soft-ink">One card per item, your colours and fonts.</span></span>
-                      </label>
-                      {templates.map((template) => (
-                        <label key={template.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition ${templateId === template.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]" : "border-ink/10 hover:bg-[var(--surface-soft)]"}`}>
-                          <input className="sr-only" type="radio" name="template" checked={templateId === template.id} onChange={() => setTemplateId(template.id)} />
-                          <span className="grid size-9 place-items-center rounded-lg bg-white text-base shadow-[0_1px_2px_rgba(0,0,0,0.08)]">▦</span>
-                          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-ink">{template.name}</span><span className="block text-xs text-soft-ink">{templateLinks[template.id] ? "✓ Set up for this agent" : fitByTemplateId[template.id]?.verdict === "fits" ? "Fits this agent" : fitByTemplateId[template.id]?.missingEssential.length ? `⚠ ${fitByTemplateId[template.id].summary}` : "Fits with minor gaps"} · {template.pageFormat || "A4"}</span></span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex items-center gap-3">
-                      {typeof onOpenTool === "function" ? <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => onOpenTool("template-builder")}>Design a new template →</button> : null}
-                      <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={loadTemplates} disabled={templatesLoading}>{templatesLoading ? "Refreshing…" : "Refresh list"}</button>
-                    </div>
-                  </div>
-                  {activeTemplate ? (
-                    <div>
-                      <p className={kicker}>Map template fields to agent fields</p>
-                      <p className="m-0 mt-1 text-xs text-soft-ink">Each slot is filled by one agent field. Matching names were pre-filled — change any you want. You can run with slots still empty: they simply stay blank.</p>
-                      {templateLinks[templateId] ? <p className="m-0 mt-1 text-xs text-[var(--accent-ink)]">Saved setup for this template restored — nothing to redo.</p> : null}
-                      {fit ? (
-                        <div className={`mt-2 rounded-xl px-3 py-2 text-xs ${fit.verdict === "fits" ? "bg-[var(--surface-soft)] text-soft-ink" : fit.missingEssential.length ? "bg-[rgba(178,94,0,0.08)] text-[var(--color-warn)]" : "bg-[var(--accent-soft)] text-[var(--accent-ink)]"}`}>
-                          <span className="font-semibold">Template fit: {fit.verdict === "fits" ? "complete" : fit.verdict === "partial" ? "partial" : "poor"}</span> · {fit.summary}.
-                          {fit.missing.length ? <span className="mt-1 block">Not shown anywhere: {fit.missing.map((field) => `${field.label || field.name} (${IMPORTANCE_LABEL[field.importance || "useful"].toLowerCase()})`).join(", ")}.</span> : null}
-                        </div>
-                      ) : null}
-                      <p className="m-0 mt-1 text-xs font-semibold text-ink">{mappingRows.filter((row) => rowMapping(row)).length} of {mappingRows.length} slot{mappingRows.length === 1 ? "" : "s"} mapped{mappingIssues.length ? ` · ${mappingIssues.length} to fix` : " · ready"}</p>
-                      <div className="mt-2 grid gap-2">
-                        {mappingRows.map((field) => {
-                          const active = highlightRowKey === field.name;
-                          return (
-                            <div className={`grid gap-1 rounded-xl px-2 py-1 transition sm:grid-cols-[1fr_1fr] sm:items-center ${active ? "bg-[var(--accent-soft)]" : ""}`} key={field.id || field.name} onMouseEnter={() => setHighlightRowKey(field.name)} onMouseLeave={() => setHighlightRowKey((current) => (current === field.name ? "" : current))}>
-                              <span className="flex flex-wrap items-center gap-1.5 text-sm text-ink">
-                                <button type="button" className={`text-left ${active ? "font-semibold text-[var(--accent-ink)]" : ""}`} onClick={() => setHighlightRowKey(active ? "" : field.name)} title="Show where this appears in the template">{field.label || field.name}</button>
-                                <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
-                                {field.count > 1 ? <span className={chipClass} title={`${field.names.join(", ")} — one choice fills all of them`}>×{field.count}</span> : null}
-                              </span>
-                              <span className="flex items-center gap-1.5">
-                                <select className={fieldClass} value={rowMapping(field)} onChange={(event) => setTemplateFieldMapping(field, event.target.value)}>
-                                  <option value="">Choose…</option>
-                                  {[...agentFields].sort((a, b) => Number(b.frequency === field.frequency) - Number(a.frequency === field.frequency)).map((agentField) => <option key={agentField.name} value={agentField.name}>{agentField.label || agentField.name}{agentField.frequency === field.frequency ? "" : agentField.frequency === "loop" ? " (per item)" : " (once)"}</option>)}
-                                </select>
-                                {rowMapping(field) ? null : <button type="button" className="shrink-0 whitespace-nowrap rounded-full border border-[var(--accent)]/40 px-2.5 py-1.5 text-xs font-semibold text-[var(--accent-ink)] transition hover:bg-[var(--accent-soft)]" title={`Add "${field.label || field.name}" to this agent's output`} onClick={() => addFieldToAgent(field)}>＋ Add to agent</button>}
-                              </span>
-                            </div>
-                          );
-                        })}
-                        <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added “${draft.name}” to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
-                        {!templateFields.length ? <p className="m-0 text-xs text-[var(--color-danger)]">This template has no field tags yet. Open it in the Template Builder and tag its blocks.</p> : null}
-                        {mappingIssues.length ? <p className="m-0 text-xs text-[var(--color-warn)]">{mappingIssues[0]}</p> : null}
-                        {mappingWarnings.map((warning) => <p key={warning} className="m-0 text-xs text-soft-ink">⚠ {warning}</p>)}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-ink/8 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 {agentDocument ? <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button> : <span />}
-                <button type="button" onClick={() => { rememberLink(); persistAgent(); setFlowStep(3); }} disabled={!hasOutput || !mappingReady} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
+                <button type="button" onClick={() => { persistAgent(); setFlowStep(3); }} disabled={!hasOutput || !doc} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
             </section>
@@ -1496,7 +938,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <div className="mt-3 grid gap-2">
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handlePrint}><span>PDF</span><span className="text-xs font-normal text-soft-ink">via print dialog</span></button>
                 <button type="button" className={`${ghostBtn} !justify-between`} onClick={handleDownloadHtml}><span>HTML</span><span className="text-xs font-normal text-soft-ink">opens in any browser</span></button>
-                {activeTemplate ? <p className="m-0 text-xs text-soft-ink">PDF, Word{activeTemplate.docModel ? " and PowerPoint" : ""} downloads are in the preview toolbar on the right.</p> : <p className="m-0 text-xs text-soft-ink">Choose a template in step 2 for Word / PowerPoint exports.</p>}
+                <p className="m-0 text-xs text-soft-ink">PDF, Word and PowerPoint (slides) downloads are in the preview toolbar on the right — pick the page size and view there first.</p>
               </div>
             </section>
             <section className={cardClass}>
@@ -1506,7 +948,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                   <option value="">Unfiled</option>
                   {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
                 </select>
-                <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !mappingReady} className={primaryBtn}>{isSavingDocument ? "Saving…" : "Save"}</button>
+                <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !doc} className={primaryBtn}>{isSavingDocument ? "Saving…" : "Save"}</button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
             </section>
@@ -1519,15 +961,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="lg:sticky lg:top-4">{previewPane}</div>
         </div>
       ) : null}
-
       {saveOpen ? (
         <SaveResourceDialog
-          defaultName={customization.brand?.title || agentConfig?.name || "Generated resource"}
+          defaultName={agentConfig?.name || "Generated resource"}
           folders={folders}
           defaultFolderId={saveFolderId}
           onCreateFolder={toolContext?.onCreateFolder}
           busy={isSavingDocument}
-          summary={`${activity?.questions.length ? `${activity.questions.length} questions · ` : ""}${activeTemplate ? activeTemplate.name : "no template"}${agentConfig?.name ? ` · ${agentConfig.name}` : ""}`}
+          summary={`${activity?.questions.length ? `${activity.questions.length} questions · ` : ""}${agentConfig?.name || "Agent output"}`}
           onCancel={() => setSaveOpen(false)}
           onSave={saveResource}
         />

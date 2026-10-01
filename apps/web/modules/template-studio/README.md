@@ -27,3 +27,13 @@ Tests: `apps/web/tests/template-studio/engine.test.ts`. Typecheck: `npm run type
 ## Blocks (pre-made objects)
 
 `engine/blocks.ts` packages a schema fragment with a group of elements bound to it. Built-in blocks live in code; user blocks are saved from a selection ("Save as block") into a local library and can be listed in the Marketplace as design blocks. Elements named `opt:<key>|Label` are controlled by the block's toggles. `{{n}}` in static text renders the item number.
+
+## Agent output (`output/`)
+
+Template Studio is the only catalog of components, formats (design variants) and colours (accents).
+`output/outputDocument.ts` plans an agent's output (typed blocks, quiz items, flashcards) into runs of
+components, assembles them with `engine/outputTemplate.ts` (the Template Wizard's assembler: A4 / Letter /
+Slides × Student view / Answer key) and reads a saved template back as "format + colour per component"
+(`styleFromTemplate`). `output/OutputDesigner.tsx` is the UI the run page uses (`OutputStylePanel`,
+`OutputPreviewPane`). Block types without a Template Studio component are not offered (dividers only
+separate; they never render).

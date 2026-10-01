@@ -4,13 +4,21 @@ import { compileAgent } from "./compile";
 import { legacyFields, outputJsonSchema } from "./schema";
 import { createField } from "../../template-studio/engine/model";
 import { buildJsonSchema } from "../../ai-tools/blocks/blockRegistry.js";
+import { normalizeSelectedBlock } from "../../template-studio/output/outputDocument";
 
 const INPUT_FROM_QUESTION: Record<string, InputType> = { text: "text", number: "number", "single-select": "choice", "multi-select": "multi_choice", "yes-no": "toggle" };
 const QUESTION_FROM_INPUT: Record<InputType, string> = { text: "text", number: "number", choice: "single-select", multi_choice: "multi-select", toggle: "yes-no", language: "single-select" };
 
+/** Agents saved before Template Studio became the only catalog keep their blocks, with formats and colours it has. */
+function modernizeOutput(spec: AgentSpec): AgentSpec {
+  const selected = spec.output?.selectedBlocks;
+  if (!selected?.length) return spec;
+  return { ...spec, output: { ...spec.output!, selectedBlocks: selected.map((entry) => normalizeSelectedBlock(entry)) } };
+}
+
 /** Legacy `.agent.json` config (or a built-in legacy agent object) → AgentSpec. */
 export function specFromLegacy(config: any): AgentSpec {
-  if (config?.spec?.version === 1) return config.spec as AgentSpec;
+  if (config?.spec?.version === 1) return modernizeOutput(config.spec as AgentSpec);
   const spec = createAgentSpec(String(config?.name || "Untitled agent"));
   spec.purpose = { headline: String(config?.tagline || config?.name || ""), description: String(config?.description || config?.instructions || "").slice(0, 400) };
   spec.instructions = { core: String(config?.instructions || ""), constraints: [] };
@@ -37,7 +45,7 @@ export function runConfigFromSpec(spec: AgentSpec, extra: Record<string, unknown
     howItWorks: [
       { title: "Choose your material", text: userSlots.length ? userSlots.map((slot) => `${slot.name}${slot.required ? " (required)" : ""}: ${slot.description}`).join(" ") : "This agent runs from its own knowledge." },
       { title: "Make your choices", text: spec.inputs.length ? spec.inputs.map((input) => input.name).join(" · ") : "Nothing to choose." },
-      { title: "Pick a layout", text: "Any template with matching fields works — the content stays the same." },
+      { title: "Pick formats and colors", text: "Style each component with Template Studio's formats and colors, or apply a saved template — the content stays the same." },
       { title: "Export or save", text: "PDF, Word, PowerPoint, HTML — or straight into your workspace." }
     ],
     instructions: compiled.system,

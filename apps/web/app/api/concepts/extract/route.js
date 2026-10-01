@@ -1,10 +1,14 @@
 /**
  * POST /api/concepts/extract
  * Extracts concepts from a document and saves them to the DB.
- * Called at document upload time (non-blocking) and on-demand.
+ * Called at document upload time (non-blocking) and on-demand from PlansPage.
  *
- * Body: { documentId, workspaceId, ownerUserId }
+ * Body: { documentId, workspaceId, ownerUserId? }
  * Returns: { conceptCount, concepts[] }
+ *
+ * Text source priority:
+ *   1. document_chunks.content_markdown (best — chunked + cleaned text)
+ *   2. documents.content JSON blob (fallback — parse the CDM)
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
@@ -19,34 +23,54 @@ export async function POST(request) {
     const body = await request.json();
     const documentId  = String(body?.documentId  || "").trim();
     const workspaceId = String(body?.workspaceId || "").trim();
-    const ownerUserId = String(body?.ownerUserId || "").trim();
+    // ownerUserId optional — fall back to LUNA_DEMO_USER_ID for backward compat
+    const ownerUserId = String(body?.ownerUserId || process.env.LUNA_DEMO_USER_ID || "").trim();
 
-    if (!documentId || !workspaceId || !ownerUserId) {
+    if (!documentId || !workspaceId) {
       return NextResponse.json(
-        { error: "documentId, workspaceId, and ownerUserId are required." },
+        { error: "documentId and workspaceId are required." },
         { status: 400 }
       );
     }
 
-    // Fetch the document text from Supabase
     const supabase = createSupabaseAdminClient();
-    const { data: doc, error: docErr } = await supabase
-      .from("documents")
-      .select("id, extracted_content, title")
-      .eq("id", documentId)
-      .eq("owner_user_id", ownerUserId)
-      .single();
 
-    if (docErr || !doc) {
-      return NextResponse.json({ error: "Document not found." }, { status: 404 });
+    // 1. Try to get text from document_chunks (richest source)
+    const { data: chunks } = await supabase
+      .from("document_chunks")
+      .select("content_markdown, section, heading_path")
+      .eq("document_id", documentId)
+      .order("page_number", { ascending: true })
+      .limit(80);
+
+    let documentText = "";
+
+    if (chunks && chunks.length > 0) {
+      documentText = chunks
+        .map((c) => [c.heading_path || c.section || "", c.content_markdown || ""].filter(Boolean).join("\n"))
+        .join("\n\n")
+        .slice(0, 14000);
     }
 
-    // Extract text from the canonical document model JSON
-    const extractedContent = doc.extracted_content || {};
-    const documentText = extractTextFromCDM(extractedContent) || String(extractedContent);
-
+    // 2. Fallback: parse the documents.content blob
     if (!documentText || documentText.length < 100) {
-      return NextResponse.json({ conceptCount: 0, concepts: [], warning: "Document text too short for extraction." });
+      const { data: doc } = await supabase
+        .from("documents")
+        .select("id, content, name")
+        .eq("id", documentId)
+        .maybeSingle();
+
+      if (doc?.content) {
+        documentText = extractTextFromBlob(doc.content);
+      }
+    }
+
+    if (!documentText || documentText.length < 80) {
+      return NextResponse.json({
+        conceptCount: 0,
+        concepts: [],
+        warning: "Document has no extracted text yet. Process it first via the workspace.",
+      });
     }
 
     await extractAndSaveConcepts(documentId, workspaceId, ownerUserId, documentText);
@@ -69,32 +93,36 @@ export async function POST(request) {
 }
 
 /**
- * Flatten a CDM (canonical document model) object to plain text for concept extraction.
- * The CDM may be a string, an object with a `text` or `blocks` array, or similar.
+ * Pull readable text out of the documents.content JSON blob.
+ * The blob may be a CDM object, a resource object, a plan object, etc.
  */
-function extractTextFromCDM(cdm) {
-  if (!cdm) return "";
-  if (typeof cdm === "string") return cdm;
-  if (typeof cdm !== "object") return String(cdm);
+function extractTextFromBlob(content) {
+  let parsed = content;
+  if (typeof content === "string") {
+    try { parsed = JSON.parse(content); } catch { return content.slice(0, 12000); }
+  }
+  if (!parsed || typeof parsed !== "object") return String(parsed || "").slice(0, 12000);
 
-  // Common CDM shapes used in LUNA's document processing pipeline
-  if (cdm.text) return String(cdm.text);
-  if (Array.isArray(cdm.blocks)) {
-    return cdm.blocks
-      .map((b) => {
-        if (typeof b === "string") return b;
-        if (b.text) return String(b.text);
-        if (b.content) return String(b.content);
-        return "";
-      })
+  // CDM shape: { blocks: [...] } or { text: "..." }
+  if (parsed.text && typeof parsed.text === "string") return parsed.text.slice(0, 12000);
+  if (Array.isArray(parsed.blocks)) {
+    return parsed.blocks
+      .map((b) => (typeof b === "string" ? b : b.text || b.content || ""))
       .filter(Boolean)
-      .join("\n\n");
+      .join("\n\n")
+      .slice(0, 12000);
   }
-  if (cdm.content) return String(cdm.content);
-  if (cdm.paragraphs && Array.isArray(cdm.paragraphs)) {
-    return cdm.paragraphs.map((p) => (typeof p === "string" ? p : p.text || "")).join("\n");
+  if (Array.isArray(parsed.paragraphs)) {
+    return parsed.paragraphs
+      .map((p) => (typeof p === "string" ? p : p.text || ""))
+      .join("\n")
+      .slice(0, 12000);
   }
+  if (parsed.content && typeof parsed.content === "string") return parsed.content.slice(0, 12000);
 
-  // Fallback: stringify keys that look like text content
-  return JSON.stringify(cdm).slice(0, 12000);
+  // Last resort: stringify and strip JSON syntax
+  return JSON.stringify(parsed)
+    .replace(/["{}[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .slice(0, 12000);
 }

@@ -96,24 +96,56 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const open = plans.find((row) => row.document.id === openId) || null;
   const roots = plans.filter((row) => !row.plan.parentPlanId || !plans.some((other) => other.document.id === row.plan.parentPlanId));
 
-  // Fetch concept graph + mastery whenever the open plan or workspace changes
+  const [extracting, setExtracting] = useState(false);
+
+  // Fetch concept graph + mastery whenever the open plan or workspace changes.
+  // If no concepts exist yet but the plan has linked material, auto-trigger extraction.
   useEffect(() => {
     if (!open || !selectedWorkspaceId) return;
     const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
+    const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
 
     Promise.all([
       fetch(`/api/concepts?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
       fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
     ]).then(([conceptData, masteryData]) => {
-      setGraphConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
+      const fetchedConcepts = Array.isArray(conceptData.concepts) ? conceptData.concepts : [];
+      setGraphConcepts(fetchedConcepts);
       setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
       const byId = {};
       for (const s of (masteryData.states || [])) {
         if (s.concept_id) byId[s.concept_id] = s.mastery ?? 0;
       }
       setMasteryByConceptId(byId);
+
+      // Auto-extract for plan-linked documents that haven't been processed yet
+      if (fetchedConcepts.length === 0 && open?.plan?.materialIds?.length > 0) {
+        triggerExtraction(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
+      }
     });
   }, [open?.document?.id, selectedWorkspaceId]);
+
+  async function triggerExtraction(materialIds, workspaceId, ownerUserId) {
+    if (!materialIds?.length || !workspaceId) return;
+    setExtracting(true);
+    try {
+      await Promise.allSettled(
+        materialIds.map((docId) =>
+          fetch("/api/concepts/extract", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documentId: docId, workspaceId, ownerUserId }),
+          }).then((r) => r.json())
+        )
+      );
+      // Reload concepts after extraction
+      const conceptData = await fetch(`/api/concepts?workspaceId=${workspaceId}`).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
+      setGraphConcepts(Array.isArray(conceptData.concepts) ? conceptData.concepts : []);
+      setGraphPrereqs(Array.isArray(conceptData.prerequisites) ? conceptData.prerequisites : []);
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   async function save(plan, documentId) {
     const content = JSON.stringify({ ...plan, updatedAt: new Date().toISOString() }, null, 2);
@@ -437,17 +469,40 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {/* Full-width knowledge graph */}
         <section className={`${card} p-5`}>
-          <p className={kicker}>Concept map</p>
-          <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">
-            All concepts from your reference material — sized by importance, coloured by mastery.
-            Arrows show prerequisites. Drag to rearrange, scroll to zoom, click to highlight a concept{"'"}s chain.
-          </p>
-          <KnowledgeGraph
-            concepts={graphConcepts}
-            prerequisites={graphPrereqs}
-            masteryByConceptId={masteryByConceptId}
-            height={520}
-          />
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <div>
+              <p className={kicker}>Concept map</p>
+              <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">
+                All concepts from your reference material — sized by importance, coloured by mastery.
+                Arrows show prerequisites. Drag to rearrange, scroll to zoom, click to highlight a concept{"'"}s chain.
+              </p>
+            </div>
+            {open?.plan?.materialIds?.length > 0 && (
+              <button
+                type="button"
+                className={ghostBtn}
+                disabled={extracting}
+                onClick={() => {
+                  const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+                  triggerExtraction(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
+                }}
+              >
+                {extracting ? "Extracting concepts…" : "↺ Rebuild concept map"}
+              </button>
+            )}
+          </div>
+          {extracting ? (
+            <div className="flex items-center justify-center rounded-2xl bg-[var(--surface-soft)] py-16">
+              <p className="m-0 text-sm text-soft-ink">Extracting concepts from your reference material…</p>
+            </div>
+          ) : (
+            <KnowledgeGraph
+              concepts={graphConcepts}
+              prerequisites={graphPrereqs}
+              masteryByConceptId={masteryByConceptId}
+              height={520}
+            />
+          )}
         </section>
 
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}

@@ -441,8 +441,24 @@ async function extractPdfText(buf) {
   if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class ImageData { constructor(w,h){this.width=w;this.height=h;this.data=new Uint8ClampedArray(w*h*4);} };
   if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D { rect(){}moveTo(){}lineTo(){}arc(){}closePath(){} };
 
-  // Import pdfjs-dist legacy build (works in Node without canvas for text extraction)
-  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  // Import pdfjs-dist legacy build (works in Node without canvas for text extraction).
+  // serverExternalPackages in next.config.js keeps this out of webpack so the
+  // dynamic import resolves to the real Node module at runtime.
+  let getDocument;
+  try {
+    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+    getDocument = pdfjs.getDocument;
+  } catch (importErr) {
+    // Try the CJS build as fallback
+    try {
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.js");
+      getDocument = pdfjs.getDocument ?? pdfjs.default?.getDocument;
+    } catch (fallbackErr) {
+      throw new Error(`pdfjs-dist import failed (mjs: ${importErr.message}; cjs: ${fallbackErr.message})`);
+    }
+  }
+
+  if (!getDocument) throw new Error("pdfjs-dist getDocument is undefined after import");
 
   const pdf = await getDocument({
     data: new Uint8Array(buf),
@@ -483,9 +499,10 @@ async function extractPdf(file) {
     pageCount = result.pageCount;
     console.log(`[aiVisionExtractor] pdfjs extracted ${rawText.length} chars from ${pageCount} pages`);
   } catch (err) {
-    console.warn("[aiVisionExtractor] pdfjs text extraction failed:", err.message);
+    console.error("[aiVisionExtractor] pdfjs text extraction FAILED — falling back to scanned path:", err.message, err.stack?.split("\n").slice(0, 3).join(" | "));
   }
 
+  console.log(`[aiVisionExtractor] PDF text length after extraction: ${rawText.trim().length} chars`);
   const isScanned = rawText.trim().length < 50;
 
   const systemPrompt = buildSystemPrompt("PDF");

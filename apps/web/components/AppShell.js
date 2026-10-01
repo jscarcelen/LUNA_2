@@ -214,6 +214,7 @@ export function AppShell() {
           onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
           onRemoveDocument={handleRemoveDocument}
           onOpenResource={(documentId) => setPage(documentId ? `workspaces?doc=${documentId}` : "workspaces")}
+          onDownloadDocument={handleDownloadDocument}
         />
       );
     }

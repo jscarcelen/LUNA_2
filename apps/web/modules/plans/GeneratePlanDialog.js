@@ -98,7 +98,7 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], folders = [], resources = [], attempts = [], onCancel, onDone, onSavePlan, onBuild }) {
+export function GeneratePlanDialog({ documents = [], folders = [], resources = [], attempts = [], conceptMap = [], onCancel, onDone, onSavePlan, onBuild }) {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [minutes, setMinutes] = useState(120);
@@ -153,6 +153,9 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
           minutesPerWeek: minutes,
           kinds,
           performance,
+          // Concept map: canonical concept list so the AI only uses these names as tags
+          // and covers all of them across the plan.
+          conceptMap: conceptMap.map((c) => ({ name: c.name, topic: c.topic || "" })),
           materials: picked.map((id) => {
             const document = documents.find((item) => item.id === id);
             const resource = resourceByDocumentId.get(id);

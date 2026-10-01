@@ -68,6 +68,13 @@ export async function POST(request) {
       ? `The learner has done ${performance.activities || 0} activities, averaging ${Math.round((performance.average || 0) * 100)}%${performance.minutesPerQuestion ? `, about ${performance.minutesPerQuestion} minutes per question` : ""}.${weak.length ? ` They keep getting these wrong: ${weak.join(", ")}.` : ""}${strong.length ? ` They are solid on: ${strong.join(", ")}.` : ""}`
       : "There is no performance history yet, so assume an average pace and check understanding early.";
 
+    // Concept map: canonical set of concepts the plan may reference as tags.
+    // Every concept map node must appear in at least one activity's concepts array.
+    const conceptMap = Array.isArray(body?.conceptMap) ? body.conceptMap : [];
+    const conceptMapSection = conceptMap.length
+      ? `\n\nConcept map (CANONICAL — the ONLY allowed concept names for tags):\n${conceptMap.map((c) => `- ${c.name}${c.topic ? ` (under: ${c.topic})` : ""}`).join("\n")}\n\nRules for concept tags:\n1. Every step's "concepts" array MUST use names EXACTLY as listed above — no paraphrasing, no synonyms.\n2. Every concept in the map must appear in at least one step's concepts array across the whole plan — no concept may be omitted entirely.\n3. A step may tag a subset (the concepts most relevant to that step's material).`
+      : "";
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -79,7 +86,7 @@ export async function POST(request) {
           {
             role: "system",
             content: `You are a study planner. Turn material and a deadline into a schedule that a person can actually keep.
-Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.`
+Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${conceptMapSection}`
           },
           {
             role: "user",

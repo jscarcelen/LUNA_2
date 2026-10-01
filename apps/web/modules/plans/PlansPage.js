@@ -167,33 +167,52 @@ function MaterialPickerModal({ documents, folders, resources, initialPicked, onC
   );
 }
 
-/** Concept mastery list — sorted weakest first, with a bar each. */
+/** Concept mastery list — hierarchical (mirrors concept map), with mastery bar each. */
 function ConceptMasteryList({ concepts = [], masteryByConceptId = {} }) {
   if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">No concept data yet. Upload reference material to populate.</p>;
-  const sorted = [...concepts].sort((a, b) => {
-    const ma = masteryByConceptId[a.id] ?? -1;
-    const mb = masteryByConceptId[b.id] ?? -1;
-    return ma - mb;
-  });
+
   const color = (m) => m === undefined ? "#9ca3af" : m < 0.4 ? "#ff3b30" : m < 0.7 ? "#ff9500" : "#34c759";
-  return (
-    <div className="mt-3 grid gap-2 max-h-[360px] overflow-y-auto pr-1">
-      {sorted.map((c) => {
-        const m = masteryByConceptId[c.id];
-        const pct = m !== undefined ? Math.round(m * 100) : null;
-        return (
-          <div key={c.id} className="grid gap-1">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-ink truncate" title={c.name}>{c.name}</span>
-              <span className="text-xs font-semibold shrink-0" style={{ color: color(m) }}>{pct !== null ? `${pct}%` : "—"}</span>
-            </div>
-            <div className="h-1 rounded-full bg-ink/8 overflow-hidden">
-              <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct ?? 0}%`, background: color(m) }} />
-            </div>
-            {c.topic && <span className="text-[10px] text-soft-ink leading-none">{c.topic}</span>}
+
+  // Build parent→children map using c.topic as the parent name.
+  // Roots are concepts whose topic doesn't match any other concept's name.
+  const byName = new Map(concepts.map((c) => [c.name, c]));
+  const children = new Map(concepts.map((c) => [c.id, []]));
+  const roots = [];
+  for (const c of concepts) {
+    const parent = c.topic ? byName.get(c.topic) : null;
+    if (parent) {
+      children.get(parent.id).push(c);
+    } else {
+      roots.push(c);
+    }
+  }
+
+  function ConceptRow({ concept, depth = 0 }) {
+    const m = masteryByConceptId[concept.id];
+    const pct = m !== undefined ? Math.round(m * 100) : null;
+    const kids = children.get(concept.id) || [];
+    return (
+      <div>
+        <div className="grid gap-0.5" style={{ paddingLeft: depth * 14 }}>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-ink truncate" title={concept.name} style={{ opacity: depth === 0 ? 1 : 0.85 }}>
+              {depth > 0 && <span className="mr-1 text-soft-ink" style={{ fontSize: 9 }}>{'└'}</span>}
+              {concept.name}
+            </span>
+            <span className="text-xs font-semibold shrink-0" style={{ color: color(m) }}>{pct !== null ? `${pct}%` : "—"}</span>
           </div>
-        );
-      })}
+          <div className="h-1 rounded-full bg-ink/8 overflow-hidden" style={{ marginLeft: depth > 0 ? 12 : 0 }}>
+            <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct ?? 0}%`, background: color(m) }} />
+          </div>
+        </div>
+        {kids.map((kid) => <ConceptRow key={kid.id} concept={kid} depth={depth + 1} />)}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 grid gap-2.5 max-h-[480px] overflow-y-auto pr-1">
+      {roots.map((c) => <ConceptRow key={c.id} concept={c} depth={0} />)}
     </div>
   );
 }
@@ -217,7 +236,7 @@ function Ring({ ratio, colour, size = 56 }) {
  * calendar puts every plan on the same weeks so a collision is visible before it happens, and the
  * alert panel says what is due now.
  */
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -711,7 +730,22 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                               <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
                             ) : null}
                             {item.resourceId && onOpenResource ? (
-                              <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>{activity ? "View" : "Open"}</button>
+                              <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>
+                                {item.kind === "read" ? "View material" : activity ? "View" : "Open"}
+                              </button>
+                            ) : null}
+                            {item.kind === "read" && item.resourceId && onDownloadDocument ? (
+                              <button
+                                type="button"
+                                className={ghostBtn}
+                                title="Download reading material"
+                                onClick={async () => {
+                                  const doc = documents.find((d) => d.id === item.resourceId);
+                                  if (doc) await onDownloadDocument(doc);
+                                }}
+                              >
+                                ↓ Download
+                              </button>
                             ) : null}
                             <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
                           </div>
@@ -728,7 +762,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
           <p className={kicker}>Student model</p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept — weakest first. Updated live after each activity.</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept, ordered by concept map hierarchy. Updated live after each activity.</p>
           <ConceptMasteryList concepts={graphConcepts} masteryByConceptId={masteryByConceptId} />
         </section>
 
@@ -964,6 +998,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           folders={folders}
           resources={resources}
           attempts={attempts}
+          conceptMap={graphConcepts}
           onCancel={() => setGenerating(false)}
           onDone={(message) => { setGenerating(false); setStatus(message); }}
           onSavePlan={(plan) => save(plan)}

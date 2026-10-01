@@ -7,7 +7,7 @@ import { BlockRenderer } from "../../blocks/BlockRenderer.js";
 import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
 import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
-import { applyOutputCustomization, defaultBrand, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
+import { applyOutputCustomization, defaultBrand, escapeHtml, renderPlainOutputHtml, renderPlainOutputText, wrapPreviewDocument } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
 import { chargeRun, readCredits } from "../../../credits/credits";
@@ -296,6 +296,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [output, setOutput] = useState(null);
   const [showAnswers, setShowAnswers] = useState(true);
   const [previewMode, setPreviewMode] = useState('answers'); // 'answers' | 'student' | 'practice'
+  const [blockStylePreset, setBlockStylePreset] = useState('default'); // 'default' | 'bold' | 'minimal'
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -752,7 +753,50 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return Object.fromEntries(Object.entries(output).filter(([key]) => !meta.has(key)));
   }, [output]);
 
+  /** Converts a flat block array to an HTML fragment for export / save-to-workspace. */
+  function renderBlocksAsHtml(blocks = []) {
+    return blocks.map((block) => {
+      const type = String(block?.type || '').toLowerCase().trim();
+      if (type === 'heading') {
+        const level = Math.min(3, Math.max(1, Number(block.level) || 1));
+        return `<h${level} style="margin:0 0 8px;font-weight:700;line-height:1.25;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</h${level}>`;
+      }
+      if (type === 'bullet_list') {
+        const listItems = (Array.isArray(block.items) ? block.items : []).map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('');
+        const titleHtml = block.title ? `<h4 style="margin:0 0 6px;font-size:13px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.title))}</h4>` : '';
+        return `${titleHtml}<ul style="margin:0;padding:0 0 0 20px">${listItems}</ul>`;
+      }
+      if (type === 'divider') {
+        return '<hr style="border:none;border-top:1px solid rgba(29,29,31,0.1);margin:8px 0" />';
+      }
+      if (type === 'paragraph') {
+        return `<p style="margin:0 0 8px;line-height:1.7;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p>`;
+      }
+      if (type === 'callout') {
+        return `<blockquote style="border-left:4px solid #0071e3;padding:8px 14px;margin:0 0 8px;background:#f0f7ff;border-radius:0 8px 8px 0"><p style="margin:0;line-height:1.6;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p></blockquote>`;
+      }
+      return `<p style="color:rgba(29,29,31,0.4);font-size:12px;margin:0 0 4px">[${escapeHtml(type || 'unknown')}]</p>`;
+    }).join('\n');
+  }
+
   function buildDocumentHtml(forPrint = false) {
+    // Block-based output: render blocks directly to HTML instead of the legacy field/card path.
+    if (isBlockOutput && Array.isArray(output?.blocks) && output.blocks.length) {
+      const blockHtml = renderBlocksAsHtml(output.blocks);
+      const textContent = output.blocks.map((b) => {
+        if (!b) return '';
+        const type = String(b.type || '').toLowerCase();
+        if (type === 'heading' || type === 'paragraph') return String(b.text || '');
+        if (type === 'bullet_list') return [b.title, ...(Array.isArray(b.items) ? b.items : [])].filter(Boolean).join('\n');
+        return '';
+      }).filter(Boolean).join('\n\n');
+      return {
+        visible: { items: output.blocks, fields: [] },
+        textContent,
+        plainFragment: `<div class="plain-output"><section class="item" style="padding:20px 24px">${blockHtml || '<p class="empty">No content.</p>'}</section></div>`,
+        wrap: (fragment, { header = true } = {}) => wrapPreviewDocument(fragment, customization.brand, { forPrint, header })
+      };
+    }
     const visible = applyOutputCustomization(output?.items || [], fields, customization);
     return {
       visible,
@@ -996,9 +1040,21 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
 
   const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
+  // Build a merged templateConfig for BlockRenderer: start from the agent's selected blocks,
+  // then apply the user's chosen style preset (formatId override for heading/bullet_list).
+  const blockTemplateConfig = (() => {
+    const base = agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] };
+    const selected = Array.isArray(base?.selectedBlocks) ? base.selectedBlocks : [];
+    if (blockStylePreset === 'default') return base;
+    return {
+      ...base,
+      selectedBlocks: selected.map((entry) => ({ ...entry, formatId: blockStylePreset }))
+    };
+  })();
+
   const blockOutputPane = isBlockOutput ? (
     <div>
-      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
         {[
           { id: 'answers', label: 'With Answers' },
           { id: 'student', label: 'Student View' },
@@ -1014,19 +1070,43 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           </button>
         ))}
       </div>
+      {/* Style presets (Bug C fix) */}
+      <div style={{ display:'flex', gap:6, marginBottom:14, alignItems:'center' }}>
+        <span style={{ fontSize:11, fontWeight:600, color:'rgba(29,29,31,0.5)', marginRight:4, textTransform:'uppercase', letterSpacing:'0.08em' }}>Style</span>
+        {[
+          { id: 'default', label: 'Classic' },
+          { id: 'bold',    label: 'Bold' },
+          { id: 'minimal', label: 'Minimal' },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setBlockStylePreset(id)}
+            style={{ ...pillButtonBase, padding:'4px 12px', fontSize:12, background: blockStylePreset === id ? '#1d1d1f' : 'var(--paper,#fff)', color: blockStylePreset === id ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: blockStylePreset === id ? '#1d1d1f' : 'rgba(29,29,31,0.15)' }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {previewMode === 'practice' && (
         <p style={{ fontSize:12, color:'rgba(29,29,31,0.5)', margin:'0 0 12px 0' }}>
           Click options to answer · Fill in blanks · Click flashcards to flip
         </p>
       )}
-      <BlockRenderer
-        key={previewMode === 'practice' ? 'practice' : 'static'}
-        blocks={outputBlocks || []}
-        templateConfig={agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] }}
-        showAnswers={previewMode === 'answers'}
-        exportMode="screen"
-        interactive={previewMode === 'practice'}
-      />
+      {(outputBlocks && outputBlocks.length > 0) ? (
+        <BlockRenderer
+          key={`${previewMode}-${blockStylePreset}`}
+          blocks={outputBlocks}
+          templateConfig={blockTemplateConfig}
+          showAnswers={previewMode === 'answers'}
+          exportMode="screen"
+          interactive={previewMode === 'practice'}
+        />
+      ) : (
+        <p style={{ color:'rgba(29,29,31,0.4)', fontSize:13, textAlign:'center', padding:'32px 0' }}>
+          No blocks to preview. Generate in step 1 first.
+        </p>
+      )}
     </div>
   ) : null;
 
@@ -1158,30 +1238,67 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               </div>
               {outputTab === "fields" ? (
                 <div className="mt-4 grid gap-3">
-                  <div>
-                    <p className={kicker}>What this agent produces</p>
-                    <p className="m-0 mt-1 text-xs text-soft-ink">Each item the agent returns has these fields. They are fixed for this agent and are the names a template must use.</p>
-                  </div>
-                  <ul className="m-0 grid list-none gap-1.5 p-0">
-                    {agentFields.map((field) => {
-                      const slots = mappingRows.filter((row) => rowMapping(row) === field.name);
-                      const active = slots.some((row) => row.name === highlightRowKey);
-                      return (
-                      <li key={field.name} className={`rounded-xl border bg-white px-3 py-2 transition ${active ? "border-[var(--accent)]/50 bg-[var(--accent-soft)]/50" : "border-ink/8"}`} onMouseEnter={() => slots[0] && setHighlightRowKey(slots[0].name)} onMouseLeave={() => setHighlightRowKey("")}>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-xs text-[var(--accent-ink)]">{field.name}</span>
-                          <span className="text-sm font-semibold text-ink">{field.label || field.name}</span>
-                          <span className={chipClass}>{field.type === "array" ? "list of values" : field.type}</span>
-                          <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
-                        </div>
-                        {field.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{field.description}</p> : null}
-                        {activeTemplate && slots.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">Fills {slots.map((row) => `“${row.label || row.name}”`).join(", ")} in {activeTemplate.name}{slots.some((row) => row.count > 1) ? " — every design that uses it" : ""}.</p> : null}
-                      </li>
-                      );
-                    })}
-                  </ul>
-                  <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added “${draft.name}” to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
-                  <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setOutputTab("layout")}>Choose a template →</button>
+                  {isBlockOutput ? (
+                    <div className="grid gap-2">
+                      <div>
+                        <p className={kicker}>Block output</p>
+                        <p className="m-0 mt-1 text-xs text-soft-ink">This agent produces a sequence of content blocks. The preview on the right shows the exact output. Use the style presets to change the look before exporting.</p>
+                      </div>
+                      {outputBlocks && outputBlocks.length > 0 ? (
+                        <ul className="m-0 grid list-none gap-1.5 p-0">
+                          {outputBlocks.map((block, i) => {
+                            const type = String(block?.type || '');
+                            const ICONS = { heading: 'H', paragraph: '¶', bullet_list: '•', divider: '—', callout: '💡', question_mc: 'MC', question_open: 'Q', question_tf: 'T/F', question_fill: 'Fill', flashcard: '🃏' };
+                            const preview = type === 'heading' ? String(block.text || '').slice(0, 60)
+                              : type === 'bullet_list' ? (Array.isArray(block.items) && block.items.length ? String(block.items[0] || '').slice(0, 50) + (block.items.length > 1 ? ` +${block.items.length - 1} more` : '') : block.title || '')
+                              : type === 'paragraph' ? String(block.text || '').slice(0, 60)
+                              : type === 'divider' ? '──────────'
+                              : String(block.text || block.question || block.front || '').slice(0, 60);
+                            return (
+                              <li key={i} className="flex items-start gap-2 rounded-xl border border-ink/8 bg-white px-3 py-2">
+                                <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent-ink)]">{ICONS[type] || '?'}</span>
+                                <div className="min-w-0">
+                                  <span className="block text-xs font-semibold text-ink">{type.replace(/_/g, ' ')}</span>
+                                  {preview ? <span className="block truncate text-xs text-soft-ink">{preview}</span> : null}
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      ) : (
+                        <p className="m-0 text-xs text-soft-ink">Generate in step 1 to see the output blocks here.</p>
+                      )}
+                      <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setFlowStep(3)} disabled={!hasOutput}>Next: Export →</button>
+                    </div>
+                  ) : null}
+                  {!isBlockOutput && outputTab === "fields" ? (
+                    <div className="grid gap-3">
+                      <div>
+                        <p className={kicker}>What this agent produces</p>
+                        <p className="m-0 mt-1 text-xs text-soft-ink">Each item the agent returns has these fields. They are fixed for this agent and are the names a template must use.</p>
+                      </div>
+                      <ul className="m-0 grid list-none gap-1.5 p-0">
+                        {agentFields.map((field) => {
+                          const slots = mappingRows.filter((row) => rowMapping(row) === field.name);
+                          const active = slots.some((row) => row.name === highlightRowKey);
+                          return (
+                          <li key={field.name} className={`rounded-xl border bg-white px-3 py-2 transition ${active ? "border-[var(--accent)]/50 bg-[var(--accent-soft)]/50" : "border-ink/8"}`} onMouseEnter={() => slots[0] && setHighlightRowKey(slots[0].name)} onMouseLeave={() => setHighlightRowKey("")}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-md bg-[var(--accent-soft)] px-1.5 py-0.5 font-mono text-xs text-[var(--accent-ink)]">{field.name}</span>
+                              <span className="text-sm font-semibold text-ink">{field.label || field.name}</span>
+                              <span className={chipClass}>{field.type === "array" ? "list of values" : field.type}</span>
+                              <span className={chipClass}>{field.frequency === "loop" ? "per item" : "once"}</span>
+                            </div>
+                            {field.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{field.description}</p> : null}
+                            {activeTemplate && slots.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">Fills {slots.map((row) => `"${row.label || row.name}"`).join(", ")} in {activeTemplate.name}{slots.some((row) => row.count > 1) ? " — every design that uses it" : ""}.</p> : null}
+                          </li>
+                          );
+                        })}
+                      </ul>
+                      <AddOutputField onAdd={(draft) => { setAgentConfig((current) => addOutputField(current, draft)); setStatusMessage(`Added "${draft.name}" to this agent's output. Generate again to fill it.`); }} existing={agentFields} />
+                      <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setOutputTab("layout")}>Choose a template →</button>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {outputTab === "layout" ? (

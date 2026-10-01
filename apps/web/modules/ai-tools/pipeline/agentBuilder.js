@@ -2,7 +2,7 @@ import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./ch
 import { selectChunksWithinBudget } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
 import { validateOutput } from "../../agent-studio/engine/validate";
-import { buildJsonSchema as buildBlockJsonSchema } from "../blocks/blockRegistry.js";
+import { buildJsonSchema as buildBlockJsonSchema, BLOCKS } from "../blocks/blockRegistry.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o-mini", label: "Luna 3 Mini (Recommended, low cost)", tier: "cheap" },
@@ -359,6 +359,45 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
 }
 
 /**
+ * Builds a human-readable per-block-type description for inclusion in the system prompt.
+ * Each entry shows the exact `type` string, example JSON, and per-field descriptions
+ * so the model knows precisely what IDs and fields to use.
+ */
+function buildBlockSchemaSummary(selectedBlockIds) {
+  const lines = [];
+  for (const id of selectedBlockIds) {
+    const block = BLOCKS[id];
+    if (!block) continue;
+    const fields = block.aiFields;
+    const example = { type: id };
+    for (const [name, def] of Object.entries(fields)) {
+      if (def.example !== undefined) {
+        example[name] = def.example;
+      } else if (def.type === "string[]" || def.type === "string[4]") {
+        example[name] = ["..."];
+      } else if (def.type === "boolean") {
+        example[name] = true;
+      } else if (def.type === "number") {
+        example[name] = 1;
+      } else {
+        example[name] = "...";
+      }
+    }
+    lines.push(`type: "${id}" — ${block.label}: ${block.description}`);
+    lines.push(`  Example: ${JSON.stringify(example)}`);
+    for (const [name, def] of Object.entries(fields)) {
+      const req = def.required ? "required" : "optional";
+      lines.push(`  • ${name} (${def.type}, ${req}): ${def.description}`);
+    }
+    if (Object.keys(fields).length === 0) {
+      lines.push("  (no additional fields)");
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
+/**
  * Block-based generation: calls OpenAI expecting a flat JSON array of block objects.
  * Used when the agent spec carries `output.selectedBlocks`.
  */
@@ -370,17 +409,29 @@ async function callOpenAiAgentBlocks(config, chunks, blockSchema, selectedBlockI
   const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
   const streaming = typeof onToken === "function";
 
-  const systemPrompt = `You are a content generation assistant. Your output is ONLY a valid JSON array of block objects — no markdown fences, no commentary, just the JSON array.
+  const blockSchemaSummary = buildBlockSchemaSummary(selectedBlockIds);
+  const systemPrompt = `You are a content generation assistant creating structured educational content.
 
-Rules:
-- Each object must have a "type" field. Allowed types and their fields are defined below.
-- You decide the count and order of blocks. Be intelligent: a simple summary might have 1 heading + 3 paragraphs; a detailed document might use headings + paragraphs + bullet lists + callouts; an exam flows from 1 heading directly into question blocks.
-- Never output block types not in the allowed list. Never omit required fields.
+TASK: ${config.instructions || "Generate content based on the reference material."}
 
-Agent instructions: ${config.instructions || ""}
+OUTPUT FORMAT
+Return a JSON object with one key "items" whose value is an array of block objects.
+Each block MUST have a "type" field set to one of the exact IDs listed below — no other type values are valid.
+Fields not relevant to a given block type should be set to null.
+Do not include markdown fences, commentary, or any text outside the JSON object.
 
-Allowed block schema:
-${JSON.stringify(blockSchema, null, 2)}`;
+ALLOWED BLOCK TYPES
+(Use these exact "type" strings — do not invent alternatives like "title", "h1", "list", "text", etc.)
+
+${blockSchemaSummary}
+
+COMPOSITION RULES
+- You decide the count and order of blocks.
+- A simple 3-bullet summary: 1 heading block + 3 bullet_list blocks (or 1 bullet_list with 3 items) + dividers between them.
+- A structured document: heading → paragraph → bullet_list → callout, etc.
+- An exam: 1 heading → question_mc / question_open / question_tf blocks in sequence.
+- Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
+- Never omit a required field; set optional fields to null if unused.`;
 
   const userMessage = JSON.stringify({
     task: "Generate content blocks",

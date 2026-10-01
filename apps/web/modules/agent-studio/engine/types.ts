@@ -82,7 +82,11 @@ export interface AgentSpec {
   validationRules: ValidationRule[];
   model: { model: string; creativity: "low" | "medium" | "high" };
   /** Block-registry–based output composition (replaces template for new-style agents). */
-  output?: { selectedBlocks: Array<{ blockId: string; formatId: string; color: string }> };
+  output?: {
+    selectedBlocks: Array<{ blockId: string; formatId: string; color: string }>;
+    /** Optional natural-language instructions for what the output should look like. */
+    outputInstructions?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }

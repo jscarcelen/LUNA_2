@@ -3,6 +3,7 @@ import { createAgentSpec, createCollection, createInput, createSlot } from "./mo
 import { compileAgent } from "./compile";
 import { legacyFields, outputJsonSchema } from "./schema";
 import { createField } from "../../template-studio/engine/model";
+import { buildJsonSchema } from "../../ai-tools/blocks/blockRegistry.js";
 
 const INPUT_FROM_QUESTION: Record<string, InputType> = { text: "text", number: "number", "single-select": "choice", "multi-select": "multi_choice", "yes-no": "toggle" };
 const QUESTION_FROM_INPUT: Record<InputType, string> = { text: "text", number: "number", choice: "single-select", multi_choice: "multi-select", toggle: "yes-no", language: "single-select" };
@@ -45,7 +46,14 @@ export function runConfigFromSpec(spec: AgentSpec, extra: Record<string, unknown
     questions: spec.inputs.map((input) => ({ id: input.id, text: input.name, type: QUESTION_FROM_INPUT[input.type], options: input.type === "language" ? undefined : input.options, required: input.required, defaultValue: input.default, description: input.description })),
     outputExample: spec.examples[0] ? JSON.stringify(spec.examples[0].output) : "",
     template: { fields: legacyFields(spec.outputSchema) },
-    outputJsonSchema: outputJsonSchema(spec.outputSchema),
+    // In blocks mode, derive the JSON schema from the selected block types so the model
+    // actually knows what fields to fill in. Fall back to the field-based schema otherwise.
+    outputJsonSchema: (() => {
+      const ids = (spec.output?.selectedBlocks ?? []).map((b) => b.blockId);
+      return ids.length
+        ? { type: "object", additionalProperties: false, required: ["items"], properties: { items: buildJsonSchema(ids) } }
+        : outputJsonSchema(spec.outputSchema);
+    })(),
     // Every agent gets the distinct-items check, even specs saved before it became a default.
     validationRules: spec.validationRules.some((rule) => rule.type === "no_duplicates")
       ? spec.validationRules

@@ -3,12 +3,38 @@ import { outputJsonSchema, outputSkeleton } from "./schema";
 import { isRefined } from "./refine";
 import { collectionFields, primaryCollection } from "./model";
 import { flattenFields, slug } from "../../template-studio/engine/model";
+import { BLOCKS, buildJsonSchema } from "../../ai-tools/blocks/blockRegistry.js";
 
 export interface RunInputs { values: Record<string, unknown> }
 
 function formatValue(input: InputDef, value: unknown): string {
   if (value === undefined || value === null || value === "") return input.default !== undefined ? `${input.default} (default)` : "not specified";
   return Array.isArray(value) ? value.join(", ") : String(value);
+}
+
+/**
+ * Human-readable description of the block output contract.
+ * Tells the model which block types are available and what fields each requires.
+ */
+function describeBlocksOutput(selectedBlockIds: string[], outputInstructions?: string): string {
+  const lines = [
+    "Return ONE JSON object: { \"items\": [ ... ] }",
+    "Each element in \"items\" is ONE content block chosen from the allowed types below.",
+    "The agent decides which block types to use, how many, and in what order.",
+    outputInstructions ? `\nOUTPUT INSTRUCTIONS\n${outputInstructions}` : "",
+    "\nALLOWED BLOCK TYPES",
+  ].filter(Boolean);
+
+  for (const id of selectedBlockIds) {
+    const block = (BLOCKS as Record<string, any>)[id];
+    if (!block) continue;
+    const fields = Object.entries(block.aiFields as Record<string, any>)
+      .map(([name, def]) => `${name}${def.required ? "" : "?"}: ${def.type} — ${def.description}`)
+      .join("; ");
+    lines.push(`- "${id}" (${block.label})${fields ? `: { type: "${id}", ${fields} }` : `: { type: "${id}" }`}`);
+  }
+  lines.push("\nOutput only valid JSON matching the schema. Do not repeat identical blocks.");
+  return lines.join("\n");
 }
 
 /** Plain-language rendering of the output contract, one line per field. */
@@ -34,6 +60,16 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
   const core = refined?.core?.trim() ? refined.core : spec.instructions.core;
   const style = refined?.style || spec.instructions.style;
   const constraints = [...new Set([...spec.instructions.constraints, ...(refined?.constraints || [])].map((c) => c.trim()).filter(Boolean))];
+
+  // Detect blocks mode
+  const selectedBlocks = spec.output?.selectedBlocks ?? [];
+  const isBlocksMode = selectedBlocks.length > 0;
+  const selectedBlockIds = selectedBlocks.map((b) => b.blockId);
+
+  const outputStructureSection = isBlocksMode
+    ? describeBlocksOutput(selectedBlockIds, spec.output?.outputInstructions)
+    : [describeOutput(spec), "Output only valid JSON matching the schema. Content only — no formatting or styling instructions.", validationHints(spec)].filter(Boolean).join("\n");
+
   const system = [
     `You are "${spec.name}", an AI agent that creates ${spec.purpose.headline || "structured educational content"}.`,
     spec.purpose.description,
@@ -44,9 +80,7 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
     constraints.length ? `Rules:\n${constraints.map((c) => `- ${c}`).join("\n")}` : "",
     "",
     "OUTPUT STRUCTURE",
-    describeOutput(spec),
-    "Output only valid JSON matching the schema. Content only — no formatting or styling instructions.",
-    validationHints(spec)
+    outputStructureSection,
   ].filter((line) => line !== "").join("\n");
 
   const choices = spec.inputs.map((input) => `- ${input.name}: ${formatValue(input, run.values[input.id])}${input.description ? ` (${input.description})` : ""}`).join("\n");
@@ -59,7 +93,12 @@ export function compileAgent(spec: AgentSpec, run: RunInputs = { values: {} }): 
     examples ? `\nEXAMPLES OF GOOD OUTPUT\n${examples}` : ""
   ].filter(Boolean).join("\n");
 
-  return { system, user, schema: outputJsonSchema(withRefinedDescriptions(spec).outputSchema), model: spec.model.model, creativity: spec.model.creativity };
+  // In blocks mode use the block-registry schema; otherwise use the field-based schema.
+  const schema = isBlocksMode
+    ? { type: "object", additionalProperties: false, required: ["items"], properties: { items: buildJsonSchema(selectedBlockIds) } }
+    : outputJsonSchema(withRefinedDescriptions(spec).outputSchema);
+
+  return { system, user, schema, model: spec.model.model, creativity: spec.model.creativity };
 }
 
 /** Output schema with empty field descriptions filled from the refined brief (ids unchanged). */

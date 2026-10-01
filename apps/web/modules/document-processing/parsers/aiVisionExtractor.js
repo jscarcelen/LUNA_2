@@ -11,6 +11,14 @@
  */
 
 import JSZip from "jszip";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { fileURLToPath } from "url";
+import path from "path";
+
+const execFileAsync = promisify(execFile);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ─── constants ───────────────────────────────────────────────────────────────
 
@@ -423,68 +431,41 @@ function mimeTypeFor(sourceType) {
 const PDF_CHUNK_SIZE = 12000;
 
 /**
- * Extract all text from a PDF buffer using pdfjs-dist (legacy Node build).
- * Does NOT require @napi-rs/canvas — text extraction works without canvas rendering.
+ * Extract all text from a PDF buffer using pdfjs-dist running in a child process.
+ *
+ * Why a child process? Next.js/webpack intercepts dynamic `import()` calls and
+ * rewrites them at bundle time. This breaks pdfjs-dist's ESM entry point silently
+ * at runtime (getDocument becomes undefined). Spawning a plain Node.js child process
+ * bypasses webpack entirely — pdfjs-dist is confirmed to work fine in plain Node.js.
+ *
  * Returns { text, pageCount }.
  */
 async function extractPdfText(buf) {
-  // Apply minimal browser-API polyfills pdfjs needs at module-load time
-  if (typeof globalThis.DOMMatrix === "undefined") {
-    globalThis.DOMMatrix = class DOMMatrix {
-      constructor() { this.a=1;this.b=0;this.c=0;this.d=1;this.e=0;this.f=0;this.m11=1;this.m22=1;this.m33=1;this.m44=1;this.is2D=true;this.isIdentity=true; }
-      multiply(){return new DOMMatrix();} translate(tx=0,ty=0){const m=new DOMMatrix();m.e=tx;m.f=ty;return m;}
-      scale(sx=1,sy=sx){const m=new DOMMatrix();m.a=sx;m.d=sy;return m;} inverse(){return new DOMMatrix();}
-      rotateAxisAngle(){return new DOMMatrix();} static fromMatrix(){return new DOMMatrix();}
-    };
-  }
-  if (typeof globalThis.DOMPoint === "undefined") globalThis.DOMPoint = class DOMPoint { constructor(x=0,y=0){this.x=x;this.y=y;this.z=0;this.w=1;} };
-  if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class ImageData { constructor(w,h){this.width=w;this.height=h;this.data=new Uint8ClampedArray(w*h*4);} };
-  if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D { rect(){}moveTo(){}lineTo(){}arc(){}closePath(){} };
+  const workerPath = path.resolve(__dirname, "pdfTextWorker.mjs");
+  const b64 = buf.toString("base64");
 
-  // Import pdfjs-dist legacy build (works in Node without canvas for text extraction).
-  // serverExternalPackages in next.config.js keeps this out of webpack so the
-  // dynamic import resolves to the real Node module at runtime.
-  let getDocument;
   try {
-    const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-    getDocument = pdfjs.getDocument;
-  } catch (importErr) {
-    // Try the CJS build as fallback
-    try {
-      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.js");
-      getDocument = pdfjs.getDocument ?? pdfjs.default?.getDocument;
-    } catch (fallbackErr) {
-      throw new Error(`pdfjs-dist import failed (mjs: ${importErr.message}; cjs: ${fallbackErr.message})`);
+    const { stdout, stderr } = await execFileAsync(
+      process.execPath, // current node binary
+      [workerPath],
+      {
+        input: b64,
+        maxBuffer: 50 * 1024 * 1024, // 50 MB stdout buffer
+        timeout: 60_000,             // 60s max
+      }
+    );
+
+    if (stderr && !stderr.includes("Warning:")) {
+      // Non-warning stderr = real error
+      console.warn("[aiVisionExtractor] pdfTextWorker stderr:", stderr.slice(0, 300));
     }
+
+    const result = JSON.parse(stdout);
+    if (result.error) throw new Error(result.error);
+    return { text: String(result.text || ""), pageCount: Number(result.pageCount || 1) };
+  } catch (err) {
+    throw new Error(`pdfTextWorker failed: ${err.message}`);
   }
-
-  if (!getDocument) throw new Error("pdfjs-dist getDocument is undefined after import");
-
-  const pdf = await getDocument({
-    data: new Uint8Array(buf),
-    disableFontFace: true,
-    isEvalSupported: false,
-    useWorkerFetch: false,
-    disableRange: true,
-    disableStream: true,
-    stopAtErrors: false
-    // Note: intentionally not setting workerSrc — pdfjs uses main-thread mode
-  }).promise;
-
-  const pageCount = pdf.numPages;
-  let text = "";
-
-  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const tc = await page.getTextContent();
-    // Reconstruct text preserving line breaks from hasEOL markers
-    const pageText = tc.items
-      .map((item) => item.str + (item.hasEOL ? "\n" : ""))
-      .join("");
-    text += pageText + "\n\n";
-  }
-
-  return { text: text.trim(), pageCount };
 }
 
 async function extractPdf(file) {

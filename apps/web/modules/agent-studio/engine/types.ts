@@ -81,6 +81,8 @@ export interface AgentSpec {
   refined?: { core: string; style?: string; constraints: string[]; fieldDescriptions: Record<string, string>; sourceHash: string; at: string; notes?: string } | null;
   validationRules: ValidationRule[];
   model: { model: string; creativity: "low" | "medium" | "high" };
+  /** Block-registry–based output composition (replaces template for new-style agents). */
+  output?: { selectedBlocks: Array<{ blockId: string; formatId: string; color: string }> };
   createdAt: string;
   updatedAt: string;
 }

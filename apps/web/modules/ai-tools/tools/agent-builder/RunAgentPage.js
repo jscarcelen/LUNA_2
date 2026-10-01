@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
+import { BlockRenderer } from "../../blocks/BlockRenderer.js";
 import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
 import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
@@ -293,6 +294,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [outputTab, setOutputTab] = useState("fields");
 
   const [output, setOutput] = useState(null);
+  const [showAnswers, setShowAnswers] = useState(true);
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -980,15 +982,35 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     );
   }
 
-  const outputItems = Array.isArray(output?.items) ? output.items : [];
-  const hasOutput = outputItems.length > 0;
+  // Block-based output: when the agent uses the new block registry, output.isBlockOutput is true
+  // and output.blocks is a flat array. Fall back to the legacy items path for classic agents.
+  const isBlockOutput = Boolean(output?.isBlockOutput);
+  const outputBlocks = isBlockOutput && Array.isArray(output?.blocks) ? output.blocks : null;
+  const outputItems = Array.isArray(output?.items) && !isBlockOutput ? output.items : [];
+  const hasOutput = isBlockOutput ? (outputBlocks?.length > 0) : (outputItems.length > 0);
   const materialOptional = Array.isArray(agentConfig.materialSlots) && (!agentConfig.materialSlots.length || agentConfig.materialSlots.every((slot) => !slot.required));
   const knowledgeReady = materialOptional || (knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0);
   const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
   const unlockedStep = hasOutput ? 3 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
 
-  const previewPane = (
+  const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
+  const blockOutputPane = isBlockOutput ? (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+        <button type="button" onClick={() => setShowAnswers(true)} style={{ ...pillButtonBase, background: showAnswers ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: showAnswers ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: showAnswers ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}>With Answers</button>
+        <button type="button" onClick={() => setShowAnswers(false)} style={{ ...pillButtonBase, background: !showAnswers ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: !showAnswers ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: !showAnswers ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}>Student View</button>
+      </div>
+      <BlockRenderer
+        blocks={outputBlocks || []}
+        templateConfig={agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] }}
+        showAnswers={showAnswers}
+        exportMode="screen"
+      />
+    </div>
+  ) : null;
+
+  const previewPane = isBlockOutput ? blockOutputPane : (
     <LivePreviewPane
       items={outputItems}
       rootData={rootData}

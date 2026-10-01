@@ -2,6 +2,7 @@ import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./ch
 import { selectChunksWithinBudget } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
 import { validateOutput } from "../../agent-studio/engine/validate";
+import { buildJsonSchema as buildBlockJsonSchema } from "../blocks/blockRegistry.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o-mini", label: "Luna 3 Mini (Recommended, low cost)", tier: "cheap" },
@@ -357,6 +358,104 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
   return { items, root, model, usage };
 }
 
+/**
+ * Block-based generation: calls OpenAI expecting a flat JSON array of block objects.
+ * Used when the agent spec carries `output.selectedBlocks`.
+ */
+async function callOpenAiAgentBlocks(config, chunks, blockSchema, selectedBlockIds, { onToken, styleChunks = [], maxTokens = 6000 } = {}) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing required environment variable: OPENAI_API_KEY");
+  }
+  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const streaming = typeof onToken === "function";
+
+  const systemPrompt = `You are a content generation assistant. Your output is ONLY a valid JSON array of block objects — no markdown fences, no commentary, just the JSON array.
+
+Rules:
+- Each object must have a "type" field. Allowed types and their fields are defined below.
+- You decide the count and order of blocks. Be intelligent: a simple summary might have 1 heading + 3 paragraphs; a detailed document might use headings + paragraphs + bullet lists + callouts; an exam flows from 1 heading directly into question blocks.
+- Never output block types not in the allowed list. Never omit required fields.
+
+Agent instructions: ${config.instructions || ""}
+
+Allowed block schema:
+${JSON.stringify(blockSchema, null, 2)}`;
+
+  const userMessage = JSON.stringify({
+    task: "Generate content blocks",
+    contextPrompt: config.contextPrompt || "",
+    questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
+    referenceMaterial: buildChunksContext(chunks),
+    styleExamples: styleChunks.length
+      ? { note: "Imitate the format, tone and difficulty of these examples.", samples: buildChunksContext(styleChunks, 4) }
+      : null,
+  });
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model,
+      temperature: creativityToTemperature(config.creativity),
+      max_tokens: maxTokens,
+      stream: streaming,
+      ...(streaming ? { stream_options: { include_usage: true } } : {}),
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "block_array_result",
+          strict: false,
+          schema: blockSchema
+        }
+      },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage }
+      ]
+    })
+  });
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error?.message || "OpenAI block generation failed");
+  }
+
+  let content = "";
+  let usage = null;
+  let finishReason = "";
+  if (streaming) {
+    ({ content, usage, finishReason } = await readOpenAiStream(response, onToken));
+  } else {
+    const payload = await response.json();
+    content = payload.choices?.[0]?.message?.content;
+    usage = payload.usage || null;
+    finishReason = payload.choices?.[0]?.finish_reason || "";
+  }
+
+  let parsed = null;
+  try {
+    const text = String(content || "").trim();
+    parsed = JSON.parse(text);
+  } catch {
+    const match = String(content || "").match(/\[[\s\S]*\]/);
+    if (match) {
+      try { parsed = JSON.parse(match[0]); } catch { /* ignore */ }
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    if (finishReason === "length") throw new Error("The model ran out of space. Ask for fewer blocks.");
+    if (finishReason === "content_filter") throw new Error("The model declined to produce this output (content filter).");
+    throw new Error(`Block generation response could not be parsed as an array (finish: ${finishReason || "unknown"}, ${String(content || "").length} chars)`);
+  }
+
+  return { blocks: parsed, model, usage };
+}
+
 function generateAgentOutputLocally(chunks, fields, config = {}) {
   const answerText = (Array.isArray(config.questionAnswers) ? config.questionAnswers : [])
     .map((entry) => String(entry?.answer ?? ""))
@@ -436,6 +535,59 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   const emit = (event) => {
     if (typeof onProgress === "function") onProgress(event);
   };
+
+  // ── Block-based generation path ──────────────────────────────────────
+  // When the agent spec uses the new block registry (output.selectedBlocks), we bypass
+  // the legacy field/template system and return a flat array of typed block objects.
+  const selectedBlockEntries = config.output?.selectedBlocks || config.spec?.output?.selectedBlocks || [];
+  const selectedBlockIds = selectedBlockEntries.map((e) => e.blockId || e).filter(Boolean);
+  if (selectedBlockIds.length > 0) {
+    const blockSchema = buildBlockJsonSchema(selectedBlockIds.length > 0 ? selectedBlockIds : ["heading", "paragraph", "bullet_list"]);
+    const { scopedDocuments: blockDocs, rankedChunks: blockChunks, styleChunks: blockStyleChunks } = await prepareMaterial(config, emit);
+    let blockResult = null;
+    let blockFallback = "";
+    const blockModel = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+    emit({ step: "generate", status: "start", model: isAgentLlmConfigured() ? blockModel : "local-heuristic-v1" });
+    if (isAgentLlmConfigured()) {
+      try {
+        blockResult = await callOpenAiAgentBlocks(config, blockChunks, blockSchema, selectedBlockIds, {
+          styleChunks: blockStyleChunks,
+          onToken: (delta, content) => emit({ step: "generate", status: "token", delta, chars: content.length })
+        });
+      } catch (err) {
+        emit({ step: "generate", status: "retry", reason: String(err.message || err) });
+        try {
+          blockResult = await callOpenAiAgentBlocks({ ...config, creativity: "low" }, blockChunks, blockSchema, selectedBlockIds, { styleChunks: blockStyleChunks, maxTokens: 3000 });
+        } catch (retryErr) {
+          blockFallback = String(retryErr.message || retryErr);
+        }
+      }
+    }
+    if (!blockResult) {
+      // Minimal local fallback for block-based generation
+      blockResult = {
+        blocks: [{ type: "heading", text: config.name || "Generated Content", level: 1 }, { type: "paragraph", text: "Content could not be generated. Please check your OpenAI API key." }],
+        model: "local-heuristic-v1"
+      };
+    }
+    emit({ step: "generate", status: "end", model: blockResult.model, blockCount: blockResult.blocks.length, fallbackReason: blockFallback });
+    emit({ step: "done", status: "end", blocks: blockResult.blocks, model: blockResult.model, usage: blockResult.usage || null, fallbackReason: blockFallback, referenceDocumentCount: blockDocs.length, referenceChunkCount: blockChunks.length });
+    return {
+      blocks: blockResult.blocks,
+      items: blockResult.blocks, // alias for backward compat (LivePreviewPane ignores unknown shapes)
+      data: {},
+      model: blockResult.model,
+      usage: blockResult.usage || null,
+      fallbackReason: blockFallback,
+      checks: [],
+      referenceDocumentCount: blockDocs.length,
+      referenceChunkCount: blockChunks.length,
+      sources: [],
+      isBlockOutput: true,
+    };
+  }
+  // ── Legacy field/template generation path ────────────────────────────
+
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   if (!fields.length) {
     throw new Error("Add at least one output field before generating output.");

@@ -9,7 +9,9 @@ import { PurposeStep } from "./steps/PurposeStep";
 import { InputSchemaBuilder } from "./steps/InputSchemaBuilder";
 import { ContextBuilder } from "./steps/ContextBuilder";
 import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
-import { OutputComposer } from "./steps/OutputComposer";
+import { OutputComposer as LegacyOutputComposer } from "./steps/OutputComposer";
+// @ts-expect-error plain JS module — no types needed
+import { OutputComposer as BlockOutputComposer } from "../ai-tools/blocks/OutputComposer.js";
 import { GeneratedTemplate } from "./steps/GeneratedTemplate";
 import { TestStep } from "./test/TestStep";
 import { AdvancedEditor } from "./AdvancedEditor";
@@ -205,8 +207,11 @@ export function AgentStudio({ toolContext }: { toolContext?: ToolContext }) {
                 {([["blocks", "Blocks (recommended)"], ["fields", "Fields (manual)"]] as const).map(([value, text]) => <button key={value} type="button" onClick={() => setOutputMode(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${outputMode === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
               </div>
               {outputMode === "blocks"
-                ? <OutputComposer spec={spec} onChange={update} listTemplates={contextRef.current?.onListDocumentBlockTemplates} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />
-                : <OutputSchemaBuilder spec={spec} onChange={update} />}
+                ? <BlockOutputComposer
+                    value={spec.output || { selectedBlocks: [] }}
+                    onChange={(newOutput: { selectedBlocks: Array<{ blockId: string; formatId: string; color: string }> }) => update((s: typeof spec) => ({ ...s, output: newOutput }))}
+                  />
+                : <LegacyOutputComposer spec={spec} onChange={update} listTemplates={contextRef.current?.onListDocumentBlockTemplates} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />}
               {/* Whatever way the fields were defined, Luna designs a finished document for them. */}
               <GeneratedTemplate spec={spec} onChange={update} templates={templateRows} saveTemplate={contextRef.current?.onSaveDocumentBlockTemplate} onOpenTemplateStudio={(id) => contextRef.current?.onOpenTool?.(`template-builder?open=${id}`)} />
             </div>

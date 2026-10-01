@@ -355,7 +355,7 @@ function normalizeBlock(block) {
         list_type: String(block.list_type || "bullet"),
         level: Number(block.level) || 0,
         list_items: (Array.isArray(block.list_items) ? block.list_items : Array.isArray(block.items) ? block.items : []).map((item) => ({
-          children: normalizeChildren(item.children || item.text ? [{ type: "text", text: String(item.text || "") }] : [])
+          children: normalizeChildren(item.children || (item.text ? [{ type: "text", text: String(item.text) }] : []))
         }))
       };
 
@@ -640,6 +640,231 @@ async function extractPdfWithAnthropic(file, pageCount) {
   const hasContent = cdm && Array.isArray(cdm.sections) && cdm.sections.some((s) => s.blocks?.length > 0);
   if (!hasContent) return buildRawTextCdm(extractedText, file.name, pageCount);
   return cdm;
+}
+
+// ─── OpenAI-native PDF → Markdown ────────────────────────────────────────────
+
+const DOCUMENT_MODEL = process.env.LUNA_DOCUMENT_MODEL || VISION_MODEL;
+const DOCUMENT_MAX_TOKENS = 16384;
+
+const MARKDOWN_SYSTEM_PROMPT = `You convert documents into clean Markdown that another AI model will read as source material, and that a person will read as a preview.
+
+RULES:
+1. Work page by page. Begin each page with the marker <!-- page N --> (N = 1, 2, 3 ...) and then transcribe EVERYTHING on that page, top to bottom, including every paragraph that sits above, below or between figures, tables and equations. Never summarise, shorten, merge or skip anything: if a paragraph is on the page it must be in your answer. No commentary and do not wrap the answer in a code fence.
+2. Headings and titles: use # to ###### according to the visual hierarchy. A numbered or bold section title such as "1. Central tendency" is a HEADING: write it as "## 1. Central tendency", never as a list item and never as bold text. Do not indent any content under a heading.
+3. Formulas: LaTeX. Inline as $...$, standalone equations on their own lines as $$ ... $$. Convert every symbol and fraction faithfully.
+4. Tables: GitHub Markdown tables with a header row. Keep every row and column.
+5. Lists: - for bullets, 1. for numbered, indent for nesting.
+6. Figures, charts, graphs, diagrams, schemes and pictures: put ![detailed description](figure) on its own line. The description must say what it shows: type of chart, axis titles and ranges, series, key values, shapes, labels and the point it makes. Put the caption, if any, on the next line in italics.
+7. Bold and italic: **bold**, *italic*. Code: fenced blocks with the language.
+8. Handwriting or scanned pages: transcribe faithfully.
+9. Running page headers, footers and page numbers (text repeated at the top or bottom of every page, e.g. the document or course name) are NOT content: omit them entirely, but keep the <!-- page N --> markers.
+10. Before finishing, re-check each page for paragraphs you skipped and add them.`;
+
+async function callOpenAIText(messages, { model = DOCUMENT_MODEL, maxTokens = DOCUMENT_MAX_TOKENS } = {}) {
+  const res = await fetch(OPENAI_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${getApiKey()}` },
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens, temperature: 0 })
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "");
+    throw new Error(`OpenAI API error ${res.status}: ${errText.slice(0, 300)}`);
+  }
+  const data = await res.json();
+  return {
+    text: String(data?.choices?.[0]?.message?.content || ""),
+    finishReason: data?.choices?.[0]?.finish_reason || ""
+  };
+}
+
+function markdownInlineChildren(text) {
+  const MATH_RE = /\$([^$\n]+?)\$|\\\((.+?)\\\)/g;
+  const EMPH_RE = /(\*\*[^*]+\*\*|\*[^*\n]+\*)/g;
+  const children = [];
+  const pushText = (chunk) => {
+    for (const part of chunk.split(EMPH_RE)) {
+      if (!part) continue;
+      if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+        children.push({ type: "text", text: part.slice(2, -2), formatting: { bold: true } });
+      } else if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+        children.push({ type: "text", text: part.slice(1, -1), formatting: { italic: true } });
+      } else {
+        children.push({ type: "text", text: part });
+      }
+    }
+  };
+  let last = 0;
+  let m;
+  while ((m = MATH_RE.exec(text)) !== null) {
+    if (m.index > last) pushText(text.slice(last, m.index));
+    children.push({ type: "inline_math", latex: (m[1] || m[2] || "").trim() });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) pushText(text.slice(last));
+  return children.length ? children : [{ type: "text", text: "" }];
+}
+
+function markdownToBlocks(markdown) {
+  const lines = String(markdown || "").replace(/\r/g, "").split("\n");
+  const blocks = [];
+  const equations = [];
+  let para = [];
+  let i = 0;
+  let afterPageMarker = false;
+  const seenHeadings = new Set();
+
+  const flushPara = () => {
+    if (!para.length) return;
+    blocks.push({ type: "paragraph", children: markdownInlineChildren(para.join(" ")), equation_ids: [] });
+    para = [];
+  };
+  const isTableSep = (s) => /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(s.trim());
+  const splitRow = (s) => s.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  const listRe = /^\s*([-*+]|\d+[.)])\s+(.*)$/;
+
+  while (i < lines.length) {
+    const t = lines[i].trim();
+    if (!t) { flushPara(); i++; continue; }
+
+    if (/^<!--\s*page\b/i.test(t)) { flushPara(); afterPageMarker = true; i++; continue; }
+    const wasAfterPageMarker = afterPageMarker;
+    afterPageMarker = false;
+
+    if (t.startsWith("```")) {
+      flushPara();
+      const language = t.slice(3).trim();
+      const buf = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) buf.push(lines[i++]);
+      i++;
+      blocks.push({ type: "code", language, text: buf.join("\n") });
+      continue;
+    }
+
+    if (t.startsWith("$$") || t.startsWith("\\[")) {
+      flushPara();
+      const open = t.startsWith("$$") ? "$$" : "\\[";
+      const close = t.startsWith("$$") ? "$$" : "\\]";
+      let body = t.slice(open.length);
+      if (body.includes(close)) {
+        body = body.slice(0, body.indexOf(close));
+      } else {
+        const buf = [body];
+        i++;
+        while (i < lines.length && !lines[i].includes(close)) buf.push(lines[i++]);
+        if (i < lines.length) buf.push(lines[i].slice(0, lines[i].indexOf(close)));
+        body = buf.join("\n");
+      }
+      i++;
+      const id = `eq-${equations.length + 1}`;
+      equations.push({ id, latex: body.trim(), display: true, confidence: 0.92 });
+      blocks.push({ type: "display_math", equation_id: id, latex: body.trim() });
+      continue;
+    }
+
+    const heading = t.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushPara();
+      const text = heading[2].replace(/\*\*|__/g, "").trim();
+      const key = text.toLowerCase();
+      if (wasAfterPageMarker && seenHeadings.has(key)) { i++; continue; }
+      seenHeadings.add(key);
+      blocks.push({ type: "heading", level: heading[1].length, text, children: markdownInlineChildren(text) });
+      i++;
+      continue;
+    }
+
+    if (t.startsWith("|") && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+      flushPara();
+      const rows = [splitRow(t)];
+      i += 2;
+      while (i < lines.length && lines[i].trim().startsWith("|")) rows.push(splitRow(lines[i++]));
+      blocks.push({ type: "table", rows: rows.map((r) => r.map((text) => ({ text }))) });
+      continue;
+    }
+
+    const figure = t.match(/^!\[(.*?)\]\(.*?\)\s*$/);
+    if (figure) {
+      flushPara();
+      i++;
+      let caption = "";
+      const next = (lines[i] || "").trim();
+      if (/^\*[^*].*\*$/.test(next) || /^_[^_].*_$/.test(next)) {
+        caption = next.slice(1, -1).trim();
+        i++;
+      }
+      blocks.push({ type: "figure", alt_text: figure[1].trim(), caption });
+      continue;
+    }
+
+    if (listRe.test(lines[i])) {
+      flushPara();
+      const ordered = /^\s*\d/.test(lines[i]);
+      const items = [];
+      while (i < lines.length && listRe.test(lines[i])) {
+        items.push({ text: lines[i].match(listRe)[2].trim() });
+        i++;
+      }
+      blocks.push({ type: "list", list_type: ordered ? "numbered" : "bullet", level: 0, list_items: items });
+      continue;
+    }
+
+    if (t.startsWith(">")) {
+      flushPara();
+      const buf = [];
+      while (i < lines.length && lines[i].trim().startsWith(">")) buf.push(lines[i++].trim().replace(/^>\s?/, ""));
+      blocks.push({ type: "quote", children: markdownInlineChildren(buf.join(" ")) });
+      continue;
+    }
+
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t) || /^<!--.*-->$/.test(t)) { flushPara(); i++; continue; }
+
+    para.push(t);
+    i++;
+  }
+  flushPara();
+  return { blocks, equations };
+}
+
+/**
+ * Primary PDF path: hand the PDF to OpenAI, get Markdown back, then derive the CDM from that
+ * Markdown. OpenAI reads both the embedded text and the page images, so scanned PDFs,
+ * charts and formulas work without server-side rendering.
+ * Returns { cdm, markdown }.
+ */
+async function extractPdfViaMarkdown(file) {
+  console.log(`[aiVisionExtractor] PDF "${file.name}": converting to Markdown with ${DOCUMENT_MODEL}`);
+  const { text, finishReason } = await callOpenAIText([
+    { role: "system", content: MARKDOWN_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: [
+        {
+          type: "file",
+          file: {
+            filename: file.name || "document.pdf",
+            file_data: `data:application/pdf;base64,${file.contentBase64}`
+          }
+        },
+        { type: "text", text: "Convert this entire document to Markdown following the rules." }
+      ]
+    }
+  ]);
+
+  let markdown = text.trim().replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1").trim();
+  if (markdown.length < 20) throw new Error("OpenAI returned no usable Markdown for the PDF");
+  if (finishReason === "length") {
+    markdown += "\n\n> Note: this document is longer than the converter's output limit, so the end was cut off.";
+  }
+
+  const { blocks, equations } = markdownToBlocks(markdown);
+  const firstHeading = blocks.find((b) => b.type === "heading")?.text || "";
+  const title = firstHeading && !/^\d/.test(firstHeading) ? firstHeading : (file.name || "Untitled").replace(/\.pdf$/i, "");
+  const cdm = buildCdmFromAiResponse({ title, equations, sections: [{ blocks }] }, { sourceType: "pdf", fileName: file.name });
+  cdm.metadata.extraction_method = `openai-pdf-markdown-${DOCUMENT_MODEL}`;
+  console.log(`[aiVisionExtractor] PDF "${file.name}": ${markdown.length} chars of Markdown, ${blocks.length} blocks`);
+  return { cdm, markdown };
 }
 
 async function extractPdf(file) {
@@ -1047,9 +1272,17 @@ export async function extractWithAIVision(file, { detectedType } = {}) {
   const type = detectedType || "unknown";
 
   let canonicalDocument;
+  let sourceMarkdown = "";
   switch (type) {
     case "pdf":
-      canonicalDocument = await extractPdf(file);
+      try {
+        const viaMarkdown = await extractPdfViaMarkdown(file);
+        canonicalDocument = viaMarkdown.cdm;
+        sourceMarkdown = viaMarkdown.markdown;
+      } catch (err) {
+        console.warn(`[aiVisionExtractor] OpenAI PDF→Markdown failed for "${file.name}", using pdfjs path:`, err.message);
+        canonicalDocument = await extractPdf(file);
+      }
       break;
     case "pptx":
       canonicalDocument = await extractPptx(file);
@@ -1071,7 +1304,7 @@ export async function extractWithAIVision(file, { detectedType } = {}) {
     issues: canonicalDocument.confidence < 0.72 ? ["low-confidence-extraction"] : [],
     riskMarkers: [],
     text,
-    markdown: "",         // filled by render stage in index.js
+    markdown: sourceMarkdown, // OpenAI's own Markdown when available; otherwise rendered from the CDM in index.js
     sourceRenderHtml: "", // filled by render stage in index.js
     sourceMimeType: file.mimeType || "",
     // Original file bytes — required for "Download original" / re-processing

@@ -246,7 +246,7 @@ export async function processUploadedDocument(file, options = {}) {
         ...aiExtraction,
         method: aiExtraction.method || detectedType,
         text: String(text || aiExtraction.text || "").trim(),
-        markdown: String(markdown || "").trim(),
+        markdown: String(aiExtraction.markdown || markdown || "").trim(),
         sourceRenderHtml: String(html || "").trim(),
         canonicalDocument: normalizedCdm,
         canonicalVerification: verification,

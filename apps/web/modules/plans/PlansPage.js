@@ -618,6 +618,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       {generating ? (
         <GeneratePlanDialog
           documents={documents}
+          folders={folders}
           resources={resources}
           attempts={attempts}
           onCancel={() => setGenerating(false)}

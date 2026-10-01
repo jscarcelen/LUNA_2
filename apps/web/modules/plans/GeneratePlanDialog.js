@@ -19,11 +19,86 @@ const KINDS = [
 ];
 
 /**
+ * Build a nested folder tree from a flat folders array.
+ * Returns root-level nodes, each with a `children` array.
+ */
+function buildFolderTree(folders = []) {
+  const byId = {};
+  for (const f of folders) byId[f.id] = { ...f, children: [] };
+  const roots = [];
+  for (const f of folders) {
+    if (f.parentFolderId && byId[f.parentFolderId]) {
+      byId[f.parentFolderId].children.push(byId[f.id]);
+    } else {
+      roots.push(byId[f.id]);
+    }
+  }
+  return roots;
+}
+
+/**
+ * Recursive folder node with checkboxes and collapsible children.
+ */
+function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDocumentId }) {
+  const [open, setOpen] = useState(true);
+  const folderDocs = documents.filter((d) => (d.folderIds || [d.folderId]).includes(node.id));
+  const childIds = [node.id, ...node.children.map((c) => c.id)]; // rough check for badge
+  const totalDocs = folderDocs.length + node.children.reduce((n, c) => n + documents.filter((d) => (d.folderIds || [d.folderId]).includes(c.id)).length, 0);
+
+  if (totalDocs === 0 && node.children.length === 0) return null;
+
+  return (
+    <div style={{ paddingLeft: depth * 12 }}>
+      {/* Folder header */}
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-xs font-semibold text-soft-ink transition hover:bg-ink/5"
+      >
+        <span style={{ fontSize: 10 }}>{open ? "▾" : "▸"}</span>
+        <span className="truncate">{node.name}</span>
+        {totalDocs > 0 && <span className="ml-auto shrink-0 text-[10px] text-soft-ink/60">{totalDocs}</span>}
+      </button>
+
+      {open && (
+        <div>
+          {/* Direct children documents */}
+          {folderDocs.map((doc) => (
+            <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5" style={{ paddingLeft: 20 }}>
+              <input
+                type="checkbox"
+                checked={picked.includes(doc.id)}
+                onChange={() => onToggle(doc.id)}
+                className="shrink-0"
+              />
+              <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
+              <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+            </label>
+          ))}
+          {/* Sub-folders */}
+          {node.children.map((child) => (
+            <FolderNode
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              documents={documents}
+              picked={picked}
+              onToggle={onToggle}
+              resourceByDocumentId={resourceByDocumentId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * "Plan it for me": pick the material, the deadline and the kinds of practice, and Luna lays the
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], resources = [], attempts = [], onCancel, onDone, onSavePlan, onBuild }) {
+export function GeneratePlanDialog({ documents = [], folders = [], resources = [], attempts = [], onCancel, onDone, onSavePlan, onBuild }) {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [minutes, setMinutes] = useState(120);
@@ -35,6 +110,19 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
 
   const material = useMemo(() => documents.filter((document) => document.sourceType !== "generated" || (document.tags || []).includes("resource")), [documents]);
   const resourceByDocumentId = useMemo(() => new Map(resources.map((row) => [row.document.id, row.resource])), [resources]);
+
+  // Build folder tree for collapsible view
+  const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
+
+  // Documents not in any folder (unorganised)
+  const unorganisedDocs = useMemo(() => {
+    if (!folders.length) return material;
+    const allFolderIds = new Set(folders.map((f) => f.id));
+    return material.filter((doc) => {
+      const docFolders = doc.folderIds || (doc.folderId ? [doc.folderId] : []);
+      return !docFolders.some((fid) => allFolderIds.has(fid));
+    });
+  }, [material, folders]);
 
   /** What the learner is good and bad at, so the plan is fitted to them rather than generic. */
   const performance = useMemo(() => {
@@ -50,7 +138,8 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
     };
   }, [attempts]);
 
-  const toggle = (list, setList, value) => setList(list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value]);
+  const toggleKind = (id) => setKinds((prev) => prev.includes(id) ? prev.filter((k) => k !== id) : [...prev, id]);
+  const toggleDoc = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]);
 
   async function generate() {
     setBusy(true);
@@ -92,7 +181,7 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
             goalId: goal?.id || "",
             minutes: item.minutes || 30
           }),
-          note: item.generate ? `Luna will generate a ${item.generate} from “${known?.name || "the material"}”.` : (known ? `Material: ${known.name}` : ""),
+          note: item.generate ? `Luna will generate a ${item.generate} from "${known?.name || "the material"}".` : (known ? `Material: ${known.name}` : ""),
           generate: item.generate || "",
           sourceDocumentId: item.sourceId || "",
           concepts: item.concepts || []
@@ -122,6 +211,13 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
     }
   }
 
+  // Selected documents info for the tray
+  const pickedDocs = picked.map((id) => {
+    const doc = documents.find((d) => d.id === id);
+    const res = resourceByDocumentId.get(id);
+    return { id, label: res?.name || doc?.name || id };
+  });
+
   return (
     <div className="tw-scope fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>
@@ -140,22 +236,55 @@ export function GeneratePlanDialog({ documents = [], resources = [], attempts = 
           <div>
             <p className="m-0 text-xs font-semibold text-soft-ink">Practice to generate</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => toggle(kinds, setKinds, entry.id)} className={`${chip} ${kinds.includes(entry.id) ? "bg-[var(--accent)] text-white" : "border border-ink/15 text-soft-ink"}`}>{entry.label}</button>)}
+              {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => toggleKind(entry.id)} className={`${chip} ${kinds.includes(entry.id) ? "bg-[var(--accent)] text-white" : "border border-ink/15 text-soft-ink"}`}>{entry.label}</button>)}
             </div>
           </div>
+
+          {/* Material picker — collapsible folder tree */}
           <div>
-            <p className="m-0 text-xs font-semibold text-soft-ink">Material to study ({picked.length} selected)</p>
-            <div className="mt-1.5 grid max-h-44 gap-1 overflow-y-auto rounded-xl border border-ink/10 p-2">
-              {material.map((document) => (
-                <label key={document.id} className="flex items-center gap-2 text-sm text-ink">
-                  <input type="checkbox" checked={picked.includes(document.id)} onChange={() => toggle(picked, setPicked, document.id)} />
-                  <span className="truncate">{resourceByDocumentId.get(document.id)?.name || document.name}</span>
-                  <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{document.sourceType === "generated" ? "resource" : "material"}</span>
-                </label>
-              ))}
-              {!material.length ? <p className="m-0 text-xs text-soft-ink">Nothing in this folder yet.</p> : null}
+            <p className="m-0 text-xs font-semibold text-soft-ink">Material to study</p>
+            <div className="mt-1.5 max-h-52 overflow-y-auto rounded-xl border border-ink/10 p-2 grid gap-0.5">
+              {!material.length
+                ? <p className="m-0 text-xs text-soft-ink">Nothing in this folder yet.</p>
+                : (<>
+                    {/* Folder tree */}
+                    {folderTree.map((node) => (
+                      <FolderNode
+                        key={node.id}
+                        node={node}
+                        documents={material}
+                        picked={picked}
+                        onToggle={toggleDoc}
+                        resourceByDocumentId={resourceByDocumentId}
+                      />
+                    ))}
+                    {/* Documents with no folder */}
+                    {unorganisedDocs.map((doc) => (
+                      <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5">
+                        <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => toggleDoc(doc.id)} className="shrink-0" />
+                        <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
+                        <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+                      </label>
+                    ))}
+                  </>)}
             </div>
+
+            {/* Selected items tray */}
+            {pickedDocs.length > 0 && (
+              <div className="mt-2 rounded-xl border border-[var(--accent)]/20 bg-[var(--accent)]/5 px-3 py-2">
+                <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">{pickedDocs.length} selected</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {pickedDocs.map(({ id, label }) => (
+                    <span key={id} className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/25 bg-white px-2 py-0.5 text-[11px] font-medium text-ink">
+                      <span className="max-w-[160px] truncate">{label}</span>
+                      <button type="button" onClick={() => toggleDoc(id)} className="ml-0.5 shrink-0 text-soft-ink transition hover:text-[var(--accent)]" aria-label={`Remove ${label}`}>×</button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
           <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={buildNow} onChange={(event) => setBuildNow(event.target.checked)} />Generate the quizzes and summaries now, and file them in my workspace</label>
           {performance ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-[11px] text-soft-ink">Luna will use your results: {performance.activities} activities, {Math.round(performance.average * 100)}% average{performance.weakConcepts.length ? `, weakest on ${performance.weakConcepts.slice(0, 3).join(", ")}` : ""}.</p> : null}
         </div>

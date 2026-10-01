@@ -15,15 +15,18 @@ function masteryColor(mastery) {
 }
 
 /**
- * Force-directed concept graph.
- * Loads D3 7 from CDN on first render; subsequent renders reuse it.
+ * Hierarchical concept tree rendered with d3.tree().
+ *
+ * Prerequisites define the tree edges: prerequisite → concept (parent → child).
+ * The root is the concept that has no prerequisites (appears in no concept_id column).
+ * Disconnected nodes (if any) are attached to the root as fallback.
  *
  * Props:
  *   concepts            – array of concept rows { id, name, topic, importance, difficulty }
  *   prerequisites       – array of { concept_id, prerequisite_id }
  *   masteryByConceptId  – { [id]: 0–1 }  (optional)
  *   activities          – array of { id, name, conceptIds[] } (optional)
- *   height              – svg height in px (default 480)
+ *   height              – svg height in px (default 520)
  *   onConceptClick      – (concept) => void (optional)
  */
 export function KnowledgeGraph({
@@ -31,14 +34,13 @@ export function KnowledgeGraph({
   prerequisites = [],
   masteryByConceptId = {},
   activities = [],
-  height = 480,
+  height = 520,
   onConceptClick,
 }) {
-  const svgRef   = useRef(null);
-  const simRef   = useRef(null);
+  const svgRef  = useRef(null);
   const [d3Ready, setD3Ready] = useState(typeof window !== "undefined" && !!window.d3);
   const [selected, setSelected] = useState(null);
-  const [tooltip, setTooltip] = useState(null); // { x, y, concept }
+  const [tooltip, setTooltip] = useState(null);
 
   // Load D3 from CDN once
   useEffect(() => {
@@ -51,171 +53,211 @@ export function KnowledgeGraph({
     document.head.appendChild(script);
   }, []);
 
-  // Build + run the simulation whenever D3 is ready or data changes
+  // Draw tree whenever D3 is ready or data changes
   useEffect(() => {
     if (!d3Ready || !svgRef.current || !concepts.length) return;
     const d3 = window.d3;
 
-    // Stop previous simulation
-    if (simRef.current) simRef.current.stop();
-
-    const svg = d3.select(svgRef.current);
+    const svg   = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
-    const width = svgRef.current.getBoundingClientRect().width || 700;
+    const width = svgRef.current.getBoundingClientRect().width || 800;
+    const PAD   = { top: 40, right: 60, bottom: 40, left: 60 };
 
-    // Assign topic colors
+    // ── topic colour map ────────────────────────────────────────────────────────
     const topics = [...new Set(concepts.map((c) => c.topic || "Other"))];
     const topicColor = {};
     topics.forEach((t, i) => { topicColor[t] = TOPIC_COLORS[i % TOPIC_COLORS.length]; });
 
-    // Build node/link data
-    const nodeById = {};
-    const nodes = concepts.map((c) => {
-      const n = {
-        id:         c.id,
-        name:       c.name,
-        topic:      c.topic || "Other",
-        importance: c.importance ?? 0.5,
-        difficulty: c.difficulty ?? 0.5,
-        mastery:    masteryByConceptId[c.id],
-        concept:    c,
-        x:          width / 2 + (Math.random() - 0.5) * 200,
-        y:          height / 2 + (Math.random() - 0.5) * 200,
-      };
-      nodeById[c.id] = n;
-      return n;
-    });
+    // ── build tree data structure ───────────────────────────────────────────────
+    // Edge: prerequisite_id → concept_id  (parent → child)
+    const childrenById = {};
+    for (const p of prerequisites) {
+      if (!p.prerequisite_id || !p.concept_id) continue;
+      if (!childrenById[p.prerequisite_id]) childrenById[p.prerequisite_id] = [];
+      if (!childrenById[p.prerequisite_id].includes(p.concept_id)) {
+        childrenById[p.prerequisite_id].push(p.concept_id);
+      }
+    }
 
-    const links = prerequisites
-      .filter((p) => nodeById[p.concept_id] && nodeById[p.prerequisite_id])
-      .map((p) => ({
-        source: p.prerequisite_id,
-        target: p.concept_id,
-        strength: p.strength ?? 1,
-      }));
+    // Root = concept that never appears as a child (concept_id) in any prerequisite edge
+    const hasParent = new Set(prerequisites.map((p) => p.concept_id));
+    const conceptById = {};
+    concepts.forEach((c) => { conceptById[c.id] = c; });
 
-    // Defs: arrowhead marker
+    let rootId = concepts.find((c) => !hasParent.has(c.id))?.id || concepts[0]?.id;
+
+    // Build recursive tree node, protecting against cycles
+    const visited = new Set();
+    function makeNode(id) {
+      if (visited.has(id)) return null;
+      visited.add(id);
+      const c = conceptById[id];
+      if (!c) return null;
+      const children = (childrenById[id] || []).map(makeNode).filter(Boolean);
+      return { id, concept: c, children };
+    }
+
+    const treeData = makeNode(rootId);
+    if (!treeData) return;
+
+    // Attach any disconnected nodes (not reachable from root) as children of root
+    const orphans = concepts.filter((c) => !visited.has(c.id));
+    for (const c of orphans) {
+      treeData.children.push({ id: c.id, concept: c, children: [] });
+    }
+
+    // ── d3 hierarchy + tree layout ──────────────────────────────────────────────
+    const root = d3.hierarchy(treeData, (d) => d.children);
+
+    const nodeCount = root.descendants().length;
+    // Give each leaf enough horizontal space so labels don't collide
+    const nodeRadius = (d) => 7 + (d.data.concept.importance ?? 0.5) * 13;
+    const leafSep    = 90;
+    const leafCount  = root.leaves().length || 1;
+    const treeWidth  = Math.max(width - PAD.left - PAD.right, leafCount * leafSep);
+    const treeHeight = height - PAD.top - PAD.bottom;
+
+    d3.tree()
+      .size([treeWidth, treeHeight])
+      .separation((a, b) => a.parent === b.parent ? 1.2 : 1.8)(root);
+
+    // ── SVG scaffold ────────────────────────────────────────────────────────────
     const defs = svg.append("defs");
+    // Arrow marker
     defs.append("marker")
       .attr("id", "arrow")
-      .attr("viewBox", "0 -5 10 10")
-      .attr("refX", 22)
+      .attr("viewBox", "0 -4 8 8")
+      .attr("refX", 8)
       .attr("refY", 0)
-      .attr("markerWidth", 6)
-      .attr("markerHeight", 6)
+      .attr("markerWidth", 5)
+      .attr("markerHeight", 5)
       .attr("orient", "auto")
       .append("path")
-      .attr("d", "M0,-5L10,0L0,5")
-      .attr("fill", "#d1d5db");
+      .attr("d", "M0,-4L8,0L0,4")
+      .attr("fill", "#9ca3af");
 
-    const g = svg.append("g");
+    const g = svg.append("g")
+      .attr("transform", `translate(${PAD.left},${PAD.top})`);
 
-    // Zoom
+    // Zoom & pan
     svg.call(
       d3.zoom()
-        .scaleExtent([0.3, 3])
+        .scaleExtent([0.25, 3])
         .on("zoom", (event) => g.attr("transform", event.transform))
     );
 
-    // Links
-    const link = g.append("g")
-      .selectAll("line")
-      .data(links)
-      .join("line")
+    // ── edges (curved bezier, parent → child) ──────────────────────────────────
+    const linkPath = d3.linkVertical()
+      .x((d) => d.x)
+      .y((d) => d.y);
+
+    const linkSel = g.append("g")
+      .attr("class", "links")
+      .selectAll("path")
+      .data(root.links())
+      .join("path")
+      .attr("fill", "none")
       .attr("stroke", "#d1d5db")
       .attr("stroke-width", 1.5)
-      .attr("marker-end", "url(#arrow)");
+      .attr("marker-end", "url(#arrow)")
+      .attr("d", linkPath);
 
-    // Node groups
-    const node = g.append("g")
+    // ── nodes ───────────────────────────────────────────────────────────────────
+    const nodeSel = g.append("g")
+      .attr("class", "nodes")
       .selectAll("g")
-      .data(nodes)
+      .data(root.descendants())
       .join("g")
+      .attr("transform", (d) => `translate(${d.x},${d.y})`)
       .style("cursor", "pointer")
       .on("click", (event, d) => {
         event.stopPropagation();
-        setSelected((prev) => (prev === d.id ? null : d.id));
-        onConceptClick?.(d.concept);
+        setSelected((prev) => prev === d.data.id ? null : d.data.id);
+        onConceptClick?.(d.data.concept);
       })
       .on("mouseenter", (event, d) => {
         const rect = svgRef.current.getBoundingClientRect();
-        setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, concept: d.concept, mastery: d.mastery });
+        setTooltip({ x: event.clientX - rect.left, y: event.clientY - rect.top, concept: d.data.concept, mastery: masteryByConceptId[d.data.id] });
       })
       .on("mouseleave", () => setTooltip(null));
 
     // Node circles
-    node.append("circle")
-      .attr("r", (d) => 8 + d.importance * 14)
+    nodeSel.append("circle")
+      .attr("r", (d) => nodeRadius(d))
       .attr("fill", (d) => {
-        const m = masteryByConceptId[d.id];
-        return m !== undefined ? masteryColor(m) : topicColor[d.topic] || "#9ca3af";
+        const m = masteryByConceptId[d.data.id];
+        return m !== undefined ? masteryColor(m) : (topicColor[d.data.concept.topic] || "#9ca3af");
       })
-      .attr("fill-opacity", 0.85)
+      .attr("fill-opacity", 0.9)
       .attr("stroke", "#fff")
       .attr("stroke-width", 2);
 
-    // Node labels
-    node.append("text")
-      .text((d) => d.name.length > 18 ? d.name.slice(0, 16) + "…" : d.name)
+    // Name label (below circle)
+    nodeSel.append("text")
+      .text((d) => {
+        const n = d.data.concept.name || "";
+        return n.length > 20 ? n.slice(0, 18) + "…" : n;
+      })
       .attr("text-anchor", "middle")
-      .attr("dy", (d) => 8 + d.importance * 14 + 14)
+      .attr("dy", (d) => nodeRadius(d) + 13)
       .attr("font-size", "10px")
       .attr("font-weight", "600")
       .attr("fill", "#1d1d1f");
 
-    node.append("text")
-      .text((d) => d.topic)
+    // Topic label (below name)
+    nodeSel.append("text")
+      .text((d) => {
+        const t = d.data.concept.topic || "";
+        return t.length > 24 ? t.slice(0, 22) + "…" : t;
+      })
       .attr("text-anchor", "middle")
-      .attr("dy", (d) => 8 + d.importance * 14 + 25)
+      .attr("dy", (d) => nodeRadius(d) + 24)
       .attr("font-size", "9px")
       .attr("fill", "#6b7280");
 
-    // Drag
-    node.call(
+    // Drag (freeform, doesn't restructure the tree)
+    nodeSel.call(
       d3.drag()
-        .on("start", (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
-        .on("drag",  (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on("end",   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+        .on("drag", function (event, d) {
+          d.x = event.x;
+          d.y = event.y;
+          d3.select(this).attr("transform", `translate(${d.x},${d.y})`);
+          linkSel.attr("d", (l) => linkPath({ source: l.source, target: l.target }));
+        })
     );
 
-    // Simulation
-    const sim = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id((d) => d.id).distance(110).strength(0.6))
-      .force("charge", d3.forceManyBody().strength(-220))
-      .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide((d) => 16 + d.importance * 14))
-      .on("tick", () => {
-        link
-          .attr("x1", (d) => d.source.x)
-          .attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x)
-          .attr("y2", (d) => d.target.y);
-        node.attr("transform", (d) => `translate(${d.x},${d.y})`);
-      });
-
-    simRef.current = sim;
     svg.on("click", () => setSelected(null));
 
-    return () => { sim.stop(); };
+    // ── highlighting on selection (update via class, no re-render) ──────────────
+    // (handled by the second useEffect below)
+
   }, [d3Ready, concepts, prerequisites, masteryByConceptId]);
 
-  // Dim non-selected nodes
+  // Dim non-selected nodes when a node is clicked
   useEffect(() => {
     if (!d3Ready || !svgRef.current) return;
     const d3 = window.d3;
     const svg = d3.select(svgRef.current);
     if (!selected) {
-      svg.selectAll("g > g > circle").attr("opacity", 1);
-      svg.selectAll("line").attr("opacity", 1);
+      svg.selectAll(".nodes circle").attr("opacity", 1);
+      svg.selectAll(".nodes text").attr("opacity", 1);
+      svg.selectAll(".links path").attr("opacity", 1);
     } else {
+      // Collect the concept's ancestors + descendants via prerequisite edges
       const linked = new Set([selected]);
-      prerequisites.forEach((p) => {
-        if (p.concept_id === selected) linked.add(p.prerequisite_id);
-        if (p.prerequisite_id === selected) linked.add(p.concept_id);
-      });
-      svg.selectAll("g > g > circle").attr("opacity", (d) => linked.has(d?.id) ? 1 : 0.15);
-      svg.selectAll("line").attr("opacity", (d) => (d?.source?.id && linked.has(d.source.id) && linked.has(d.target.id)) ? 1 : 0.08);
+      const addChain = (id, dir) => {
+        prerequisites.forEach((p) => {
+          if (dir === "up"   && p.concept_id === id     && !linked.has(p.prerequisite_id)) { linked.add(p.prerequisite_id); addChain(p.prerequisite_id, "up"); }
+          if (dir === "down" && p.prerequisite_id === id && !linked.has(p.concept_id))    { linked.add(p.concept_id);    addChain(p.concept_id,    "down"); }
+        });
+      };
+      addChain(selected, "up");
+      addChain(selected, "down");
+
+      svg.selectAll(".nodes circle").attr("opacity", (d) => linked.has(d?.data?.id) ? 1 : 0.12);
+      svg.selectAll(".nodes text").attr("opacity", (d) => linked.has(d?.data?.id) ? 1 : 0.12);
+      svg.selectAll(".links path").attr("opacity", (d) => linked.has(d?.source?.data?.id) && linked.has(d?.target?.data?.id) ? 1 : 0.06);
     }
   }, [selected, d3Ready, prerequisites]);
 
@@ -238,9 +280,7 @@ export function KnowledgeGraph({
             {label}
           </span>
         ))}
-        <span className="ml-auto flex items-center gap-1.5">
-          <span className="text-soft-ink">Node size = importance · Arrows = prerequisites</span>
-        </span>
+        <span className="ml-auto text-soft-ink">Node size = importance · Click to highlight chain</span>
       </div>
 
       <svg
@@ -254,7 +294,7 @@ export function KnowledgeGraph({
       {tooltip && (
         <div
           className="pointer-events-none absolute z-10 rounded-xl border border-ink/8 bg-white p-3 shadow-lg"
-          style={{ left: tooltip.x + 12, top: tooltip.y - 20, maxWidth: 220 }}
+          style={{ left: tooltip.x + 14, top: tooltip.y - 20, maxWidth: 240 }}
         >
           <p className="m-0 text-sm font-semibold text-ink">{tooltip.concept.name}</p>
           <p className="m-0 text-xs text-soft-ink">{tooltip.concept.topic}</p>
@@ -264,7 +304,7 @@ export function KnowledgeGraph({
             </p>
           )}
           <p className="m-0 mt-1 text-xs text-soft-ink">
-            Importance: {Math.round((tooltip.concept.importance ?? 0.5) * 100)}% ·
+            Importance: {Math.round((tooltip.concept.importance ?? 0.5) * 100)}% ·{" "}
             Difficulty: {Math.round((tooltip.concept.difficulty ?? 0.5) * 100)}%
           </p>
           {tooltip.concept.description && (

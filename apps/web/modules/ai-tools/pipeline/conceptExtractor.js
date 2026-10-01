@@ -36,15 +36,30 @@ const EXTRACTION_SCHEMA = {
   required: ["concepts"],
 };
 
-const SYSTEM_PROMPT = `You are a curriculum analyst. You read an educational document and identify the distinct, testable concepts it covers.
+const SYSTEM_PROMPT = `You are a curriculum analyst. You read an educational document and identify the distinct, testable concepts it covers, organised as a CONNECTED TREE.
 
 Rules:
-- A concept is something a student could be directly tested on (not a chapter title or administrative heading).
-- Each concept name should be specific and unique — "Photosynthesis" not "Biology", "Newton's Third Law" not "Physics laws".
-- difficulty and importance are 0.0–1.0 floats.
-- prerequisites: list only concepts that appear WITHIN THIS SAME DOCUMENT. Use exact names.
-- Aim for 5–25 concepts per document. Do not over-fragment (definitions are not separate concepts) or under-fragment (a chapter is not one concept).
-- source_pages: use 1-indexed page numbers. If you cannot determine them, use an empty array.`;
+1. TREE STRUCTURE — CRITICAL: Every concept (except the root) MUST have at least one prerequisite. No isolated nodes are allowed.
+   - The first concept in the list is the ROOT (the overall subject / document title). It has NO prerequisites.
+   - Every other concept must list at least one prerequisite using exact names of other concepts in the list.
+   - The result must form a single connected tree (or DAG) rooted at concept 0. A student must be able to follow prerequisite edges from any concept back to the root.
+2. HIERARCHY: Organise concepts from broad to specific. Topic headings become mid-level nodes; specific skills and formulas are leaves.
+   - Example structure: Root → Topic A, Topic B → Subtopic A1, Subtopic A2 → Specific formula
+3. A concept is something a student could be directly tested on (not a chapter title or administrative heading).
+4. Each concept name should be specific and unique — "Sample variance formula" not "Statistics", "Newton's Third Law" not "Physics laws".
+5. difficulty and importance are 0.0–1.0 floats.
+6. prerequisites: use EXACT names of concepts earlier in the list. Every non-root concept needs at least one.
+7. Aim for 8–25 concepts per document. Do not over-fragment or under-fragment.
+8. source_pages: use 1-indexed page numbers. If unknown, use an empty array.
+
+EXAMPLE TREE (for a Statistics document):
+  0. "Statistics overview" (root, no prerequisites)
+  1. "Central tendency" → prerequisites: ["Statistics overview"]
+  2. "Mean" → prerequisites: ["Central tendency"]
+  3. "Median" → prerequisites: ["Central tendency"]
+  4. "Sample variance" → prerequisites: ["Mean"]
+  5. "Correlation" → prerequisites: ["Sample variance"]
+  ... etc. Every node connects back to the root.`;
 
 /**
  * Extract concepts from a document's text content.
@@ -94,6 +109,27 @@ export async function extractConcepts(documentText, opts = {}) {
   // Build a name → index map for resolving prerequisite names to indices
   const nameToIndex = {};
   rawConcepts.forEach((c, i) => { nameToIndex[c.name?.toLowerCase().trim()] = i; });
+
+  // ── ENFORCE CONNECTED TREE ───────────────────────────────────────────────────
+  // The root is concept[0]. Any concept with no valid prerequisites (other than
+  // the root itself) gets connected to the root, so the graph stays a single tree.
+  const rootName = rawConcepts[0]?.name || "";
+  for (let i = 1; i < rawConcepts.length; i++) {
+    const c = rawConcepts[i];
+    const validPrereqs = (c.prerequisites || []).filter((p) => {
+      const key = String(p || "").toLowerCase().trim();
+      return key && nameToIndex[key] !== undefined && nameToIndex[key] !== i;
+    });
+    if (validPrereqs.length === 0) {
+      // Isolated node — connect to root
+      rawConcepts[i] = { ...c, prerequisites: [rootName] };
+    } else {
+      rawConcepts[i] = { ...c, prerequisites: validPrereqs };
+    }
+  }
+  // Root has no prerequisites
+  if (rawConcepts[0]) rawConcepts[0] = { ...rawConcepts[0], prerequisites: [] };
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // Shape into DB-ready rows (prerequisite IDs resolved after insert, stored as names for now)
   const concepts = rawConcepts.map((c) => ({

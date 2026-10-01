@@ -358,6 +358,21 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       const header = continuation ? element.pageScope.mode === "every" : true;
       if (!header || !isShown(element, scopes, ctx)) continue;
       const laid = layoutElement(element, 0, 0, scopes, ctx, limit);
+      // Slides title slide: center the first-scoped element vertically and center all text.
+      if (hasTitleSlide && !continuation && element.pageScope.mode === "first") {
+        const centerY = (height - element.frame.h) / 2;
+        const dy = centerY - element.frame.y;
+        const cx = layout.margins.left;
+        const cw = width - layout.margins.left - layout.margins.right;
+        for (const item of laid.items) {
+          if (item.type === "text") {
+            target.items.push({ ...item, y: item.y + dy, x: cx, w: cw, style: { ...item.style, align: "center" as const } });
+          } else {
+            target.items.push({ ...item, y: item.y + dy });
+          }
+        }
+        continue;
+      }
       target.items.push(...laid.items);
       // Headers and footers live in the margin band by design; only the page edge binds them.
       const fullBleed = element.frame.w >= layout.canvas.width * 0.9;
@@ -411,6 +426,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       let pageLimit = capFor(element, onFirstPage) - (fixedTops.length ? gap : 0);
       let onPage = 0;
       let c = y;
+      const pagesAtFlowStart = out.length;
       for (const record of repeatRecords(element, scopes, ctx)) {
         const recordScopes = [record, ...scopes];
         let laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
@@ -451,7 +467,9 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
         c = laid.bottom + gap;
         onPage += 1;
       }
-      cursor = Math.max(y, c - gap);
+      // If flow records paginated onto a new page, cursor is on that page — don't clamp to
+      // y (which was on the prior page), as that would push the next block into empty space.
+      cursor = out.length > pagesAtFlowStart ? c - gap : Math.max(y, c - gap);
       if (element.pagination.breakAfter) newPage(element);
     } else {
       const pageLimit = capFor(element, onFirstPage);

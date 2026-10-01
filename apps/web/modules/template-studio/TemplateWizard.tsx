@@ -212,11 +212,23 @@ function assembleTemplate(
     // Outer group frames are already set to contentW in the placement loop above;
     // child elements need their x-positions and widths scaled proportionally.
     const fmtContentW = fmt.w - margins.left - margins.right;
-    const scaledElements = allElements.map((el) => scaleGroupChildren(el, fmtContentW));
+    if (i === 0) {
+      const scaledElements = allElements.map((el) => scaleGroupChildren(el, fmtContentW));
+      const page = { ...template.layouts[0].pages[0], elements: scaledElements };
+      const base = { ...baseLayout, pages: [page], canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
+      return fmt.isSlides ? { ...base, class: "slides" as const } : base;
+    }
+    // Non-A4 layouts get fresh view IDs. Remap visibility.views so answer-toggle elements
+    // remain visible — resolveView matches by view id, so stale original ids would filter them out.
+    const newViews = views.map((v) => ({ ...v, id: createId("view") }));
+    const viewIdMap = new Map(views.map((v, idx) => [v.id, newViews[idx].id]));
+    const remapVis = (el: Element): Element => {
+      if (!el.visibility?.views) return el;
+      return { ...el, visibility: { ...el.visibility, views: el.visibility.views.map((vid) => viewIdMap.get(vid) ?? vid) } };
+    };
+    const scaledElements = allElements.map((el) => scaleGroupChildren(remapVis(el), fmtContentW));
     const page = { ...template.layouts[0].pages[0], elements: scaledElements };
-    const base = i === 0
-      ? { ...baseLayout, pages: [page], canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } }
-      : { ...baseLayout, pages: [page], id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: views.map((v) => ({ ...v, id: createId("view") })) };
+    const base = { ...baseLayout, pages: [page], id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: newViews };
     return fmt.isSlides ? { ...base, class: "slides" as const } : base;
   });
   return { ...template, fields: currentFields, layouts };

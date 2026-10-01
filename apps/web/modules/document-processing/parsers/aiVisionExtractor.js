@@ -584,9 +584,23 @@ File: ${file.name}`;
 
   if (chunks.length === 1) {
     // Small document — single call
-    const userContent = buildPdfUserPrompt(file.name, pageCount, chunks[0], 1, 1);
-    const aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);
-    return buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name });
+    let aiJson;
+    try {
+      const userContent = buildPdfUserPrompt(file.name, pageCount, chunks[0], 1, 1);
+      aiJson = await callOpenAI([{ role: "system", content: systemPrompt }, { role: "user", content: userContent }]);
+    } catch (err) {
+      console.warn(`[aiVisionExtractor] GPT-4o call failed for "${file.name}", falling back to raw text CDM:`, err.message);
+      aiJson = null;
+    }
+    const cdm = aiJson ? buildCdmFromAiResponse(aiJson, { sourceType: "pdf", fileName: file.name }) : null;
+    // Guard: if GPT returned empty sections (or call failed), build a plain-text CDM from rawText so
+    // the document preview and exports always contain the extracted content.
+    const hasContent = cdm && Array.isArray(cdm.sections) && cdm.sections.some((s) => s.blocks?.length > 0);
+    if (!hasContent) {
+      console.warn(`[aiVisionExtractor] GPT returned empty sections for "${file.name}" — using raw-text fallback CDM`);
+      return buildRawTextCdm(rawText, file.name, pageCount);
+    }
+    return cdm;
   }
 
   // Large document — parallel chunk calls, then merge
@@ -648,6 +662,12 @@ File: ${file.name}`;
     }
   }
 
+  const mergedHasContent = sections.some((s) => s.blocks?.length > 0);
+  if (!mergedHasContent) {
+    console.warn(`[aiVisionExtractor] All chunks returned empty sections for "${file.name}" — using raw-text fallback CDM`);
+    return buildRawTextCdm(rawText, file.name, pageCount);
+  }
+
   return {
     schemaVersion: "2.0",
     schema_version: "cdm.v2",
@@ -658,6 +678,62 @@ File: ${file.name}`;
     stats: { section_count: sections.length, block_count: blockCount, equation_count: equations.length, table_count: tableCount, text_length: rawText.length },
     confidence: computeDocConfidence(sections, equations),
     debug: { source: "aiVisionExtractor", chunks: chunks.length }
+  };
+}
+
+/**
+ * Build a minimal CDM from raw extracted text when GPT-4o returns empty sections.
+ * Splits the text at double-newlines into paragraph blocks so the document is always readable.
+ */
+function buildRawTextCdm(rawText, fileName, pageCount) {
+  const paragraphs = String(rawText || "")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  // Try to detect the first line as a heading
+  const blocks = paragraphs.map((p, i) => {
+    if (i === 0 && p.length < 120 && !p.includes("\n")) {
+      return {
+        type: "heading",
+        level: 1,
+        text: p,
+        children: [],
+        confidence: 0.75,
+        source: "raw-text-fallback"
+      };
+    }
+    return {
+      type: "paragraph",
+      children: [{ type: "text", text: p }],
+      equation_ids: [],
+      confidence: 0.75,
+      source: "raw-text-fallback"
+    };
+  });
+
+  const docId = crypto.randomUUID();
+  return {
+    schemaVersion: "2.0",
+    schema_version: "cdm.v2",
+    document_id: docId,
+    metadata: {
+      title: fileName || "Untitled",
+      source_type: "pdf",
+      mime_type: "application/pdf",
+      extraction_method: "raw-text-fallback"
+    },
+    equations: [],
+    sections: [{ blocks }],
+    stats: {
+      section_count: 1,
+      block_count: blocks.length,
+      equation_count: 0,
+      table_count: 0,
+      text_length: rawText.length
+    },
+    confidence: 0.75,
+    debug: { source: "aiVisionExtractor", fallback: "raw-text", pageCount }
   };
 }
 

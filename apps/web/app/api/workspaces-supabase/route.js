@@ -32,6 +32,7 @@ import {
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
+import { extractAndSaveConcepts } from "../../../lib/conceptsRepository.js";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -170,10 +171,25 @@ export async function POST(request) {
         tags: payload.tags || [],
         quality: payload.quality || {}
       });
+
+      // Async concept extraction for uploaded reference documents — non-blocking
+      const uploaded = Array.isArray(uploadResult?.uploaded) ? uploadResult.uploaded : [];
+      const workspaceId = payload.workspaceId || "";
+      if (workspaceId && uploaded.length > 0) {
+        Promise.allSettled(
+          uploaded.map((doc) => {
+            if (!doc?.id) return Promise.resolve();
+            const text = doc.extractedText || doc.content || "";
+            if (!text || String(text).length < 100) return Promise.resolve();
+            return extractAndSaveConcepts(doc.id, workspaceId, ownerUserId, String(text));
+          })
+        ).catch(() => {}); // swallow — never let this break the upload response
+      }
+
       return await ok(ownerUserId, {
         uploadReport: uploadResult?.extractionReport || [],
-        uploadedCount: Array.isArray(uploadResult?.uploaded) ? uploadResult.uploaded.length : 0,
-        uploadedDocuments: Array.isArray(uploadResult?.uploaded) ? uploadResult.uploaded : [],
+        uploadedCount: uploaded.length,
+        uploadedDocuments: uploaded,
         reviewWorkflowAvailable: uploadResult?.reviewWorkflowAvailable !== false
       });
     }

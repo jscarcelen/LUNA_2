@@ -817,9 +817,30 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     URL.revokeObjectURL(url);
   }
   async function handleAttempt(attempt) {
+    // 1. Persist to relational DB (non-blocking — runs in parallel with blob save)
+    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) ||
+      toolContext?.profileName || "anonymous";
+    const ownerUserId = toolContext?.ownerUserId || process?.env?.LUNA_DEMO_USER_ID || "";
+    const activityDocumentId = playing?.documentId || "";
+
+    if (learnerId && activityDocumentId) {
+      fetch("/api/attempts/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attempt,
+          learnerId,
+          ownerUserId,
+          activityDocumentId,
+          subjectId: subjectId || null,
+        }),
+      }).catch(() => { /* attempt stays local on network error */ });
+    }
+
+    // 2. Legacy JSON blob save (kept for backward compat)
     if (!onSaveGeneratedQuizDocument) return;
     try {
-      const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId: playing?.documentId || "", activityId: attempt.activityId, learner: toolContext?.profileName || "" }, null, 2);
+      const content = JSON.stringify({ kind: "activity-attempt", attempt, activityDocumentId, activityId: attempt.activityId, learner: toolContext?.profileName || "" }, null, 2);
       await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
     } catch { /* attempt stays local */ }
   }

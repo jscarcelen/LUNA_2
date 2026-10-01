@@ -1,6 +1,7 @@
 import { buildCanonicalDocumentFromDocxFile, buildCanonicalDocumentFromExtraction } from "./canonical/model.js";
 import { normalizeCanonicalDocument } from "./normalization/semanticNormalizer.js";
 import { extractBaseDocument } from "./parsers/baseExtractor.js";
+import { extractWithAIVision } from "./parsers/aiVisionExtractor.js";
 import { ComponentRegistry, DocumentPipelineRegistry, createPipelineSpec } from "./pipeline/components.js";
 import { PipelineRegistry, createStage } from "./pipeline/registry.js";
 import { renderCanonicalDocumentToHtml } from "./renderers/htmlRenderer.js";
@@ -8,6 +9,9 @@ import { renderCanonicalDocumentToMarkdown } from "./renderers/markdownRenderer.
 import { renderCanonicalDocumentToText } from "./renderers/textRenderer.js";
 import { buildCanonicalVerification, buildCanonicalVerificationMarkers } from "./verification/verification.js";
 import { runAuxiliaryDocxPipeline } from "./parsers/auxiliaryDocxPipeline.js";
+
+// File types that benefit from GPT-4o vision extraction (rich visual/formula content)
+const AI_VISION_TYPES = new Set(["pdf", "pptx", "image"]);
 
 export const DOCUMENT_PROCESSING_PIPELINE_VERSION = "CDM_V2_REAL_PIPELINE_TEST_001";
 
@@ -209,6 +213,77 @@ export async function processUploadedDocument(file, options = {}) {
       },
       confidenceSignals: []
     };
+  }
+
+  // AI vision fast-path: PDF, PPTX, images → GPT-4o for rich content extraction
+  if (AI_VISION_TYPES.has(detectedType)) {
+    try {
+      const aiExtraction = await extractWithAIVision(file, { detectedType });
+      const normalizedCdm = normalizeCanonicalDocument(aiExtraction.canonicalDocument);
+      const html = renderCanonicalDocumentToHtml(normalizedCdm);
+      const markdown = renderCanonicalDocumentToMarkdown(normalizedCdm);
+      const text = renderCanonicalDocumentToText(normalizedCdm);
+      const verification = buildCanonicalVerification(normalizedCdm, aiExtraction);
+      const verificationMarkers = buildCanonicalVerificationMarkers(verification);
+
+      const lowConfidenceItems = collectLowConfidenceItems(normalizedCdm, confidenceReviewThreshold);
+      const confidenceMarkers = lowConfidenceItems.map((item, index) => ({
+        id: `CDM-C${index + 1}`,
+        type: "confidence-review",
+        severity: "medium",
+        label: item.kind === "equation" ? `Low confidence equation ${item.id}` : `Low confidence block ${item.type}`,
+        excerpt: item.nodePath || item.id || item.type || "",
+        formula: null,
+        confidence: item.confidence
+      }));
+      const issues = [
+        ...(Array.isArray(aiExtraction.issues) ? aiExtraction.issues : []),
+        ...(verification && !verification.gatePassed ? ["canonical-document-verification-failed"] : []),
+        ...(lowConfidenceItems.length ? ["canonical-low-confidence-content"] : [])
+      ];
+
+      return {
+        ...aiExtraction,
+        method: aiExtraction.method || detectedType,
+        text: String(text || aiExtraction.text || "").trim(),
+        markdown: String(markdown || "").trim(),
+        sourceRenderHtml: String(html || "").trim(),
+        canonicalDocument: normalizedCdm,
+        canonicalVerification: verification,
+        processingRunId,
+        processingPipelineVersion: `ai-vision-${detectedType}-v1`,
+        pipelineDiagnostic: PIPELINE_DIAGNOSTIC,
+        pipelineStageTrace: [
+          `[STAGE 1] ${detectedType.toUpperCase()} UPLOAD`,
+          "[STAGE 2] AI VISION EXTRACTION (GPT-4o)",
+          "[STAGE 3] CDM NORMALIZATION",
+          "[STAGE 4] HTML/MARKDOWN RENDER",
+          "[STAGE 5] VERIFICATION"
+        ],
+        processingSummary: {
+          schemaVersion: String(normalizedCdm?.schemaVersion || "2.0"),
+          cdmVersion: String(normalizedCdm?.schema_version || "cdm.v2"),
+          blockCount: Number(normalizedCdm?.stats?.block_count || 0),
+          equationCount: Number(normalizedCdm?.stats?.equation_count || 0),
+          headingCount: Array.isArray(normalizedCdm?.sections)
+            ? normalizedCdm.sections.reduce((sum, sec) => sum + (Array.isArray(sec?.blocks) ? sec.blocks.filter((b) => b?.type === "heading").length : 0), 0)
+            : 0
+        },
+        confidenceSignals: lowConfidenceItems,
+        riskMarkers: [
+          ...(Array.isArray(aiExtraction.riskMarkers) ? aiExtraction.riskMarkers : []),
+          ...verificationMarkers,
+          ...confidenceMarkers
+        ],
+        issues: Array.from(new Set(issues)),
+        requiresReview: Boolean(aiExtraction.requiresReview)
+          || Boolean(verification && !verification.gatePassed)
+          || Boolean(lowConfidenceItems.length)
+      };
+    } catch (aiError) {
+      console.error(`[processUploadedDocument] AI vision extraction failed for ${detectedType}:`, aiError.message);
+      // Fall through to the generic pipeline below
+    }
   }
 
   const context = await engine.run({

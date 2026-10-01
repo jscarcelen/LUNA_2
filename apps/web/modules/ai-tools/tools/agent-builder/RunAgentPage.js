@@ -1143,16 +1143,15 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
 
   const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
-  const blockTemplateConfig = useMemo(() => {
-    if (!outputBlocks) return agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] };
-    return {
-      selectedBlocks: outputBlocks.map((block, i) => ({
-        type: block.type,
-        formatId: blockConfigs[i]?.formatId || BLOCKS[block?.type]?.defaultFormat || 'default',
-        color: blockConfigs[i]?.color || '#0071e3',
-      }))
-    };
-  }, [outputBlocks, blockConfigs, agentConfig]);
+  const blockTemplateConfig = outputBlocks
+    ? {
+        selectedBlocks: outputBlocks.map((block, i) => ({
+          type: block.type,
+          formatId: blockConfigs[i]?.formatId || BLOCKS[block?.type]?.defaultFormat || 'default',
+          color: blockConfigs[i]?.color || '#0071e3',
+        }))
+      }
+    : (agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] });
 
   const blockOutputPane = isBlockOutput ? (
     <div>

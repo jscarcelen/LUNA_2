@@ -398,6 +398,45 @@ function buildBlockSchemaSummary(selectedBlockIds) {
 }
 
 /**
+ * Makes a fast, cheap GPT call to rewrite vague user instructions into a precise numbered ruleset.
+ * Returns the enhanced rules string, or falls back to rawInstructions on any failure.
+ */
+async function enhanceOutputInstructions(rawInstructions, selectedBlockIds, blockSchemaSummary) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || !String(rawInstructions || "").trim()) return rawInstructions || "";
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        temperature: 0,
+        max_tokens: 300,
+        messages: [
+          {
+            role: "system",
+            content: "You are a prompt engineer. Given user instructions for an AI content generator and its available block types, rewrite the instructions as a precise numbered ruleset. Extract exact counts (e.g. 'exactly 3 items'), ordering constraints (e.g. 'heading FIRST, then bullet_list, then divider'), and field-level rules (e.g. 'items array must have exactly 3 strings'). Be concise. Output only the rules, no preamble."
+          },
+          {
+            role: "user",
+            content: `Instructions: ${rawInstructions}\n\nAvailable blocks:\n${blockSchemaSummary}`
+          }
+        ]
+      })
+    });
+    if (!response.ok) return rawInstructions;
+    const payload = await response.json();
+    const enhanced = payload.choices?.[0]?.message?.content;
+    return enhanced && enhanced.trim() ? enhanced.trim() : rawInstructions;
+  } catch {
+    return rawInstructions;
+  }
+}
+
+/**
  * Block-based generation: calls OpenAI expecting a flat JSON array of block objects.
  * Used when the agent spec carries `output.selectedBlocks`.
  */
@@ -410,9 +449,14 @@ async function callOpenAiAgentBlocks(config, chunks, blockSchema, selectedBlockI
   const streaming = typeof onToken === "function";
 
   const blockSchemaSummary = buildBlockSchemaSummary(selectedBlockIds);
+  const rawInstructions = config.instructions || "Generate content based on the reference material.";
+  // Enhance vague instructions into a precise numbered ruleset before the main generation call.
+  // Falls back silently to rawInstructions on any failure so the pipeline is never broken.
+  const enhancedRules = await enhanceOutputInstructions(rawInstructions, selectedBlockIds, blockSchemaSummary);
+
   const systemPrompt = `You are a content generation assistant creating structured educational content.
 
-TASK: ${config.instructions || "Generate content based on the reference material."}
+TASK: ${rawInstructions}
 
 OUTPUT FORMAT
 Return a JSON object with one key "items" whose value is an array of block objects.
@@ -425,11 +469,10 @@ ALLOWED BLOCK TYPES
 
 ${blockSchemaSummary}
 
-COMPOSITION RULES
-- You decide the count and order of blocks.
-- A simple 3-bullet summary: 1 heading block + 3 bullet_list blocks (or 1 bullet_list with 3 items) + dividers between them.
-- A structured document: heading → paragraph → bullet_list → callout, etc.
-- An exam: 1 heading → question_mc / question_open / question_tf blocks in sequence.
+COMPOSITION RULES (follow exactly)
+${enhancedRules}
+
+Additional hard rules:
 - Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
 - Never omit a required field; set optional fields to null if unused.`;
 

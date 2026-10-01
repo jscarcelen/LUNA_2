@@ -17,6 +17,9 @@ import { RunEstimateLine, useRunEstimate } from "../../credits/RunEstimate";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore — plain JS module
 import { chargeRun, readCredits } from "../../credits/credits";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore — plain JS module
+import { BLOCKS } from "../../ai-tools/blocks/blockRegistry";
 
 interface Doc { id: string; name: string }
 interface Generation { generate: (config: unknown) => Promise<any>; cancel: () => void; isGenerating: boolean; steps: any; tokenChars: number; tokenTail: string; elapsedMs: number; error: string }
@@ -98,6 +101,7 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
   }
 
   const items = lastRun?.output?.items || [];
+  const isBlocksMode = (spec.output?.selectedBlocks?.length ?? 0) > 0;
   return (
     <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <div className="grid gap-3">
@@ -134,34 +138,58 @@ export function TestStep({ spec, docs, workspaceId, subjectId, generation, lastR
           <div className="flex items-center justify-between"><p className={kicker}>Output</p>{items.length ? <span className="text-xs text-soft-ink">{items.length} items</span> : null}</div>
           {!lastRun ? <p className="m-0 mt-2 text-sm text-soft-ink">Run a test to see what the agent produces. The result is structured content — pick a template later to make it look the way you want.</p> : (
             <div className="mt-3 grid gap-2">
-              {spec.outputSchema.map((f) => {
-                const output = (lastRun.output || {}) as Record<string, unknown>;
-                if (f.type === "array") {
-                  const key = f === primaryCollection(spec) ? "items" : slug(f.name);
-                  const rows = Array.isArray(output[key]) ? (output[key] as Record<string, unknown>[]) : [];
-                  const cols = collectionFields(f);
-                  return (
-                    <div key={f.id} className="grid gap-2">
-                      <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6d4de6]">{f.name} · {rows.length} element{rows.length === 1 ? "" : "s"}</p>
-                      {!rows.length ? <p className="m-0 text-sm text-[var(--color-danger)]">The agent returned no elements for this list.</p> : null}
-                      {rows.slice(0, 30).map((item, index) => (
-                        <div key={index} className="rounded-xl border border-ink/10 p-3">
-                          <span className="mb-1 inline-block rounded-full px-2 text-[10px] font-bold text-white" style={{ background: "#6d4de6" }}>{index + 1}</span>
-                          {cols.map((c) => { const v = (item || {})[slug(c.name)]; return <p key={c.id} className="m-0 text-sm text-ink"><span className="text-xs text-soft-ink">{c.name}: </span>{Array.isArray(v) ? v.join(" · ") : String(v ?? "—")}</p>; })}
+              {isBlocksMode ? (
+                <>
+                  <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6d4de6]">Items · {items.length} element{items.length === 1 ? "" : "s"}</p>
+                  {!items.length ? <p className="m-0 text-sm text-[var(--color-danger)]">The agent returned no blocks.</p> : null}
+                  {(items as Record<string, unknown>[]).slice(0, 30).map((block, index) => {
+                    const blockType = String(block.type || "");
+                    const blockDef = (BLOCKS as Record<string, any>)[blockType];
+                    const label = blockDef?.label || blockType || "block";
+                    // Pick the most informative text field to preview
+                    const previewField = ["question", "statement", "sentence", "text", "front", "title"].find((k) => block[k] != null && block[k] !== "");
+                    const preview = previewField ? String(block[previewField]).slice(0, 120) : Object.entries(block).filter(([k]) => k !== "type").map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(", ") : String(v ?? "")}`).join(" · ").slice(0, 120);
+                    return (
+                      <div key={index} className="rounded-xl border border-ink/10 p-3">
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="inline-block rounded-full px-2 text-[10px] font-bold text-white" style={{ background: "#6d4de6" }}>{index + 1}</span>
+                          <span className="text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{label}</span>
                         </div>
-                      ))}
+                        <p className="m-0 text-sm text-ink">{preview || <span className="text-soft-ink">(no preview)</span>}</p>
+                      </div>
+                    );
+                  })}
+                </>
+              ) : (
+                spec.outputSchema.map((f) => {
+                  const output = (lastRun.output || {}) as Record<string, unknown>;
+                  if (f.type === "array") {
+                    const key = f === primaryCollection(spec) ? "items" : slug(f.name);
+                    const rows = Array.isArray(output[key]) ? (output[key] as Record<string, unknown>[]) : [];
+                    const cols = collectionFields(f);
+                    return (
+                      <div key={f.id} className="grid gap-2">
+                        <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#6d4de6]">{f.name} · {rows.length} element{rows.length === 1 ? "" : "s"}</p>
+                        {!rows.length ? <p className="m-0 text-sm text-[var(--color-danger)]">The agent returned no elements for this list.</p> : null}
+                        {rows.slice(0, 30).map((item, index) => (
+                          <div key={index} className="rounded-xl border border-ink/10 p-3">
+                            <span className="mb-1 inline-block rounded-full px-2 text-[10px] font-bold text-white" style={{ background: "#6d4de6" }}>{index + 1}</span>
+                            {cols.map((c) => { const v = (item || {})[slug(c.name)]; return <p key={c.id} className="m-0 text-sm text-ink"><span className="text-xs text-soft-ink">{c.name}: </span>{Array.isArray(v) ? v.join(" · ") : String(v ?? "—")}</p>; })}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  const v = output[slug(f.name)];
+                  const missing = v === undefined || v === null || v === "";
+                  return (
+                    <div key={f.id} className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3">
+                      <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--accent-ink)]">{f.name} · once</p>
+                      <p className="m-0 mt-1 whitespace-pre-wrap text-sm text-ink">{missing ? <span className={f.required === false ? "text-soft-ink" : "text-[var(--color-danger)]"}>{f.required === false ? "(empty — optional)" : "missing"}</span> : String(v)}</p>
                     </div>
                   );
-                }
-                const v = output[slug(f.name)];
-                const missing = v === undefined || v === null || v === "";
-                return (
-                  <div key={f.id} className="rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)] p-3">
-                    <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--accent-ink)]">{f.name} · once</p>
-                    <p className="m-0 mt-1 whitespace-pre-wrap text-sm text-ink">{missing ? <span className={f.required === false ? "text-soft-ink" : "text-[var(--color-danger)]"}>{f.required === false ? "(empty — optional)" : "missing"}</span> : String(v)}</p>
-                  </div>
-                );
-              })}
+                })
+              )}
             </div>
           )}
         </section>

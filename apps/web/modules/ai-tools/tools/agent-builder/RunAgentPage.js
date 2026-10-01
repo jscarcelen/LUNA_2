@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { LivePreviewPane, buildTemplateData } from "./LivePreviewPane";
 import { BlockRenderer } from "../../blocks/BlockRenderer.js";
+import { BLOCKS, BLOCK_COLORS } from "../../blocks/blockRegistry.js";
 import { addOutputField, buildMappingRows, mergeKey } from "./outputFields";
 import { IMPORTANCE_LABEL, importanceOf, templateFit } from "../../../template-studio/engine/fit";
 import { OutputCustomizerPanel } from "./OutputCustomizerPanel";
@@ -141,6 +142,62 @@ function AddOutputField({ onAdd, existing = [] }) {
       </div>
       {taken ? <p className="m-0 text-xs text-[var(--color-warn)]">This agent already has a field with that name.</p> : null}
     </div>
+  );
+}
+
+function BlockConfigRow({ block, index, blockConfigs, onConfigChange }) {
+  const [open, setOpen] = useState(false);
+  const type = String(block?.type || '');
+  const blockDef = BLOCKS[type];
+  const config = blockConfigs[index] || { formatId: blockDef?.defaultFormat || 'default', color: '#0071e3' };
+  const ICONS = { heading: 'H', paragraph: '¶', bullet_list: '•', divider: '—', callout: '!', question_mc: 'MC', question_open: 'OA', question_tf: 'T/F', question_fill: '___', flashcard: '🃏' };
+  const preview = type === 'heading' ? String(block.text || '').slice(0, 50)
+    : type === 'bullet_list' ? (Array.isArray(block.items) && block.items.length ? String(block.items[0]).slice(0, 40) + (block.items.length > 1 ? ` +${block.items.length - 1}` : '') : String(block.title || ''))
+    : type === 'paragraph' ? String(block.text || '').slice(0, 50)
+    : type === 'divider' ? '──────'
+    : String(block.text || block.question || block.front || block.statement || '').slice(0, 50);
+  return (
+    <li className="overflow-hidden rounded-xl border border-ink/8 bg-white">
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
+        <span className="grid size-6 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent-ink)]">{ICONS[type] || '?'}</span>
+        <div className="min-w-0 flex-1">
+          <span className="block text-xs font-semibold text-ink">{type.replace(/_/g, ' ')}</span>
+          {preview ? <span className="block truncate text-[11px] text-soft-ink">{preview}</span> : null}
+        </div>
+        <span className="mr-1 text-[11px] font-medium text-soft-ink">{config.formatId}</span>
+        <span className="size-3 shrink-0 rounded-full border border-ink/20" style={{ background: config.color }} />
+        <span className={`text-xs text-soft-ink transition-transform ${open ? 'rotate-180' : ''}`}>⌄</span>
+      </button>
+      {open ? (
+        <div className="grid gap-2 border-t border-ink/8 px-3 pb-3 pt-2">
+          {blockDef?.formats?.length > 1 ? (
+            <div>
+              <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">Format</p>
+              <div className="flex flex-wrap gap-1.5">
+                {blockDef.formats.map((fmt) => (
+                  <button key={fmt.id} type="button" title={fmt.description}
+                    onClick={() => onConfigChange(index, { ...config, formatId: fmt.id })}
+                    className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${config.formatId === fmt.id ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]' : 'border-ink/15 bg-white text-ink hover:bg-[var(--surface-soft)]'}`}>
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          <div>
+            <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">Color</p>
+            <div className="flex gap-1.5">
+              {BLOCK_COLORS.map((c) => (
+                <button key={c.id} type="button" title={c.label}
+                  onClick={() => onConfigChange(index, { ...config, color: c.value })}
+                  className={`size-6 rounded-full border-2 transition ${config.color === c.value ? 'scale-110 border-ink/60' : 'border-transparent hover:border-ink/30'}`}
+                  style={{ background: c.value }} />
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </li>
   );
 }
 
@@ -296,7 +353,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [output, setOutput] = useState(null);
   const [showAnswers, setShowAnswers] = useState(true);
   const [previewMode, setPreviewMode] = useState('answers'); // 'answers' | 'student' | 'practice'
-  const [blockStylePreset, setBlockStylePreset] = useState('default'); // 'default' | 'bold' | 'minimal'
+  const [blockConfigs, setBlockConfigs] = useState({}); // { [blockIndex]: { formatId, color } }
+  const [applyTemplateId, setApplyTemplateId] = useState("");
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -754,26 +812,67 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   }, [output]);
 
   /** Converts a flat block array to an HTML fragment for export / save-to-workspace. */
-  function renderBlocksAsHtml(blocks = []) {
-    return blocks.map((block) => {
+  function renderBlocksAsHtml(blocks = [], configs = {}, withAnswers = true) {
+    return blocks.map((block, i) => {
       const type = String(block?.type || '').toLowerCase().trim();
+      const cfg = configs[i] || {};
+      const fmt = cfg.formatId || BLOCKS[type]?.defaultFormat || 'default';
+      const color = cfg.color || '#0071e3';
       if (type === 'heading') {
         const level = Math.min(3, Math.max(1, Number(block.level) || 1));
-        return `<h${level} style="margin:0 0 8px;font-weight:700;line-height:1.25;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</h${level}>`;
+        const border = fmt === 'bold' ? `;border-bottom:3px solid ${color};padding-bottom:6px` : fmt === 'minimal' ? '' : `;border-bottom:1px solid rgba(0,0,0,0.1);padding-bottom:6px`;
+        return `<h${level} style="margin:0 0 12px;font-weight:${fmt === 'bold' ? 800 : 700};line-height:1.25;color:#1d1d1f${border}">${escapeHtml(String(block.text || ''))}</h${level}>`;
       }
       if (type === 'bullet_list') {
-        const listItems = (Array.isArray(block.items) ? block.items : []).map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('');
-        const titleHtml = block.title ? `<h4 style="margin:0 0 6px;font-size:13px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.title))}</h4>` : '';
-        return `${titleHtml}<ul style="margin:0;padding:0 0 0 20px">${listItems}</ul>`;
+        const items = Array.isArray(block.items) ? block.items : [];
+        const titleHtml = block.title ? `<p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.title))}</p>` : '';
+        if (fmt === 'numbered') return `${titleHtml}<ol style="margin:0 0 10px;padding:0 0 0 20px">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('')}</ol>`;
+        if (fmt === 'checkmark') return `${titleHtml}<ul style="margin:0 0 10px;padding:0;list-style:none">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5;display:flex;gap:6px"><span style="color:${color};font-weight:700">✓</span>${escapeHtml(String(item || ''))}</li>`).join('')}</ul>`;
+        return `${titleHtml}<ul style="margin:0 0 10px;padding:0 0 0 20px">${items.map((item) => `<li style="margin:0 0 4px;font-size:14px;line-height:1.5">${escapeHtml(String(item || ''))}</li>`).join('')}</ul>`;
       }
       if (type === 'divider') {
-        return '<hr style="border:none;border-top:1px solid rgba(29,29,31,0.1);margin:8px 0" />';
+        if (fmt === 'space') return '<div style="margin:20px 0"></div>';
+        return '<hr style="border:none;border-top:1px solid rgba(29,29,31,0.1);margin:12px 0" />';
       }
       if (type === 'paragraph') {
-        return `<p style="margin:0 0 8px;line-height:1.7;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p>`;
+        const lead = fmt === 'lead';
+        return `<p style="margin:0 0 10px;line-height:1.7;color:#1d1d1f;font-size:${lead ? 16 : 14}px">${escapeHtml(String(block.text || ''))}</p>`;
       }
       if (type === 'callout') {
-        return `<blockquote style="border-left:4px solid #0071e3;padding:8px 14px;margin:0 0 8px;background:#f0f7ff;border-radius:0 8px 8px 0"><p style="margin:0;line-height:1.6;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p></blockquote>`;
+        const bg = fmt === 'card' ? `${color}18` : 'transparent';
+        return `<div style="border-left:4px solid ${color};padding:10px 14px;margin:0 0 10px;background:${bg};border-radius:${fmt === 'card' ? '0 8px 8px 0' : '0'}"><p style="margin:0;line-height:1.6;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.text || ''))}</p></div>`;
+      }
+      if (type === 'question_mc') {
+        const opts = Array.isArray(block.options) ? block.options : [];
+        const optHtml = opts.map((opt, oi) => {
+          const letter = String.fromCharCode(65 + oi);
+          const correct = withAnswers && oi === Number(block.answer_index ?? -1);
+          return `<div style="display:flex;align-items:center;gap:8px;margin:4px 0;padding:6px 10px;border-radius:8px;background:${correct ? `${color}18` : 'rgba(0,0,0,0.03)'}"><span style="font-weight:700;color:${correct ? color : '#888'};min-width:18px">${letter}.</span><span style="font-size:13px;color:#1d1d1f">${escapeHtml(String(opt || ''))}</span>${correct ? `<span style="margin-left:auto;color:${color};font-weight:700">✓</span>` : ''}</div>`;
+        }).join('');
+        const expHtml = withAnswers && block.explanation ? `<p style="margin:8px 0 0;font-size:12px;color:#666;font-style:italic">${escapeHtml(String(block.explanation))}</p>` : '';
+        const ptsHtml = block.points != null ? `<p style="margin:6px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
+        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:16px 18px;margin:0 0 12px;background:white"><p style="margin:0 0 10px;font-weight:700;font-size:14px;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.question || ''))}</p>${optHtml}${expHtml}${ptsHtml}</div>`;
+      }
+      if (type === 'question_open') {
+        const lines = Math.min(8, Math.max(2, Number(block.lines) || 4));
+        const linesHtml = Array.from({ length: lines }).map(() => '<div style="border-bottom:1px solid rgba(0,0,0,0.15);height:28px;margin:2px 0"></div>').join('');
+        const ansHtml = withAnswers && block.answer_guide ? `<p style="margin:10px 0 0;font-size:12px;color:${color};font-weight:600">Answer guide: ${escapeHtml(String(block.answer_guide))}</p>` : '';
+        const ptsHtml = block.points != null ? `<p style="margin:4px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
+        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:16px 18px;margin:0 0 12px;background:white"><p style="margin:0 0 12px;font-weight:700;font-size:14px;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.question || ''))}</p>${linesHtml}${ansHtml}${ptsHtml}</div>`;
+      }
+      if (type === 'question_tf') {
+        const ans = withAnswers ? block.is_true : null;
+        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px 18px;margin:0 0 10px;background:white;display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-weight:700;font-size:14px;color:#1d1d1f;flex:1;min-width:200px">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${escapeHtml(String(block.statement || ''))}</span><div style="display:flex;gap:6px"><span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;background:${ans === true ? `${color}18` : 'rgba(0,0,0,0.05)'};color:${ans === true ? color : '#888'};border:1px solid ${ans === true ? color : 'transparent'}">True${ans === true ? ' ✓' : ''}</span><span style="padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;background:${ans === false ? '#dc354518' : 'rgba(0,0,0,0.05)'};color:${ans === false ? '#dc3545' : '#888'};border:1px solid ${ans === false ? '#dc3545' : 'transparent'}">False${ans === false ? ' ✓' : ''}</span></div></div>`;
+      }
+      if (type === 'question_fill') {
+        const escapedSentence = escapeHtml(String(block.sentence || ''));
+        const blankHtml = `<span style="display:inline-block;min-width:80px;border-bottom:2px solid ${color};color:${color};font-weight:600">${withAnswers && block.answer ? escapeHtml(String(block.answer)) : '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</span>`;
+        const sentHtml = escapedSentence.replace(/___/g, blankHtml);
+        const ptsHtml = block.points != null ? `<p style="margin:4px 0 0;font-size:11px;font-weight:600;color:#888">${block.points} pt${block.points === 1 ? '' : 's'}</p>` : '';
+        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:12px;padding:14px 18px;margin:0 0 10px;background:white"><p style="margin:0;font-size:14px;line-height:1.9;color:#1d1d1f">${block.number != null ? `${escapeHtml(String(block.number))}. ` : ''}${sentHtml}</p>${ptsHtml}</div>`;
+      }
+      if (type === 'flashcard') {
+        return `<div style="border:1px solid rgba(0,0,0,0.1);border-radius:16px;padding:20px 24px;margin:0 0 12px;background:white;display:grid;grid-template-columns:1fr 1fr;gap:16px"><div><p style="margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888">Front</p><p style="margin:0;font-size:14px;font-weight:700;color:#1d1d1f">${escapeHtml(String(block.front || ''))}</p></div><div style="border-left:2px solid ${color};padding-left:16px"><p style="margin:0 0 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#888">Back</p><p style="margin:0;font-size:14px;color:#1d1d1f">${escapeHtml(String(block.back || ''))}</p></div></div>`;
       }
       return `<p style="color:rgba(29,29,31,0.4);font-size:12px;margin:0 0 4px">[${escapeHtml(type || 'unknown')}]</p>`;
     }).join('\n');
@@ -782,12 +881,16 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   function buildDocumentHtml(forPrint = false) {
     // Block-based output: render blocks directly to HTML instead of the legacy field/card path.
     if (isBlockOutput && Array.isArray(output?.blocks) && output.blocks.length) {
-      const blockHtml = renderBlocksAsHtml(output.blocks);
+      const blockHtml = renderBlocksAsHtml(output.blocks, blockConfigs, showAnswers);
       const textContent = output.blocks.map((b) => {
         if (!b) return '';
         const type = String(b.type || '').toLowerCase();
         if (type === 'heading' || type === 'paragraph') return String(b.text || '');
         if (type === 'bullet_list') return [b.title, ...(Array.isArray(b.items) ? b.items : [])].filter(Boolean).join('\n');
+        if (type === 'question_mc' || type === 'question_open') return String(b.question || '');
+        if (type === 'question_tf') return String(b.statement || '');
+        if (type === 'question_fill') return String(b.sentence || '');
+        if (type === 'flashcard') return `${b.front || ''}: ${b.back || ''}`;
         return '';
       }).filter(Boolean).join('\n\n');
       return {
@@ -1040,17 +1143,16 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
 
   const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
-  // Build a merged templateConfig for BlockRenderer: start from the agent's selected blocks,
-  // then apply the user's chosen style preset (formatId override for heading/bullet_list).
-  const blockTemplateConfig = (() => {
-    const base = agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] };
-    const selected = Array.isArray(base?.selectedBlocks) ? base.selectedBlocks : [];
-    if (blockStylePreset === 'default') return base;
+  const blockTemplateConfig = useMemo(() => {
+    if (!outputBlocks) return agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] };
     return {
-      ...base,
-      selectedBlocks: selected.map((entry) => ({ ...entry, formatId: blockStylePreset }))
+      selectedBlocks: outputBlocks.map((block, i) => ({
+        type: block.type,
+        formatId: blockConfigs[i]?.formatId || BLOCKS[block?.type]?.defaultFormat || 'default',
+        color: blockConfigs[i]?.color || '#0071e3',
+      }))
     };
-  })();
+  }, [outputBlocks, blockConfigs, agentConfig]);
 
   const blockOutputPane = isBlockOutput ? (
     <div>
@@ -1070,24 +1172,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           </button>
         ))}
       </div>
-      {/* Style presets (Bug C fix) */}
-      <div style={{ display:'flex', gap:6, marginBottom:14, alignItems:'center' }}>
-        <span style={{ fontSize:11, fontWeight:600, color:'rgba(29,29,31,0.5)', marginRight:4, textTransform:'uppercase', letterSpacing:'0.08em' }}>Style</span>
-        {[
-          { id: 'default', label: 'Classic' },
-          { id: 'bold',    label: 'Bold' },
-          { id: 'minimal', label: 'Minimal' },
-        ].map(({ id, label }) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setBlockStylePreset(id)}
-            style={{ ...pillButtonBase, padding:'4px 12px', fontSize:12, background: blockStylePreset === id ? '#1d1d1f' : 'var(--paper,#fff)', color: blockStylePreset === id ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: blockStylePreset === id ? '#1d1d1f' : 'rgba(29,29,31,0.15)' }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
       {previewMode === 'practice' && (
         <p style={{ fontSize:12, color:'rgba(29,29,31,0.5)', margin:'0 0 12px 0' }}>
           Click options to answer · Fill in blanks · Click flashcards to flip
@@ -1095,7 +1179,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       )}
       {(outputBlocks && outputBlocks.length > 0) ? (
         <BlockRenderer
-          key={`${previewMode}-${blockStylePreset}`}
+          key={previewMode}
           blocks={outputBlocks}
           templateConfig={blockTemplateConfig}
           showAnswers={previewMode === 'answers'}
@@ -1232,7 +1316,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <div className="flex items-center gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-                {[{ id: "fields", label: "Output fields" }, { id: "layout", label: "Template" }, { id: "style", label: "Styling" }].map((tab) => (
+                {[{ id: "fields", label: "Output fields" }, ...(isBlockOutput ? [] : [{ id: "layout", label: "Template" }, { id: "style", label: "Styling" }])].map((tab) => (
                   <button key={tab.id} type="button" onClick={() => setOutputTab(tab.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${outputTab === tab.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>{tab.label}</button>
                 ))}
               </div>
@@ -1242,32 +1326,44 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
                     <div className="grid gap-2">
                       <div>
                         <p className={kicker}>Block output</p>
-                        <p className="m-0 mt-1 text-xs text-soft-ink">This agent produces a sequence of content blocks. The preview on the right shows the exact output. Use the style presets to change the look before exporting.</p>
+                        <p className="m-0 mt-1 text-xs text-soft-ink">Expand each block to choose its visual format and color. The preview updates instantly.</p>
                       </div>
                       {outputBlocks && outputBlocks.length > 0 ? (
                         <ul className="m-0 grid list-none gap-1.5 p-0">
-                          {outputBlocks.map((block, i) => {
-                            const type = String(block?.type || '');
-                            const ICONS = { heading: 'H', paragraph: '¶', bullet_list: '•', divider: '—', callout: '💡', question_mc: 'MC', question_open: 'Q', question_tf: 'T/F', question_fill: 'Fill', flashcard: '🃏' };
-                            const preview = type === 'heading' ? String(block.text || '').slice(0, 60)
-                              : type === 'bullet_list' ? (Array.isArray(block.items) && block.items.length ? String(block.items[0] || '').slice(0, 50) + (block.items.length > 1 ? ` +${block.items.length - 1} more` : '') : block.title || '')
-                              : type === 'paragraph' ? String(block.text || '').slice(0, 60)
-                              : type === 'divider' ? '──────────'
-                              : String(block.text || block.question || block.front || '').slice(0, 60);
-                            return (
-                              <li key={i} className="flex items-start gap-2 rounded-xl border border-ink/8 bg-white px-3 py-2">
-                                <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-md bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent-ink)]">{ICONS[type] || '?'}</span>
-                                <div className="min-w-0">
-                                  <span className="block text-xs font-semibold text-ink">{type.replace(/_/g, ' ')}</span>
-                                  {preview ? <span className="block truncate text-xs text-soft-ink">{preview}</span> : null}
-                                </div>
-                              </li>
-                            );
-                          })}
+                          {outputBlocks.map((block, i) => (
+                            <BlockConfigRow
+                              key={i}
+                              block={block}
+                              index={i}
+                              blockConfigs={blockConfigs}
+                              onConfigChange={(idx, cfg) => setBlockConfigs((prev) => ({ ...prev, [idx]: cfg }))}
+                            />
+                          ))}
                         </ul>
                       ) : (
                         <p className="m-0 text-xs text-soft-ink">Generate in step 1 to see the output blocks here.</p>
                       )}
+                      {templates.length > 0 ? (
+                        <div className="mt-1 grid gap-2 rounded-xl border border-ink/8 bg-[var(--surface-soft)] p-3">
+                          <p className={kicker}>Base on template</p>
+                          <p className="m-0 text-xs text-soft-ink">Apply a template's color scheme to all blocks at once.</p>
+                          <div className="flex gap-2">
+                            <select className={`${fieldClass} flex-1`} value={applyTemplateId} onChange={(e) => setApplyTemplateId(e.target.value)}>
+                              <option value="">Choose a template…</option>
+                              {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </select>
+                            <button type="button" className={ghostBtn} disabled={!applyTemplateId || !outputBlocks?.length} onClick={() => {
+                              const idx = templates.findIndex((t) => t.id === applyTemplateId);
+                              const color = BLOCK_COLORS[idx % BLOCK_COLORS.length]?.value || '#0071e3';
+                              setBlockConfigs((prev) => {
+                                const next = { ...prev };
+                                (outputBlocks || []).forEach((_, bi) => { next[bi] = { ...(prev[bi] || {}), color }; });
+                                return next;
+                              });
+                            }}>Apply</button>
+                          </div>
+                        </div>
+                      ) : null}
                       <button type="button" className={`${primaryBtn} justify-self-start`} onClick={() => setFlowStep(3)} disabled={!hasOutput}>Next: Export →</button>
                     </div>
                   ) : null}

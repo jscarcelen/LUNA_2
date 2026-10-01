@@ -320,23 +320,26 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
           )}
         </div>
 
-        {/* Right: AI fields summary */}
+        {/* Right: selected components summary */}
         <div className={`${card} p-4`}>
-          <p className={`${kicker} mb-2`}>What the agent will return</p>
-          {blockCount === 0 ? (
-            <p className="m-0 text-sm text-soft-ink">No blocks selected yet.</p>
+          <p className={`${kicker} mb-2`}>Selected components</p>
+          {resolvedBlockIds.length === 0 ? (
+            <p className="m-0 text-sm text-soft-ink">No components selected yet.</p>
           ) : (
             <>
-              <p className="m-0 mb-3 text-xs text-soft-ink">These AI fields will be in every output. The agent fills them; the template controls how they look.</p>
+              <p className="m-0 mb-3 text-xs text-soft-ink">These components will appear in the agent's output. Each one defines what the AI needs to fill in.</p>
               <div className="grid gap-1">
-                {template.fields.filter((f) => f.type !== "object").slice(0, 20).map((f) => (
-                  <div key={f.id} className="flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
-                    <span className="text-[11px] font-semibold text-[var(--accent-ink)]">✦</span>
-                    <span className="text-[12px] font-semibold text-ink">{f.name}</span>
-                    <span className="ml-auto text-[10px] text-soft-ink">{f.type}</span>
-                  </div>
-                ))}
-                {template.fields.length > 20 ? <p className="m-0 text-[11px] text-soft-ink">+{template.fields.length - 20} more…</p> : null}
+                {resolvedBlockIds.map((id) => {
+                  const block = findBlock(id);
+                  if (!block) return null;
+                  return (
+                    <div key={id} className="flex items-center gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2">
+                      <span className="text-[11px] font-semibold text-[var(--accent-ink)]">✦</span>
+                      <span className="text-[12px] font-semibold text-ink">{block.variant || block.name}</span>
+                      <span className="ml-auto text-[10px] text-soft-ink">{(block.options || []).length} fields</span>
+                    </div>
+                  );
+                })}
               </div>
               {blockCount > 0 && (
                 <details className="mt-4">

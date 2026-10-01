@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newGoal, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
+import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
@@ -320,6 +320,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
     return (
       <section className="tw-scope grid gap-4">
+        {/* ── Header ── */}
         <div className={`${card} p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
@@ -347,10 +348,72 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           </div>
         </div>
 
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section className={`${card} p-5`}>
-            <div className="flex items-center justify-between gap-2">
-              <p className={kicker}>The plan</p>
+        {/* ── Deadlines — full width, first ── */}
+        <section className={`${card} p-5`}>
+          <p className={kicker}>Deadlines</p>
+          <div className="mt-2 grid gap-2">
+            {(plan.deadlines || []).map((deadline) => (
+              <div key={deadline.id} className="flex flex-wrap items-center gap-1.5 rounded-xl border border-ink/10 p-2">
+                <input className="min-w-0 flex-1 rounded-lg border border-ink/12 px-2 py-1 text-sm" value={deadline.title} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, title: event.target.value } : entry)) }))} />
+                <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
+                  {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                </select>
+                <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
+                <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date)}</span>
+                <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
+              </div>
+            ))}
+            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt("What is the deadline? e.g. Mock exam"); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ Add a deadline</button>
+          </div>
+        </section>
+
+        {/* ── Performance replan alert ── */}
+        {replanResult?.shouldReplan ? (
+          <section className={`${card} p-5`} style={{ borderLeft: `4px solid var(--accent)` }}>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className={kicker}>Performance update — plan adjustment suggested</p>
+                <ul className="m-0 mt-2 grid list-none gap-1 p-0">
+                  {(replanResult.reasons || []).map((r, i) => <li key={i} className="text-sm text-ink">{r.message}</li>)}
+                </ul>
+              </div>
+              <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => setReplanResult(null)}>✕</button>
+            </div>
+            {replanResult.suggestedItems?.length ? (
+              <div className="mt-3">
+                <p className="m-0 text-xs font-semibold text-soft-ink">Suggested additions:</p>
+                <div className="mt-2 grid gap-2">
+                  {replanResult.suggestedItems.map((sugItem, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="m-0 text-sm font-semibold text-ink">{sugItem.title}</p>
+                        <p className="m-0 text-[11px] text-soft-ink">{sugItem.reason} · {sugItem.minutes} min · due {sugItem.dueDate}</p>
+                        {sugItem.conceptName ? <span className={`${chip} mt-1 bg-[var(--surface-soft)] text-soft-ink`}>{sugItem.conceptName}</span> : null}
+                      </div>
+                      <button type="button" className={ghostBtn} onClick={() => { updateOpen((current) => ({ ...current, items: [...current.items, newItem({ title: sugItem.title, kind: sugItem.kind || "activity", dueDate: sugItem.dueDate, minutes: sugItem.minutes || 30 })] })); }}>＋ Add</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {/* ── The plan — full width with list / calendar toggle ── */}
+        <section className={`${card} p-5`}>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className={kicker}>The plan</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Add reference material */}
+              <select
+                className="rounded-xl border border-ink/12 bg-white px-2 py-1 text-xs"
+                value=""
+                onChange={(event) => { if (event.target.value) addMaterialToPlan(event.target.value); }}
+              >
+                <option value="">＋ Add reference material…</option>
+                {documents.filter((d) => !(plan.materialIds || []).includes(d.id) && !(d.tags || []).includes("study-plan") && !(d.tags || []).includes("activity-attempt")).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+              {/* Add activity resource */}
               <select
                 className="rounded-xl border border-ink/12 bg-white px-2 py-1 text-xs"
                 value=""
@@ -363,202 +426,147 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 <option value="">＋ Add a resource…</option>
                 {resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}
               </select>
-            </div>
-            {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing scheduled yet. Add a resource here, or use "＋ Plan" on any resource in your folders.</p> : null}
-            <div className="mt-3 grid gap-4">
-              {weeks.map((week) => (
-                <div key={week.start || "undated"}>
-                  <p className="m-0 text-xs font-bold uppercase tracking-[0.1em] text-soft-ink">
-                    {week.start ? `Week of ${new Date(`${week.start}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long" })}` : "No date yet"}
-                  </p>
-                  <div className="mt-2 grid gap-2">
-                    {week.items.map((item) => {
-                      const score = progress.scoreByResource.get(item.resourceId);
-                      const done = Boolean(item.doneAt) || score !== undefined;
-                      const late = !done && dueLabel(item.dueDate).includes("late");
-                      const kind = ITEM_KINDS.find((entry) => entry.id === item.kind) || ITEM_KINDS[0];
-                      return (
-                        <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
-                          <button
-                            type="button"
-                            title={done ? "Mark as not done" : "Mark as done"}
-                            className={`grid size-6 shrink-0 place-items-center rounded-full border text-xs ${done ? "border-[#2f9e5b] bg-[#2f9e5b] text-white" : "border-ink/25 text-transparent"}`}
-                            onClick={() => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, doneAt: entry.doneAt ? "" : new Date().toISOString() } : entry)) }))}
-                          >
-                            ✓
-                          </button>
-                          <span className="shrink-0 text-sm" aria-hidden>{kind.icon}</span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                            <span className="block text-[11px] text-soft-ink">{kind.label}{item.minutes ? ` · ${item.minutes} min` : ""}{item.goalId ? ` · ${(plan.goals.find((goal) => goal.id === item.goalId) || {}).title || ""}` : ""}{score !== undefined ? ` · scored ${Math.round(score * 100)}%` : ""}</span>
-                          </span>
-                          <select
-                            className="rounded-lg border border-ink/12 px-2 py-1 text-xs"
-                            value={item.goalId || ""}
-                            onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, goalId: event.target.value } : entry)) }))}
-                          >
-                            <option value="">No goal</option>
-                            {plan.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
-                          </select>
-                          <input
-                            type="date"
-                            className="rounded-lg border border-ink/12 px-2 py-1 text-xs"
-                            value={item.dueDate || ""}
-                            onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
-                          />
-                          {item.resourceId ? (() => {
-                            const resourceDoc = documents.find((d) => d.id === item.resourceId);
-                            const resource = resourceDoc ? parseResource(resourceDoc) : null;
-                            const activity = resource?.activity?.questions?.length ? resource.activity : null;
-                            return (
-                              <>
-                                {activity ? (
-                                  <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
-                                ) : onOpenResource ? (
-                                  <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>Open</button>
-                                ) : null}
-                                {activity && onOpenResource ? (
-                                  <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>View</button>
-                                ) : null}
-                              </>
-                            );
-                          })() : null}
-                          <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <div className="grid gap-3">
-            <section className={`${card} p-5`}>
-              <p className={kicker}>Deadlines</p>
-              <div className="mt-2 grid gap-2">
-                {(plan.deadlines || []).map((deadline) => (
-                  <div key={deadline.id} className="flex flex-wrap items-center gap-1.5 rounded-xl border border-ink/10 p-2">
-                    <input className="min-w-0 flex-1 rounded-lg border border-ink/12 px-2 py-1 text-sm" value={deadline.title} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, title: event.target.value } : entry)) }))} />
-                    <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
-                      {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-                    </select>
-                    <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
-                    <span className="text-[11px] text-soft-ink">{dueLabel(deadline.date)}</span>
-                    <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
-                  </div>
+              {/* Update from performance */}
+              <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
+                {replanning ? "Checking…" : "↺ Update from performance"}
+              </button>
+              {/* List / Calendar view toggle */}
+              <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
+                {[["list", "List"], ["calendar", "Calendar"]].map(([value, label]) => (
+                  <button key={value} type="button" onClick={() => setPlanView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${planView === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>
                 ))}
-                <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt("What is the deadline? e.g. Mock exam"); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ Add a deadline</button>
               </div>
-            </section>
-
-            <section className={`${card} p-5`}>
-              <p className={kicker}>What to achieve</p>
-              <p className="m-0 mt-1 text-[11px] text-soft-ink">A goal can name the concepts it covers and the resources that teach them.</p>
-              <div className="mt-2 grid gap-2">
-                {progress.goals.map((goal) => (
-                  <div key={goal.id} className="rounded-xl border border-ink/10 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="m-0 text-sm font-semibold text-ink">{goal.title}</p>
-                      <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => updateOpen((current) => ({ ...current, goals: current.goals.filter((entry) => entry.id !== goal.id), items: current.items.map((entry) => (entry.goalId === goal.id ? { ...entry, goalId: "" } : entry)) }))}>✕</button>
-                    </div>
-                    <p className="m-0 mt-1 text-[11px] text-soft-ink">Target {Math.round((goal.targetScore || 0.8) * 100)}% · {goal.done} of {goal.total} steps{goal.average ? ` · averaging ${Math.round(goal.average * 100)}%` : ""}</p>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${goal.total ? (goal.done / goal.total) * 100 : 0}%`, background: goal.met ? "#2f9e5b" : plan.colour }} /></div>
-                    {(goal.concepts || []).length ? <p className="m-0 mt-2 flex flex-wrap gap-1">{goal.concepts.map((concept) => <span key={concept} className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{concept}</span>)}</p> : null}
-                    <div className="mt-2 grid gap-1.5">
-                      {concepts.length ? (
-                        <select
-                          className="rounded-lg border border-ink/12 bg-white px-2 py-1 text-xs"
-                          value=""
-                          onChange={(event) => {
-                            const value = event.target.value;
-                            if (!value) return;
-                            const entry = concepts.find((item) => item.key === value);
-                            updateOpen((current) => ({
-                              ...current,
-                              goals: current.goals.map((item) => (item.id === goal.id
-                                ? { ...item, concepts: [...new Set([...(item.concepts || []), entry.name])], resourceIds: [...new Set([...(item.resourceIds || []), ...entry.resources.map((resource) => resource.documentId)])] }
-                                : item))
-                            }));
-                          }}
-                        >
-                          <option value="">＋ Cover a concept…</option>
-                          {concepts.map((entry) => <option key={entry.key} value={entry.key}>{entry.name} ({entry.resources.length} resource{entry.resources.length === 1 ? "" : "s"})</option>)}
-                        </select>
-                      ) : null}
-                      <select
-                        className="rounded-lg border border-ink/12 bg-white px-2 py-1 text-xs"
-                        value=""
-                        onChange={(event) => {
-                          const row = resources.find((item) => item.document.id === event.target.value);
-                          if (!row) return;
-                          updateOpen((current) => ({
-                            ...current,
-                            goals: current.goals.map((item) => (item.id === goal.id ? { ...item, resourceIds: [...new Set([...(item.resourceIds || []), row.document.id])], concepts: [...new Set([...(item.concepts || []), ...resourceConcepts(row.resource).map((concept) => concept.name)])] } : item)),
-                            items: current.items.some((item) => item.resourceId === row.document.id)
-                              ? current.items.map((item) => (item.resourceId === row.document.id ? { ...item, goalId: goal.id } : item))
-                              : [...current.items, newItem({ resourceId: row.document.id, title: row.resource.name, kind: row.resource.activity ? "activity" : "read", goalId: goal.id })]
-                          }));
-                        }}
-                      >
-                        <option value="">＋ Link a resource to this goal…</option>
-                        {resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                ))}
-                <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt("What should be achieved? e.g. Master quadratic equations"); if (title) updateOpen((current) => ({ ...current, goals: [...current.goals, newGoal(title)] })); }}>＋ Add a goal</button>
-              </div>
-            </section>
-
-            <section className={`${card} p-5`}>
-              <p className={kicker}>Sub-plans</p>
-              <p className="m-0 mt-1 text-[11px] text-soft-ink">Break a big exam into the topics it is made of; the parent shows their combined progress.</p>
-              <div className="mt-2 grid gap-1.5">
-                {children.map((row) => {
-                  const childProgress = planProgress(row.plan, attempts);
-                  return (
-                    <button key={row.document.id} type="button" className="flex items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 text-left hover:bg-[var(--surface-soft)]" onClick={() => setOpenId(row.document.id)}>
-                      <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.plan.colour }} />
-                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{row.plan.name}</span><span className="block text-[11px] text-soft-ink">{childProgress.done}/{childProgress.total} steps{childProgress.deadline ? ` · ${dueLabel(childProgress.deadline.date)}` : ""}</span></span>
-                      <span className="text-xs font-bold text-soft-ink">{Math.round(childProgress.ratio * 100)}%</span>
-                    </button>
-                  );
-                })}
-                <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { setDraft({ name: "", examDate: "", colour: plan.colour, note: "", parentPlanId: open.document.id }); setCreating(true); }}>＋ New sub-plan</button>
-                {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).length ? (
-                  <select className="rounded-lg border border-ink/12 bg-white px-2 py-1 text-xs" value="" onChange={(event) => { const row = plans.find((item) => item.document.id === event.target.value); if (row) save({ ...row.plan, parentPlanId: open.document.id }, row.document.id); }}>
-                    <option value="">Move an existing plan under this one…</option>
-                    {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
-                  </select>
-                ) : null}
-              </div>
-            </section>
-
-            <section className={`${card} p-5`}>
-              <p className={kicker}>Student model</p>
-              <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept — weakest first. Updated live after each activity.</p>
-              <ConceptMasteryList concepts={graphConcepts} masteryByConceptId={masteryByConceptId} />
-            </section>
-
-            <section className={`${card} p-5`}>
-              <p className={kicker}>Plan settings</p>
-              <div className="mt-2 grid gap-2">
-                <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input className={field} value={plan.name} onChange={(event) => updateOpen((current) => ({ ...current, name: event.target.value }))} /></label>
-                <label className="grid gap-1 text-xs font-semibold text-soft-ink">Notes<textarea className={field} rows={3} value={plan.note || ""} onChange={(event) => updateOpen((current) => ({ ...current, note: event.target.value }))} /></label>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((current) => ({ ...current, colour }))} />)}
-                </div>
-                {plan.parentPlanId ? <button type="button" className="justify-self-start text-xs font-semibold text-soft-ink hover:underline" onClick={() => updateOpen((current) => ({ ...current, parentPlanId: "" }))}>Detach from its parent plan</button> : null}
-                {onRemoveDocument ? <button type="button" className="justify-self-start text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => setDeletingPlan(open)}>Delete this plan…</button> : null}
-              </div>
-            </section>
+            </div>
           </div>
-        </div>
 
-        {/* Full-width knowledge graph */}
+          {planView === "calendar" ? (
+            <div className="mt-3">
+              <PlanCalendar rows={[open]} attempts={attempts} onOpenPlan={() => {}} onMoveItem={moveItem} />
+            </div>
+          ) : (
+            <>
+              {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing scheduled yet. Add a resource here, or use "＋ Plan" on any resource in your folders.</p> : null}
+              <div className="mt-3 grid gap-4">
+                {weeks.map((week) => (
+                  <div key={week.start || "undated"}>
+                    <p className="m-0 text-xs font-bold uppercase tracking-[0.1em] text-soft-ink">
+                      {week.start ? `Week of ${new Date(`${week.start}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long" })}` : "No date yet"}
+                    </p>
+                    <div className="mt-2 grid gap-2">
+                      {week.items.map((item) => {
+                        const score = progress.scoreByResource.get(item.resourceId);
+                        const done = Boolean(item.doneAt) || score !== undefined;
+                        const late = !done && dueLabel(item.dueDate).includes("late");
+                        const kind = ITEM_KINDS.find((entry) => entry.id === item.kind) || ITEM_KINDS[0];
+                        const itemConcepts = item.resourceId ? (conceptsByResourceId.get(item.resourceId) || []) : [];
+                        return (
+                          <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
+                            <button
+                              type="button"
+                              title={done ? "Mark as not done" : "Mark as done"}
+                              className={`grid size-6 shrink-0 place-items-center rounded-full border text-xs ${done ? "border-[#2f9e5b] bg-[#2f9e5b] text-white" : "border-ink/25 text-transparent"}`}
+                              onClick={() => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, doneAt: entry.doneAt ? "" : new Date().toISOString() } : entry)) }))}
+                            >
+                              ✓
+                            </button>
+                            <span className="shrink-0 text-sm" aria-hidden>{kind.icon}</span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
+                              <span className="block text-[11px] text-soft-ink">{kind.label}{item.minutes ? ` · ${item.minutes} min` : ""}{score !== undefined ? ` · scored ${Math.round(score * 100)}%` : ""}</span>
+                              {itemConcepts.length > 0 && (
+                                <p className="m-0 mt-1 flex flex-wrap gap-1">
+                                  {itemConcepts.slice(0, 5).map((name) => {
+                                    const gc = graphConcepts.find((c) => c.name === name);
+                                    const mastery = gc ? masteryByConceptId[gc.id] : undefined;
+                                    const color = mastery === undefined ? "#9ca3af" : mastery < 0.4 ? "#ff3b30" : mastery < 0.7 ? "#ff9500" : "#34c759";
+                                    return <span key={name} className={`${chip} text-[9px]`} style={{ background: `${color}20`, color }}>{name}</span>;
+                                  })}
+                                  {itemConcepts.length > 5 && <span className={`${chip} text-[9px] bg-[var(--surface-soft)] text-soft-ink`}>+{itemConcepts.length - 5} more</span>}
+                                </p>
+                              )}
+                            </span>
+                            <input
+                              type="date"
+                              className="rounded-lg border border-ink/12 px-2 py-1 text-xs"
+                              value={item.dueDate || ""}
+                              onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
+                            />
+                            {item.resourceId ? (() => {
+                              const resourceDoc = documents.find((d) => d.id === item.resourceId);
+                              const resource = resourceDoc ? parseResource(resourceDoc) : null;
+                              const activity = resource?.activity?.questions?.length ? resource.activity : null;
+                              return (
+                                <>
+                                  {activity ? (
+                                    <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                                  ) : null}
+                                  {onOpenResource ? (
+                                    <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>{activity ? "View" : "Open"}</button>
+                                  ) : null}
+                                </>
+                              );
+                            })() : null}
+                            <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+
+        {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
-          <div className="flex items-start justify-between gap-4 flex-wrap">
+          <p className={kicker}>Student model</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept — weakest first. Updated live after each activity.</p>
+          <ConceptMasteryList concepts={graphConcepts} masteryByConceptId={masteryByConceptId} />
+        </section>
+
+        {/* ── Sub-plans ── */}
+        <section className={`${card} p-5`}>
+          <p className={kicker}>Sub-plans</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Break a big exam into the topics it is made of; the parent shows their combined progress.</p>
+          <div className="mt-2 grid gap-1.5">
+            {children.map((row) => {
+              const childProgress = planProgress(row.plan, attempts);
+              return (
+                <button key={row.document.id} type="button" className="flex items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 text-left hover:bg-[var(--surface-soft)]" onClick={() => setOpenId(row.document.id)}>
+                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.plan.colour }} />
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{row.plan.name}</span><span className="block text-[11px] text-soft-ink">{childProgress.done}/{childProgress.total} steps{childProgress.deadline ? ` · ${dueLabel(childProgress.deadline.date)}` : ""}</span></span>
+                  <span className="text-xs font-bold text-soft-ink">{Math.round(childProgress.ratio * 100)}%</span>
+                </button>
+              );
+            })}
+            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { setDraft({ name: "", examDate: "", colour: plan.colour, note: "", parentPlanId: open.document.id }); setCreating(true); }}>＋ New sub-plan</button>
+            {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).length ? (
+              <select className="rounded-lg border border-ink/12 bg-white px-2 py-1 text-xs" value="" onChange={(event) => { const row = plans.find((item) => item.document.id === event.target.value); if (row) save({ ...row.plan, parentPlanId: open.document.id }, row.document.id); }}>
+                <option value="">Move an existing plan under this one…</option>
+                {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
+              </select>
+            ) : null}
+          </div>
+        </section>
+
+        {/* ── Plan settings ── */}
+        <section className={`${card} p-5`}>
+          <p className={kicker}>Plan settings</p>
+          <div className="mt-2 grid gap-2">
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input className={field} value={plan.name} onChange={(event) => updateOpen((current) => ({ ...current, name: event.target.value }))} /></label>
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Notes<textarea className={field} rows={3} value={plan.note || ""} onChange={(event) => updateOpen((current) => ({ ...current, note: event.target.value }))} /></label>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((current) => ({ ...current, colour }))} />)}
+            </div>
+            {plan.parentPlanId ? <button type="button" className="justify-self-start text-xs font-semibold text-soft-ink hover:underline" onClick={() => updateOpen((current) => ({ ...current, parentPlanId: "" }))}>Detach from its parent plan</button> : null}
+            {onRemoveDocument ? <button type="button" className="justify-self-start text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => setDeletingPlan(open)}>Delete this plan…</button> : null}
+          </div>
+        </section>
+
+        {/* ── Concept map — full width, last ── */}
+        <section className={`${card} p-5`}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className={kicker}>Concept map</p>
               <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">

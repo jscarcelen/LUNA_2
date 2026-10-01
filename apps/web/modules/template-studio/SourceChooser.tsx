@@ -30,9 +30,20 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
           <h2 className="m-0 mt-2 text-2xl font-bold tracking-tight text-ink">My templates</h2>
           <p className="m-0 mt-0.5 text-sm text-soft-ink">Templates tell the AI how to format and present its output.</p>
         </div>
-        <button type="button" className={`${primaryBtn} gap-1.5 px-5 py-2.5 text-sm`} onClick={onNewTemplate}>
-          ＋ New template
-        </button>
+        <div className="flex items-center gap-2">
+          <a
+            href="/dev/block-matrix"
+            target="_blank"
+            rel="noreferrer"
+            title="Internal developer tool — Block Component Matrix"
+            className="rounded-xl border border-ink/10 px-3 py-2 text-xs font-semibold text-soft-ink hover:border-ink/25 hover:text-ink"
+          >
+            ⊞ Block Matrix
+          </a>
+          <button type="button" className={`${primaryBtn} gap-1.5 px-5 py-2.5 text-sm`} onClick={onNewTemplate}>
+            ＋ New template
+          </button>
+        </div>
       </div>
 
       {/* Gallery */}

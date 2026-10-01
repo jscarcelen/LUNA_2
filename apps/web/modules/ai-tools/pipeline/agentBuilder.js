@@ -398,13 +398,27 @@ function buildBlockSchemaSummary(selectedBlockIds) {
 }
 
 /**
- * Makes a fast, cheap GPT call to rewrite vague user instructions into a precise numbered ruleset.
+ * Makes a fast, cheap GPT call to rewrite vague user instructions into a precise numbered ruleset
+ * plus a concrete JSON skeleton showing the exact items array structure the content agent must follow.
  * Returns the enhanced rules string, or falls back to rawInstructions on any failure.
  */
 async function enhanceOutputInstructions(rawInstructions, selectedBlockIds, blockSchemaSummary) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !String(rawInstructions || "").trim()) return rawInstructions || "";
   try {
+    const systemMsg = `You are a prompt engineer for a structured-content AI. Your job is to turn vague user instructions into a PRECISE ruleset + a CONCRETE JSON SKELETON.
+
+RULES FOR YOUR OUTPUT:
+1. Start with numbered rules that enforce exact counts, ordering, and field values.
+2. End with a JSON skeleton showing the complete "items" array structure using PLACEHOLDER values like "{{heading text}}", "{{bullet text 1}}", etc.
+3. Interpret "divided by divider" / "divider between each" as: place a {"type":"divider"} BETWEEN each content block (not at the end).
+   Example: 3 bullets divided by dividers → bullet → divider → bullet → divider → bullet (5 items total).
+4. Interpret "single bullet point" or "one item per bullet" as: one {"type":"bullet_list","items":["{{text}}"]} per bullet.
+   bullet_list items array can have 1–8 entries; use 1 when each bullet is a standalone point.
+5. Extract exact numeric counts and enforce them (e.g. "exactly 3" → produce exactly 3, never 2 or 4).
+6. Only use block types from the ALLOWED list provided.
+Output only the ruleset + JSON skeleton. No preamble, no explanation.`;
+
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -414,16 +428,10 @@ async function enhanceOutputInstructions(rawInstructions, selectedBlockIds, bloc
       body: JSON.stringify({
         model: "gpt-4o-mini",
         temperature: 0,
-        max_tokens: 300,
+        max_tokens: 500,
         messages: [
-          {
-            role: "system",
-            content: "You are a prompt engineer. Given user instructions for an AI content generator and its available block types, rewrite the instructions as a precise numbered ruleset. Extract exact counts (e.g. 'exactly 3 items'), ordering constraints (e.g. 'heading FIRST, then bullet_list, then divider'), and field-level rules (e.g. 'items array must have exactly 3 strings'). Be concise. Output only the rules, no preamble."
-          },
-          {
-            role: "user",
-            content: `Instructions: ${rawInstructions}\n\nAvailable blocks:\n${blockSchemaSummary}`
-          }
+          { role: "system", content: systemMsg },
+          { role: "user", content: `Instructions: ${rawInstructions}\n\nAvailable blocks:\n${blockSchemaSummary}` }
         ]
       })
     });

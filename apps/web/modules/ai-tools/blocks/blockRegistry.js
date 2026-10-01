@@ -47,7 +47,7 @@ export const BLOCKS = {
     icon: '•',
     aiFields: {
       title: { type: 'string',   description: 'Optional list title/label', required: false, example: 'Key points:' },
-      items: { type: 'string[]', description: 'List items, 2–8 entries',   required: true,  example: ['First point', 'Second point'] },
+      items: { type: 'string[]', description: 'List items, 1–8 entries (use 1 when each bullet is a standalone point separated by dividers)',   required: true,  example: ['First point', 'Second point'] },
     },
     formats: [
       { id: 'default',   label: 'Default',   description: 'Standard bullet dots' },

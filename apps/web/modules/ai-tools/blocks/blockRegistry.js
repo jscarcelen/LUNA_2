@@ -202,34 +202,51 @@ export function getBlock(id) { return BLOCKS[id]; }
 
 /**
  * Build a JSON Schema for the AI output based on selected block IDs.
- * Returns a schema describing an array of block objects.
+ *
+ * OpenAI structured-output strict mode forbids `oneOf`/`anyOf` for discriminated unions and
+ * requires every property to be listed in `required`. We therefore use a FLAT schema: all field
+ * names across all selected block types are merged into a single item object; each non-`type`
+ * field is nullable (`anyOf: [{…}, {type:"null"}]`) so the model can set irrelevant fields to
+ * null. `type` is a plain string (not a `const`) — the prompt tells the model which values are
+ * valid. This is the only schema shape that OpenAI strict mode reliably accepts for polymorphic
+ * block arrays.
  */
 export function buildJsonSchema(selectedBlockIds) {
-  const oneOf = (selectedBlockIds || [])
-    .filter((id) => BLOCKS[id])
-    .map((id) => {
-      const block = BLOCKS[id];
-      const properties = { type: { const: id } };
-      const required = ['type'];
-      for (const [field, def] of Object.entries(block.aiFields)) {
-        properties[field] = {
-          description: def.description,
-          ...(def.type === 'string[]'   ? { type: 'array', items: { type: 'string' } } :
-              def.type === 'string[4]'  ? { type: 'array', items: { type: 'string' }, minItems: 4, maxItems: 4 } :
-              def.type === 'boolean'    ? { type: 'boolean' } :
-              def.type === 'number'     ? { type: 'number' } :
-                                          { type: 'string' }),
-        };
-        if (def.required) required.push(field);
-      }
-      return { type: 'object', properties, required, additionalProperties: false };
-    });
+  const ids = (selectedBlockIds || []).filter((id) => BLOCKS[id]);
 
-  return {
-    type: 'array',
-    items: oneOf.length === 1 ? oneOf[0] : { oneOf },
-    minItems: 1,
+  // Collect every unique field name across all selected block types.
+  const fieldMap = {}; // fieldName → def (first seen wins for type info)
+  for (const id of ids) {
+    for (const [name, def] of Object.entries(BLOCKS[id].aiFields)) {
+      if (!fieldMap[name]) fieldMap[name] = def;
+    }
+  }
+
+  // Build a flat item schema: `type` required string, every other field nullable.
+  const properties = {
+    type: {
+      type: 'string',
+      description: `Block type. Must be one of: ${ids.join(', ')}.`,
+    },
   };
+  const required = ['type'];
+
+  for (const [name, def] of Object.entries(fieldMap)) {
+    required.push(name);
+    const base =
+      def.type === 'string[]' || def.type === 'string[4]'
+        ? { type: 'array', items: { type: 'string' } }
+        : def.type === 'boolean'
+        ? { type: 'boolean' }
+        : def.type === 'number'
+        ? { type: 'number' }
+        : { type: 'string' };
+    // Wrap as nullable so strict mode accepts it as optional for block types that lack this field.
+    properties[name] = { description: def.description, anyOf: [base, { type: 'null' }] };
+  }
+
+  const itemSchema = { type: 'object', properties, required, additionalProperties: false };
+  return { type: 'array', items: itemSchema };
 }
 
 /**

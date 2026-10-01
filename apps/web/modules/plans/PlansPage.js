@@ -19,6 +19,154 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const field = "w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm text-ink";
 const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
 
+// ─── Skill-tag helpers ──────────────────────────────────────────────────────
+
+const MATH_KEYWORDS = ["equation","formula","calcul","algebra","geom","statistic","probabilit","arithm","derivative","integral","mean","median","mode","variance","range","function","trigon","logarithm"];
+
+/**
+ * Infer human-readable skill-category tags from an item's kind + the resource's
+ * concept levels and names. Returns [{label, cls}] where cls is a Tailwind string.
+ */
+function inferSkillTags(item, resource) {
+  const tags = [];
+  const concepts = resource?.concepts || [];
+  const levels = new Set(concepts.map((c) => c.level).filter(Boolean));
+  const names = concepts.map((c) => String(c.name || "").toLowerCase()).join(" ");
+
+  if (item.kind === "read" || item.kind === "review") {
+    tags.push({ label: "Reading", cls: "border-[#5856d6]/30 bg-[#5856d6]/10 text-[#5856d6]" });
+  }
+  if (item.kind === "exam") {
+    tags.push({ label: "Assessment", cls: "border-[#ff3b30]/30 bg-[#ff3b30]/10 text-[#ff3b30]" });
+  }
+  if (levels.has("apply") || levels.has("analyse")) {
+    tags.push({ label: "Problem-solving", cls: "border-[#ff9500]/30 bg-[#ff9500]/10 text-[#b86000]" });
+  } else if (levels.has("understand") || levels.has("remember")) {
+    tags.push({ label: "Conceptual", cls: "border-[#0071e3]/30 bg-[#0071e3]/10 text-[#0071e3]" });
+  }
+  if (MATH_KEYWORDS.some((kw) => names.includes(kw))) {
+    tags.push({ label: "Maths", cls: "border-[#34c759]/30 bg-[#34c759]/10 text-[#1d7a44]" });
+  }
+  return tags;
+}
+
+// ─── Material picker modal ──────────────────────────────────────────────────
+
+/** Flat folders array → tree with .children arrays. */
+function buildFolderTree(folders = []) {
+  const byId = {};
+  for (const f of folders) byId[f.id] = { ...f, children: [] };
+  const roots = [];
+  for (const f of folders) {
+    if (f.parentFolderId && byId[f.parentFolderId]) byId[f.parentFolderId].children.push(byId[f.id]);
+    else roots.push(byId[f.id]);
+  }
+  return roots;
+}
+
+/** Collapsible folder node with checkboxes (used inside MaterialPickerModal). */
+function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel }) {
+  const [expanded, setExpanded] = useState(true);
+  const folderDocs = docs.filter((d) => (d.folderIds || (d.folderId ? [d.folderId] : [])).includes(node.id));
+  const childDocCount = node.children.reduce((n, c) => n + docs.filter((d) => (d.folderIds || (d.folderId ? [d.folderId] : [])).includes(c.id)).length, 0);
+  if (folderDocs.length + childDocCount === 0 && node.children.length === 0) return null;
+  return (
+    <div style={{ paddingLeft: depth * 12 }}>
+      <button type="button" onClick={() => setExpanded((v) => !v)} className="flex w-full items-center gap-1.5 rounded-lg px-1 py-0.5 text-left text-xs font-semibold text-soft-ink transition hover:bg-ink/5">
+        <span style={{ fontSize: 10 }}>{expanded ? "▾" : "▸"}</span>
+        <span className="truncate">{node.name}</span>
+        {(folderDocs.length + childDocCount) > 0 && <span className="ml-auto shrink-0 text-[10px] text-soft-ink/60">{folderDocs.length + childDocCount}</span>}
+      </button>
+      {expanded && (
+        <div>
+          {folderDocs.map((doc) => (
+            <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5 cursor-pointer" style={{ paddingLeft: 20 }}>
+              <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => onToggle(doc.id)} className="shrink-0" />
+              <span className="truncate">{docLabel(doc)}</span>
+            </label>
+          ))}
+          {node.children.map((child) => <FolderPickerNode key={child.id} node={child} depth={depth + 1} docs={docs} picked={picked} onToggle={onToggle} docLabel={docLabel} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Full-height modal that mirrors the GeneratePlanDialog file picker.
+ * initialPicked = union of plan.materialIds + plan items' resourceIds.
+ * onConfirm(newPicked[]) returns the final selection.
+ */
+function MaterialPickerModal({ documents, folders, resources, initialPicked, onClose, onConfirm }) {
+  const [picked, setPicked] = useState(() => [...initialPicked]);
+  const resourceByDocumentId = useMemo(() => new Map(resources.map((row) => [row.document.id, row.resource])), [resources]);
+  const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
+  const allFolderIds = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
+  const unorganised = useMemo(() => documents.filter((d) => {
+    const df = d.folderIds || (d.folderId ? [d.folderId] : []);
+    return !df.some((fid) => allFolderIds.has(fid));
+  }), [documents, allFolderIds]);
+
+  const toggle = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  const docLabel = (doc) => (doc && (resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
+  const pickedDocs = picked.map((id) => {
+    const doc = documents.find((d) => d.id === id);
+    return { id, label: docLabel(doc || { id, name: id }) };
+  });
+
+  return (
+    <div className="tw-scope fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
+      <div className="flex w-full max-w-lg flex-col rounded-2xl bg-white shadow-[0_24px_64px_rgba(0,0,0,0.25)]" style={{ maxHeight: "82vh" }} onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
+          <div>
+            <h4 className="m-0 text-base font-bold text-ink">Materials &amp; resources</h4>
+            <p className="m-0 mt-0.5 text-xs text-soft-ink">Tick documents to include — they feed the concept map and can be scheduled as reading steps.</p>
+          </div>
+          <button type="button" className="shrink-0 text-soft-ink hover:text-ink" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Folder tree */}
+        <div className="flex-1 overflow-y-auto p-3 grid gap-0.5">
+          {!documents.length
+            ? <p className="m-0 p-2 text-xs text-soft-ink">No documents in this workspace yet.</p>
+            : (<>
+                {folderTree.map((node) => <FolderPickerNode key={node.id} node={node} docs={documents} picked={picked} onToggle={toggle} docLabel={docLabel} />)}
+                {unorganised.map((doc) => (
+                  <label key={doc.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5">
+                    <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => toggle(doc.id)} className="shrink-0" />
+                    <span className="truncate">{docLabel(doc)}</span>
+                    <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+                  </label>
+                ))}
+              </>)}
+        </div>
+
+        {/* Selected tray */}
+        {pickedDocs.length > 0 && (
+          <div className="border-t border-ink/8 px-4 py-3">
+            <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">{pickedDocs.length} selected</p>
+            <div className="flex max-h-20 flex-wrap gap-1.5 overflow-y-auto">
+              {pickedDocs.map(({ id, label }) => (
+                <span key={id} className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/5 px-2 py-0.5 text-[11px] font-medium text-ink">
+                  <span className="max-w-[140px] truncate">{label}</span>
+                  <button type="button" onClick={() => toggle(id)} className="ml-0.5 shrink-0 text-soft-ink hover:text-[var(--color-danger)]" aria-label={`Remove ${label}`}>×</button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 border-t border-ink/8 px-5 py-4">
+          <button type="button" className={ghostBtn} onClick={onClose}>Cancel</button>
+          <button type="button" className={primaryBtn} onClick={() => onConfirm(picked)}>Confirm selection</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Concept mastery list — sorted weakest first, with a bar each. */
 function ConceptMasteryList({ concepts = [], masteryByConceptId = {} }) {
   if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">No concept data yet. Upload reference material to populate.</p>;
@@ -86,6 +234,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [planView, setPlanView] = useState("list"); // "list" | "calendar" inside the open plan
   const [replanResult, setReplanResult] = useState(null);
   const [replanning, setReplanning] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
 
   // Knowledge graph + student model state
   const [graphConcepts, setGraphConcepts] = useState([]);
@@ -344,6 +494,54 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               <Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} />
               {progress.average ? <div><p className={kicker}>Average</p><p className="m-0 text-xl font-bold text-ink">{Math.round(progress.average * 100)}%</p></div> : null}
               {progress.late.length ? <div><p className={kicker}>Late</p><p className="m-0 text-xl font-bold text-[var(--color-danger)]">{progress.late.length}</p></div> : null}
+
+              {/* ── Gear icon → settings dropdown ── */}
+              <div className="relative">
+                <button
+                  type="button"
+                  title="Plan settings"
+                  aria-label="Plan settings"
+                  onClick={() => setSettingsOpen((v) => !v)}
+                  className="grid size-9 place-items-center rounded-full border border-ink/15 bg-white text-base text-soft-ink transition hover:bg-[var(--surface-soft)]"
+                >
+                  ⚙
+                </button>
+                {settingsOpen && (
+                  <div
+                    className="absolute right-0 top-11 z-20 w-72 rounded-2xl border border-ink/8 bg-white p-4 shadow-[0_8px_32px_rgba(0,0,0,0.16)]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <p className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Plan settings</p>
+                    <div className="grid gap-2">
+                      <label className="grid gap-1 text-xs font-semibold text-soft-ink">
+                        Name
+                        <input className={field} value={plan.name} onChange={(e) => updateOpen((c) => ({ ...c, name: e.target.value }))} />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-soft-ink">
+                        Notes
+                        <textarea className={field} rows={2} value={plan.note || ""} onChange={(e) => updateOpen((c) => ({ ...c, note: e.target.value }))} />
+                      </label>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {PLAN_COLOURS.map((colour) => (
+                          <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((c) => ({ ...c, colour }))} />
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-2 border-t border-ink/8 pt-2">
+                        {plan.parentPlanId ? (
+                          <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { updateOpen((c) => ({ ...c, parentPlanId: "" })); setSettingsOpen(false); }}>
+                            Detach from parent plan
+                          </button>
+                        ) : null}
+                        {onRemoveDocument ? (
+                          <button type="button" className="text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => { setDeletingPlan(open); setSettingsOpen(false); }}>
+                            Delete this plan…
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -381,7 +579,28 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             </div>
             {replanResult.suggestedItems?.length ? (
               <div className="mt-3">
-                <p className="m-0 text-xs font-semibold text-soft-ink">Suggested additions:</p>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="m-0 text-xs font-semibold text-soft-ink">Suggested additions:</p>
+                  <button
+                    type="button"
+                    className={primaryBtn}
+                    onClick={() => {
+                      // Keep all completed items; replace all incomplete items with suggestions
+                      const doneItems = open.plan.items.filter((i) => {
+                        const sc = progress.scoreByResource.get(i.resourceId);
+                        return Boolean(i.doneAt) || sc !== undefined;
+                      });
+                      const newItems = (replanResult.suggestedItems || []).map((sugItem) =>
+                        newItem({ title: sugItem.title, kind: sugItem.kind || "activity", dueDate: sugItem.dueDate, minutes: sugItem.minutes || 30 })
+                      );
+                      updateOpen((current) => ({ ...current, items: [...doneItems, ...newItems] }));
+                      setReplanResult(null);
+                      setStatus("Plan updated — completed activities kept, new steps scheduled.");
+                    }}
+                  >
+                    Apply all suggestions
+                  </button>
+                </div>
                 <div className="mt-2 grid gap-2">
                   {replanResult.suggestedItems.map((sugItem, i) => (
                     <div key={i} className="flex items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2">
@@ -404,28 +623,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className={kicker}>The plan</p>
             <div className="flex flex-wrap items-center gap-2">
-              {/* Add reference material */}
-              <select
-                className="rounded-xl border border-ink/12 bg-white px-2 py-1 text-xs"
-                value=""
-                onChange={(event) => { if (event.target.value) addMaterialToPlan(event.target.value); }}
-              >
-                <option value="">＋ Add reference material…</option>
-                {documents.filter((d) => !(plan.materialIds || []).includes(d.id) && !(d.tags || []).includes("study-plan") && !(d.tags || []).includes("activity-attempt")).map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              {/* Add activity resource */}
-              <select
-                className="rounded-xl border border-ink/12 bg-white px-2 py-1 text-xs"
-                value=""
-                onChange={(event) => {
-                  const row = resources.find((item) => item.document.id === event.target.value);
-                  if (!row) return;
-                  updateOpen((current) => ({ ...current, items: [...current.items, newItem({ resourceId: row.document.id, title: row.resource.name, kind: row.resource.activity ? "activity" : "read" })] }));
-                }}
-              >
-                <option value="">＋ Add a resource…</option>
-                {resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}
-              </select>
+              {/* Single button → opens MaterialPickerModal */}
+              <button type="button" className={ghostBtn} onClick={() => setMaterialPickerOpen(true)}>
+                ＋ Materials &amp; resources…
+              </button>
               {/* Update from performance */}
               <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
                 {replanning ? "Checking…" : "↺ Update from performance"}
@@ -459,6 +660,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                         const late = !done && dueLabel(item.dueDate).includes("late");
                         const kind = ITEM_KINDS.find((entry) => entry.id === item.kind) || ITEM_KINDS[0];
                         const itemConcepts = item.resourceId ? (conceptsByResourceId.get(item.resourceId) || []) : [];
+                        // Resolve resource for skill tags + activity detection
+                        const itemResourceDoc = item.resourceId ? documents.find((d) => d.id === item.resourceId) : null;
+                        const itemResource = itemResourceDoc ? parseResource(itemResourceDoc) : null;
+                        const activity = itemResource?.activity?.questions?.length ? itemResource.activity : null;
+                        const skillTags = inferSkillTags(item, itemResource);
                         return (
                           <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
                             <button
@@ -473,6 +679,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
                               <span className="block text-[11px] text-soft-ink">{kind.label}{item.minutes ? ` · ${item.minutes} min` : ""}{score !== undefined ? ` · scored ${Math.round(score * 100)}%` : ""}</span>
+                              {/* Concept tags — coloured by mastery */}
                               {itemConcepts.length > 0 && (
                                 <p className="m-0 mt-1 flex flex-wrap gap-1">
                                   {itemConcepts.slice(0, 5).map((name) => {
@@ -484,6 +691,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                   {itemConcepts.length > 5 && <span className={`${chip} text-[9px] bg-[var(--surface-soft)] text-soft-ink`}>+{itemConcepts.length - 5} more</span>}
                                 </p>
                               )}
+                              {/* Skill-category tags — fixed palette, square-ish */}
+                              {skillTags.length > 0 && (
+                                <p className="m-0 mt-1 flex flex-wrap gap-1">
+                                  {skillTags.map((tag) => (
+                                    <span key={tag.label} className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold ${tag.cls}`}>{tag.label}</span>
+                                  ))}
+                                </p>
+                              )}
                             </span>
                             <input
                               type="date"
@@ -491,21 +706,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                               value={item.dueDate || ""}
                               onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
                             />
-                            {item.resourceId ? (() => {
-                              const resourceDoc = documents.find((d) => d.id === item.resourceId);
-                              const resource = resourceDoc ? parseResource(resourceDoc) : null;
-                              const activity = resource?.activity?.questions?.length ? resource.activity : null;
-                              return (
-                                <>
-                                  {activity ? (
-                                    <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
-                                  ) : null}
-                                  {onOpenResource ? (
-                                    <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>{activity ? "View" : "Open"}</button>
-                                  ) : null}
-                                </>
-                              );
-                            })() : null}
+                            {/* Action buttons */}
+                            {activity ? (
+                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                            ) : null}
+                            {item.resourceId && onOpenResource ? (
+                              <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>{activity ? "View" : "Open"}</button>
+                            ) : null}
                             <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
                           </div>
                         );
@@ -550,20 +757,6 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           </div>
         </section>
 
-        {/* ── Plan settings ── */}
-        <section className={`${card} p-5`}>
-          <p className={kicker}>Plan settings</p>
-          <div className="mt-2 grid gap-2">
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input className={field} value={plan.name} onChange={(event) => updateOpen((current) => ({ ...current, name: event.target.value }))} /></label>
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Notes<textarea className={field} rows={3} value={plan.note || ""} onChange={(event) => updateOpen((current) => ({ ...current, note: event.target.value }))} /></label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((current) => ({ ...current, colour }))} />)}
-            </div>
-            {plan.parentPlanId ? <button type="button" className="justify-self-start text-xs font-semibold text-soft-ink hover:underline" onClick={() => updateOpen((current) => ({ ...current, parentPlanId: "" }))}>Detach from its parent plan</button> : null}
-            {onRemoveDocument ? <button type="button" className="justify-self-start text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => setDeletingPlan(open)}>Delete this plan…</button> : null}
-          </div>
-        </section>
-
         {/* ── Concept map — full width, last ── */}
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -605,6 +798,52 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
         {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
+
+        {/* ── Material picker modal ── */}
+        {materialPickerOpen && (
+          <MaterialPickerModal
+            documents={documents.filter((d) => !(d.tags || []).includes("study-plan") && !(d.tags || []).includes("activity-attempt"))}
+            folders={folders}
+            resources={resources}
+            initialPicked={[...(open.plan.materialIds || []), ...open.plan.items.map((i) => i.resourceId).filter(Boolean)]}
+            onClose={() => setMaterialPickerOpen(false)}
+            onConfirm={(newPicked) => {
+              const wasMaterial = new Set(open.plan.materialIds || []);
+              const wasItem = new Set(open.plan.items.map((i) => i.resourceId).filter(Boolean));
+              const wasIn = new Set([...wasMaterial, ...wasItem]);
+              const added = newPicked.filter((id) => !wasIn.has(id));
+              const removed = new Set([...wasIn].filter((id) => !newPicked.includes(id)));
+
+              // New plan items for added resources (only if they parse as a resource)
+              const addedItems = added.map((id) => {
+                const row = resources.find((r) => r.document.id === id);
+                if (!row) return null;
+                if (open.plan.items.some((i) => i.resourceId === id)) return null;
+                return newItem({ resourceId: id, title: row.resource.name, kind: row.resource.activity ? "activity" : "read" });
+              }).filter(Boolean);
+
+              // Remove plan items for removed docs (only non-done ones)
+              const itemsAfterRemoval = open.plan.items.filter((i) => {
+                if (!i.resourceId || !removed.has(i.resourceId)) return true;
+                const sc = progress.scoreByResource.get(i.resourceId);
+                return Boolean(i.doneAt) || sc !== undefined; // keep done
+              });
+
+              updateOpen((current) => ({
+                ...current,
+                materialIds: newPicked,
+                items: [...itemsAfterRemoval, ...addedItems],
+              }));
+
+              if (added.length) {
+                const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+                triggerExtraction(added, selectedWorkspaceId, ownerUserId);
+                setStatus("Materials updated — rebuilding concept map…");
+              }
+              setMaterialPickerOpen(false);
+            }}
+          />
+        )}
         {playing ? (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
             <ActivityPlayer

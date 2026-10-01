@@ -19,10 +19,10 @@ function formatValue(input: InputDef, value: unknown): string {
 function describeBlocksOutput(selectedBlockIds: string[], outputInstructions?: string): string {
   const lines = [
     "Return ONE JSON object: { \"items\": [ ... ] }",
-    "Each element in \"items\" is ONE content block chosen from the allowed types below.",
+    "Each element in \"items\" is ONE content block. Set \"type\" to the block's id.",
     "The agent decides which block types to use, how many, and in what order.",
     outputInstructions ? `\nOUTPUT INSTRUCTIONS\n${outputInstructions}` : "",
-    "\nALLOWED BLOCK TYPES",
+    "\nALLOWED BLOCK TYPES (fill the listed fields; set any field not needed for a block to null)",
   ].filter(Boolean);
 
   for (const id of selectedBlockIds) {
@@ -31,7 +31,7 @@ function describeBlocksOutput(selectedBlockIds: string[], outputInstructions?: s
     const fields = Object.entries(block.aiFields as Record<string, any>)
       .map(([name, def]) => `${name}${def.required ? "" : "?"}: ${def.type} — ${def.description}`)
       .join("; ");
-    lines.push(`- "${id}" (${block.label})${fields ? `: { type: "${id}", ${fields} }` : `: { type: "${id}" }`}`);
+    lines.push(`- type="${id}" (${block.label})${fields ? `: ${fields}` : ""}`);
   }
   lines.push("\nOutput only valid JSON matching the schema. Do not repeat identical blocks.");
   return lines.join("\n");

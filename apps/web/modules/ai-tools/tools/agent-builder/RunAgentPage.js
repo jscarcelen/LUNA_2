@@ -295,6 +295,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
   const [output, setOutput] = useState(null);
   const [showAnswers, setShowAnswers] = useState(true);
+  const [previewMode, setPreviewMode] = useState('answers'); // 'answers' | 'student' | 'practice'
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -997,15 +998,34 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const pillButtonBase = { display:'inline-flex', alignItems:'center', justifyContent:'center', borderRadius:999, border:'1px solid rgba(29,29,31,0.15)', padding:'6px 16px', fontSize:13, fontWeight:600, cursor:'pointer', transition:'background 120ms, color 120ms' };
   const blockOutputPane = isBlockOutput ? (
     <div>
-      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        <button type="button" onClick={() => setShowAnswers(true)} style={{ ...pillButtonBase, background: showAnswers ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: showAnswers ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: showAnswers ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}>With Answers</button>
-        <button type="button" onClick={() => setShowAnswers(false)} style={{ ...pillButtonBase, background: !showAnswers ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: !showAnswers ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: !showAnswers ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}>Student View</button>
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+        {[
+          { id: 'answers', label: 'With Answers' },
+          { id: 'student', label: 'Student View' },
+          { id: 'practice', label: '⚡ Practice' },
+        ].map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => { setPreviewMode(id); if (id !== 'practice') setShowAnswers(id === 'answers'); }}
+            style={{ ...pillButtonBase, background: previewMode === id ? 'var(--accent,#0071e3)' : 'var(--paper,#fff)', color: previewMode === id ? '#fff' : 'var(--ink,#1d1d1f)', borderColor: previewMode === id ? 'var(--accent,#0071e3)' : 'rgba(29,29,31,0.15)' }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
+      {previewMode === 'practice' && (
+        <p style={{ fontSize:12, color:'rgba(29,29,31,0.5)', margin:'0 0 12px 0' }}>
+          Click options to answer · Fill in blanks · Click flashcards to flip
+        </p>
+      )}
       <BlockRenderer
+        key={previewMode === 'practice' ? 'practice' : 'static'}
         blocks={outputBlocks || []}
         templateConfig={agentConfig?.output || agentConfig?.spec?.output || { selectedBlocks: [] }}
-        showAnswers={showAnswers}
+        showAnswers={previewMode === 'answers'}
         exportMode="screen"
+        interactive={previewMode === 'practice'}
       />
     </div>
   ) : null;

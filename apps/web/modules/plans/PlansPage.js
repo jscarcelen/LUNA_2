@@ -82,6 +82,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null); // { activity, documentId, itemId, planDocumentId }
+  const [deletingPlan, setDeletingPlan] = useState(null); // plan row to confirm-delete
 
   // Knowledge graph + student model state
   const [graphConcepts, setGraphConcepts] = useState([]);
@@ -156,7 +157,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       const saved = documentId
         ? await onUpdateGeneratedDocument?.(documentId, { file })
         : await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file });
-      setStatus(`Saved “${plan.name}”.`);
+      setStatus(`Saved "${plan.name}".`);
       return saved;
     } catch (error) {
       setStatus(String(error.message || error));
@@ -210,6 +211,51 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     }
   }
 
+  /**
+   * Delete a study plan and — optionally — the auto-generated materials it produced and/or
+   * the activity-attempt records for its resources.
+   */
+  async function deletePlan(planRow, { materials, metrics }) {
+    if (!onRemoveDocument) return;
+    setBusy(true);
+    try {
+      const plan = planRow.plan;
+      const toDelete = [planRow.document.id];
+
+      if (materials) {
+        // Only remove documents that were auto-generated (item.generate) and still exist
+        const generatedIds = (plan.items || [])
+          .filter((item) => item.generate && item.resourceId)
+          .map((item) => item.resourceId);
+        toDelete.push(...generatedIds);
+      }
+
+      if (metrics) {
+        // Remove activity-attempt documents for any resource in this plan
+        const resourceIds = new Set((plan.items || []).map((item) => item.resourceId).filter(Boolean));
+        const attemptIds = documents
+          .filter((doc) => {
+            if (!(doc.tags || []).includes("activity-attempt")) return false;
+            try { return resourceIds.has(JSON.parse(doc.content || "{}").activityDocumentId); }
+            catch { return false; }
+          })
+          .map((doc) => doc.id);
+        toDelete.push(...attemptIds);
+      }
+
+      for (const id of [...new Set(toDelete)]) {
+        await onRemoveDocument(id);
+      }
+      setOpenId("");
+      setDeletingPlan(null);
+      setStatus(`Plan "${plan.name}" deleted.`);
+    } catch (error) {
+      setStatus(String(error.message || error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   /** Dropping an item on a day of the calendar moves its due date, whichever plan it belongs to. */
   function moveItem(planId, itemId, date) {
     const row = plans.find((entry) => entry.document.id === planId);
@@ -235,7 +281,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setOpenId("")}>← All plans</button>
-              {parent ? <button type="button" className="ml-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpenId(parent.document.id)}>part of “{parent.plan.name}”</button> : null}
+              {parent ? <button type="button" className="ml-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpenId(parent.document.id)}>part of "{parent.plan.name}"</button> : null}
               <h3 className="m-0 mt-1 text-2xl font-bold tracking-tight text-ink">{plan.name}</h3>
               <p className="m-0 mt-1 text-sm text-soft-ink">
                 {progress.deadline ? `${progress.deadline.title}: ${dueLabel(progress.deadline.date)}` : "No deadline set"}
@@ -275,7 +321,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 {resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}
               </select>
             </div>
-            {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing scheduled yet. Add a resource here, or use “＋ Plan” on any resource in your folders.</p> : null}
+            {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing scheduled yet. Add a resource here, or use "＋ Plan" on any resource in your folders.</p> : null}
             <div className="mt-3 grid gap-4">
               {weeks.map((week) => (
                 <div key={week.start || "undated"}>
@@ -461,7 +507,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((current) => ({ ...current, colour }))} />)}
                 </div>
                 {plan.parentPlanId ? <button type="button" className="justify-self-start text-xs font-semibold text-soft-ink hover:underline" onClick={() => updateOpen((current) => ({ ...current, parentPlanId: "" }))}>Detach from its parent plan</button> : null}
-                {onRemoveDocument ? <button type="button" className="justify-self-start text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => { if (window.confirm(`Delete the plan “${plan.name}”?`)) { onRemoveDocument(open.document.id); setOpenId(""); } }}>Delete this plan</button> : null}
+                {onRemoveDocument ? <button type="button" className="justify-self-start text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => setDeletingPlan(open)}>Delete this plan…</button> : null}
               </div>
             </section>
           </div>
@@ -507,6 +553,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+        {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
         {playing ? (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
             <ActivityPlayer
@@ -604,7 +651,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                       {building === document.id ? "Building…" : `✦ Build ${plan.items.filter((item) => item.generate && !item.resourceId).length} resources`}
                     </button>
                   ) : null}
-                  <button type="button" className={primaryBtn} onClick={() => setOpenId(document.id)}>Open plan</button>
+                  <div className="flex items-center gap-1.5">
+                    <button type="button" className={`${primaryBtn} flex-1`} onClick={() => setOpenId(document.id)}>Open plan</button>
+                    {onRemoveDocument ? (
+                      <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => setDeletingPlan({ document, plan })}>🗑</button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             );
@@ -614,6 +666,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       )}
 
       {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+      {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
       {generating ? (
         <GeneratePlanDialog
@@ -646,6 +699,67 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         />
       ) : null}
     </section>
+  );
+}
+
+function DeletePlanDialog({ planRow, documents, busy, onCancel, onConfirm }) {
+  const plan = planRow.plan;
+  const generatedCount = (plan.items || []).filter((item) => item.generate && item.resourceId).length;
+  const resourceIds = new Set((plan.items || []).map((item) => item.resourceId).filter(Boolean));
+  const metricsCount = documents.filter((doc) => {
+    if (!(doc.tags || []).includes("activity-attempt")) return false;
+    try { return resourceIds.has(JSON.parse(doc.content || "{}").activityDocumentId); }
+    catch { return false; }
+  }).length;
+
+  const [delMaterials, setDelMaterials] = useState(false);
+  const [delMetrics, setDelMetrics] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
+        <h4 className="m-0 text-lg font-bold text-ink">Delete &ldquo;{plan.name}&rdquo;?</h4>
+        <p className="m-0 mt-1 text-sm text-soft-ink">The plan document will be permanently removed. Choose what else to delete:</p>
+
+        <div className="mt-4 grid gap-3">
+          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${delMaterials ? "border-[var(--color-danger)]/40 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 hover:border-ink/20"}`}>
+            <input type="checkbox" className="mt-0.5 accent-[var(--color-danger)]" checked={delMaterials} onChange={(e) => setDelMaterials(e.target.checked)} disabled={!generatedCount} />
+            <div>
+              <p className="m-0 text-sm font-semibold text-ink">Also delete generated materials</p>
+              <p className="m-0 mt-0.5 text-xs text-soft-ink">
+                {generatedCount
+                  ? `${generatedCount} auto-built resource${generatedCount === 1 ? "" : "s"} will be removed from the workspace.`
+                  : "No auto-generated materials found for this plan."}
+              </p>
+            </div>
+          </label>
+
+          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${delMetrics ? "border-[var(--color-danger)]/40 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 hover:border-ink/20"}`}>
+            <input type="checkbox" className="mt-0.5 accent-[var(--color-danger)]" checked={delMetrics} onChange={(e) => setDelMetrics(e.target.checked)} disabled={!metricsCount} />
+            <div>
+              <p className="m-0 text-sm font-semibold text-ink">Also delete performance metrics</p>
+              <p className="m-0 mt-0.5 text-xs text-soft-ink">
+                {metricsCount
+                  ? `${metricsCount} activity attempt${metricsCount === 1 ? "" : "s"} recorded against this plan's resources will be erased.`
+                  : "No recorded attempts found for this plan's resources."}
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
+          <button
+            type="button"
+            disabled={busy}
+            className="inline-flex items-center justify-center rounded-full bg-[var(--color-danger)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            onClick={() => onConfirm({ materials: delMaterials, metrics: delMetrics })}
+          >
+            {busy ? "Deleting…" : "Delete plan"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -59,6 +59,7 @@ const SRC = {
   revise: "apps/web/app/api/plans/revise/route.js",
   resConcepts: "apps/web/app/api/resources/concepts/route.js",
   refine: "apps/web/app/api/ai-tools/agent-builder/refine/route.js",
+  iterate: "apps/web/app/api/ai-tools/agent-builder/iterate/route.js",
   improve: "apps/web/app/api/ai-tools/agent-builder/improve/route.js",
   coach: "apps/web/app/api/performance/coach/route.js"
 };
@@ -278,7 +279,8 @@ export const REQUESTS = [
     tokens: { basis: "measured", scale: { unit: "1,000 characters of material", label: "k chars of material", fixedIn: 1150, inPer: 294, outPer: 0, units: 12, outPerItem: 87, items: 10 } },
     seconds: { typical: 12, note: "measured 11.6–12.1 s for 10 questions" },
     prompts: [
-      { label: "System prompt", file: SRC.agent, re: /role: "system",\n          content: "(You are a configurable AI agent runtime[^"]*)"/ },
+      { label: "System prompt", file: SRC.agent, re: /content: withRevision\("(You are a configurable AI agent runtime[^"]*)", config\)/ },
+      { label: "Added when the user iterates (A7 + this note)", file: SRC.agent, re: /const REVISION_NOTE = `([\s\S]*?)`;/ },
       { label: "User message builder", file: SRC.agent, re: /(function buildUserMessage\([\s\S]*?\n\})/ }
     ]
   },
@@ -356,6 +358,24 @@ export const REQUESTS = [
     prompts: [
       { label: "System prompt", file: SRC.improve, re: /\{ role: "system", content: "([^"]*)" \}/ },
       { label: "User message", file: SRC.improve, re: /(\{ role: "user", content: JSON\.stringify\(\{[^\n]*\}\) \})/ }
+    ]
+  },
+  {
+    id: "A7", stage: "agents", name: "Improve an 'Iterate' request", status: "live",
+    purpose: "Turns the few words a user types after reading a result ('give more examples') into a precise revision brief with a verifiable checklist, and names the original limits the request overrides (for example 'one page').",
+    why: "Left as typed, the model changes little and the agent's original limits win. With the brief the change is visible.",
+    position: "When the user presses 'Apply to the result' in Iterate, right before the rewrite (A1/A2).",
+    trigger: "Run page → Iterate → Apply",
+    file: SRC.iterate, anchor: /export async function POST/,
+    model: "gpt-4o", modelEnv: "LUNA_REFINER_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
+    input: "The user's request, the agent's name and original instructions, the user's choices, the current result as text (first 6,000 characters) and earlier requests.",
+    output: "A one-sentence 'Luna understood…' (shown to the user), the brief, a 3–6 item checklist, the constraints relaxed and what to keep. The rewrite is then run with all of it plus the previous result.",
+    fallbacks: "The user's own words are sent unchanged.",
+    tokens: { basis: "estimated", typical: { in: 2400, out: 330 }, scale: null },
+    seconds: { typical: 4, note: "estimate" },
+    prompts: [
+      { label: "System prompt", file: SRC.iterate, re: /content: "(You are the prompt improver[\s\S]*?)"\n          \},/ }
     ]
   },
   {
@@ -580,7 +600,7 @@ export const NODES = [
   { id: "plandb", col: 6, lane: 3, label: "Plan · goals · steps", sub: "saved as a document", phase: "plan" },
   { id: "run", col: 6, lane: 0, label: "Run an agent", sub: "choices + material", phase: "agents" },
   { id: "retr", col: 7, lane: 1, label: "Retrieve passages", sub: "≤ 48k characters", phase: "agents" },
-  { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Pro (default) / Max", reqs: ["A1", "A2", "A3"], phase: "agents" },
+  { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Pro (default) / Max", reqs: ["A1", "A2", "A3", "A7"], phase: "agents" },
   { id: "tpl", col: 8, lane: 1, label: "Template Studio engine", sub: "HTML · PDF · DOCX · PPTX", phase: "agents" },
   { id: "design", col: 8, lane: 2, label: "AI template design", sub: "optional", reqs: ["T1", "T2", "T3", "T4"], phase: "design" },
   { id: "res", col: 9, lane: 3, label: "Resources", sub: "quiz · flashcards · summary", phase: "agents" },

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./engine/blocks";
-import { DESIGN_VARIANTS, accentOf, assembleTemplate, defaultToggles, findBlock } from "./engine/outputTemplate";
+import { accentOf, assembleTemplate, defaultToggles, findBlock, variantsOf } from "./engine/outputTemplate";
 import { buildSampleData } from "./engine/sample";
 import { compileForSave } from "./adapters/agentTemplate";
 import type { Element, GroupElement, Template } from "./engine/types";
@@ -14,39 +14,29 @@ type StructureType = "quiz" | "document" | "game";
 type Step = 1 | 2 | 3 | 4;
 
 const STRUCTURE_TYPES: { id: StructureType; emoji: string; label: string; desc: string }[] = [
-  { id: "quiz",     emoji: "📝", label: "Quiz / Exam",          desc: "Fixed header (title, name, date). Add question types and worksheets." },
+  { id: "quiz",     emoji: "📝", label: "Quiz / Exam",          desc: "Exam header (title, name, date) and footer. Pick the question types: multiple choice, open answer, true/false, fill in the blanks, matching, math." },
   { id: "document", emoji: "📄", label: "Document / Summary",   desc: "Headings, paragraphs, bullets, callouts, tables — all included, you just style them." },
   { id: "game",     emoji: "🃏", label: "Flashcard / Game",     desc: "Compact header + one game format (flashcard or puzzle)." },
 ];
 
 /* ─── Fixed blocks per type ──────────────────────────────────────── */
 const QUIZ_FIXED_IDS     = ["block-header-exam", "block-footer"];
-const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-paragraph", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
+const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-headings", "block-paragraph", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
 const GAME_FIXED_IDS     = ["block-header-minimal"];
 
 /* ─── Interactive blocks for quiz step 2 ─────────────────────────── */
 const QUIZ_QUESTIONS: { id: string; label: string; icon: string; desc: string }[] = [
-  { id: "block-exam-question",     label: "Multiple choice",         icon: "❶",  desc: "Numbered question with lettered options." },
-  { id: "block-open-question",     label: "Open answer",             icon: "✍",  desc: "Question with a blank writing area." },
-  { id: "block-true-false",        label: "True / False",            icon: "◎",  desc: "Binary choice question." },
-  { id: "block-question-compact",  label: "Compact (2 columns)",     icon: "❶❶", desc: "Fits more questions per page." },
-  { id: "block-section-questions", label: "Sections with questions", icon: "§❶", desc: "Group questions under numbered sections." },
-  { id: "block-answer-box",        label: "Answer key box",          icon: "✓",  desc: "Highlighted correct answer with explanation." },
-];
-const QUIZ_WORKSHEETS: { id: string; label: string; icon: string; desc: string }[] = [
-  { id: "block-fill-blanks",   label: "Fill in the blanks",  icon: "Aa", desc: "Sentences with a missing word." },
-  { id: "block-match-pairs",   label: "Match the pairs",     icon: "⋯",  desc: "Connect words, images, or translations." },
-  { id: "block-math-practice", label: "Math practice set",   icon: "±",  desc: "Numbered operations with working and answer boxes." },
-  { id: "block-word-search",   label: "Word search",         icon: "▩",  desc: "Letter grid with words to find." },
-  { id: "block-pair-puzzle",   label: "Pair puzzle",         icon: "▦",  desc: "Cut-apart matching tiles." },
-  { id: "block-square-puzzle", label: "Square puzzle",       icon: "▦",  desc: "16-tile edge-matching grid." },
-  { id: "block-tracing",       label: "Tracing",             icon: "✎",  desc: "Large letters between writing lines." },
-  { id: "block-cut-paste",     label: "Cut and paste",       icon: "✂",  desc: "Category boxes with cut-out words." },
+  { id: "block-exam-question", label: "Multiple choice",    icon: "❶",  desc: "Numbered question with lettered options." },
+  { id: "block-open-question", label: "Open answer",        icon: "✍",  desc: "Question with ruled writing space and a model answer." },
+  { id: "block-true-false",    label: "True / False",       icon: "◎",  desc: "Statement to tick true or false." },
+  { id: "block-fill-blanks",   label: "Fill in the blanks", icon: "Aa", desc: "Sentences with a missing word." },
+  { id: "block-match-pairs",   label: "Match the pairs",    icon: "⋯",  desc: "Connect words, images or translations." },
+  { id: "block-math-practice", label: "Math practice set",  icon: "±",  desc: "Numbered operations with working and answer boxes." },
 ];
 
 /* ─── Game options ───────────────────────────────────────────────── */
 const GAME_OPTIONS: { id: string; emoji: string; label: string; desc: string; primaryBlockId: string | null; familyIds: string[]; disabled?: boolean }[] = [
-  { id: "flashcard", emoji: "🃏", label: "Flashcard deck", desc: "Front / back cards — great for vocabulary and key concepts.", primaryBlockId: "block-flashcard", familyIds: ["block-flashcard", "block-flashcard-single"] },
+  { id: "flashcard", emoji: "🃏", label: "Flashcard deck", desc: "Front / back cards — great for vocabulary and key concepts.", primaryBlockId: "block-flashcard-single", familyIds: ["block-flashcard-single"] },
   { id: "puzzle",    emoji: "🧩", label: "Word puzzle",    desc: "Coming soon.", primaryBlockId: null, familyIds: [], disabled: true },
 ];
 
@@ -82,11 +72,7 @@ export function VisualizeModal({ block: initialBlock, accentId: initialAccentId,
   useEffect(() => { setLocalAccentId(initialAccentId || "blue"); }, [initialAccentId]);
   const block = allBlocks.find((b) => b.id === localBlockId) || initialBlock;
   const accent = ACCENT_PRESETS.find((a) => a.id === localAccentId) || ACCENT_PRESETS[0];
-  // Show format variants using the DESIGN_VARIANTS map (same logic as FormatCard)
-  const designIds = DESIGN_VARIANTS[initialBlock.id];
-  const familyVariants: BlockDef[] = designIds
-    ? designIds.map((id) => allBlocks.find((b) => b.id === id)).filter(Boolean) as BlockDef[]
-    : allBlocks.filter((b) => b.family === block.family && b.category === block.category);
+  const familyVariants: BlockDef[] = variantsOf(initialBlock, allBlocks);
   const { fields, elements } = useMemo(() => instantiateBlock(block, [], { accent, toggles }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [localBlockId, localAccentId, JSON.stringify(toggles)]);
@@ -225,12 +211,8 @@ export function FormatCard({ origId, block: origBlock, allBlocks, blockFormats, 
   const previewAccent = selectedAccent || ACCENT_PRESETS[0];
   const defToggles = defaultToggles(currentBlock);
   const toggles = { ...defToggles, ...(blockToggles.get(origId) || {}) };
-  // Show format design gallery for all blocks; use DESIGN_VARIANTS map when available,
-  // otherwise fall back to all blocks in the same family (for future-proofing).
-  const designIds = DESIGN_VARIANTS[origId];
-  const variants: BlockDef[] = designIds
-    ? designIds.map((id) => allBlocks.find((b) => b.id === id)).filter(Boolean) as BlockDef[]
-    : allBlocks.filter((b) => b.family === origBlock.family && b.category === origBlock.category);
+  // The formats of this component: every design of its family (they all carry the same fields).
+  const variants: BlockDef[] = variantsOf(origBlock, allBlocks);
 
   return (
     <div className={`${card} mt-3 overflow-hidden transition-all`} style={{ border: isFormatted ? "2px solid #16a34a" : undefined }}>
@@ -338,13 +320,13 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
       const currentId = blockFormats.get(origId) || origId;
       const block = findBlock(currentId) || findBlock(origId);
       if (!block) return;
-      const accent = isFixed ? ACCENT_PRESETS[0] : accentOf(origId, blockAccents);
+      const accent = accentOf(origId, blockAccents);
       const toggles = { ...defaultToggles(block), ...(blockToggles.get(origId) || {}) };
       out.push({ origId, block, accent, toggles, isFixed });
     }
     if (structureType === "quiz") {
       for (const id of QUIZ_FIXED_IDS) addBlock(id, true);
-      for (const q of [...QUIZ_QUESTIONS, ...QUIZ_WORKSHEETS]) if (selectedInteractiveIds.has(q.id)) addBlock(q.id, false);
+      for (const q of QUIZ_QUESTIONS) if (selectedInteractiveIds.has(q.id)) addBlock(q.id, false);
     } else if (structureType === "document") {
       for (const id of DOCUMENT_BLOCK_IDS) addBlock(id, false);
     } else {
@@ -356,6 +338,15 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
   }, [structureType, selectedInteractiveIds, selectedGameOptionId, blockFormats, blockAccents, blockToggles]);
 
   const stylableBlocks = useMemo(() => resolvedSelections.filter((s) => !s.isFixed), [resolvedSelections]);
+  // Format names that more than one component offers (or that a component offers next to another), to apply to all at once.
+  const sharedFormats = useMemo(() => {
+    const names = new Set<string>();
+    for (const entry of resolvedSelections) {
+      const formats = variantsOf(findBlock(entry.origId) || entry.block, allBlocks);
+      if (formats.length > 1) formats.forEach((format) => names.add(format.variant || format.name));
+    }
+    return [...names];
+  }, [resolvedSelections, allBlocks]);
   // For the "all formatted" check, only require non-fixed styleable blocks to have a color.
   // Fixed blocks (header/footer) are pre-styled by the block builder; picking a color is optional.
   const requiredBlocks = useMemo(() => structureType === "document" ? [] : stylableBlocks, [structureType, stylableBlocks]);
@@ -449,7 +440,7 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
                 <span className="text-sm">📝</span>
                 <span className="text-[12px] font-semibold text-green-800">Always included: Exam header (title, name, date) · Page footer</span>
               </div>
-              <p className={`${kicker} mb-3`}>Questions</p>
+              <p className={`${kicker} mb-3`}>Question types</p>
               <div className="grid gap-1.5">
                 {QUIZ_QUESTIONS.map((q) => {
                   const active = selectedInteractiveIds.has(q.id);
@@ -459,20 +450,6 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
                       <span className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ background: active ? "#dbeafe" : "var(--surface-soft)", color: active ? "#1d4ed8" : "#6b7280" }}>{q.icon}</span>
                       <span className="flex-1"><span className="block text-[13px] font-semibold text-ink">{q.label}</span><span className="block text-[11px] text-soft-ink">{q.desc}</span></span>
                       <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>{active && <span className="text-[10px] font-bold text-white">✓</span>}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className={`${kicker} mb-3 mt-5`}>Worksheets</p>
-              <div className="grid gap-1.5">
-                {QUIZ_WORKSHEETS.map((q) => {
-                  const active = selectedInteractiveIds.has(q.id);
-                  return (
-                    <button key={q.id} type="button" onClick={() => setSelectedInteractiveIds((c) => { const n = new Set(c); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
-                      className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition ${active ? "border-orange-400/50 bg-orange-50" : "border-ink/10 bg-white hover:border-ink/25"}`}>
-                      <span className="grid size-9 shrink-0 place-items-center rounded-xl text-sm font-bold" style={{ background: active ? "#fff7ed" : "var(--surface-soft)", color: active ? "#9a3412" : "#6b7280" }}>{q.icon}</span>
-                      <span className="flex-1"><span className="block text-[13px] font-semibold text-ink">{q.label}</span><span className="block text-[11px] text-soft-ink">{q.desc}</span></span>
-                      <span className={`grid size-5 shrink-0 place-items-center rounded-full border-2 transition ${active ? "border-orange-400 bg-orange-400" : "border-ink/25 bg-white"}`}>{active && <span className="text-[10px] font-bold text-white">✓</span>}</span>
                     </button>
                   );
                 })}
@@ -562,39 +539,27 @@ export function TemplateWizard({ onSave, onCancel, editTemplate }: TemplateWizar
                 ))}
               </div>
             </div>
-            <div className="border-t border-ink/8 pt-3 flex flex-wrap items-center gap-3">
-              <span className="text-[12px] font-semibold text-soft-ink">Force one format for all question types:</span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { id: "standard", label: "Standard", icon: "❶", desc: "Classic numbered question card" },
-                  { id: "kids",     label: "Kids style", icon: "🎨", desc: "Larger options, playful layout" },
-                  { id: "compact",  label: "Compact",    icon: "❶❶", desc: "Smaller, two columns — fits more per page" },
-                ].map((style) => {
-                  const MAP: Record<string, Record<string, string>> = {
-                    standard: { "block-exam-question": "block-exam-question", "block-mc-kids": "block-exam-question", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
-                    kids:     { "block-exam-question": "block-mc-kids", "block-mc-kids": "block-mc-kids", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
-                    compact:  { "block-exam-question": "block-question-compact", "block-mc-kids": "block-question-compact", "block-open-question": "block-open-question", "block-true-false": "block-true-false" },
-                  };
-                  return (
-                    <button key={style.id} type="button" title={style.desc}
-                      onClick={() => {
-                        const mapping = MAP[style.id] || {};
-                        setBlockFormats((c) => {
-                          const n = new Map(c);
-                          for (const [from, to] of Object.entries(mapping)) {
-                            const entry = resolvedSelections.find((s) => s.origId === from || s.block.id === from);
-                            if (entry) n.set(entry.origId, to);
-                          }
-                          return n;
-                        });
-                      }}
-                      className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-purple-300 hover:bg-purple-50">
-                      <span>{style.icon}</span>{style.label}
+            {sharedFormats.length > 0 && (
+              <div className="border-t border-ink/8 pt-3 flex flex-wrap items-center gap-3">
+                <span className="text-[12px] font-semibold text-soft-ink">One format for all:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {sharedFormats.map((name) => (
+                    <button key={name} type="button"
+                      onClick={() => setBlockFormats((c) => {
+                        const n = new Map(c);
+                        for (const entry of resolvedSelections) {
+                          const match = variantsOf(findBlock(entry.origId) || entry.block, allBlocks).find((v) => (v.variant || v.name) === name);
+                          if (match) n.set(entry.origId, match.id);
+                        }
+                        return n;
+                      })}
+                      className="flex items-center gap-1.5 rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-[var(--accent)]/50 hover:bg-[var(--accent-soft)]">
+                      {name}
                     </button>
-                  );
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
         {/* Fixed structure blocks (header, footer) — always in the template, but still styleable */}

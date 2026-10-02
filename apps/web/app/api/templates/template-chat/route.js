@@ -78,9 +78,10 @@ function matchBlock(section, blocks) {
   for (const block of blocks) {
     const repeats = block.fields.some((field) => field.type === "array");
     // A header is a header and a footer is a footer: role decides before wording does.
-    if (role === "header" && block.family !== "Header") continue;
+    const isHeader = block.family === "Exam header" || block.family === "Document header";
+    if (role === "header" && !isHeader) continue;
     if (role === "footer" && block.family !== "Footer") continue;
-    if (role !== "header" && role !== "footer" && (block.family === "Header" || block.family === "Footer")) continue;
+    if (role !== "header" && role !== "footer" && (isHeader || block.family === "Footer")) continue;
     if (section.repeats === true && !repeats) continue;
     const vocabulary = new Set([...words(block.name), ...words(block.family), ...words(block.variant), ...words(block.description)]);
     let score = 0;

@@ -84,7 +84,7 @@ export function resolveSource(fields: FieldDef[], source: ContentSource, scopes:
     // `{{A}}` is the same index as a letter, which is how answer options are labelled on an exam.
     const index = scopes[0]?.index ?? 0;
     const value = source.value
-      .replace(/\{\{n\}\}/g, String(index + 1))
+      .replace(/\{\{n\}\}/gi, String(index + 1))
       .replace(/\{\{A\}\}/g, letterFor(index))
       .replace(/\{\{a\}\}/g, letterFor(index).toLowerCase())
       .replace(/\{\{page\}\}/g, pageNumber === undefined ? "{{page}}" : String(pageNumber));

@@ -35,30 +35,20 @@ const STRUCTURE_TYPES: { id: StructureType; emoji: string; label: string; desc: 
 ];
 
 const QUIZ_FIXED_IDS     = ["block-header-exam", "block-footer"];
-const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-paragraph", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
+const DOCUMENT_BLOCK_IDS = ["block-header-minimal", "block-section-header", "block-headings", "block-paragraph", "block-key-points", "block-callout", "block-vocabulary-row", "block-footer"];
 const GAME_FIXED_IDS     = ["block-header-minimal"];
 
 const QUIZ_QUESTIONS: { id: string; label: string; icon: string; desc: string }[] = [
-  { id: "block-exam-question",     label: "Multiple choice",         icon: "❶",  desc: "Numbered question with lettered options." },
-  { id: "block-open-question",     label: "Open answer",             icon: "✍",  desc: "Question with a blank writing area." },
-  { id: "block-true-false",        label: "True / False",            icon: "◎",  desc: "Binary choice question." },
-  { id: "block-question-compact",  label: "Compact (2 columns)",     icon: "❶❶", desc: "Fits more questions per page." },
-  { id: "block-section-questions", label: "Sections with questions", icon: "§❶", desc: "Group questions under numbered sections." },
-  { id: "block-answer-box",        label: "Answer key box",          icon: "✓",  desc: "Highlighted correct answer with explanation." },
-];
-const QUIZ_WORKSHEETS: { id: string; label: string; icon: string; desc: string }[] = [
-  { id: "block-fill-blanks",   label: "Fill in the blanks",  icon: "Aa", desc: "Sentences with a missing word." },
-  { id: "block-match-pairs",   label: "Match the pairs",     icon: "⋯",  desc: "Connect words or translations." },
-  { id: "block-math-practice", label: "Math practice set",   icon: "±",  desc: "Numbered operations with answer boxes." },
-  { id: "block-word-search",   label: "Word search",         icon: "▩",  desc: "Letter grid with words to find." },
-  { id: "block-pair-puzzle",   label: "Pair puzzle",         icon: "▦",  desc: "Cut-apart matching tiles." },
-  { id: "block-square-puzzle", label: "Square puzzle",       icon: "▦",  desc: "16-tile edge-matching grid." },
-  { id: "block-tracing",       label: "Tracing",             icon: "✎",  desc: "Large letters between writing lines." },
-  { id: "block-cut-paste",     label: "Cut and paste",       icon: "✂",  desc: "Category boxes with cut-out words." },
+  { id: "block-exam-question", label: "Multiple choice",    icon: "❶",  desc: "Numbered question with lettered options." },
+  { id: "block-open-question", label: "Open answer",        icon: "✍",  desc: "Question with ruled writing space and a model answer." },
+  { id: "block-true-false",    label: "True / False",       icon: "◎",  desc: "Statement to tick true or false." },
+  { id: "block-fill-blanks",   label: "Fill in the blanks", icon: "Aa", desc: "Sentences with a missing word." },
+  { id: "block-match-pairs",   label: "Match the pairs",    icon: "⋯",  desc: "Connect words, images or translations." },
+  { id: "block-math-practice", label: "Math practice set",  icon: "±",  desc: "Numbered operations with working and answer boxes." },
 ];
 
 const GAME_OPTIONS: { id: string; emoji: string; label: string; desc: string; primaryBlockId: string | null; disabled?: boolean }[] = [
-  { id: "flashcard", emoji: "🃏", label: "Flashcard deck", desc: "Front / back cards.", primaryBlockId: "block-flashcard" },
+  { id: "flashcard", emoji: "🃏", label: "Flashcard deck", desc: "Front / back cards.", primaryBlockId: "block-flashcard-single" },
   { id: "puzzle",    emoji: "🧩", label: "Word puzzle",    desc: "Coming soon.", primaryBlockId: null, disabled: true },
 ];
 
@@ -126,7 +116,7 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
   // Rebuild template when structure type or component selection changes.
   const resolvedBlockIds = useMemo(() => {
     if (structureType === "quiz") {
-      return [...QUIZ_FIXED_IDS, ...[...QUIZ_QUESTIONS, ...QUIZ_WORKSHEETS].filter((q) => selectedInteractiveIds.has(q.id)).map((q) => q.id)];
+      return [...QUIZ_FIXED_IDS, ...QUIZ_QUESTIONS.filter((q) => selectedInteractiveIds.has(q.id)).map((q) => q.id)];
     } else if (structureType === "document") {
       return DOCUMENT_BLOCK_IDS;
     } else {
@@ -249,7 +239,7 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
           {structureType === "quiz" && (
             <div className={`${card} p-4`}>
               <div className="mb-3 rounded-xl bg-green-50 px-3 py-2 text-[11px] font-semibold text-green-800">Always included: Exam header · Page footer</div>
-              <p className={`${kicker} mb-2`}>Questions</p>
+              <p className={`${kicker} mb-2`}>Question types</p>
               <div className="grid gap-1">
                 {QUIZ_QUESTIONS.map((q) => {
                   const active = selectedInteractiveIds.has(q.id);
@@ -259,20 +249,6 @@ export function OutputComposer({ spec, onChange, listTemplates, saveTemplate, on
                       <span className="grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold" style={{ background: active ? "#dbeafe" : "var(--surface-soft)", color: active ? "#1d4ed8" : "#6b7280" }}>{q.icon}</span>
                       <span className="flex-1"><span className="block text-[12px] font-semibold text-ink">{q.label}</span><span className="block text-[10px] text-soft-ink">{q.desc}</span></span>
                       <span className={`grid size-4 shrink-0 place-items-center rounded-full border-2 ${active ? "border-[var(--accent)] bg-[var(--accent)]" : "border-ink/25 bg-white"}`}>{active && <span className="text-[9px] font-bold text-white">✓</span>}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <p className={`${kicker} mb-2 mt-4`}>Worksheets</p>
-              <div className="grid gap-1">
-                {QUIZ_WORKSHEETS.map((q) => {
-                  const active = selectedInteractiveIds.has(q.id);
-                  return (
-                    <button key={q.id} type="button" onClick={() => setSelectedInteractiveIds((c) => { const n = new Set(c); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
-                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition ${active ? "border-orange-400/50 bg-orange-50" : "border-ink/10 bg-white hover:border-ink/20"}`}>
-                      <span className="grid size-7 shrink-0 place-items-center rounded-lg text-[11px] font-bold" style={{ background: active ? "#fff7ed" : "var(--surface-soft)", color: active ? "#9a3412" : "#6b7280" }}>{q.icon}</span>
-                      <span className="flex-1"><span className="block text-[12px] font-semibold text-ink">{q.label}</span><span className="block text-[10px] text-soft-ink">{q.desc}</span></span>
-                      <span className={`grid size-4 shrink-0 place-items-center rounded-full border-2 ${active ? "border-orange-400 bg-orange-400" : "border-ink/25 bg-white"}`}>{active && <span className="text-[9px] font-bold text-white">✓</span>}</span>
                     </button>
                   );
                 })}

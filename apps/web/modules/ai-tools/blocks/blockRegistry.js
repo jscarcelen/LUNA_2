@@ -11,14 +11,46 @@
 
 export const BLOCKS = {
   // ── STRUCTURE ──────────────────────────────────────────────
+  document_header: {
+    category: 'structure',
+    label: 'Document header',
+    description: 'Title of the whole document (summaries, guides, notes). Use once, first.',
+    icon: 'T',
+    aiFields: {
+      title: { type: 'string', description: 'A specific title for THIS document, written for its content (never the tool or agent name)', required: true, example: 'Osmosis and Diffusion: Study Guide' },
+    },
+  },
+
+  exam_header: {
+    category: 'structure',
+    label: 'Exam header',
+    description: 'Title block of an exam or worksheet, with Name and Date lines. Use once, first.',
+    icon: 'EX',
+    aiFields: {
+      title:    { type: 'string', description: 'A specific title for THIS exam or worksheet, written for its content (never the tool or agent name)', required: true,  example: 'Cell Transport · Unit Test' },
+      subtitle: { type: 'string', description: 'Course, class or subject', required: false, example: 'Biology · Grade 10' },
+    },
+  },
+
+  section_header: {
+    category: 'structure',
+    label: 'Section header',
+    description: 'Title of a section of the document, with an optional one-line intro',
+    icon: '§',
+    aiFields: {
+      title: { type: 'string', description: 'The section title', required: true,  example: 'Part A: Multiple choice' },
+      intro: { type: 'string', description: 'One-line instruction or introduction for the section', required: false, example: 'Choose the one correct answer.' },
+    },
+  },
+
   heading: {
     category: 'structure',
     label: 'Heading',
-    description: 'Section heading (H1, H2 or H3)',
+    description: 'Heading at level 1–4 (sections, sub-sections, …); a long document uses several levels',
     icon: 'H',
     aiFields: {
       text:  { type: 'string',  description: 'The heading text', required: true,  example: 'Introduction to Osmosis' },
-      level: { type: 'number',  description: 'Heading level: 1 (largest), 2, or 3', required: true, example: 1 },
+      level: { type: 'number',  description: 'Heading level: 1 (main section), 2 (subsection), 3, or 4 (smallest). Use as many levels as the content needs.', required: true, example: 2 },
     },
   },
 
@@ -51,6 +83,18 @@ export const BLOCKS = {
     aiFields: {
       text: { type: 'string', description: 'The callout text', required: true, example: 'Remember: osmosis only applies to water molecules, not solutes.' },
       type: { type: 'string', description: 'Callout type: info, tip, warning, or note', required: true, example: 'tip' },
+    },
+  },
+
+  vocabulary: {
+    category: 'structure',
+    label: 'Table',
+    description: 'One row of a word · translation · example table (consecutive rows form one table)',
+    icon: '▦',
+    aiFields: {
+      word:        { type: 'string', description: 'The word or term', required: true,  example: 'casa' },
+      translation: { type: 'string', description: 'Its translation or definition', required: true, example: 'house' },
+      example:     { type: 'string', description: 'A short example sentence', required: false, example: 'Mi casa es pequeña.' },
     },
   },
 
@@ -119,6 +163,31 @@ export const BLOCKS = {
     },
   },
 
+  question_match: {
+    category: 'questions',
+    label: 'Match the pairs',
+    description: 'Two columns of items the student connects',
+    icon: '⋯',
+    aiFields: {
+      title:       { type: 'string',   description: 'Short title of the matching activity', required: false, example: 'Match the organelle to its job' },
+      instruction: { type: 'string',   description: 'One-line instruction', required: false, example: 'Draw a line to connect each pair.' },
+      left_items:  { type: 'string[]', description: 'Left column, in order', required: true, example: ['Mitochondria', 'Chloroplast'] },
+      right_items: { type: 'string[]', description: 'Right column: the match of each left item, SAME ORDER and same length as left_items', required: true, example: ['Makes ATP', 'Photosynthesis'] },
+    },
+  },
+
+  question_math: {
+    category: 'questions',
+    label: 'Math practice',
+    description: 'One operation or problem with a numeric answer (consecutive problems form one set)',
+    icon: '±',
+    aiFields: {
+      title:   { type: 'string', description: 'Title of the practice set (only needed on the first problem)', required: false, example: 'Practice · Level 3' },
+      problem: { type: 'string', description: 'The operation, e.g. "24 + 18 ="', required: true, example: '24 + 18 =' },
+      answer:  { type: 'string', description: 'The result', required: true, example: '42' },
+    },
+  },
+
   // ── GAMES ──────────────────────────────────────────────────
   flashcard: {
     category: 'games',
@@ -134,9 +203,9 @@ export const BLOCKS = {
 };
 
 export const BLOCK_CATEGORIES = [
-  { id: 'structure', label: 'Document Structure', icon: '📄', blocks: ['heading','paragraph','bullet_list','callout'] },
-  { id: 'questions', label: 'Questions',          icon: '❓', blocks: ['question_mc','question_open','question_tf','question_fill'] },
-  { id: 'games',     label: 'Games & Cards',       icon: '🎮', blocks: ['flashcard'] },
+  { id: 'structure', label: 'Structure',     icon: '📄', blocks: ['document_header','exam_header','section_header','heading','paragraph','bullet_list','callout','vocabulary'] },
+  { id: 'questions', label: 'Questions',     icon: '❓', blocks: ['question_mc','question_open','question_tf','question_fill','question_match','question_math'] },
+  { id: 'games',     label: 'Cards & Games', icon: '🎮', blocks: ['flashcard'] },
 ];
 
 export function getBlock(id) { return BLOCKS[id]; }

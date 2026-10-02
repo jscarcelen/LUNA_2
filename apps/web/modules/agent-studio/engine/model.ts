@@ -51,6 +51,23 @@ export function collectionFields(collection: FieldDef | null): FieldDef[] {
   return item?.type === "object" ? item.children || [] : item ? [item] : [];
 }
 
+/** The title of the generated work, written by the AI for its content — printed in the document header. */
+export function titleField(description = "A short, specific title for this work, written for its content. Never the name of the tool.") {
+  // Soft: a missing title falls back to the agent's name and never fails the agent's checks.
+  return createField("Title", "text", { description, required: false });
+}
+
+/**
+ * Agents that return a list of items get a title for the whole work; the header of the document
+ * prints it. Agents saved before this existed receive the field when they are opened or run.
+ */
+export function withTitle(spec: AgentSpec): AgentSpec {
+  if (spec.output?.selectedBlocks?.length) return spec;
+  if (!primaryCollection(spec)) return spec;
+  const has = spec.outputSchema.some((field) => field.type !== "array" && field.type !== "object" && /^(title|heading|name)$/i.test(field.name.trim()));
+  return has ? spec : { ...spec, outputSchema: [titleField(), ...spec.outputSchema] };
+}
+
 /* ---------------------------------------------------------------- built-in agents */
 
 export function createVocabularyFlashcardsSpec(): AgentSpec {
@@ -71,9 +88,9 @@ export function createVocabularyFlashcardsSpec(): AgentSpec {
   const back = createField("Back", "text", { description: "The translation in language 2", required: true });
   const topic = createField("Topic", "text", { description: "The topic or category of the word", required: false });
   const cards = createCollection("Flashcards", [front, back, topic]);
-  spec.outputSchema = [cards];
+  spec.outputSchema = [titleField("A short, specific title for this set, e.g. 'Animals · Spanish → English'"), cards];
   spec.validationRules = [{ type: "required_fields" }, { type: "count_matches_input", arrayFieldId: cards.id, inputId: count.id }, { type: "no_duplicates", arrayFieldId: cards.id, byFieldId: front.id }];
-  spec.examples = [{ id: createId("ex"), source: "pasted", inputs: { [count.id]: 3, [lang1.id]: "Spanish", [lang2.id]: "English", [difficulty.id]: "Beginner" }, output: { items: [{ front: "perro", back: "dog", topic: "Animals" }, { front: "gato", back: "cat", topic: "Animals" }, { front: "caballo", back: "horse", topic: "Animals" }] }, note: "Simple, everyday words for beginners." }];
+  spec.examples = [{ id: createId("ex"), source: "pasted", inputs: { [count.id]: 3, [lang1.id]: "Spanish", [lang2.id]: "English", [difficulty.id]: "Beginner" }, output: { title: "Animals · Spanish → English", items: [{ front: "perro", back: "dog", topic: "Animals" }, { front: "gato", back: "cat", topic: "Animals" }, { front: "caballo", back: "horse", topic: "Animals" }] }, note: "Simple, everyday words for beginners." }];
   spec.model = { model: "gpt-4o-mini", creativity: "medium" };
   return spec;
 }
@@ -103,7 +120,7 @@ export function createQuizSpec(): AgentSpec {
   const topic = createField("Topic", "text", { description: "Short topic tag taken from the material.", required: true });
   const diff = createField("Difficulty", "text", { description: "easy, medium or hard.", required: true });
   const questions = createCollection("Questions", [question, type, options, answer, explanation, topic, diff]);
-  spec.outputSchema = [questions];
+  spec.outputSchema = [titleField("A short, specific title for this quiz, written for its content, e.g. 'Median and outliers · Quiz 1'. Never the name of the tool."), questions];
   spec.validationRules = [{ type: "required_fields" }, { type: "count_matches_input", arrayFieldId: questions.id, inputId: count.id }, { type: "no_duplicates", arrayFieldId: questions.id, byFieldId: question.id }, { type: "answer_in_options", arrayFieldId: questions.id, answerFieldId: answer.id, optionsFieldId: options.id }];
   spec.model = { model: "gpt-4o-mini", creativity: "low" };
   return spec;

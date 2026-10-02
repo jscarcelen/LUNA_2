@@ -27,18 +27,15 @@ export interface AddPanelProps {
 const CATEGORIES = [
   { id: "structure",  label: "Structure",     emoji: "▔", bg: "#f0fdf4", ink: "#166534", border: "#bbf7d0" },
   { id: "questions",  label: "Questions",     emoji: "❶", bg: "#dbeafe", ink: "#1d4ed8", border: "#bfdbfe" },
-  { id: "worksheets", label: "Worksheets",    emoji: "✍", bg: "#fff7ed", ink: "#9a3412", border: "#fed7aa" },
   { id: "games",      label: "Cards & Games", emoji: "🃏", bg: "#fdf4ff", ink: "#7e22ce", border: "#e9d5ff" },
 ] as const;
 
 type CatId = typeof CATEGORIES[number]["id"];
 
-const WORKSHEET_FAMILIES = new Set(["Fill in the blanks", "Match the pairs", "Math practice set", "Cut and paste", "Tracing"]);
-
+/** Every question type — multiple choice to worksheets — is a question; documents are structure; the rest are games. */
 function uiCat(block: BlockDef): CatId {
   if (block.category === "structure") return "structure";
-  if (block.category === "questions" || (block.category === "kids" && block.family === "Question card")) return "questions";
-  if (WORKSHEET_FAMILIES.has(block.family || "")) return "worksheets";
+  if (block.category === "questions" || block.category === "kids") return "questions";
   return "games";
 }
 

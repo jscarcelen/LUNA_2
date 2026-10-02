@@ -9,7 +9,7 @@ import { fieldBase, ghostBtn, label, primaryBtn } from "../ui";
  * agent will use. The result is one block — the agent's list decides which design goes where.
  */
 export function SequenceDialog({ onClose, onInsert }: { onClose: () => void; onInsert: (block: BlockDef, choices: SequenceChoice[]) => void }) {
-  const library = [...builtInBlocks().filter((b) => b.id !== "block-question-mixed" && b.id !== "block-section-questions" && !b.id.startsWith("block-footer") && !b.id.startsWith("block-header")), ...readBlockLibrary()];
+  const library = [...builtInBlocks().filter((b) => !b.id.startsWith("block-footer") && !b.id.startsWith("block-header")), ...readBlockLibrary()];
   const families = blockFamilies(library);
   const [listName, setListName] = useState("Content");
   const [picked, setPicked] = useState<Record<string, string>>({});

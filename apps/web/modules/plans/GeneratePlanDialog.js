@@ -72,7 +72,7 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
                 className="shrink-0"
               />
               <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
-              <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+              <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "generated" : "uploaded"}</span>
             </label>
           ))}
           {/* Sub-folders */}
@@ -266,7 +266,7 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
                       <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5">
                         <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => toggleDoc(doc.id)} className="shrink-0" />
                         <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
-                        <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+                        <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "generated" : "uploaded"}</span>
                       </label>
                     ))}
                   </>)}

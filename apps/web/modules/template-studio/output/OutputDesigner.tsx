@@ -349,7 +349,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
         {doc && tab === "preview" ? (
           <div ref={frameBox} className="h-[640px] overflow-hidden">
             {rendering ? <div className="h-0.5 animate-pulse bg-[var(--accent)]" /> : null}
-            <iframe title="Output preview" sandbox="" srcDoc={srcDoc} className="h-full w-full border-0" />
+            <iframe title="Output preview" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={srcDoc} className="h-full w-full border-0" />
           </div>
         ) : null}
         {doc && tab === "data" ? <pre className="m-0 h-[640px] overflow-auto p-4 font-mono text-xs leading-relaxed text-ink/90">{dataJson}</pre> : null}

@@ -11,10 +11,12 @@
  * `styleFromTemplate` reads exactly that out of any saved template.
  */
 import { ACCENT_PRESETS, builtInBlocks, type AccentPreset, type BlockDef } from "../engine/blocks";
-import { DESIGN_VARIANTS, assembleTemplate, defaultToggles, findBlock } from "../engine/outputTemplate";
+import { assembleTemplate, defaultToggles, findBlock, variantsOf } from "../engine/outputTemplate";
 import { compileForSave } from "../adapters/agentTemplate";
 import { fieldsFromAgentFields, slug } from "../engine/model";
 import { templateFromFields } from "../engine/autoTemplate";
+import { locateSource, type SourcePassage } from "../../activities/engine/activity";
+import { localizeTemplate, wordsFor, type LabelLanguage } from "./labels";
 import { PALETTES } from "../engine/design";
 import type { DataObject, Element, GroupElement, Template } from "../engine/types";
 
@@ -24,15 +26,21 @@ export type FlatBlock = { type: string } & Record<string, unknown>;
 
 /** Which Template Studio component renders each flat block type an agent can produce. */
 export const COMPONENT_FOR_BLOCK: Record<string, string | null> = {
-  heading: "block-section-header",
+  document_header: "block-header-minimal",
+  exam_header: "block-header-exam",
+  section_header: "block-section-header",
+  heading: "block-headings",
   paragraph: "block-paragraph",
   bullet_list: "block-key-points",
   callout: "block-callout",
+  vocabulary: "block-vocabulary-row",
   divider: null,
   question_mc: "block-exam-question",
   question_open: "block-open-question",
   question_tf: "block-true-false",
   question_fill: "block-fill-blanks",
+  question_match: "block-match-pairs",
+  question_math: "block-math-practice",
   flashcard: "block-flashcard-single"
 };
 
@@ -47,12 +55,8 @@ const allBlocks = (): BlockDef[] => builtInBlocks();
 
 /** The formats (design variants) a component can take — the same list Template Studio offers. */
 export function formatsOf(componentKey: string): BlockDef[] {
-  const blocks = allBlocks();
-  const base = blocks.find((block) => block.id === componentKey);
-  if (!base) return [];
-  const ids = DESIGN_VARIANTS[componentKey];
-  if (ids) return ids.map((id) => blocks.find((block) => block.id === id)).filter(Boolean) as BlockDef[];
-  return [base];
+  const base = allBlocks().find((block) => block.id === componentKey);
+  return base ? variantsOf(base, allBlocks()) : [];
 }
 
 /** The accent a component has when nobody chose one: the colour Template Studio designed it in. */
@@ -185,6 +189,12 @@ export function blocksToActivityItems(blocks: FlatBlock[]): Record<string, unkno
       items.push({ question: text(block.question), type: "short-answer", options: [], answer: text(block.answer_guide), explanation: text(block.explanation) });
     } else if (block.type === "question_fill") {
       items.push({ question: text(block.sentence).replace(/_{2,}/g, "____"), type: "short-answer", options: [], answer: text(block.answer), explanation: "" });
+    } else if (block.type === "question_match") {
+      const left = (Array.isArray(block.left_items) ? block.left_items : []).map(text);
+      const right = (Array.isArray(block.right_items) ? block.right_items : []).map(text);
+      left.forEach((item, index) => items.push({ left: item, right: right[index] ?? "" }));
+    } else if (block.type === "question_math") {
+      items.push({ question: text(block.problem), type: "short-answer", options: [], answer: text(block.answer), explanation: "" });
     } else if (block.type === "flashcard") {
       items.push({ front: text(block.front), back: text(block.back) });
     }
@@ -225,14 +235,56 @@ interface RunSpec {
 
 /** Switches an option off when it has nothing to show. */
 const off = (key: string, when: boolean): Record<string, boolean> => (when ? { [key]: false } : {});
+/** The source line and link planOutput attached to a question block (empty strings when it has none). */
+const sourceOf = (block: FlatBlock) => {
+  const found = block.__source as { text: string; url: string } | undefined;
+  return { source: found?.text || "", source_link: found?.url || "" };
+};
 const hasValue = (value: unknown) => value !== undefined && value !== null && text(value).trim() !== "";
 
 const RUNS: Record<string, RunSpec> = {
+  "block-header-minimal": {
+    merge: false,
+    build: (blocks) => ({ data: { title: text(blocks[0]?.title) }, autoOff: {} })
+  },
+  "block-header-exam": {
+    merge: false,
+    build: (blocks) => ({ data: { title: text(blocks[0]?.title), subtitle: text(blocks[0]?.subtitle) }, autoOff: off("subtitle", !hasValue(blocks[0]?.subtitle)) })
+  },
   "block-section-header": {
     merge: true,
     build: (blocks) => ({
-      data: { sections: blocks.map((block) => ({ section_title: text(block.text), section_intro: "" })) },
-      autoOff: { intro: false }
+      data: { sections: blocks.map((block) => ({ section_title: text(block.title), section_intro: text(block.intro) })) },
+      autoOff: off("intro", !blocks.some((block) => hasValue(block.intro)))
+    })
+  },
+  "block-headings": {
+    merge: true,
+    build: (blocks) => ({
+      data: { headings: blocks.map((block) => ({ level: String(Math.min(4, Math.max(1, Math.round(Number(block.level) || 1)))), text: text(block.text) })) },
+      autoOff: {}
+    })
+  },
+  "block-vocabulary-row": {
+    merge: true,
+    build: (blocks) => ({ data: { words: blocks.map((block) => ({ word: text(block.word), translation: text(block.translation), example: text(block.example) })) }, autoOff: {} })
+  },
+  "block-match-pairs": {
+    merge: false,
+    build: (blocks) => {
+      const left = (Array.isArray(blocks[0]?.left_items) ? (blocks[0].left_items as unknown[]) : []).map(text);
+      const right = (Array.isArray(blocks[0]?.right_items) ? (blocks[0].right_items as unknown[]) : []).map(text);
+      return {
+        data: { title: text(blocks[0]?.title), instruction: text(blocks[0]?.instruction), pairs: left.map((item, index) => ({ left: item, right: right[index] ?? "" })) },
+        autoOff: off("instruction", !hasValue(blocks[0]?.instruction))
+      };
+    }
+  },
+  "block-math-practice": {
+    merge: true,
+    build: (blocks) => ({
+      data: { title: text(blocks.find((block) => hasValue(block.title))?.title), problems: blocks.map((block) => ({ problem: text(block.problem), answer: text(block.answer) })) },
+      autoOff: {}
     })
   },
   "block-paragraph": {
@@ -264,7 +316,8 @@ const RUNS: Record<string, RunSpec> = {
             question: text(block.question),
             options,
             answer: explanation && answer.length + explanation.length < 150 ? `${answer} — ${explanation}` : answer,
-            points: hasValue(block.points) ? Number(block.points) : ""
+            points: hasValue(block.points) ? Number(block.points) : "",
+            ...sourceOf(block)
           };
         })
       },
@@ -274,13 +327,13 @@ const RUNS: Record<string, RunSpec> = {
   "block-open-question": {
     merge: true,
     build: (blocks) => ({
-      data: { questions: blocks.map((block) => ({ question: text(block.question), points: hasValue(block.points) ? Number(block.points) : "" })) },
+      data: { questions: blocks.map((block) => ({ question: text(block.question), points: hasValue(block.points) ? Number(block.points) : "", answer: text(block.answer_guide), ...sourceOf(block) })) },
       autoOff: off("points", !blocks.some((block) => hasValue(block.points)))
     })
   },
   "block-true-false": {
     merge: true,
-    build: (blocks) => ({ data: { statements: blocks.map((block) => ({ statement: text(block.statement), answer: Boolean(block.is_true) })) }, autoOff: {} })
+    build: (blocks) => ({ data: { statements: blocks.map((block) => ({ statement: text(block.statement), answer: Boolean(block.is_true), ...sourceOf(block) })) }, autoOff: {} })
   },
   "block-fill-blanks": {
     merge: true,
@@ -295,15 +348,36 @@ const RUNS: Record<string, RunSpec> = {
   }
 };
 
-const QUESTION_TYPES = new Set(["question_mc", "question_open", "question_tf", "question_fill"]);
+const QUESTION_TYPES = new Set(["question_mc", "question_open", "question_tf", "question_fill", "question_match", "question_math"]);
+
+/**
+ * Where a question's answer comes from: the passage of the reference material that best matches the
+ * question and its answer, the sentence to quote, and a link to that exact passage.
+ */
+function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string, language: LabelLanguage): { text: string; url: string } | null {
+  if (!passages.length) return null;
+  const options = (Array.isArray(block.options) ? block.options : []).map(text);
+  const prompt = text(block.question || block.statement || block.sentence);
+  const answer = [options[Number(block.answer_index) || 0], block.answer_guide, block.answer, block.explanation].map(text).join(" ");
+  const found = locateSource(prompt, answer, passages);
+  if (!found) return null;
+  const words = wordsFor(language);
+  const quote = found.extract.length > 120 ? `${found.extract.slice(0, 117)}…` : found.extract;
+  const place = [found.passage.documentName || "—", found.passage.heading].filter(Boolean).join(" › ");
+  const label = `${words.source}: ${place} · ${words.passage} ${found.passage.chunkIndex}`;
+  const url = found.passage.documentId
+    ? `${linkBase}/source?d=${encodeURIComponent(found.passage.documentId)}&c=${found.passage.chunkIndex}&q=${encodeURIComponent(found.extract.slice(0, 200))}`
+    : "";
+  return { text: quote ? `${label} — “${quote}”` : label, url };
+}
 
 /**
  * Plans the document: which components the output uses, in which runs. `framed` outputs (quiz
  * items, flashcard sets) get the header/footer Template Studio's quiz and game types always have;
  * block agents bring their own headings, so nothing is added around them.
  */
-export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitle?: string; framed?: boolean }): OutputPlan | null {
-  const blocks = input.blocks.filter((block) => block && typeof block.type === "string");
+export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitle?: string; framed?: boolean; passages?: SourcePassage[]; linkBase?: string; language?: LabelLanguage }): OutputPlan | null {
+  const blocks = input.blocks.filter((block) => block && typeof block.type === "string").map((block) => (QUESTION_TYPES.has(block.type) ? { ...block, __source: sourceFor(block, input.passages || [], input.linkBase || "", input.language || "en") } : block));
   const runs: PlannedRun[] = [];
   let open: { componentKey: string; blocks: FlatBlock[] } | null = null;
   const groups: { componentKey: string; blocks: FlatBlock[] }[] = [];
@@ -320,6 +394,16 @@ export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitl
     const built = RUNS[group.componentKey].build(group.blocks);
     runs.push({ n: index + 1, componentKey: group.componentKey, data: built.data, autoOff: built.autoOff });
   });
+
+  // An exam header already carries Name and Date: a math set inside it does not repeat them.
+  if (input.framed) for (const run of runs) if (run.componentKey === "block-math-practice") run.autoOff = { ...run.autoOff, namedate: false };
+
+  // True / false answers are printed as words, so they follow the output's language too.
+  const words = wordsFor(input.language || "en");
+  for (const run of runs) {
+    if (run.componentKey !== "block-true-false") continue;
+    run.data = { ...run.data, statements: (run.data.statements as Record<string, unknown>[]).map((row) => ({ ...row, answer: row.answer ? words.true : words.false })) };
+  }
 
   const hasQuestions = blocks.some((block) => QUESTION_TYPES.has(block.type));
   const onlyCards = blocks.every((block) => block.type === "flashcard" || COMPONENT_FOR_BLOCK[block.type] === null);
@@ -360,7 +444,7 @@ function renameFields(block: BlockDef, n: number): BlockDef {
 }
 
 /** Builds the Template Studio document for a plan: assembled template + the data that fills it. */
-export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles): OutputDocument {
+export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles, options: { language?: LabelLanguage } = {}): OutputDocument {
   const selections: { block: BlockDef; accent: AccentPreset; toggles: Record<string, boolean> }[] = [];
   const data: DataObject = {};
 
@@ -384,7 +468,7 @@ export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles): Out
   data.subtitle = plan.subtitle;
 
   const cards = plan.kind === "cards";
-  const template = assembleTemplate(plan.title || "Output", cards ? 148 : 210, cards ? 105 : 297, selections);
+  const template = localizeTemplate(assembleTemplate(plan.title || "Output", cards ? 148 : 210, cards ? 105 : 297, selections), options.language || "en");
   const labels = cards ? ["Cards"] : ["A4", "Letter", "Slides 16:9"];
   return {
     template,

@@ -175,6 +175,8 @@ export interface TextElement extends ElementBase {
   format: "plain" | "rich";
   /** Sample shown while designing when the source is a field. */
   placeholder?: string;
+  /** A field holding a URL: the text becomes a link in HTML and PowerPoint (plain text elsewhere). */
+  linkFieldId?: ID;
 }
 export interface ImageElement extends ElementBase {
   type: "image";
@@ -262,6 +264,8 @@ export interface LaidOutTextItem {
   fieldId?: ID;
   hasValue?: boolean;
   elementId: ID;
+  /** Where the text links to, when its element has a link field with a value. */
+  href?: string;
 }
 export interface LaidOutImageItem { type: "image"; x: number; y: number; w: number; h: number; style: Style; src: string; elementId: ID }
 export interface LaidOutRectItem { type: "rect"; x: number; y: number; w: number; h: number; style: Style; elementId: ID; ellipse?: boolean }

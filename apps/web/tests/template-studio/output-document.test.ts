@@ -4,6 +4,7 @@ import { assembleTemplate } from "../../modules/template-studio/engine/outputTem
 import { ACCENT_PRESETS, builtInBlocks } from "../../modules/template-studio/engine/blocks";
 import { layoutDocument } from "../../modules/template-studio/engine/layout";
 import { renderHtml } from "../../modules/template-studio/engine/renderers";
+import { detectLanguage, labelLanguageFrom, resolveOutputLanguage } from "../../modules/template-studio/output/labels";
 
 const allText = (doc: ReturnType<typeof buildOutputDocument>, layoutIndex = 0, viewIndex = 0) => {
   const layout = doc.template.layouts[layoutIndex];
@@ -23,9 +24,9 @@ const bulletBlocks: FlatBlock[] = [
 describe("planOutput", () => {
   it("merges bullets separated by dividers into one Key points list and keeps the heading first", () => {
     const plan = planOutput({ blocks: bulletBlocks })!;
-    expect(plan.runs.map((run) => run.componentKey)).toEqual(["block-section-header", "block-key-points"]);
+    expect(plan.runs.map((run) => run.componentKey)).toEqual(["block-headings", "block-key-points"]);
     expect((plan.runs[1].data.points as unknown[]).length).toBe(3);
-    expect(plan.components.map((component) => component.key)).toEqual(["block-section-header", "block-key-points"]);
+    expect(plan.components.map((component) => component.key)).toEqual(["block-headings", "block-key-points"]);
     expect(plan.kind).toBe("document");
   });
 
@@ -78,9 +79,33 @@ describe("buildOutputDocument", () => {
     expect(student).toContain("Define the median.");
     expect(student).not.toContain("B · 4");
     expect(key).toContain("B · 4");
+    expect(key).toContain("Middle value");
+    expect(student).not.toContain("Middle value");
     // Placeholders from the component designs must never show up in real output.
     for (const placeholder of ["Biology Midterm Exam", "Which organelle", "The mean is always larger", "Explain why the median"]) expect(student).not.toContain(placeholder);
     expect(student).toContain("Statistics quiz");
+  });
+
+  it("fits cards to each page size and drops Name / Date on slides only", () => {
+    const blocks = itemsToBlocks([
+      { question: "Is the median robust to outliers?", type: "true-false", options: ["True", "False"], answer: "True" },
+      { question: "Define the variance in the context of sample statistics.", type: "short-answer", options: [], answer: "The mean squared deviation from the mean." }
+    ])!;
+    const doc = buildOutputDocument(planOutput({ blocks, title: "Stats", framed: true })!, {});
+    const [a4, letter, slides] = doc.template.layouts;
+    for (const layout of [a4, letter, slides]) {
+      const width = layout.canvas.width - layout.margins.left - layout.margins.right;
+      for (const element of layout.pages[0].elements) expect(element.frame.w).toBeCloseTo(width, 1);
+      const laid = layoutDocument(doc.template, doc.data, { layoutId: layout.id, viewId: layout.views[1].id });
+      expect(laid.overflows).toHaveLength(0);
+      for (const item of laid.pages.flatMap((page) => page.items)) expect(item.x + item.w).toBeLessThanOrEqual(layout.canvas.width + 0.5);
+    }
+    const textOf = (layoutIndex: number) => layoutDocument(doc.template, doc.data, { layoutId: doc.template.layouts[layoutIndex].id, viewId: doc.template.layouts[layoutIndex].views[0].id }).pages.flatMap((page) => page.items).filter((item) => item.type === "text").map((item) => (item as { lines: string[] }).lines.join(" ")).join("\n");
+    expect(textOf(0)).toContain("Name");
+    expect(textOf(1)).toContain("Name");
+    expect(textOf(2)).not.toContain("Name");
+    expect(textOf(2)).not.toContain("Date");
+    expect(textOf(2)).toContain("Stats");
   });
 
   it("keeps two runs of the same component apart", () => {
@@ -155,5 +180,68 @@ describe("buildAutoDocument", () => {
     });
     expect(allText(doc)).toContain("Second");
     expect(renderHtml(doc.template, doc.data).html).toContain("#8a4fd6");
+  });
+});
+
+describe("sources", () => {
+  const passages = [
+    { documentId: "doc-1", documentName: "Statistics.pdf", chunkIndex: 3, heading: "2. Dispersion", content: "The variance measures the average squared deviation from the mean. The standard deviation is its square root." },
+    { documentId: "doc-1", documentName: "Statistics.pdf", chunkIndex: 7, heading: "4. Correlation", content: "Correlation describes how two variables move together. It ranges between minus one and one." }
+  ];
+  const quiz = () => itemsToBlocks([
+    { question: "What does the variance measure?", type: "multiple-choice", options: ["Squared deviation from the mean", "The middle value", "The most frequent value", "The range"], answer: "Squared deviation from the mean" },
+    { question: "A completely unrelated question about volcanoes?", type: "true-false", options: ["True", "False"], answer: "True" }
+  ])!;
+
+  it("cites the best passage under the answer, links to that chunk, and only in the answer key", () => {
+    const plan = planOutput({ blocks: quiz(), title: "Quiz", framed: true, passages, linkBase: "https://luna.test", language: "en" })!;
+    const doc = buildOutputDocument(plan, {});
+    const student = allText(doc, 0, 0);
+    const key = allText(doc, 0, 1);
+    expect(key).toContain("Source: Statistics.pdf › 2. Dispersion · passage 3");
+    expect(key).toContain("average squared deviation");
+    expect(key).not.toContain("passage 7");
+    expect(student).not.toContain("Statistics.pdf");
+    const layout = doc.template.layouts[0];
+    const html = renderHtml(doc.template, doc.data, { layoutId: layout.id, viewId: layout.views[1].id }).html;
+    expect(html).toContain('href="https://luna.test/source?d=doc-1&amp;c=3&amp;q=');
+    expect(layoutDocument(doc.template, doc.data, { layoutId: layout.id, viewId: layout.views[1].id }).overflows).toHaveLength(0);
+  });
+
+  it("adds no source when nothing in the material backs the question", () => {
+    const plan = planOutput({ blocks: quiz(), title: "Quiz", framed: true, passages: [passages[1]], linkBase: "https://luna.test" })!;
+    expect(allText(buildOutputDocument(plan, {}), 0, 1)).not.toContain("volcanoes · passage");
+  });
+});
+
+describe("language of the printed words", () => {
+  const blocks = () => itemsToBlocks([
+    { question: "¿Qué mide la varianza?", type: "multiple-choice", options: ["La desviación", "La media", "La moda", "El rango"], answer: "La desviación" },
+    { question: "La mediana es robusta.", type: "true-false", options: ["Verdadero", "Falso"], answer: "Verdadero" }
+  ])!;
+
+  it("translates the fixed words, in every page size, and leaves English alone", () => {
+    const plan = planOutput({ blocks: blocks(), title: "Prueba", framed: true, language: "es" })!;
+    const es = buildOutputDocument(plan, {}, { language: "es" });
+    const key = allText(es, 0, 1).toLowerCase();
+    for (const word of ["respuesta", "verdadero", "falso", "nombre", "fecha"]) expect(key).toContain(word);
+    for (const word of ["answer", "true", "name", "date"]) expect(key).not.toContain(word);
+    expect(allText(es, 1, 1).toLowerCase()).toContain("respuesta");
+    expect(allText(buildOutputDocument(plan, {}), 0, 1).toLowerCase()).toContain("answer");
+  });
+
+  it("works out the language from the choice, or from the content when it says 'same as the material'", () => {
+    expect(labelLanguageFrom("Spanish")).toBe("es");
+    expect(labelLanguageFrom("Same as material")).toBeNull();
+    const questions = [{ id: "q1", text: "Language" }];
+    expect(resolveOutputLanguage(questions, { q1: "French" }, "The mean is the average")).toBe("fr");
+    expect(resolveOutputLanguage(questions, { q1: "Same as material" }, "¿Cuál es el valor de la mediana en la muestra?")).toBe("es");
+    expect(detectLanguage("Wat is de mediaan van de steekproef en het gemiddelde?")).toBe("nl");
+    expect(detectLanguage("What is the median of the sample?")).toBe("en");
+  });
+
+  it("numbers the section and page words in the chosen language", () => {
+    const plan = planOutput({ blocks: [{ type: "section_header", title: "Intro" }], title: "Doc", language: "de" })!;
+    expect(allText(buildOutputDocument(plan, {}, { language: "de" }))).toContain("ABSCHNITT 1");
   });
 });

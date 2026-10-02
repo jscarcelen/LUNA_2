@@ -197,7 +197,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
 
 /* ---------------------------------------------------------------- source citations */
 
-export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string }
+export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string }
 
 const STOP = new Set(["the", "a", "an", "of", "and", "or", "is", "are", "to", "in", "on", "for", "with", "that", "this", "it", "as", "by", "be", "which", "what", "de", "la", "el", "los", "las", "que", "y", "en", "un", "una"]);
 const terms = (value: string) => [...new Set(String(value || "").toLowerCase().split(/[^a-z0-9áéíóúüñ]+/).filter((word) => word.length > 3 && !STOP.has(word)))];
@@ -220,21 +220,28 @@ function bestSentence(content: string, keys: string[]): string {
  * Links each question to where its answer lives in the material: the passage with the most terms
  * in common with the question and its answer, plus a short extract to read straight away.
  */
+/** The passage that best backs a question and its answer, with the sentence to quote; null when nothing matches well. */
+export function locateSource(prompt: string, answer: string, passages: SourcePassage[]): { passage: SourcePassage; extract: string } | null {
+  const keys = terms(`${prompt} ${answer}`);
+  if (!keys.length) return null;
+  let best: SourcePassage | null = null;
+  let bestScore = 0;
+  for (const passage of passages) {
+    const lower = String(passage.content || "").toLowerCase();
+    const score = keys.filter((key) => lower.includes(key)).length / keys.length;
+    if (score > bestScore) { bestScore = score; best = passage; }
+  }
+  if (!best || bestScore < 0.25) return null;
+  return { passage: best, extract: bestSentence(best.content, keys) };
+}
+
 export function attachSources(activity: Activity, passages: SourcePassage[] = []): Activity {
   if (!passages.length) return activity;
   const questions = activity.questions.map((question) => {
     if (question.source?.documentName) return question;
-    const keys = terms(`${question.prompt} ${typeof question.answer === "string" ? question.answer : ""} ${question.back || ""}`);
-    if (!keys.length) return question;
-    let best: SourcePassage | null = null;
-    let bestScore = 0;
-    for (const passage of passages) {
-      const lower = passage.content.toLowerCase();
-      const score = keys.filter((key) => lower.includes(key)).length / keys.length;
-      if (score > bestScore) { bestScore = score; best = passage; }
-    }
-    if (!best || bestScore < 0.25) return question;
-    return { ...question, source: { documentName: best.documentName, locator: `passage ${best.chunkIndex}`, extract: question.source?.extract || bestSentence(best.content, keys) } };
+    const found = locateSource(question.prompt, `${typeof question.answer === "string" ? question.answer : ""} ${question.back || ""}`, passages);
+    if (!found) return question;
+    return { ...question, source: { documentName: found.passage.documentName, locator: `passage ${found.passage.chunkIndex}`, extract: question.source?.extract || found.extract } };
   });
   return { ...activity, questions };
 }

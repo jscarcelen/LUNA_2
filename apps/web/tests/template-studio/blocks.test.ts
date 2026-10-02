@@ -30,7 +30,7 @@ describe("blocks", () => {
     const { fields, elements } = instantiateBlock(byName("Open question"), template.fields);
     expect(fields.filter((field) => field.name === "Questions")).toHaveLength(1);
     const item = fields[0].children![0];
-    expect(item.children!.map((field) => field.name)).toEqual(["Question", "Points"]);
+    expect(item.children!.map((field) => field.name)).toEqual(["Question", "Points", "Answer", "Source", "Source link"]);
     let bound = "";
     walkElements(elements, (element) => { if (element.type === "text" && element.source.type === "field" && element.placeholder?.startsWith("Explain")) bound = element.source.fieldId; });
     expect(bound).toBe(question.id);
@@ -87,8 +87,8 @@ describe("simple design + families", () => {
   it("stacks top-level blocks in order inside the margins and keeps footers pinned", async () => {
     const { createLayout, stackElements, simpleOrder } = await import("../../modules/template-studio/engine/model");
     const layout = createLayout("Doc", "a4-portrait");
-    const header = instantiateBlock(byName("Header"), []).elements[0];
-    const section = instantiateBlock(byName("Section + questions"), []).elements[0];
+    const header = instantiateBlock(byName("Exam header"), []).elements[0];
+    const section = instantiateBlock(byName("Exam question"), []).elements[0];
     const footer = instantiateBlock(builtInBlocks().find((b) => b.id === "block-footer")!, []).elements[0];
     const stacked = stackElements(simpleOrder([section, footer, header].map((e, i) => ({ ...e, frame: { ...e.frame, y: e.id === footer.id ? 280 : 100 - i * 10 } })), layout), layout);
     expect(stacked[0].frame.y).toBe(layout.margins.top);
@@ -97,19 +97,12 @@ describe("simple design + families", () => {
     expect(stacked[0].frame.w).toBe(layout.canvas.width - layout.margins.left - layout.margins.right);
   });
 
-  it("groups blocks into families with variants and nested section lists lay out per section", async () => {
+  it("groups blocks into families; a family's variants are the formats of one component", async () => {
     const { blockFamilies } = await import("../../modules/template-studio/engine/blocks");
     const families = blockFamilies(builtInBlocks());
-    expect(families.find((f) => f.family === "Question card")!.variants.length).toBeGreaterThanOrEqual(3);
-    const template = createTemplate("T");
-    const { fields, elements } = instantiateBlock(byName("Section + questions"), template.fields);
-    template.fields = fields;
-    template.layouts[0].pages[0].elements = elements;
-    const data = { sections: [{ section_title: "A", section_intro: "", questions: [{ question: "q1", options: ["x", "y"], answer: "x" }, { question: "q2", options: ["x"], answer: "x" }] }, { section_title: "B", section_intro: "", questions: [{ question: "q3", options: ["z"], answer: "z" }] }] };
-    const result = layoutDocument(template, data);
-    const texts = result.pages.flatMap((page) => page.items.filter((item) => item.type === "text").map((item) => (item as { lines: string[] }).lines.join(" ")));
-    expect(texts).toContain("SECTION 2");
-    expect(texts.filter((t) => /^q[123]$/.test(t))).toHaveLength(3);
+    expect(families.find((f) => f.family === "Section header")!.variants.map((v) => v.variant)).toEqual(["Badge + title", "Title only"]);
+    // Every question type is its own component with its own fields.
+    for (const family of ["Multiple choice", "Open answer", "True / false", "Fill in the blanks", "Match the pairs", "Math practice set"]) expect(families.find((f) => f.family === family)).toBeTruthy();
   });
 });
 
@@ -182,7 +175,7 @@ describe("migration of stored compositions", () => {
   it("keeps a v3 template object intact (agent output compositions round-trip)", async () => {
     const { migrateToV3, normalizeTemplate } = await import("../../modules/template-studio/engine/migrate");
     const template = createTemplate("Summary generator");
-    const { fields, elements } = instantiateBlock(byName("Header"), template.fields);
+    const { fields, elements } = instantiateBlock(byName("Exam header"), template.fields);
     template.fields = fields;
     template.layouts[0].pages[0].elements = elements;
     const back = normalizeTemplate(migrateToV3(JSON.parse(JSON.stringify(template))));

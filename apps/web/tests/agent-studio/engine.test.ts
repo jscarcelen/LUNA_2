@@ -19,7 +19,8 @@ describe("schema", () => {
   });
   it("flattens to legacy fields with descriptions", () => {
     const fields = legacyFields(createQuizSpec().outputSchema);
-    expect(fields.map((f) => f.name)).toEqual(["question", "type", "options", "answer", "explanation", "topic", "difficulty"]);
+    expect(fields.map((f) => f.name)).toEqual(["question", "type", "options", "answer", "explanation", "topic", "difficulty", "title"]);
+    expect(fields[7].repeatScope).toBe("once");
     expect(fields[2].type).toBe("array");
     expect(fields[0].description).toContain("question text");
   });
@@ -77,9 +78,10 @@ describe("improve", () => {
   });
   it("patches field descriptions by stable id", () => {
     const spec = createVocabularyFlashcardsSpec();
-    const topic = spec.outputSchema[0].children![0].children![2];
+    const collection = (s: typeof spec) => s.outputSchema.find((field) => field.type === "array")!;
+    const topic = collection(spec).children![0].children![2];
     const { spec: next, changes } = applyPatches(spec, [{ target: "field.description", fieldId: topic.id, value: "One-word category" }]);
-    expect(next.outputSchema[0].children![0].children![2].description).toBe("One-word category");
+    expect(collection(next).children![0].children![2].description).toBe("One-word category");
     expect(changes[0].path).toContain("Topic");
     expect(compileAgent(next).system).toContain("One-word category");
   });
@@ -93,7 +95,8 @@ describe("migration + integration", () => {
     expect(spec.outputSchema[0].children![0].children!.map((f) => f.name)).toEqual(["Front", "Tags"]);
     const config = runConfigFromSpec(spec);
     expect(config.questions[1].options).toEqual(["A", "B"]);
-    expect(config.template.fields.map((f) => f.name)).toEqual(["front", "tags"]);
+    // The title of the generated work is added to agents saved before it existed.
+    expect(config.template.fields.map((f) => f.name)).toEqual(["front", "tags", "title"]);
     expect(config.outputJsonSchema).toBeTruthy();
     expect(config.model).toBe("gpt-4o");
   });

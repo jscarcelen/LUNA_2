@@ -8,6 +8,8 @@ import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
+import { RevisePlanDialog } from "./RevisePlanDialog";
+import { isGeneratedDocument, splitDocuments } from "./revise";
 import { ensurePlanFolders, linkMaterial } from "./folders";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
@@ -86,7 +88,7 @@ function buildFolderTree(folders = []) {
 }
 
 /** Collapsible folder node with checkboxes (used inside MaterialPickerModal). */
-function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel }) {
+function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel, badgeOf }) {
   const [expanded, setExpanded] = useState(true);
   const folderDocs = docs.filter((d) => (d.folderIds || (d.folderId ? [d.folderId] : [])).includes(node.id));
   const childDocCount = node.children.reduce((n, c) => n + docs.filter((d) => (d.folderIds || (d.folderId ? [d.folderId] : [])).includes(c.id)).length, 0);
@@ -104,9 +106,10 @@ function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel })
             <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5 cursor-pointer" style={{ paddingLeft: 20 }}>
               <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => onToggle(doc.id)} className="shrink-0" />
               <span className="truncate">{docLabel(doc)}</span>
+              {badgeOf?.(doc) ? <span className="ml-auto shrink-0 rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">{badgeOf(doc)}</span> : null}
             </label>
           ))}
-          {node.children.map((child) => <FolderPickerNode key={child.id} node={child} depth={depth + 1} docs={docs} picked={picked} onToggle={onToggle} docLabel={docLabel} />)}
+          {node.children.map((child) => <FolderPickerNode key={child.id} node={child} depth={depth + 1} docs={docs} picked={picked} onToggle={onToggle} docLabel={docLabel} badgeOf={badgeOf} />)}
         </div>
       )}
     </div>
@@ -114,26 +117,52 @@ function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel })
 }
 
 /**
- * Full-height modal that mirrors the GeneratePlanDialog file picker.
- * initialPicked = union of plan.materialIds + plan items' resourceIds.
- * onConfirm(newPicked[]) returns the final selection.
+ * Adds to a plan. Two different things can be added and the picker keeps them apart:
+ *  - Uploaded material: documents the learner studies from. They feed the concept map and are what
+ *    Luna generates practice from.
+ *  - Generated resources: quizzes, summaries, flashcards made by agents. They become steps of the plan.
+ * onConfirm({ materialIds, resourceIds }) returns the final selection of each kind.
  */
-function MaterialPickerModal({ documents, folders, resources, initialPicked, onClose, onConfirm }) {
-  const [picked, setPicked] = useState(() => [...initialPicked]);
+function MaterialPickerModal({ documents, folders, resources, plan, initialPicked, onClose, onConfirm }) {
+  const [tab, setTab] = useState("uploaded");
+  const [picked, setPicked] = useState(() => [...new Set(initialPicked)]);
+  const { uploaded, generated } = useMemo(() => splitDocuments(documents, resources), [documents, resources]);
+  const generatedIds = useMemo(() => new Set(generated.map((d) => d.id)), [generated]);
+  const builtByPlan = useMemo(() => new Set((plan.items || []).filter((item) => item.generate && item.resourceId).map((item) => item.resourceId)), [plan]);
   const resourceByDocumentId = useMemo(() => new Map(resources.map((row) => [row.document.id, row.resource])), [resources]);
+  const shown = tab === "uploaded" ? uploaded : generated;
   const folderTree = useMemo(() => buildFolderTree(folders), [folders]);
   const allFolderIds = useMemo(() => new Set(folders.map((f) => f.id)), [folders]);
-  const unorganised = useMemo(() => documents.filter((d) => {
+  const unorganised = useMemo(() => shown.filter((d) => {
     const df = d.folderIds || (d.folderId ? [d.folderId] : []);
     return !df.some((fid) => allFolderIds.has(fid));
-  }), [documents, allFolderIds]);
+  }), [shown, allFolderIds]);
 
   const toggle = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   const docLabel = (doc) => (doc && (resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
-  const pickedDocs = picked.map((id) => {
-    const doc = documents.find((d) => d.id === id);
-    return { id, label: docLabel(doc || { id, name: id }) };
-  });
+  const badgeOf = (doc) => (builtByPlan.has(doc.id) ? "built by this plan" : "");
+  const label = (id) => docLabel(documents.find((d) => d.id === id) || { id, name: id });
+  const pickedUploaded = picked.filter((id) => !generatedIds.has(id));
+  const pickedGenerated = picked.filter((id) => generatedIds.has(id));
+  const tabs = [
+    { id: "uploaded", title: "Uploaded material", count: uploaded.length, picked: pickedUploaded.length, hint: "Documents you uploaded. They feed the concept map and are what Luna generates practice from." },
+    { id: "generated", title: "Generated resources", count: generated.length, picked: pickedGenerated.length, hint: "Quizzes, summaries and flashcards made by agents. Each becomes a step of the plan." }
+  ];
+  const active = tabs.find((entry) => entry.id === tab);
+
+  const tray = (title, ids) => ids.length ? (
+    <div>
+      <p className="m-0 mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">{title} · {ids.length}</p>
+      <div className="flex max-h-16 flex-wrap gap-1.5 overflow-y-auto">
+        {ids.map((id) => (
+          <span key={id} className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/5 px-2 py-0.5 text-[11px] font-medium text-ink">
+            <span className="max-w-[140px] truncate">{label(id)}</span>
+            <button type="button" onClick={() => toggle(id)} className="ml-0.5 shrink-0 text-soft-ink hover:text-[var(--color-danger)]" aria-label={`Remove ${label(id)}`}>×</button>
+          </span>
+        ))}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div className="tw-scope fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
@@ -141,47 +170,52 @@ function MaterialPickerModal({ documents, folders, resources, initialPicked, onC
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
           <div>
-            <h4 className="m-0 text-base font-bold text-ink">Materials &amp; resources</h4>
-            <p className="m-0 mt-0.5 text-xs text-soft-ink">Tick documents to include — they feed the concept map and can be scheduled as reading steps.</p>
+            <h4 className="m-0 text-base font-bold text-ink">Add to this plan</h4>
+            <p className="m-0 mt-0.5 text-xs text-soft-ink">Adding anything re-plans what is still to do. What you have already done stays as it is.</p>
           </div>
           <button type="button" className="shrink-0 text-soft-ink hover:text-ink" onClick={onClose}>✕</button>
         </div>
 
+        {/* Uploaded vs generated */}
+        <div className="px-5 pt-3">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
+            {tabs.map((entry) => (
+              <button key={entry.id} type="button" onClick={() => setTab(entry.id)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${tab === entry.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink hover:text-ink"}`}>
+                {entry.title} <span className="font-normal text-soft-ink">({entry.picked}/{entry.count})</span>
+              </button>
+            ))}
+          </div>
+          <p className="m-0 mt-2 text-xs text-soft-ink">{active.hint}</p>
+        </div>
+
         {/* Folder tree */}
         <div className="flex-1 overflow-y-auto p-3 grid gap-0.5">
-          {!documents.length
-            ? <p className="m-0 p-2 text-xs text-soft-ink">No documents in this workspace yet.</p>
+          {!shown.length
+            ? <p className="m-0 p-2 text-xs text-soft-ink">{tab === "uploaded" ? "No uploaded documents in this workspace yet." : "No generated resources yet. Make some with the AI agents."}</p>
             : (<>
-                {folderTree.map((node) => <FolderPickerNode key={node.id} node={node} docs={documents} picked={picked} onToggle={toggle} docLabel={docLabel} />)}
+                {folderTree.map((node) => <FolderPickerNode key={node.id} node={node} docs={shown} picked={picked} onToggle={toggle} docLabel={docLabel} badgeOf={badgeOf} />)}
                 {unorganised.map((doc) => (
                   <label key={doc.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 text-sm text-ink transition hover:bg-ink/5">
                     <input type="checkbox" checked={picked.includes(doc.id)} onChange={() => toggle(doc.id)} className="shrink-0" />
                     <span className="truncate">{docLabel(doc)}</span>
-                    <span className="ml-auto shrink-0 text-[10px] text-soft-ink">{doc.sourceType === "generated" ? "resource" : "material"}</span>
+                    {badgeOf(doc) ? <span className="ml-auto shrink-0 rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">{badgeOf(doc)}</span> : null}
                   </label>
                 ))}
               </>)}
         </div>
 
-        {/* Selected tray */}
-        {pickedDocs.length > 0 && (
-          <div className="border-t border-ink/8 px-4 py-3">
-            <p className="m-0 mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--accent)]">{pickedDocs.length} selected</p>
-            <div className="flex max-h-20 flex-wrap gap-1.5 overflow-y-auto">
-              {pickedDocs.map(({ id, label }) => (
-                <span key={id} className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/5 px-2 py-0.5 text-[11px] font-medium text-ink">
-                  <span className="max-w-[140px] truncate">{label}</span>
-                  <button type="button" onClick={() => toggle(id)} className="ml-0.5 shrink-0 text-soft-ink hover:text-[var(--color-danger)]" aria-label={`Remove ${label}`}>×</button>
-                </span>
-              ))}
-            </div>
+        {/* Selected tray, by kind */}
+        {picked.length > 0 && (
+          <div className="grid gap-2 border-t border-ink/8 px-4 py-3">
+            {tray("Uploaded material", pickedUploaded)}
+            {tray("Generated resources", pickedGenerated)}
           </div>
         )}
 
         {/* Footer */}
         <div className="flex justify-end gap-2 border-t border-ink/8 px-5 py-4">
           <button type="button" className={ghostBtn} onClick={onClose}>Cancel</button>
-          <button type="button" className={primaryBtn} onClick={() => onConfirm(picked)}>Confirm selection</button>
+          <button type="button" className={primaryBtn} onClick={() => onConfirm({ materialIds: pickedUploaded, resourceIds: pickedGenerated })}>Confirm selection</button>
         </div>
       </div>
     </div>
@@ -278,6 +312,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
+  const [revising, setRevising] = useState(null); // { plan, newUploadedIds } while the re-plan preview is open
   const [rebuildPreview, setRebuildPreview] = useState(null); // { newConcepts, newPrereqs, prevConcepts, prevPrereqs }
 
   // Knowledge graph + student model state
@@ -557,17 +592,6 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     } finally {
       setReplanning(false);
     }
-  }
-
-  /** Links a new document as reference material for this plan and auto-triggers concept extraction. */
-  function addMaterialToPlan(docId) {
-    if (!open) return;
-    const current = open.plan.materialIds || [];
-    if (current.includes(docId)) return;
-    updateOpen((p) => ({ ...p, materialIds: [...current, docId] }));
-    const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
-    triggerExtraction([docId], selectedWorkspaceId, ownerUserId);
-    setStatus("Reference material added — rebuilding concept map…");
   }
 
   /** Dropping an item on a day of the calendar moves its due date, whichever plan it belongs to. */
@@ -1028,51 +1052,72 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           </div>
         )}
 
-        {/* ── Material picker modal ── */}
+        {/* ── Material picker modal: uploaded material and generated resources, kept apart ── */}
         {materialPickerOpen && (
           <MaterialPickerModal
             documents={documents.filter((d) => !(d.tags || []).includes("study-plan") && !(d.tags || []).includes("activity-attempt"))}
             folders={folders}
             resources={resources}
+            plan={open.plan}
             initialPicked={[...(open.plan.materialIds || []), ...open.plan.items.map((i) => i.resourceId).filter(Boolean)]}
             onClose={() => setMaterialPickerOpen(false)}
-            onConfirm={(newPicked) => {
-              const wasMaterial = new Set(open.plan.materialIds || []);
-              const wasItem = new Set(open.plan.items.map((i) => i.resourceId).filter(Boolean));
-              const wasIn = new Set([...wasMaterial, ...wasItem]);
-              const added = newPicked.filter((id) => !wasIn.has(id));
-              const removed = new Set([...wasIn].filter((id) => !newPicked.includes(id)));
+            onConfirm={({ materialIds, resourceIds }) => {
+              const resourceIdSet = new Set(resources.map((r) => r.document.id));
+              const isGenerated = (id) => {
+                const document = documents.find((d) => d.id === id);
+                return document ? isGeneratedDocument(document, resourceIdSet) : resourceIdSet.has(id);
+              };
+              // Earlier versions filed generated resources under materialIds; they are read as resources here.
+              const prevUploaded = new Set((open.plan.materialIds || []).filter((id) => !isGenerated(id)));
+              const prevGenerated = new Set([...open.plan.items.map((i) => i.resourceId).filter(Boolean), ...(open.plan.materialIds || []).filter(isGenerated)]);
+              const addedUploaded = materialIds.filter((id) => !prevUploaded.has(id));
+              const removedGenerated = new Set([...prevGenerated].filter((id) => !resourceIds.includes(id)));
 
-              // New plan items for added resources (only if they parse as a resource)
-              const addedItems = added.map((id) => {
+              // Generated resources are steps of the plan; remove only the ones not done yet.
+              const itemsAfterRemoval = open.plan.items.filter((i) => {
+                if (!i.resourceId || !removedGenerated.has(i.resourceId)) return true;
+                return Boolean(i.doneAt) || progress.scoreByResource.get(i.resourceId) !== undefined;
+              });
+              const addedItems = resourceIds.filter((id) => !prevGenerated.has(id)).map((id) => {
+                const document = documents.find((d) => d.id === id);
+                if (!document || open.plan.items.some((i) => i.resourceId === id)) return null;
                 const row = resources.find((r) => r.document.id === id);
-                if (!row) return null;
-                if (open.plan.items.some((i) => i.resourceId === id)) return null;
-                return newItem({ resourceId: id, title: row.resource.name, kind: row.resource.activity ? "activity" : "read" });
+                return newItem({ resourceId: id, title: row?.resource.name || document.name, kind: row?.resource.activity ? "activity" : "read" });
               }).filter(Boolean);
 
-              // Remove plan items for removed docs (only non-done ones)
-              const itemsAfterRemoval = open.plan.items.filter((i) => {
-                if (!i.resourceId || !removed.has(i.resourceId)) return true;
-                const sc = progress.scoreByResource.get(i.resourceId);
-                return Boolean(i.doneAt) || sc !== undefined; // keep done
-              });
-
-              updateOpen((current) => ({
-                ...current,
-                materialIds: newPicked,
-                items: [...itemsAfterRemoval, ...addedItems],
-              }));
-
-              if (added.length) {
-                const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
-                triggerExtraction(added, selectedWorkspaceId, ownerUserId);
-                setStatus("Materials updated — rebuilding concept map…");
-              }
+              const nextPlan = { ...open.plan, materialIds, items: [...itemsAfterRemoval, ...addedItems] };
+              save(nextPlan, open.document.id);
               setMaterialPickerOpen(false);
+
+              if (addedUploaded.length) {
+                const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+                triggerExtraction(addedUploaded, selectedWorkspaceId, ownerUserId);
+                setStatus("Material added — reading its concepts…");
+              }
+              // Anything new means the rest of the plan has to be redone around it.
+              if (addedUploaded.length || addedItems.length) setRevising({ plan: nextPlan, newUploadedIds: addedUploaded });
             }}
           />
         )}
+        {revising ? (
+          <RevisePlanDialog
+            row={{ document: open.document, plan: revising.plan }}
+            documents={documents}
+            resources={resources}
+            attempts={attempts}
+            conceptMap={graphConcepts}
+            newUploadedIds={revising.newUploadedIds}
+            ready={!extracting}
+            onCancel={() => { setRevising(null); setStatus("Plan left as it was — the new material is linked, but nothing was rescheduled."); }}
+            onApply={async (nextPlan, { buildNow }) => {
+              const target = { document: open.document, plan: nextPlan };
+              setRevising(null);
+              await save(nextPlan, open.document.id);
+              setStatus(`Plan re-planned: finished work kept, ${nextPlan.items.filter((item) => !item.doneAt).length} steps still to do.`);
+              if (buildNow) await build(target);
+            }}
+          />
+        ) : null}
         {playing ? (
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
             <ActivityPlayer

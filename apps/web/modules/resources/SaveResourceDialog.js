@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { buildFolderTree } from "../ui/FolderTree";
+import { useState } from "react";
+import { FolderPicker } from "../ui/FolderTree";
 
 const input = "w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-[var(--accent)]";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
@@ -17,11 +17,6 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
   const [openAfter, setOpenAfter] = useState(true);
   const [newFolder, setNewFolder] = useState("");
   const [creating, setCreating] = useState(false);
-  // Folders are shown with their nesting, so a resource is filed where it belongs, not "somewhere".
-  const flat = useMemo(() => {
-    const walk = (nodes) => nodes.flatMap((node) => [{ id: node.id, label: `${"— ".repeat(node.depth)}${node.name}` }, ...walk(node.children)]);
-    return walk(buildFolderTree(folders));
-  }, [folders]);
   async function create() {
     const name = newFolder.trim();
     if (!name || !onCreateFolder) return;
@@ -44,16 +39,13 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input autoFocus className={input} value={name} onChange={(event) => setName(event.target.value)} placeholder="Biology quiz · chapter 3" /></label>
           <div className="grid gap-1 text-xs font-semibold text-soft-ink">
             <span>Folder <span className="font-normal">· where it is filed in this space</span></span>
-            <select className={input} value={folderId} onChange={(event) => setFolderId(event.target.value)}>
-              <option value="">Unfiled</option>
-              {flat.map((folder) => <option key={folder.id} value={folder.id}>{folder.label}</option>)}
-            </select>
+            <FolderPicker folders={folders} selectedId={folderId} onSelect={setFolderId} />
             {onCreateFolder ? (
               <div className="flex items-center gap-2">
                 <input
                   className={`${input} py-1 text-xs`}
                   value={newFolder}
-                  placeholder="…or type a new folder name"
+                  placeholder={folderId ? "…or a new folder inside the selected one" : "…or type a new folder name"}
                   onChange={(event) => setNewFolder(event.target.value)}
                   onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); create(); } }}
                 />

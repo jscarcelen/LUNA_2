@@ -1,5 +1,5 @@
 import type { AgentSpec, InputDef, InputType } from "./types";
-import { createAgentSpec, createCollection, createInput, createSlot } from "./model";
+import { createAgentSpec, createCollection, createInput, createSlot, withTitle } from "./model";
 import { compileAgent } from "./compile";
 import { legacyFields, outputJsonSchema } from "./schema";
 import { createField } from "../../template-studio/engine/model";
@@ -18,7 +18,7 @@ function modernizeOutput(spec: AgentSpec): AgentSpec {
 
 /** Legacy `.agent.json` config (or a built-in legacy agent object) → AgentSpec. */
 export function specFromLegacy(config: any): AgentSpec {
-  if (config?.spec?.version === 1) return modernizeOutput(config.spec as AgentSpec);
+  if (config?.spec?.version === 1) return withTitle(modernizeOutput(config.spec as AgentSpec));
   const spec = createAgentSpec(String(config?.name || "Untitled agent"));
   spec.purpose = { headline: String(config?.tagline || config?.name || ""), description: String(config?.description || config?.instructions || "").slice(0, 400) };
   spec.instructions = { core: String(config?.instructions || ""), constraints: [] };
@@ -35,7 +35,8 @@ export function specFromLegacy(config: any): AgentSpec {
  * AgentSpec → the legacy run config RunAgentPage and the runtime consume. The compiled prompt
  * goes into `instructions`; the JSON schema and validation rules travel alongside.
  */
-export function runConfigFromSpec(spec: AgentSpec, extra: Record<string, unknown> = {}) {
+export function runConfigFromSpec(rawSpec: AgentSpec, extra: Record<string, unknown> = {}) {
+  const spec = withTitle(modernizeOutput(rawSpec));
   const compiled = compileAgent(spec);
   const userSlots = spec.contextSlots.filter((slot) => slot.kind === "user_material");
   return {

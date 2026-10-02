@@ -5,6 +5,7 @@ import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { GenerationProgress } from "./GenerationProgress";
 import { OutputPreviewPane, OutputStylePanel, renderOutputHtml } from "../../../template-studio/output/OutputDesigner";
 import { blocksToActivityItems, buildAutoDocument, buildOutputDocument, itemsToBlocks, planOutput, stylesFromSelectedBlocks } from "../../../template-studio/output/outputDocument";
+import { resolveOutputLanguage } from "../../../template-studio/output/labels";
 import { renderPlainOutputText } from "./previewHtml";
 import { runConfigFromSpec } from "../../../agent-studio/engine/migrate";
 import { RunEstimateLine, useRunEstimate } from "../../../credits/RunEstimate";
@@ -530,28 +531,40 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
    */
   const outputIsBlocks = Boolean(output?.isBlockOutput);
   const outputBlocks = outputIsBlocks && Array.isArray(output?.blocks) ? output.blocks : null;
+  const dataJson = useMemo(() => JSON.stringify(outputBlocks || output?.items || [], null, 2), [outputBlocks, output]);
+  const rawText = useMemo(() => (outputBlocks ? blocksToText(outputBlocks) : renderPlainOutputText(Array.isArray(output?.items) ? output.items : [], fields, {})), [outputBlocks, output, fields]);
+  /** Words the components print by themselves (Answer, True / False, Name…) follow the output's language. */
+  const outputLanguage = useMemo(() => resolveOutputLanguage(agentConfig?.questions || [], answersByQuestionId, rawText), [agentConfig?.questions, answersByQuestionId, rawText]);
   const plan = useMemo(() => {
     if (!output) return null;
     const blocks = outputBlocks || (outputIsBlocks ? null : itemsToBlocks(output.items));
     if (!blocks) return null;
-    return planOutput({ blocks, title: agentConfig?.name || "", subtitle: String(rootData?.subtitle || ""), framed: !outputBlocks });
-  }, [output, outputBlocks, outputIsBlocks, agentConfig?.name, rootData]);
+    return planOutput({
+      blocks,
+      // The header prints the title the AI wrote for this work; the agent's name only if it wrote none.
+      title: String(rootData?.title || "").trim() || agentConfig?.name || "",
+      subtitle: String(rootData?.subtitle || ""),
+      framed: !outputBlocks,
+      // Each answer cites the passage of the material it came from, and links to it.
+      passages: Array.isArray(output.sources) ? output.sources : [],
+      linkBase: typeof window !== "undefined" ? window.location.origin : "",
+      language: outputLanguage
+    });
+  }, [output, outputBlocks, outputIsBlocks, agentConfig?.name, rootData, outputLanguage]);
   const doc = useMemo(() => {
     if (!output) return null;
     try {
-      if (plan) return buildOutputDocument(plan, outputStyles);
+      if (plan) return buildOutputDocument(plan, outputStyles, { language: outputLanguage });
       const items = outputIsBlocks ? [] : (Array.isArray(output.items) ? output.items : []);
       if (items.length) return buildAutoDocument({ fields, items, rootData, title: agentConfig?.name || "", accentId: autoAccentId });
     } catch (error) {
       console.error("[RunAgentPage] could not build the output document", error);
     }
     return null;
-  }, [output, outputIsBlocks, plan, outputStyles, autoAccentId, fields, rootData, agentConfig?.name]);
+  }, [output, outputIsBlocks, plan, outputStyles, outputLanguage, autoAccentId, fields, rootData, agentConfig?.name]);
   useEffect(() => {
     if (doc && (selection.layoutIndex >= doc.layouts.length || selection.viewIndex >= doc.views.length)) setSelection({ layoutIndex: 0, viewIndex: 0 });
   }, [doc, selection.layoutIndex, selection.viewIndex]);
-  const dataJson = useMemo(() => JSON.stringify(outputBlocks || output?.items || [], null, 2), [outputBlocks, output]);
-  const rawText = useMemo(() => (outputBlocks ? blocksToText(outputBlocks) : renderPlainOutputText(Array.isArray(output?.items) ? output.items : [], fields, {})), [outputBlocks, output, fields]);
 
   /** Interactive activity derived from the output: questions the student can answer on Luna. */
   const activity = useMemo(() => {
@@ -878,7 +891,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <p className={kicker}>What happens next</p>
               <ul className="m-0 mt-2 grid list-none gap-2 p-0 text-sm text-ink">
                 <li className="flex gap-2"><span className="text-[var(--accent-ink)]">1.</span> The agent reads {knowledgeMode === "workspace" ? `${referenceDocumentIds.length} document${referenceDocumentIds.length === 1 ? "" : "s"}` : "your text"}{styleDocumentIds.length ? ` and ${styleDocumentIds.length} style example${styleDocumentIds.length === 1 ? "" : "s"}` : ""}.</li>
-                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It writes {fields.length} field{fields.length === 1 ? "" : "s"} per item: {fields.slice(0, 4).map((field) => field.label || field.name).join(", ")}{fields.length > 4 ? "…" : ""}.</li>
+                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It writes {fields.filter((field) => field.repeatScope !== "once").length} field{fields.filter((field) => field.repeatScope !== "once").length === 1 ? "" : "s"} per item: {fields.filter((field) => field.repeatScope !== "once").slice(0, 4).map((field) => field.label || field.name).join(", ")}{fields.filter((field) => field.repeatScope !== "once").length > 4 ? "…" : ""}.</li>
                 <li className="flex gap-2"><span className="text-[var(--accent-ink)]">3.</span> You pick a layout and export — or save it to your workspace.</li>
               </ul>
               {hasOutput ? <button type="button" className={`${ghostBtn} mt-4`} onClick={() => setFlowStep(2)}>See last result →</button> : null}

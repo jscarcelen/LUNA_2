@@ -59,14 +59,23 @@ function collectScopedDocuments(workspaces, scope = {}) {
 function buildJsonSchemaFromFields(fields = []) {
   const properties = {};
   const required = [];
+  // Fields marked "once" (a title) are written once per document, next to the list of items.
+  const rootProperties = {};
+  const rootRequired = [];
 
   for (const field of fields) {
     const name = String(field?.name || "").trim();
     if (!name || name === "_source") continue; // _source is system-injected below
     const type = FIELD_TYPES.includes(field?.type) ? field.type : "string";
-    properties[name] = type === "array" ? { type: "array", items: { type: "string" } } : { type };
-    if (field?.description) properties[name].description = String(field.description);
-    required.push(name);
+    const schema = type === "array" ? { type: "array", items: { type: "string" } } : { type };
+    if (field?.description) schema.description = String(field.description);
+    if (field?.repeatScope === "once") {
+      rootProperties[name] = schema;
+      rootRequired.push(name);
+    } else {
+      properties[name] = schema;
+      required.push(name);
+    }
   }
 
   // System field: the model fills this with the sourceId of the chunk it drew from (e.g. "S3").
@@ -78,6 +87,7 @@ function buildJsonSchemaFromFields(fields = []) {
     type: "object",
     additionalProperties: false,
     properties: {
+      ...rootProperties,
       items: {
         type: "array",
         minItems: 1,
@@ -89,7 +99,7 @@ function buildJsonSchemaFromFields(fields = []) {
         }
       }
     },
-    required: ["items"]
+    required: [...rootRequired, "items"]
   };
 }
 
@@ -105,6 +115,17 @@ function buildChunksContext(chunks, maxChunks = 40) {
     headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath.join(" > ") : "",
     chunkIndex: (chunk.chunkIndex || 0) + 1,
     content: String(chunk.content || "")
+  }));
+}
+
+/** The passages a run read, for citing where each answer comes from (chunkIndex is 1-based, as shown to people). */
+function sourcesFromChunks(chunks = []) {
+  return chunks.slice(0, 40).map((chunk) => ({
+    documentId: chunk.documentId || "",
+    documentName: chunk.documentName || "",
+    chunkIndex: (chunk.chunkIndex || 0) + 1,
+    heading: Array.isArray(chunk.headingPath) && chunk.headingPath.length ? chunk.headingPath.join(" › ") : String(chunk.section || ""),
+    content: String(chunk.content || "").slice(0, 1200)
   }));
 }
 
@@ -692,7 +713,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       checks: [],
       referenceDocumentCount: blockDocs.length,
       referenceChunkCount: blockChunks.length,
-      sources: [],
+      sources: sourcesFromChunks(blockChunks),
       isBlockOutput: true,
     };
   }
@@ -798,7 +819,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length,
     // The passages the answer came from: used to link each question back to its source material.
-    sources: rankedChunks.slice(0, 40).map((chunk) => ({ documentId: chunk.documentId || "", documentName: chunk.documentName || "", chunkIndex: (chunk.chunkIndex || 0) + 1, content: String(chunk.content || "").slice(0, 1200) }))
+    sources: sourcesFromChunks(rankedChunks)
   };
   emit({ step: "done", status: "end", ...payload });
   return payload;

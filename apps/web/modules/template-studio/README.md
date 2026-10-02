@@ -37,3 +37,24 @@ Slides × Student view / Answer key) and reads a saved template back as "format 
 (`styleFromTemplate`). `output/OutputDesigner.tsx` is the UI the run page uses (`OutputStylePanel`,
 `OutputPreviewPane`). Block types without a Template Studio component are not offered (dividers only
 separate; they never render).
+
+Sources and language: question cards print, in the Answer key only, "Source: document › heading · passage N — quote"
+linked (HTML and PowerPoint) to `/source?d=<document>&c=<passage>&q=<quote>`, a page that re-chunks the document
+exactly as the generator did and highlights the quote (`app/source/page.js`). The best passage per question is
+found by `locateSource` (activities/engine) over the run's `sources`. `output/labels.ts` translates the words
+components print themselves (Answer, True/False, Name, Date, Page, Section…) into the agent's chosen language,
+or the language detected in the content when it is "same as the material".
+
+## Catalog (3 categories)
+
+- **Structure:** Exam header (title, name, date) · Document header (title) · Section header (badge + title | title only) ·
+  Headings (levels 1–4) · Paragraph · Key points · Callout · Table · Footer.
+- **Questions:** Multiple choice · Open answer · True / false · Fill in the blanks · Match the pairs · Math practice.
+  Every question type has an answer (and source) that only the Answer key view shows.
+- **Cards & Games:** Flashcard (a document by itself).
+
+A component's *formats* are the other designs of its family (same fields), so switching format never changes what the
+AI must write. The AI-side counterpart of each component is a block type in `ai-tools/blocks/blockRegistry.js`
+(`COMPONENT_FOR_BLOCK` in `output/outputDocument.ts` is the map). The document title comes from the AI (a `title` field),
+not from the agent's name. Pages keep their real size (A4 297 mm, Letter 279 mm, slides 143 mm) and the footer sits at the
+bottom of each one.

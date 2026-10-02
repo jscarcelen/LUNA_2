@@ -174,3 +174,37 @@ export function FolderTree({
     </div>
   );
 }
+
+/**
+ * Pick one folder from the same tree the workspace shows — collapsible, nothing else (no rename,
+ * delete or drag). `selectedId` "" is "Unfiled". Used where a document is filed: saving a resource.
+ */
+export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeight = 220 }) {
+  const tree = useMemo(() => buildFolderTree(folders), [folders]);
+  const [collapsed, setCollapsed] = useState({});
+  const row = (node) => {
+    const isOpen = !collapsed[node.id];
+    const isSelected = selectedId === node.id;
+    return (
+      <div key={node.id}>
+        <div className={`flex min-w-0 items-center gap-1 rounded-lg py-1 pr-2 text-sm transition ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} style={{ paddingLeft: 4 + node.depth * 16 }}>
+          <button type="button" className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`} onClick={() => setCollapsed((current) => ({ ...current, [node.id]: isOpen }))} aria-label={isOpen ? `Collapse ${node.name}` : `Expand ${node.name}`} aria-expanded={isOpen}>{isOpen ? "▾" : "▸"}</button>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect?.(node.id)} aria-pressed={isSelected}>
+            <span aria-hidden>📁</span>
+            <span className="truncate font-medium">{node.name}</span>
+            {isSelected ? <span className="ml-auto shrink-0 text-xs font-bold" aria-hidden>✓</span> : null}
+          </button>
+        </div>
+        {isOpen ? node.children.map(row) : null}
+      </div>
+    );
+  };
+  return (
+    <div className="grid gap-0.5 overflow-y-auto rounded-xl border border-ink/10 bg-white p-1.5" style={{ maxHeight }} role="tree" aria-label="Folders">
+      <button type="button" className={`flex min-w-0 items-center gap-2 rounded-lg py-1 pl-7 pr-2 text-left text-sm transition ${selectedId === "" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} onClick={() => onSelect?.("")} aria-pressed={selectedId === ""}>
+        <span aria-hidden>▫</span><span className="font-medium">Unfiled</span>{selectedId === "" ? <span className="ml-auto text-xs font-bold" aria-hidden>✓</span> : null}
+      </button>
+      {tree.map(row)}
+    </div>
+  );
+}

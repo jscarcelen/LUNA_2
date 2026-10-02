@@ -19,28 +19,13 @@ export function defaultToggles(block: BlockDef): Record<string, boolean> {
 }
 
 /**
- * Maps each block ID to the list of block IDs that are genuine visual-design alternatives
- * (same concept / same AI fields, different visual style).
- * Siblings share the same entry — both point to the same array.
+ * The formats of a component: the designs of its family that carry the same fields, so swapping
+ * one for another never changes what the AI has to produce. Most families have a single design.
  */
-export const DESIGN_VARIANTS: Record<string, string[]> = {
-  // Multiple choice question: standard card vs. kids playful card
-  "block-exam-question":    ["block-exam-question", "block-mc-kids"],
-  "block-mc-kids":          ["block-exam-question", "block-mc-kids"],
-  // Compact MC: no kids variant yet, single entry keeps the UI consistent
-  "block-question-compact": ["block-question-compact"],
-  // Open answer
-  "block-open-question":    ["block-open-question"],
-  // True / False
-  "block-true-false":       ["block-true-false"],
-  // Section + questions (combined block)
-  "block-section-questions":["block-section-questions"],
-  // Mixed question (agent picks type)
-  "block-question-mixed":   ["block-question-mixed"],
-  // Flashcard: grid view vs. one-per-page
-  "block-flashcard":        ["block-flashcard", "block-flashcard-single"],
-  "block-flashcard-single": ["block-flashcard", "block-flashcard-single"],
-};
+export function variantsOf(block: BlockDef, all: BlockDef[] = builtInBlocks()): BlockDef[] {
+  const same = all.filter((candidate) => candidate.family === block.family && candidate.category === block.category);
+  return same.some((candidate) => candidate.id === block.id) ? same : [block];
+}
 
 export function accentOf(id: string, map: Map<string, string>): AccentPreset {
   return ACCENT_PRESETS.find((a) => a.id === (map.get(id) || "blue")) || ACCENT_PRESETS[0];
@@ -104,63 +89,65 @@ export function assembleTemplate(
   const answerKey = hasAnswerToggle ? createView("Answer key") : null;
   const views = answerKey ? [studentView, answerKey] : [studentView];
 
-  let curY = margins.top;
-  const allElements: ReturnType<typeof instantiateBlock>["elements"] = [];
   let currentFields = template.fields;
 
-  for (const { block, accent, toggles } of selections) {
-    const blockHasAnswer = (block.options || []).some((o) => o.key === "answer");
-
-    if (blockHasAnswer && answerKey) {
-      // Student view: answer hidden, element visible only in student view
-      const studentResult = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: false } });
-      currentFields = studentResult.fields;
-      let yOff = curY;
-      const studentPlaced = studentResult.elements.map((el) => {
-        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
-        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [studentView.id] } };
-        const y = yOff; yOff += el.frame.h + 2;
-        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [studentView.id] } };
-      });
-      allElements.push(...studentPlaced);
-
-      // Answer key: answer shown, element visible only in answer key view
-      const keyResult = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: true } });
-      let yOff2 = curY;
-      const keyPlaced = keyResult.elements.map((el) => {
-        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
-        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, visibility: { views: [answerKey.id] } };
-        const y = yOff2; yOff2 += el.frame.h + 2;
-        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, visibility: { views: [answerKey.id] } };
-      });
-      allElements.push(...keyPlaced);
-
-      curY = yOff + 2;
-    } else {
-      const result = instantiateBlock(block, currentFields, { accent, toggles });
-      currentFields = result.fields;
-      let yOff = curY;
-      const placed = result.elements.map((el) => {
-        // pageScope:"every" elements (header/footer) keep their original y position
-        // and do NOT advance the flow cursor — the renderer repeats them on every page.
-        const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
-        if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW } };
-        const y = yOff; yOff += el.frame.h + 2;
-        return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW } };
-      });
-      allElements.push(...placed);
-      // Only advance curY for non-pageScope elements
-      const hasFlowEl = result.elements.some((el) => !(el.type === "group" && (el as GroupElement).pageScope?.mode === "every"));
-      if (hasFlowEl) curY = yOff + 2;
+  /**
+   * Places every selected block one under the other. Built twice when needed: slides leave out the
+   * Name / Date lines (nobody writes their name on a slide), the paged sizes keep them.
+   */
+  const place = (override: Record<string, boolean>) => {
+    let curY = margins.top;
+    const placedElements: ReturnType<typeof instantiateBlock>["elements"] = [];
+    for (const { block, accent, toggles: chosen } of selections) {
+      const toggles = { ...chosen, ...override };
+      const blockHasAnswer = (block.options || []).some((o) => o.key === "answer");
+      const place1 = (result: ReturnType<typeof instantiateBlock>, visibleIn?: string) => {
+        let yOff = curY;
+        const placed = result.elements.map((el) => {
+          // pageScope:"every" elements (header/footer) keep their original y position
+          // and do NOT advance the flow cursor — the renderer repeats them on every page.
+          const isEveryPage = el.type === "group" && (el as GroupElement).pageScope?.mode === "every";
+          const visibility = visibleIn ? { visibility: { views: [visibleIn] } } : {};
+          if (isEveryPage) return { ...el, frame: { ...el.frame, x: margins.left, w: contentW }, ...visibility };
+          const y = yOff; yOff += el.frame.h + 2;
+          return { ...el, frame: { ...el.frame, x: margins.left, y, w: contentW }, ...visibility };
+        });
+        return { placed, bottom: yOff, hasFlow: result.elements.some((el) => !(el.type === "group" && (el as GroupElement).pageScope?.mode === "every")) };
+      };
+      if (blockHasAnswer && answerKey) {
+        // Student view: answer hidden, element visible only in student view
+        const student = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: false } });
+        currentFields = student.fields;
+        const studentPlaced = place1(student, studentView.id);
+        placedElements.push(...studentPlaced.placed);
+        // Answer key: answer shown, element visible only in answer key view
+        const key = instantiateBlock(block, currentFields, { accent, toggles: { ...toggles, answer: true } });
+        placedElements.push(...place1(key, answerKey.id).placed);
+        curY = studentPlaced.bottom + 2;
+      } else {
+        const result = instantiateBlock(block, currentFields, { accent, toggles });
+        currentFields = result.fields;
+        const single = place1(result);
+        placedElements.push(...single.placed);
+        if (single.hasFlow) curY = single.bottom + 2;
+      }
     }
-  }
+    return { elements: placedElements, bottom: curY };
+  };
 
-  const totalH = Math.max(canvasH, curY + margins.bottom);
+  const paged = place({});
+  const allElements = paged.elements;
+  // A slide cover is a centred title: the logo mark and the Name / Date lines have no place on it.
+  const hasCoverExtras = selections.some((s) => (s.block.options || []).some((o) => o.key === "namedate" || o.key === "logo"));
+  const slideElements = hasCoverExtras ? place({ namedate: false, logo: false }).elements : allElements;
+
+  // Real page sizes: content that does not fit continues on the next page (the footer stays at the
+  // bottom of each one) instead of stretching a single page.
   const fmts: { label: string; w: number; h: number; isSlides?: boolean; class?: "paged" | "slides" }[] = canvasW < 200
-    ? [{ label: "Cards", w: canvasW, h: totalH }]
+    ? [{ label: "Cards", w: canvasW, h: canvasH }]
     : [
-        { label: "A4",          w: 210, h: totalH },
-        { label: "Letter",      w: 216, h: totalH },
+        { label: "A4",          w: 210, h: 297 },
+        { label: "Letter",      w: 216, h: 279 },
         { label: "Slides 16:9", w: 254, h: 143, isSlides: true },
       ];
   const baseLayout = { ...template.layouts[0], views };
@@ -169,8 +156,16 @@ export function assembleTemplate(
     // Outer group frames are already set to contentW in the placement loop above;
     // child elements need their x-positions and widths scaled proportionally.
     const fmtContentW = fmt.w - margins.left - margins.right;
+    // Outer frames are placed at the first size's content width; every size gets its own, so the
+    // cards (border, fill) are as wide as the contents scaled to them.
+    // Page furniture is drawn for A4 (297 mm): a footer keeps its distance from the bottom edge of every page size.
+    const fit = (el: Element): Element => {
+      const isFooter = el.type === "group" && (el as GroupElement).pageScope?.mode === "every" && el.frame.y >= 150;
+      return { ...el, frame: { ...el.frame, w: fmtContentW, ...(isFooter ? { y: fmt.h - (297 - el.frame.y) } : {}) } };
+    };
+    const source = fmt.isSlides ? slideElements : allElements;
     if (i === 0) {
-      const scaledElements = allElements.map((el) => scaleGroupChildren(el, fmtContentW));
+      const scaledElements = source.map((el) => scaleGroupChildren(fit(el), fmtContentW));
       const page = { ...template.layouts[0].pages[0], elements: scaledElements };
       const base = { ...baseLayout, pages: [page], canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
       return fmt.isSlides ? { ...base, class: "slides" as const } : base;
@@ -183,7 +178,7 @@ export function assembleTemplate(
       if (!el.visibility?.views) return el;
       return { ...el, visibility: { ...el.visibility, views: el.visibility.views.map((vid) => viewIdMap.get(vid) ?? vid) } };
     };
-    const scaledElements = allElements.map((el) => scaleGroupChildren(remapVis(el), fmtContentW));
+    const scaledElements = source.map((el) => scaleGroupChildren(fit(remapVis(el)), fmtContentW));
     const page = { ...template.layouts[0].pages[0], elements: scaledElements };
     const base = { ...baseLayout, pages: [page], id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: newViews };
     return fmt.isSlides ? { ...base, class: "slides" as const } : base;

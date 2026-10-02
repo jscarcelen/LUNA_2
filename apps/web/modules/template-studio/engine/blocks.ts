@@ -17,6 +17,8 @@ export interface BlockOptionDef {
   key: string;
   label: string;
   default: boolean;
+  /** Extra height (mm) the card needs while this option is on, e.g. the source line under an answer. */
+  grow?: number;
 }
 
 export interface BlockDef {
@@ -96,8 +98,9 @@ function examQuestion(): BlockDef {
   // Classification: used by the platform to measure mistakes by skill and difficulty (never printed).
   const skill = createField("Skill", "text", { description: "What this question tests: concept, definition, vocabulary, calculation, problem solving, application, comprehension, recall or analysis", options: ["concept", "definition", "vocabulary", "calculation", "problem solving", "application", "comprehension", "recall", "analysis"], required: false });
   const difficulty = createField("Difficulty", "text", { description: "easy, medium or hard", options: ["easy", "medium", "hard"], required: false });
-  const source = createField("Source", "text", { description: "Short quote from the material where the answer is found", required: false });
-  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer, points, skill, difficulty, source] })] });
+  const source = createField("Source", "text", { description: "Where in the material the answer is found: document and passage", required: false });
+  const sourceLink = createField("Source link", "text", { description: "Link to that passage (filled by Luna)", required: false });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer, points, skill, difficulty, source, sourceLink] })] });
   const W = PAGE.width;
   const group = createGroup({
     name: "Exam question",
@@ -118,13 +121,14 @@ function examQuestion(): BlockDef {
         children: [optionRow(accent, option.id, W - 24)]
       }),
       ...confidenceRow(accent, 40, W - 24).map((element) => shift(element, 17)),
-      ...answerBand(accent, answer.id, 46, W).map((element) => element)
+      ...answerBand(accent, answer.id, 46, W).map((element) => element),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 53.2, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
     ]
   });
   return {
     id: "block-exam-question",
-    family: "Question card",
-    variant: "Multiple choice",
+    family: "Multiple choice",
+    variant: "Lettered options",
     name: "Exam question",
     description: "Numbered card with lettered options, points, an optional confidence check and an answer band for the key.",
     category: "questions",
@@ -135,7 +139,7 @@ function examQuestion(): BlockDef {
       { key: "number", label: "Question number", default: true },
       { key: "points", label: "Points", default: true },
       { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false },
-      { key: "answer", label: "Show answer", default: false }
+      { key: "answer", label: "Show answer", default: false, grow: 10 }
     ],
     accent: { main: accent.main, tint: accent.tint },
     builtIn: true
@@ -146,29 +150,37 @@ function openQuestion(): BlockDef {
   const accent = palette("blue");
   const question = createField("Question", "rich_text", { description: "The question text" });
   const points = createField("Points", "number", { description: "Point value for this question, e.g. 2" });
-  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, points] })] });
+  const answer = createField("Answer", "rich_text", { description: "A model answer or marking guide, 1–3 sentences", required: false });
+  const source = createField("Source", "text", { description: "Where in the material the answer is found: document and passage", required: false });
+  const sourceLink = createField("Source link", "text", { description: "Link to that passage (filled by Luna)", required: false });
+  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, points, answer, source, sourceLink] })] });
   const W = PAGE.width;
   const group = createGroup({
     name: "Open question",
-    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 52 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 64 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
     style: cardStyle(accent),
     children: [
-      accentEdge(accent, 52),
+      accentEdge(accent, 64),
       ...numberBadge(accent, 6, 6),
       ...pointsPill(accent, points.id, W - 20, 6.6),
       field(question.id, "Explain why the median resists outliers.", { x: 17, y: 6.4, w: W - 40, h: 9 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
       ...[0, 1, 2, 3].map((row) => writingLine(20 + row * 7.5, 17, W - 28)),
-      ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17))
+      ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17)),
+      // The model answer sits in a taller band than a multiple-choice letter: it is a sentence or two.
+      createShape("rect", { name: "opt:answer|Answer band", frame: { x: 0, y: 51, w: W, h: 11.4 }, style: defaultStyle({ fill: palette("green").tint, stroke: "", radius: RADIUS.panel }) }),
+      kicker("Answer", { x: 4, y: 52.6, w: 14, h: 4 }, palette("green").deep, { name: "opt:answer|Answer label" }),
+      field(answer.id, "The median is the middle value, so extreme values do not move it.", { x: 19, y: 52.3, w: W - 23, h: 8.4 }, { fontSize: TYPE.small, fontWeight: "bold", color: palette("green").deep, lineHeight: 1.35 }, { format: "rich", name: "opt:answer|Answer" }),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 63.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
     ]
   });
   return {
     id: "block-open-question",
-    family: "Question card",
-    variant: "Open answer",
+    family: "Open answer",
+    variant: "Ruled lines",
     name: "Open question",
-    description: "Question with ruled space to write in, points and an optional confidence check.",
+    description: "Question with ruled space to write in, points, an optional confidence check and a model answer for the key.",
     category: "questions",
     icon: "✎",
     fields: [questions],
@@ -176,7 +188,8 @@ function openQuestion(): BlockDef {
     options: [
       { key: "number", label: "Question number", default: true },
       { key: "points", label: "Points", default: true },
-      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }
+      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false },
+      { key: "answer", label: "Show answer", default: false, grow: 10 }
     ],
     accent: { main: accent.main, tint: accent.tint },
     builtIn: true
@@ -187,7 +200,9 @@ function trueFalse(): BlockDef {
   const accent = palette("blue");
   const statement = createField("Statement", "rich_text", { description: "A declarative sentence that is either factually correct or incorrect" });
   const answer = createField("Answer", "boolean", { description: "true when the statement is correct." });
-  const statements = createField("Statements", "array", { children: [createField("item", "object", { children: [statement, answer] })] });
+  const source = createField("Source", "text", { description: "Where in the material the answer is found: document and passage", required: false });
+  const sourceLink = createField("Source link", "text", { description: "Link to that passage (filled by Luna)", required: false });
+  const statements = createField("Statements", "array", { children: [createField("item", "object", { children: [statement, answer, source, sourceLink] })] });
   const W = PAGE.width;
   const group = createGroup({
     name: "True / false",
@@ -201,20 +216,21 @@ function trueFalse(): BlockDef {
       field(statement.id, "The mean is always larger than the median.", { x: 15, y: 5.2, w: W - 72, h: 6 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" }),
       ...tickBox(accent, W - 54, 5, "True"),
       ...tickBox(accent, W - 30, 5, "False"),
-      field(answer.id, "true", { x: W - 54, y: 11, w: 46, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep, align: "right" }, { name: "opt:answer|Answer" })
+      field(answer.id, "true", { x: W - 54, y: 11, w: 46, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep, align: "right" }, { name: "opt:answer|Answer" }),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 15, y: 15.8, w: W - 20, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
     ]
   });
   return {
     id: "block-true-false",
-    family: "Question card",
-    variant: "True / false",
+    family: "True / false",
+    variant: "Tick boxes",
     name: "True / false",
     description: "Statement with tick boxes on one tidy line; the answer can be shown for the key.",
     category: "questions",
     icon: "☑",
     fields: [statements],
     elements: [group],
-    options: [{ key: "number", label: "Number", default: true }, { key: "answer", label: "Show answer", default: false }],
+    options: [{ key: "number", label: "Number", default: true }, { key: "answer", label: "Show answer", default: false, grow: 9 }],
     accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
@@ -266,7 +282,7 @@ function vocabularyRow(): BlockDef {
     variant: "Vocabulary rows",
     name: "Vocabulary table",
     description: "Word · translation · example as a clean table with a coloured header.",
-    category: "cards",
+    category: "structure",
     icon: "▦",
     fields: [words],
     elements: [group],
@@ -324,7 +340,7 @@ function keyPoints(): BlockDef {
 
 function examHeader(): BlockDef {
   const accent = palette("blue");
-  const title = createField("Title", "text", { description: "Document title" });
+  const title = createField("Title", "text", { description: "Title of this exam or worksheet, written for its content (not the agent's name)" });
   const subtitle = createField("Subtitle", "text", { description: "Course, class or subject" });
   const W = PAGE.width;
   const group = createGroup({
@@ -346,12 +362,12 @@ function examHeader(): BlockDef {
       writingLine(30.5, W - 50, 50)
     ]
   });
-  return { id: "block-header-exam", family: "Header", variant: "Exam header", name: "Header", description: "Tinted title panel with the subject, plus Name / Date lines on the first page.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+  return { id: "block-header-exam", family: "Exam header", variant: "Title, name and date", name: "Exam header", description: "Tinted title panel with the subject, plus Name / Date lines on the first page. For exams and worksheets.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function minimalHeader(): BlockDef {
   const accent = palette("blue");
-  const title = createField("Title", "text", { description: "Document title" });
+  const title = createField("Title", "text", { description: "Title of this document, written for its content (not the agent's name)" });
   const W = PAGE.width;
   const group = createGroup({
     name: "Header",
@@ -364,7 +380,7 @@ function minimalHeader(): BlockDef {
       createShape("rect", { frame: { x: W / 2 - 13, y: 15, w: 26, h: 1.4 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.7 }) })
     ]
   });
-  return { id: "block-header-minimal", family: "Header", variant: "Centered title", name: "Header", description: "Centred title with an accent rule.", category: "structure", icon: "▔", fields: [title], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+  return { id: "block-header-minimal", family: "Document header", variant: "Centered title", name: "Document header", description: "Centred title with an accent rule. For summaries, guides and any document that is not an exam.", category: "structure", icon: "▔", fields: [title], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function footer(): BlockDef {
@@ -405,53 +421,6 @@ function sectionHeader(): BlockDef {
   return { id: "block-section-header", family: "Section header", variant: "Badge + title", name: "Section header", description: "Numbered section badge, title and intro line — one per section.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
-function sectionWithQuestions(): BlockDef {
-  const accent = palette("blue");
-  const title = createField("Section title", "text");
-  const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
-  const question = createField("Question", "rich_text", { description: "The question text" });
-  const option = createField("Option", "text", { description: "One answer option text" });
-  const options = createField("Options", "array", { children: [option] });
-  const answer = createField("Answer", "text", { description: "The letter of the correct option: A, B, C or D" });
-  const questions = createField("Questions", "array", { children: [createField("item", "object", { children: [question, options, answer] })] });
-  const sections = createField("Sections", "array", { description: "One element per section: its title, intro and its own questions", children: [createField("item", "object", { children: [title, intro, questions] })] });
-  const W = PAGE.width;
-  const card = createGroup({
-    name: "Question card",
-    frame: { x: 0, y: 26, w: W, h: 46 },
-    layout: { mode: "free", gap: SPACE.sm },
-    repeat: { fieldId: questions.id, mode: "flow" },
-    style: cardStyle(accent),
-    children: [
-      accentEdge(accent, 46),
-      ...numberBadge(accent, 6, 6, 7.4, ""),
-      field(question.id, "What is the main function of chlorophyll in plants?", { x: 16, y: 6, w: W - 24, h: 8.5 }, { fontSize: TYPE.question, fontWeight: "bold", color: INK.strong, lineHeight: 1.3 }, { format: "rich" }),
-      createGroup({
-        name: "Options",
-        frame: { x: 16, y: 17, w: W - 24, h: 20 },
-        layout: { mode: "vertical", gap: 1.6 },
-        repeat: { fieldId: options.id, mode: "flow" },
-        children: [optionRow(accent, option.id, W - 24)]
-      }),
-      ...confidenceRow(accent, 38, W - 24).map((element) => shift(element, 16)),
-      ...answerBand(accent, answer.id, 40, W)
-    ]
-  });
-  const group = createGroup({
-    name: "Section",
-    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 74 },
-    layout: { mode: "free", gap: SPACE.md },
-    repeat: { fieldId: sections.id, mode: "flow" },
-    children: [
-      ...chip("SECTION {{n}}", accent, { x: 0, y: 0, w: 27, h: 6 }),
-      field(title.id, "Multiple choice", { x: 0, y: 8, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
-      field(intro.id, "Choose the correct answer for each question.", { x: 0, y: 17.5, w: W, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line" }),
-      card
-    ]
-  });
-  return { id: "block-section-questions", family: "Section header", variant: "Section with question cards", name: "Section + questions", description: "Sections in the agent's order, each with its title and its own question cards.", category: "questions", icon: "§❶", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }, { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false }, { key: "answer", label: "Show answer", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
-}
-
 function bodyText(): BlockDef {
   const accent = palette("blue");
   const text = createField("Text", "rich_text", { description: "One paragraph of body text; may use **bold** for emphasis" });
@@ -467,7 +436,67 @@ function bodyText(): BlockDef {
       field(text.id, "Photosynthesis converts light energy into chemical energy stored in glucose.", { x: 6, y: 2, w: W - 10, h: 12 }, { fontSize: TYPE.body, color: INK.body, lineHeight: 1.5 }, { format: "rich" })
     ]
   });
-  return { id: "block-paragraph", family: "Text", variant: "Body paragraph", name: "Paragraph", description: "A paragraph of body text with a slim accent edge.", category: "structure", icon: "¶", fields: [paragraphs], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+  return { id: "block-paragraph", family: "Paragraph", variant: "Body text", name: "Paragraph", description: "A paragraph of body text with a slim accent edge.", category: "structure", icon: "¶", fields: [paragraphs], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+}
+
+function sectionTitle(): BlockDef {
+  const accent = palette("blue");
+  const title = createField("Section title", "text");
+  const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
+  const sections = createField("Sections", "array", { children: [createField("item", "object", { children: [title, intro] })] });
+  const W = PAGE.width;
+  const group = createGroup({
+    name: "Section title",
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 22 },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: sections.id, mode: "flow" },
+    children: [
+      field(title.id, "Multiple choice", { x: 0, y: 0, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
+      createShape("rect", { frame: { x: 0, y: 10.4, w: 20, h: 1.1 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.55 }) }),
+      field(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: 13.4, w: W, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line" })
+    ]
+  });
+  return { id: "block-section-title", family: "Section header", variant: "Title only", name: "Section header", description: "Plain section title with a short accent rule and an optional intro line — no badge.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+}
+
+/**
+ * Headings with levels: one component, as many levels as the content needs. Every element of the
+ * list says which level it is, and the matching design (size, indent, colour) is drawn for it.
+ */
+function headings(): BlockDef {
+  const accent = palette("blue");
+  const level = createField("Level", "text", { description: "Heading level: 1 = main section, 2 = subsection, 3 = sub-subsection, 4 = smallest. Use as many levels as the content needs.", options: ["1", "2", "3", "4"] });
+  const text = createField("Text", "text", { description: "The heading text, short" });
+  const list = createField("Headings", "array", { children: [createField("item", "object", { children: [level, text] })] });
+  const W = PAGE.width;
+  const designs = [
+    { level: "1", size: 20, height: 10, indent: 0, color: INK.strong, rule: true },
+    { level: "2", size: 15, height: 8, indent: 0, color: INK.strong, rule: false },
+    { level: "3", size: 12, height: 7, indent: 4, color: accent.deep, rule: false },
+    { level: "4", size: 10, height: 6, indent: 8, color: INK.muted, rule: false }
+  ];
+  const variants = designs.map((design) => {
+    const inner = createGroup({
+      name: `Level ${design.level}`,
+      frame: { x: 0, y: 0, w: W, h: design.height + (design.rule ? 3 : 0) },
+      layout: { mode: "free", gap: 0 },
+      repeat: null,
+      children: [
+        field(text.id, `Heading level ${design.level}`, { x: design.indent, y: 0, w: W - design.indent, h: design.height }, { fontSize: design.size, fontWeight: "bold", color: design.color, lineHeight: 1.2 }),
+        ...(design.rule ? [createShape("rect", { frame: { x: 0, y: design.height + 1.2, w: 22, h: 1.1 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.55 }) })] : [])
+      ]
+    });
+    inner.condition = { fieldId: level.id, equals: design.level };
+    return inner;
+  });
+  const group = createGroup({
+    name: "Headings",
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 13 },
+    layout: { mode: "free", gap: SPACE.sm },
+    repeat: { fieldId: list.id, mode: "flow" },
+    children: variants
+  });
+  return { id: "block-headings", family: "Headings", variant: "Levels 1–4", name: "Headings", description: "Section and sub-section headings at several levels — the bigger the level, the smaller the heading.", category: "structure", icon: "H", fields: [list], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function callout(): BlockDef {
@@ -489,30 +518,6 @@ function callout(): BlockDef {
     ]
   });
   return { id: "block-callout", family: "Callout", variant: "Info box", name: "Callout", description: "Highlighted box for important information, tips or notes.", category: "structure", icon: "ⓘ", fields: [note], elements: [group], options: [{ key: "label", label: "Label", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
-}
-
-function answerBox(): BlockDef {
-  const green = palette("green");
-  const answer = createField("Answer", "text", { description: "The correct answer, e.g. 'B · Absorbs light energy for photosynthesis'" });
-  const explanation = createField("Explanation", "rich_text", { description: "Why the answer is correct, 1–2 sentences" });
-  const items = createField("Answers", "array", { children: [createField("item", "object", { children: [answer, explanation] })] });
-  const W = PAGE.width;
-  const group = createGroup({
-    name: "Answer box",
-    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 26 },
-    layout: { mode: "free", gap: 0 },
-    repeat: { fieldId: items.id, mode: "flow" },
-    style: defaultStyle({ fill: green.tint, stroke: green.line, strokeWidth: 0.3, radius: RADIUS.card }),
-    children: [
-      accentEdge(green, 26),
-      createShape("ellipse", { frame: { x: 6, y: 5.4, w: 5.6, h: 5.6 }, style: defaultStyle({ fill: green.main, stroke: "" }) }),
-      label("✓", { x: 6, y: 6.3, w: 5.6, h: 4.2 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.paper, align: "center" }),
-      kicker("Answer {{n}}", { x: 15, y: 6, w: 60, h: 4 }, green.deep),
-      field(answer.id, "B · Absorbs light energy for photosynthesis", { x: 15, y: 11, w: W - 20, h: 6 }, { fontSize: TYPE.body, fontWeight: "bold", color: INK.strong }),
-      field(explanation.id, "Chlorophyll absorbs light energy, which is used to convert CO₂ and H₂O into glucose.", { x: 15, y: 17.5, w: W - 20, h: 7 }, { fontSize: TYPE.small, color: INK.body, lineHeight: 1.45 }, { format: "rich", name: "opt:explanation|Explanation" })
-    ]
-  });
-  return { id: "block-answer-box", family: "Answer box", variant: "Correct answer + explanation", name: "Answer box", description: "Green box with the correct answer and why it is right — the heart of an answer key.", category: "questions", icon: "✓", fields: [items], elements: [group], options: [{ key: "explanation", label: "Explanation", default: true }], accent: { main: green.main, tint: green.tint }, builtIn: true };
 }
 
 function flashcardSingle(): BlockDef {
@@ -543,7 +548,6 @@ function flashcardSingle(): BlockDef {
 
 /* ---------------------------------------------------------------- kids learning & worksheets */
 
-const KID = { main: "#5b5bd6", tint: "#eef0ff", pink: "#ffe4ec", blue: "#e3f1ff", green: "#e6f7ea", yellow: "#fff5d6", lilac: "#efe6ff" };
 
 function matchPairs(): BlockDef {
   const left = createField("Left", "text", { description: "Word or picture on the left" });
@@ -551,6 +555,7 @@ function matchPairs(): BlockDef {
   const pairs = createField("Pairs", "array", { description: "Matching pairs (left ↔ right)", children: [createField("item", "object", { children: [left, right] })] });
   const title = createField("Title", "text", { description: "Activity title" });
   const instruction = createField("Instruction", "text", { description: "One-line instruction for the child" });
+  const accent = palette("blue");
   const group = createGroup({
     name: "Match the pairs",
     frame: { x: 12, y: 12, w: 186, h: 34 },
@@ -558,28 +563,28 @@ function matchPairs(): BlockDef {
     repeat: null,
     pagination: { breakBefore: false, breakAfter: false, keepTogether: false, allowSplit: true, overflow: "continue" as const },
     children: [
-      tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: A.main }),
-      tx(instruction.id, "Draw a line to connect each pair.", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 10, align: "center", color: "#6e6e73" }, { name: "opt:instruction|Instruction" }),
+      tx(title.id, "Match the Pairs", { x: 0, y: 0, w: 186, h: 12 }, { fontSize: 22, fontWeight: "bold", align: "center", color: accent.deep }),
+      tx(instruction.id, "Draw a line to connect each pair.", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: TYPE.body, align: "center", color: INK.muted }, { name: "opt:instruction|Instruction" }),
       createGroup({
         name: "Pair row",
         frame: { x: 0, y: 20, w: 186, h: 14 },
         layout: { mode: "free", gap: 0 },
         repeat: { fieldId: pairs.id, mode: "flow" },
         children: [
-          createShape("rect", { frame: { x: 8, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.pink, stroke: "#f4c6d3", strokeWidth: 0.3, radius: 3 }) }),
-          tx(left.id, "Apple", { x: 12, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" }),
-          createShape("ellipse", { frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
-          createShape("ellipse", { name: "opt:answer|Left dot filled", frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: KID.main, stroke: KID.main, strokeWidth: 0.5 }) }),
-          createShape("line", { name: "opt:answer|Connection line", frame: { x: 74, y: 6.5, w: 38, h: 0.1 }, style: defaultStyle({ stroke: KID.main, strokeWidth: 0.8 }) }),
-          createShape("ellipse", { frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: "#ffffff", stroke: KID.main, strokeWidth: 0.5 }) }),
-          createShape("ellipse", { name: "opt:answer|Right dot filled", frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: KID.main, stroke: KID.main, strokeWidth: 0.5 }) }),
-          createShape("rect", { frame: { x: 112, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: KID.blue, stroke: "#bcd9f5", strokeWidth: 0.3, radius: 3 }) }),
-          tx(right.id, "Manzana", { x: 122, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: "#1f2a6b" })
+          createShape("rect", { frame: { x: 8, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: accent.tint, stroke: accent.line, strokeWidth: 0.3, radius: 3 }) }),
+          tx(left.id, "Apple", { x: 12, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: INK.strong }),
+          createShape("ellipse", { frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: INK.paper, stroke: accent.main, strokeWidth: 0.5 }) }),
+          createShape("ellipse", { name: "opt:answer|Left dot filled", frame: { x: 70, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: accent.main, stroke: accent.main, strokeWidth: 0.5 }) }),
+          createShape("line", { name: "opt:answer|Connection line", frame: { x: 74, y: 6.5, w: 38, h: 0.1 }, style: defaultStyle({ stroke: accent.main, strokeWidth: 0.8 }) }),
+          createShape("ellipse", { frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: INK.paper, stroke: accent.main, strokeWidth: 0.5 }) }),
+          createShape("ellipse", { name: "opt:answer|Right dot filled", frame: { x: 112, y: 4.5, w: 4, h: 4 }, style: defaultStyle({ fill: accent.main, stroke: accent.main, strokeWidth: 0.5 }) }),
+          createShape("rect", { frame: { x: 112, y: 1, w: 66, h: 11 }, style: defaultStyle({ fill: accent.soft, stroke: accent.line, strokeWidth: 0.3, radius: 3 }) }),
+          tx(right.id, "Manzana", { x: 122, y: 3.5, w: 52, h: 6 }, { fontSize: 12, fontWeight: "bold", color: INK.strong })
         ]
       })
     ]
   });
-  return { id: "block-match-pairs", family: "Match the pairs", variant: "Two columns with dots", name: "Match the pairs", description: "Two columns to connect with a line — words, translations, pictures. Interactive: the child picks each match.", category: "kids", icon: "⋯", fields: [title, instruction, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction line", default: true }, { key: "answer", label: "Show answer key", default: false }], accent: A, builtIn: true };
+  return { id: "block-match-pairs", family: "Match the pairs", variant: "Two columns with dots", name: "Match the pairs", description: "Two columns to connect with a line — words, translations, pictures. Interactive: the child picks each match.", category: "questions", icon: "⋯", fields: [title, instruction, pairs], elements: [group], options: [{ key: "instruction", label: "Instruction line", default: true }, { key: "answer", label: "Show answer key", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function fillBlanks(): BlockDef {
@@ -587,20 +592,22 @@ function fillBlanks(): BlockDef {
   const answer = createField("Answer", "text", { description: "The missing word" });
   const hint = createField("Hint", "text", { description: "Optional hint, e.g. first letter", required: false });
   const items = createField("Sentences", "array", { children: [createField("item", "object", { children: [sentence, answer, hint] })] });
+  const accent = palette("blue");
   const group = createGroup({
     name: "Fill in the blanks",
     frame: { x: 12, y: 12, w: 186, h: 13 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: items.id, mode: "flow" },
-    style: defaultStyle({ fill: KID.yellow, stroke: "", radius: 2.5 }),
+    style: cardStyle(accent),
     children: [
-      st("{{n}}.", { x: 4, y: 3.5, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: KID.main }, { name: "opt:number|Number" }),
-      tx(sentence.id, "The ____ is shining in the sky.", { x: 13, y: 3.5, w: 130, h: 6 }, { fontSize: 11 }),
-      tx(hint.id, "(s...)", { x: 146, y: 3.5, w: 36, h: 6 }, { fontSize: 9, color: "#8e8e93", align: "right" }, { name: "opt:hint|Hint" }),
-      tx(answer.id, "sun", { x: 13, y: 9.5, w: 60, h: 3 }, { fontSize: 6.5, color: KID.main }, { name: "opt:answer|Answer" })
+      accentEdge(accent, 13),
+      st("{{n}}.", { x: 5, y: 3.5, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: accent.deep }, { name: "opt:number|Number" }),
+      tx(sentence.id, "The ____ is shining in the sky.", { x: 14, y: 3.5, w: 129, h: 6 }, { fontSize: 11, color: INK.strong }),
+      tx(hint.id, "(s...)", { x: 146, y: 3.5, w: 36, h: 6 }, { fontSize: TYPE.meta, color: INK.muted, align: "right" }, { name: "opt:hint|Hint" }),
+      tx(answer.id, "sun", { x: 14, y: 9.4, w: 60, h: 3.4 }, { fontSize: TYPE.micro, fontWeight: "bold", color: accent.deep }, { name: "opt:answer|Answer" })
     ]
   });
-  return { id: "block-fill-blanks", family: "Fill in the blanks", variant: "Sentence + hint", name: "Fill in the blanks", description: "Sentences with a missing word. Interactive: the child types the word; checked automatically.", category: "kids", icon: "Aa", fields: [items], elements: [group], options: [{ key: "number", label: "Numbers", default: true }, { key: "hint", label: "Hint", default: true }, { key: "answer", label: "Show answer", default: false }], accent: A, builtIn: true };
+  return { id: "block-fill-blanks", family: "Fill in the blanks", variant: "Sentence + hint", name: "Fill in the blanks", description: "Sentences with a missing word. Interactive: the child types the word; checked automatically.", category: "questions", icon: "Aa", fields: [items], elements: [group], options: [{ key: "number", label: "Numbers", default: true }, { key: "hint", label: "Hint", default: true }, { key: "answer", label: "Show answer", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 function mathPractice(): BlockDef {
@@ -608,17 +615,18 @@ function mathPractice(): BlockDef {
   const answer = createField("Answer", "number", { description: "The result" });
   const problems = createField("Problems", "array", { children: [createField("item", "object", { children: [problem, answer] })] });
   const title = createField("Title", "text", { description: "Worksheet title, e.g. Math Practice · Level 3" });
+  const accent = palette("blue");
   const cell = createGroup({
     name: "Problem",
     frame: { x: 0, y: 0, w: 90, h: 22 },
     layout: { mode: "free", gap: 0 },
     repeat: null,
     children: [
-      st("{{n}}.", { x: 0, y: 1, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: "#1f2a6b" }),
-      tx(problem.id, "24 + 18 =", { x: 9, y: 1, w: 70, h: 7 }, { fontSize: 13, color: "#1f2a6b" }),
-      createShape("rect", { frame: { x: 9, y: 9, w: 56, h: 11 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c9d4ff", strokeWidth: 0.4, radius: 2 }) }),
-      createShape("rect", { frame: { x: 68, y: 9, w: 14, h: 11 }, style: defaultStyle({ fill: "#ffffff", stroke: "#c9d4ff", strokeWidth: 0.4, radius: 2 }) }),
-      tx(answer.id, "42", { x: 70, y: 12, w: 10, h: 6 }, { fontSize: 8, color: KID.main, align: "center" }, { name: "opt:answer|Answer" })
+      st("{{n}}.", { x: 0, y: 1, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: accent.deep }),
+      tx(problem.id, "24 + 18 =", { x: 9, y: 1, w: 70, h: 7 }, { fontSize: 13, color: INK.strong }),
+      createShape("rect", { frame: { x: 9, y: 9, w: 56, h: 11 }, style: defaultStyle({ fill: INK.paper, stroke: accent.line, strokeWidth: 0.4, radius: 2 }) }),
+      createShape("rect", { frame: { x: 68, y: 9, w: 14, h: 11 }, style: defaultStyle({ fill: INK.paper, stroke: accent.line, strokeWidth: 0.4, radius: 2 }) }),
+      tx(answer.id, "42", { x: 69, y: 12.4, w: 12, h: 5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep, align: "center" }, { name: "opt:answer|Answer" })
     ]
   });
   const group = createGroup({
@@ -627,17 +635,24 @@ function mathPractice(): BlockDef {
     layout: { mode: "vertical", gap: 3 },
     repeat: null,
     children: [
-      tx(title.id, "Math Practice · Level 3", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 20, fontWeight: "bold", align: "center", color: "#1f2a6b" }),
-      st("Name ______________________     Date ____________", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: 9, color: "#6e6e73" }, { name: "opt:namedate|Name / Date" }),
+      tx(title.id, "Math Practice · Level 3", { x: 0, y: 0, w: 186, h: 11 }, { fontSize: 20, fontWeight: "bold", align: "center", color: accent.deep }),
+      st("Name ______________________     Date ____________", { x: 0, y: 12, w: 186, h: 6 }, { fontSize: TYPE.meta, color: INK.muted }, { name: "opt:namedate|Name / Date" }),
       createGroup({ name: "Problems", frame: { x: 0, y: 20, w: 186, h: 22 }, layout: { mode: "grid", gap: 6, columns: 2 }, repeat: { fieldId: problems.id, mode: "grid", columns: 2 }, children: [cell] })
     ]
   });
-  return { id: "block-math-practice", family: "Math practice set", variant: "Two columns with answer boxes", name: "Math practice set", description: "Numbered operations in two columns with a working box and an answer box. Interactive: the child types results.", category: "kids", icon: "±", fields: [title, problems], elements: [group], options: [{ key: "namedate", label: "Name / Date", default: true }, { key: "answer", label: "Show answers", default: false }], accent: A, builtIn: true };
+  return { id: "block-math-practice", family: "Math practice set", variant: "Two columns with answer boxes", name: "Math practice set", description: "Numbered operations in two columns with a working box and an answer box. Interactive: the child types results.", category: "questions", icon: "±", fields: [title, problems], elements: [group], options: [{ key: "namedate", label: "Name / Date", default: true }, { key: "answer", label: "Show answers", default: false }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 
 export function builtInBlocks(): BlockDef[] {
-  return [examHeader(), minimalHeader(), sectionHeader(), sectionWithQuestions(), examQuestion(), openQuestion(), trueFalse(), answerBox(), flashcardSingle(), vocabularyRow(), callout(), keyPoints(), bodyText(), matchPairs(), fillBlanks(), mathPractice(), footer()];
+  return [
+    // Structure
+    examHeader(), minimalHeader(), sectionHeader(), sectionTitle(), headings(), bodyText(), keyPoints(), callout(), vocabularyRow(), footer(),
+    // Questions (every question type has an answer for the key)
+    examQuestion(), openQuestion(), trueFalse(), fillBlanks(), matchPairs(), mathPractice(),
+    // Cards & games
+    flashcardSingle()
+  ];
 }
 
 /** Blocks grouped by family, in library order. */
@@ -751,6 +766,7 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
         if ((next.type === "text" || next.type === "image") && next.source.type === "field") {
           next.source = { type: "field", fieldId: idMap.get(next.source.fieldId) || next.source.fieldId };
         }
+        if (next.type === "text" && next.linkFieldId) next.linkFieldId = idMap.get(next.linkFieldId) || next.linkFieldId;
         if (next.type === "group") {
           const group = next as GroupElement;
           group.repeat = group.repeat ? { ...group.repeat, fieldId: idMap.get(group.repeat.fieldId) || group.repeat.fieldId } : null;
@@ -761,6 +777,16 @@ export function instantiateBlock(block: BlockDef, templateFields: FieldDef[], op
       });
 
   const instantiated = remapElements(elements);
+  // Options that add a row (the source under an answer) make the card taller only while they are on.
+  const grow = (block.options || []).filter((option) => !hidden.has(option.key) && option.grow).reduce((sum, option) => sum + (option.grow || 0), 0);
+  if (grow) {
+    for (const element of instantiated) {
+      if (element.type !== "group") continue;
+      const original = element.frame.h;
+      element.frame = { ...element.frame, h: original + grow };
+      element.children = element.children.map((child) => (child.frame.x === 0 && child.frame.y === 0 && Math.abs(child.frame.h - original) < 0.01 ? { ...child, frame: { ...child.frame, h: child.frame.h + grow } } : child));
+    }
+  }
   // Remember the source block on the top-level group so the simple editor can rebuild or regroup it.
   for (const element of instantiated) if (element.type === "group" && !element.origin) element.origin = { blockId: block.id, ...(options.accent ? { accentId: options.accent.id } : {}) };
   return { fields, elements: instantiated };

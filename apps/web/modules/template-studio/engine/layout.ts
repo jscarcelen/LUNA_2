@@ -86,7 +86,9 @@ function textItem(element: TextElement, x: number, y: number, scopes: Scope[], c
   const style = { ...designedStyle, fontSize: fitted.fontSize };
   const lines = fitted.lines;
   const height = Math.max(element.frame.h, lines.length * lineHeightMm(style) + 1);
-  const item: LaidOutTextItem = { type: "text", x, y, w: element.frame.w, h: height, style, lines, isField, fieldId: element.source.type === "field" ? element.source.fieldId : undefined, hasValue, elementId: element.id };
+  const linkValue = element.linkFieldId ? resolveFieldValue(ctx.fields, element.linkFieldId, scopes) : undefined;
+  const href = typeof linkValue === "string" && /^https?:\/\//i.test(linkValue.trim()) && raw.trim() ? linkValue.trim() : undefined;
+  const item: LaidOutTextItem = { type: "text", x, y, w: element.frame.w, h: height, style, lines, isField, fieldId: element.source.type === "field" ? element.source.fieldId : undefined, hasValue, elementId: element.id, ...(href ? { href } : {}) };
   return { items: [item], bottom: y + height, right: x + element.frame.w, height };
 }
 

@@ -717,3 +717,13 @@
   (`template-studio/output/outputDocument.ts`); a Paragraph component was added to Template Studio.
 - `blockRegistry.js` keeps only what the AI needs; `BlockRenderer`, `LivePreviewPane`, `OutputCustomizerPanel`
   and the field-mapping helpers were removed. Saved agents are upgraded on load (`normalizeSelectedBlock`).
+
+## 2026-10-01 — Template Studio catalog, sources, languages, study-plan re-planning
+- Catalog restructured into Structure / Questions / Cards & Games: Exam header vs Document header, Section header
+  (badge | title only), levelled Headings, Table under Structure, worksheets merged into Questions, Answer box and
+  "Section + questions" removed. Worksheet components now use the accent palette only (guarded by tests).
+- Real page sizes (A4 / Letter / slides) with the footer at the bottom of every page; slide covers drop logo/name/date.
+- Answer key shows the source passage of each answer, linked to `/source`; printed words follow the output language;
+  the header title is written by the AI. Save-resource dialog uses a collapsible folder picker.
+- Study plans: the material picker separates uploaded material from generated resources; adding either re-plans what
+  is still to do (`plans/revise.js`, `/api/plans/revise`, `RevisePlanDialog`) while finished work stays untouched.

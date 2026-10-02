@@ -25,6 +25,7 @@ export const QUIZ_AGENT = {
   ],
   template: {
     fields: [
+      { name: "title", label: "Title", type: "string", repeatScope: "once", description: "A short, specific title for THIS quiz, written for its content (e.g. 'Median and outliers · Quiz 1'). Never the name of the tool." },
       { name: "question", label: "Question", type: "string", repeatScope: "per-output", description: "The question text, self-contained and unambiguous." },
       { name: "type", label: "Question type", type: "string", repeatScope: "per-output", description: "One of: multiple-choice, true-false, short-answer." },
       { name: "options", label: "Answer options", type: "array", repeatScope: "per-output", description: "Answer choices in display order (4 for multiple choice, 2 for true/false, empty for short answer)." },

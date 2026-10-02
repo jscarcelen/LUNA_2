@@ -324,14 +324,24 @@ function splitAtLimit(items: LaidOutItem[], limit: number, nextTop: number): { h
   const straddling = items
     .filter((item): item is LaidOutTextItem => item.type === "text" && item.y < limit - 0.5 && item.y + item.h > limit + 0.5 && item.lines.length > 1)
     .sort((a, b) => a.y - b.y)[0];
-  if (!straddling) return null;
-  const lh = lineHeightMm(straddling.style);
-  let take = Math.floor((limit - straddling.y - 0.5) / lh);
-  const total = straddling.lines.length;
-  // Keep at least two lines on each side when the text allows it (no lone first or last lines).
-  if (total - take === 1 && take > 2) take -= 1;
-  if (take < 1) return null;
-  const splitY = straddling.y + take * lh;
+  let splitY: number;
+  if (straddling) {
+    const lh = lineHeightMm(straddling.style);
+    let take = Math.floor((limit - straddling.y - 0.5) / lh);
+    const total = straddling.lines.length;
+    // Keep at least two lines on each side when the text allows it (no lone first or last lines).
+    if (total - take === 1 && take > 2) take -= 1;
+    if (take < 1) return null;
+    splitY = straddling.y + take * lh;
+  } else {
+    // No text line to cut at: break between blocks, before the first one that starts past the limit.
+    const beyond = items.filter((item) => item.y >= limit - 0.5);
+    if (!beyond.length) return null;
+    const first = Math.min(...beyond.map((item) => item.y));
+    // Everything already above the cut must exist, or nothing would ever move.
+    if (!items.some((item) => item.y + item.h <= first + 0.01)) return null;
+    splitY = first;
+  }
   const head: LaidOutItem[] = [];
   const tail: LaidOutItem[] = [];
   const shift = nextTop - splitY;
@@ -485,14 +495,17 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           newPage(element);
           c = cursor;
           onPage = 0;
-          pageLimit = limit;
+          pageLimit = contentLimit;
           laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
         }
         const bleeds = element.frame.w >= layout.canvas.width * 0.9;
         // One record taller than a whole page: a section with more questions than fit. Split it at
         // its own list instead of letting it run off the bottom — each page repeats the section's
         // heading and carries as many of its items as fit.
-        const splittable = laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip" ? innerList(element, recordScopes, ctx) : null;
+        // A record whose own text is longer than most of a page (one huge paragraph) is cut at its
+        // text lines below instead; splitting its small lists would not make it fit.
+        const longText = laid.items.some((item) => item.type === "text" && item.h > 0.5 * (contentLimit - contentTop));
+        const splittable = laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip" && !(longText && !isSlides) ? innerList(element, recordScopes, ctx) : null;
         if (splittable) {
           let drawn = 0;
           while (drawn < splittable.count) {
@@ -502,7 +515,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
             if (drawn < splittable.count) {
               newPage(element);
               c = cursor;
-              pageLimit = limit;
+              pageLimit = contentLimit;
             } else {
               c = fitted.laid.bottom + gap;
             }

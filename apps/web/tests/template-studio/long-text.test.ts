@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildOutputDocument, planOutput } from "../../modules/template-studio/output/outputDocument";
+import { buildOutputDocument, itemsToBlocks, planOutput } from "../../modules/template-studio/output/outputDocument";
 import { layoutDocument } from "../../modules/template-studio/engine/layout";
 
 const sentence = "The cash flow statement reconciles the beginning and ending balance of cash by classifying every movement as operating, investing or financing activity. ";
@@ -47,3 +47,25 @@ function slideIndex() {
   const doc: any = buildOutputDocument(plan, {});
   return doc.template.layouts.findIndex((layout: any) => layout.class === "slides");
 }
+
+describe("a long question in a document with a footer", () => {
+  it("stays above the footer on every page and never leaves the page", () => {
+    const sentence = "The cash flow statement reconciles the beginning and ending balance of cash by classifying every movement. ";
+    const items: any[] = Array.from({ length: 12 }, (_, i) => ({ type: "multiple-choice", question: `Q${i + 1}. ${sentence.repeat(i === 3 ? 90 : 2)}`, options: ["A one", "B two", "C three", "D four"], answer: "B two", explanation: sentence, topic: "t", difficulty: "easy" }));
+    const plan: any = planOutput({ blocks: itemsToBlocks(items) as any, title: "Quiz", framed: true });
+    expect(plan.end).toContain("block-footer");
+    const doc: any = buildOutputDocument(plan, {});
+    const layout = doc.template.layouts.find((l: any) => l.class === "paged");
+    const result = layoutDocument(doc.template, doc.data, { layoutId: layout.id });
+    expect(result.pages.length).toBeGreaterThan(3);
+    for (const page of result.pages as any[]) {
+      const footer = page.items.filter((item: any) => item.type === "text" && /^Page \d+/.test(item.lines[0] || ""));
+      expect(footer.length).toBeGreaterThan(0);
+      const footerTop = Math.min(...footer.map((item: any) => item.y));
+      for (const item of page.items) {
+        expect(item.y + item.h).toBeLessThanOrEqual(page.height + 0.5);
+        if (item.y < footerTop - 0.5) expect(item.y + item.h).toBeLessThanOrEqual(footerTop + 0.5);
+      }
+    }
+  });
+});

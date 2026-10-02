@@ -15,6 +15,7 @@ import { renderActivityHtml } from "../../../activities/engine/html";
 import { ActivityPlayer } from "../../../activities/ActivityPlayer";
 import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
 import { buildResource, parseResource, trimSources } from "../../../resources/resource";
+import { activityLook } from "../../../resources/look";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const OUTPUT_STYLES_KEY = "luna.outputStyles.v1";
@@ -1006,7 +1007,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       )}
       {playing ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-          <ActivityPlayer activity={playing.activity} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />
+          <ActivityPlayer activity={playing.activity} look={activityLook({ data: { ...(output?.data || {}), items: output?.items || [], ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) }, request: { outputStyles } })} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />
         </div>
       ) : null}
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}

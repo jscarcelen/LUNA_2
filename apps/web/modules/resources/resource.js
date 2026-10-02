@@ -22,7 +22,7 @@ export function parseResource(document) {
  * and links the source of every answer. Trimmed: it is only needed to find the matching passage.
  */
 export function trimSources(sources = []) {
-  return (Array.isArray(sources) ? sources : []).slice(0, 30).map((source) => ({ ...source, content: String(source?.content || "").slice(0, 800) }));
+  return (Array.isArray(sources) ? sources : []).slice(0, 30).map((source) => ({ ...source, content: String(source?.content || "").slice(0, 1500) }));
 }
 
 export function buildResource({ name, activity = null, data = {}, request = {}, meta = {} }) {

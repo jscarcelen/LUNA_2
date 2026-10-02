@@ -11,6 +11,8 @@ import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
 import { isGeneratedDocument, splitDocuments } from "./revise";
 import { planAgentCatalog } from "./agents";
+import { activityLook } from "../resources/look";
+import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, linkMaterial, planDeletionScope } from "./folders";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
@@ -635,6 +637,19 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 {children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"} (${wholeProgress.done}/${wholeProgress.total} in total)` : ""}
               </p>
               {plan.note ? <p className="m-0 mt-2 max-w-2xl text-sm text-ink">{plan.note}</p> : null}
+              {(() => {
+                const names = conceptNames(graphConcepts);
+                if (!names.length) return null;
+                const cov = planCoverage(plan, names);
+                if (cov.complete) return <p className="m-0 mt-1.5 text-xs font-semibold text-[#1f7a3a]">✓ Exhaustive: all {cov.total} concepts of the material are studied and tested in this plan.</p>;
+                const missing = [...new Set([...cov.missingStudy, ...cov.missingTest])];
+                return (
+                  <p className="m-0 mt-1.5 text-xs text-[var(--color-warn)]">
+                    Coverage: {cov.testedCount} of {cov.total} concepts are tested. Missing: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` +${missing.length - 6} more` : ""}.{" "}
+                    <button type="button" className="font-semibold text-[var(--accent)] underline" onClick={() => { const fixed = ensureCoverage(plan.items, names); updateOpen((current) => ({ ...current, items: fixed.items })); setStatus(`Added ${fixed.repairs.filter((entry) => entry.as !== "exam").length} concept${fixed.repairs.length === 1 ? "" : "s"} to the plan's steps.`); }}>Add them to the plan</button>
+                  </p>
+                );
+              })()}
               {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Agents in scope: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none — studying the material only"}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
@@ -860,7 +875,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             />
                             {/* Action buttons */}
                             {activity ? (
-                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, look: activityLook(itemResource), documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
                             ) : null}
                             {item.resourceId && onOpenResource ? (
                               <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>
@@ -1121,6 +1136,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
             <ActivityPlayer
               activity={playing.activity}
+              look={playing.look}
               onSubmit={async (attempt) => {
                 await saveAttempt(attempt, playing.documentId);
                 const row = plans.find((r) => r.document.id === playing.planDocumentId);
@@ -1235,10 +1251,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <GeneratePlanDialog
           documents={documents}
           agents={agentCatalog}
+          workspaceId={selectedWorkspaceId}
           folders={folders}
           resources={resources}
           attempts={attempts}
-          conceptMap={graphConcepts}
           onCancel={() => setGenerating(false)}
           onDone={(message) => { setGenerating(false); setStatus(message); }}
           onSavePlan={(plan) => save(plan)}

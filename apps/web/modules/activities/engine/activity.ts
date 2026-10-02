@@ -10,6 +10,22 @@ import { renderMath } from "../../template-studio/engine/latex";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
+/**
+ * Where an answer can be traced: the document, the place in it (section path, page, passage), the
+ * words that back the answer, and what is needed to open that exact passage.
+ */
+export interface ActivitySource {
+  documentName: string;
+  /** Human place: "Section › Subsection · page 3 · passage 4". */
+  locator: string;
+  /** What the document says, quoted. */
+  extract: string;
+  documentId?: string;
+  chunkIndex?: number;
+  page?: number | null;
+  heading?: string;
+}
+
 export interface ActivityQuestion {
   id: string;
   kind: QuestionKind;
@@ -27,7 +43,7 @@ export interface ActivityQuestion {
   /** What the question tests — one of SKILLS, or a category the creator typed. */
   skill?: string;
   /** Where the answer can be found in the material. */
-  source?: { documentName: string; locator: string; extract: string };
+  source?: ActivitySource;
   /** Flashcard back side. */
   back?: string;
   /** Tile puzzle: tiles in solved order (row-major) with their edge words; `columns` per row. */
@@ -72,7 +88,8 @@ const text = (value: unknown): string => (value === undefined || value === null 
 const norm = (value: unknown) => text(value).trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?"'()]/g, "");
 
 function pick(row: Row, ...names: string[]): unknown {
-  const keys = Object.keys(row);
+  // System fields (_source, _sourceResolved…) are bookkeeping, never content.
+  const keys = Object.keys(row).filter((key) => !key.startsWith("_"));
   for (const name of names) {
     const key = keys.find((k) => slug(k) === name || slug(k).endsWith(`_${name}`));
     if (key !== undefined && row[key] !== undefined && row[key] !== "") return row[key];
@@ -107,7 +124,11 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     const topic = text(pick(item, "topic", "subject_area"));
     const skill = text(pick(item, "skill", "category", "tests", "question_type", "competence"));
     const sourceText = text(pick(item, "source", "reference", "evidence", "quote", "extract"));
-    const source = sourceText ? { documentName: "", locator: "", extract: sourceText } : undefined;
+    // The agent cites the passage each item came from (_source → _sourceResolved); the quote is found later.
+    const resolved = (item as Row)._sourceResolved as { documentId?: string; documentName?: string; headingPath?: string; section?: string; chunkIndex?: number; page?: number | null } | null | undefined;
+    const source: ActivitySource | undefined = resolved?.documentName
+      ? { documentName: resolved.documentName, documentId: resolved.documentId || "", chunkIndex: resolved.chunkIndex, page: resolved.page ?? null, heading: resolved.headingPath || resolved.section || "", locator: sourceLocator(resolved.headingPath || resolved.section || "", resolved.page ?? null, resolved.chunkIndex), extract: sourceText }
+      : sourceText ? { documentName: "", locator: "", extract: sourceText } : undefined;
     // Nested lists (sections → questions) recurse with the section title as the group label.
     for (const [key, value] of Object.entries(item)) {
       if (Array.isArray(value) && value.length && typeof value[0] === "object" && value[0] !== null && slug(key) !== "options" && slug(key) !== "choices") {
@@ -197,30 +218,56 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
 
 /* ---------------------------------------------------------------- source citations */
 
-export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string }
+export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string; page?: number | null; pageEnd?: number | null }
 
 const STOP = new Set(["the", "a", "an", "of", "and", "or", "is", "are", "to", "in", "on", "for", "with", "that", "this", "it", "as", "by", "be", "which", "what", "de", "la", "el", "los", "las", "que", "y", "en", "un", "una"]);
 const terms = (value: string) => [...new Set(String(value || "").toLowerCase().split(/[^a-z0-9áéíóúüñ]+/).filter((word) => word.length > 3 && !STOP.has(word)))];
 
-/** The sentence of `content` that best matches the question and answer — the extract we cite. */
-function bestSentence(content: string, keys: string[]): string {
-  const sentences = String(content).split(/(?<=[.!?])\s+/).filter((sentence) => sentence.trim().length > 20);
-  let best = "";
-  let bestScore = 0;
-  for (const sentence of sentences) {
-    const lower = sentence.toLowerCase();
-    const score = keys.filter((key) => lower.includes(key)).length;
-    if (score > bestScore) { bestScore = score; best = sentence.trim(); }
-  }
-  const chosen = best || sentences[0] || String(content).slice(0, 180);
-  return chosen.length > 240 ? `${chosen.slice(0, 237)}…` : chosen;
+/** "Section › Subsection · page 3 · passage 4" — the place, in the words a reader would use. */
+export function sourceLocator(heading: string, page?: number | null, chunkIndex?: number): string {
+  return [heading, page ? `page ${page}` : "", chunkIndex ? `passage ${chunkIndex}` : ""].filter(Boolean).join(" · ");
 }
 
-/**
- * Links each question to where its answer lives in the material: the passage with the most terms
- * in common with the question and its answer, plus a short extract to read straight away.
- */
-/** The passage that best backs a question and its answer, with the sentence to quote; null when nothing matches well. */
+/** The heading the quoted words sit under, joined to the chapter above it: "2. Balance sheet › 2.6. Double-entry accounting". */
+function headingFor(passage: SourcePassage, extract: string): string {
+  const probe = String(extract).toLowerCase().replace(/\s+/g, " ").slice(0, 28);
+  let current = "";
+  for (const line of String(passage.content || "").split("\n")) {
+    const heading = line.match(/^#{1,6}\s+(.*)$/);
+    if (heading) { current = heading[1].trim(); continue; }
+    if (probe.length > 12 && line.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/\*\*|__/g, "").replace(/\s+/g, " ").toLowerCase().includes(probe)) {
+      const path = String(passage.heading || "").split(" › ");
+      if (!current || path.includes(current)) return passage.heading || current;
+      return [path[0], current].filter(Boolean).join(" › ");
+    }
+  }
+  return passage.heading || "";
+}
+
+/** The sentence(s) of `content` that best match the question and answer — the words we quote (up to ~420 characters). */
+function bestSentences(content: string, keys: string[]): string {
+  const clean = String(content).replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/^#{1,6}\s+.*$/gm, "");
+  // Sentences, but also list items and lines: slides and notes are mostly bullets without full stops.
+  const sentences = clean
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((sentence) => sentence.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/\*\*|__/g, "").replace(/\s+/g, " ").trim())
+    .filter((sentence) => sentence.length > 20 && !/^\$\$?/.test(sentence));
+  if (!sentences.length) return clean.replace(/\s+/g, " ").trim().slice(0, 280);
+  const scores = sentences.map((sentence) => { const lower = sentence.toLowerCase(); return keys.filter((key) => lower.includes(key)).length; });
+  let bestIndex = 0;
+  scores.forEach((score, index) => { if (score > scores[bestIndex]) bestIndex = index; });
+  let chosen = sentences[bestIndex].trim();
+  // A neighbouring sentence often completes the thought (the definition, the example): add the better one while it fits.
+  const neighbours = [bestIndex + 1, bestIndex - 1].filter((index) => index >= 0 && index < sentences.length && scores[index] > 0).sort((a, b) => scores[b] - scores[a]);
+  if (neighbours.length) {
+    const next = neighbours[0];
+    const joined = next > bestIndex ? `${chosen} ${sentences[next].trim()}` : `${sentences[next].trim()} ${chosen}`;
+    if (joined.length <= 420) chosen = joined;
+  }
+  return chosen.length > 420 ? `${chosen.slice(0, 417)}…` : chosen;
+}
+
+/** The passage that best backs a question and its answer, with the words to quote; null when nothing matches well. */
 export function locateSource(prompt: string, answer: string, passages: SourcePassage[]): { passage: SourcePassage; extract: string } | null {
   const keys = terms(`${prompt} ${answer}`);
   if (!keys.length) return null;
@@ -232,16 +279,39 @@ export function locateSource(prompt: string, answer: string, passages: SourcePas
     if (score > bestScore) { bestScore = score; best = passage; }
   }
   if (!best || bestScore < 0.25) return null;
-  return { passage: best, extract: bestSentence(best.content, keys) };
+  return { passage: best, extract: bestSentences(best.content, keys) };
 }
 
+/** Where to open the exact passage: the source page finds the quote even if the document was re-chunked. */
+export function sourceUrl(source: Pick<ActivitySource, "documentId" | "chunkIndex" | "extract">, base = ""): string {
+  if (!source.documentId) return "";
+  return `${base}/source?d=${encodeURIComponent(source.documentId)}&c=${source.chunkIndex || 1}&q=${encodeURIComponent(String(source.extract || "").slice(0, 200))}`;
+}
+
+/**
+ * Links each question to where its answer lives in the material. When the agent named the passage
+ * (its `_source` citation) that passage is used and the quote is the sentence in it that best matches
+ * the question and answer; otherwise the passage with the most terms in common is found.
+ */
 export function attachSources(activity: Activity, passages: SourcePassage[] = []): Activity {
   if (!passages.length) return activity;
   const questions = activity.questions.map((question) => {
-    if (question.source?.documentName) return question;
-    const found = locateSource(question.prompt, `${typeof question.answer === "string" ? question.answer : ""} ${question.back || ""}`, passages);
+    if (question.source?.extract && question.source.documentName && question.source.documentId) return question;
+    const answerText = `${typeof question.answer === "string" ? question.answer : ""} ${question.back || ""}`;
+    const keys = terms(`${question.prompt} ${answerText}`);
+    const cited = question.source?.documentId
+      ? passages.find((passage) => passage.documentId === question.source!.documentId && passage.chunkIndex === question.source!.chunkIndex)
+      : undefined;
+    if (cited) {
+      const extract = question.source?.extract || bestSentences(cited.content, keys);
+      const heading = headingFor(cited, extract) || question.source!.heading || "";
+      return { ...question, source: { ...question.source!, extract, heading, locator: sourceLocator(heading, cited.page ?? question.source!.page, cited.chunkIndex) } };
+    }
+    const found = locateSource(question.prompt, answerText, passages);
     if (!found) return question;
-    return { ...question, source: { documentName: found.passage.documentName, locator: `passage ${found.passage.chunkIndex}`, extract: question.source?.extract || found.extract } };
+    const { passage } = found;
+    const heading = headingFor(passage, found.extract);
+    return { ...question, source: { documentName: passage.documentName, documentId: passage.documentId || "", chunkIndex: passage.chunkIndex, page: passage.page ?? null, heading, locator: sourceLocator(heading, passage.page, passage.chunkIndex), extract: question.source?.extract || found.extract } };
   });
   return { ...activity, questions };
 }

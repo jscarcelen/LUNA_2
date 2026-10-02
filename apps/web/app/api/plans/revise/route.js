@@ -104,7 +104,8 @@ Hard rules:
 2. Schedule everything still to do — the pending steps and the steps for the new material — between ${today} and ${deadline}, at about ${minutesPerWeek} minutes a week and never more than 90 minutes on one day. If the time left cannot hold everything, shorten or drop the least important practice rather than overloading days.
 3. Keep each pending step that is still useful: return it with its keepId (you may move its date and change its minutes). Steps that Luna has already built (built=true) must be kept. Planned-but-unbuilt practice (built=false, generate set) may be replaced.
 4. For each NEW uploaded document add a reading step (generate "", sourceId = the document id) and practice generated from it, using only these kinds: ${kinds.join(", ")} (generate = the kind, sourceId = the document id). New GENERATED resources are already pending steps: keep them (keepId) and place them in the schedule.
-5. Space repetition, give weak concepts more time and earlier practice, and leave the last fifth of the remaining time for review and a practice exam instead of new content.
+5. EXHAUSTIVE COVERAGE: every concept of the concept map must remain studied AND tested by a generated activity somewhere in the final schedule (done steps count). Each activity is generated from the concepts listed on its step with at least one question per concept, so list them; keep steps to 8 concepts at most and let the final exam list them all.
+5b. Space repetition, give weak concepts more time and earlier practice, and leave the last fifth of the remaining time for review and a practice exam instead of new content.
 6. Every step names the concepts it serves.${agentSection}${conceptSection}
 Dates are YYYY-MM-DD, between ${today} and ${deadline}.`
           },

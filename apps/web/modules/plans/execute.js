@@ -9,7 +9,7 @@
 import { QUIZ_AGENT } from "../ai-tools/tools/quiz-generator/quizAgent";
 import { createVocabularyFlashcardsSpec } from "../agent-studio/engine/model";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
-import { buildActivity } from "../activities/engine/activity";
+import { attachSources, buildActivity } from "../activities/engine/activity";
 import { buildResource, RESOURCE_TAG, trimSources } from "../resources/resource";
 import { isCustomKey } from "./agents";
 
@@ -90,36 +90,84 @@ function customRecipe(agentDocuments, key) {
  * Runs one step: generates with the right agent, saves the result as a resource in the plan's
  * folder, and returns what the step should now point at.
  */
+/** Exact-name match first, then the concept's words appearing in the question: which concepts did this set test? */
+function conceptsTested(items, concepts) {
+  const norm = (value) => String(value || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const covered = new Set();
+  for (const item of items) {
+    const topic = norm(item.topic);
+    const text = norm([item.question, item.front, item.prompt, item.statement, item.sentence, item.back, item.answer].join(" "));
+    for (const concept of concepts) {
+      const name = norm(concept);
+      if (name && (topic === name || topic.includes(name) || name.includes(topic) && topic.length > 3 || text.includes(name))) covered.add(concept);
+    }
+  }
+  return covered;
+}
+
+/** What the agent is told so the activity is exhaustive over the step's concepts. */
+function coverageInstruction(concepts, perConcept) {
+  return `\n\nCOVERAGE (mandatory): this set must test EVERY one of the ${concepts.length} concepts below — ${perConcept > 1 ? `at least ${perConcept} questions each` : "at least one question each"}, spread evenly, none skipped, nothing outside the material. Set each item's "topic" to the exact concept name it tests (copy it exactly as written).\nConcepts:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
+}
+
 export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "", agentDocuments = [] }) {
   const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
-  const answers = answersFor(agent, recipe.answers);
-  const config = {
-    name: agent.name,
-    instructions: agent.instructions,
-    knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
-    questionAnswers: answers,
-    outputExample: agent.outputExample || "",
-    model: agent.model,
-    creativity: agent.creativity,
-    template: agent.template,
-    ...(recipe.custom ? {
-      outputJsonSchema: agent.outputJsonSchema || null,
-      validationRules: agent.validationRules || [],
-      spec: agent.spec || null,
-      contextPrompt: "",
-      inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
-    } : {}),
-    scope: { workspaceId, subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
-  };
+  const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
 
-  const response = await fetch("/api/ai-tools/agent-builder", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || `Could not generate the ${recipe.label.toLowerCase()}`);
+  /** One call to the agent; `focus` limits it to some concepts (the first pass uses all of them). */
+  async function callAgent(focus) {
+    const perConcept = step.generate === "exam" || step.kind === "exam" ? 2 : 1;
+    const preset = { ...recipe.answers };
+    if (focus.length && !recipe.custom && "q-count" in preset) preset["q-count"] = Math.min(40, Math.max(Number(preset["q-count"]) || 0, focus.length * perConcept));
+    const answers = answersFor(agent, preset);
+    const config = {
+      name: agent.name,
+      instructions: `${agent.instructions}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
+      knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
+      questionAnswers: answers,
+      outputExample: agent.outputExample || "",
+      model: agent.model,
+      creativity: agent.creativity,
+      template: agent.template,
+      ...(recipe.custom ? {
+        outputJsonSchema: agent.outputJsonSchema || null,
+        validationRules: agent.validationRules || [],
+        spec: agent.spec || null,
+        contextPrompt: "",
+        inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
+      } : {}),
+      scope: { workspaceId, subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
+    };
+    const response = await fetch("/api/ai-tools/agent-builder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || `Could not generate the ${recipe.label.toLowerCase()}`);
+    return result;
+  }
+
+  let data = await callAgent(concepts);
+
+  // Check the promise: every concept of the step needs at least one question. Whatever is still
+  // missing is asked for in a second, narrower call and merged in.
+  let coverage = null;
+  if (concepts.length && !recipe.custom && !data.isBlockOutput) {
+    const covered = conceptsTested(Array.isArray(data.items) ? data.items : [], concepts);
+    const missing = concepts.filter((concept) => !covered.has(concept));
+    if (missing.length && missing.length <= 12) {
+      try {
+        const extra = await callAgent(missing);
+        const known = new Set((data.items || []).map((item) => String(item.question || item.front || item.prompt || "").toLowerCase()));
+        const fresh = (extra.items || []).filter((item) => !known.has(String(item.question || item.front || item.prompt || "").toLowerCase()));
+        data = { ...data, items: [...(data.items || []), ...fresh], sources: [...(data.sources || []), ...(extra.sources || [])] };
+      } catch { /* the first set stands; the gap is reported below */ }
+    }
+    const finalCovered = conceptsTested(Array.isArray(data.items) ? data.items : [], concepts);
+    coverage = { concepts, covered: concepts.filter((concept) => finalCovered.has(concept)), missing: concepts.filter((concept) => !finalCovered.has(concept)) };
+  }
 
   const blocks = data.isBlockOutput && Array.isArray(data.blocks) ? data.blocks : null;
   const items = blocks ? [] : (Array.isArray(data.items) ? data.items : []);
@@ -129,7 +177,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   try {
     if (blocks) throw new Error("block output has no questions");
     const schemaFields = Array.isArray(agent.spec?.outputSchema) && agent.spec.outputSchema.length ? agent.spec.outputSchema : fieldDefs(agent.template.fields);
-    activity = buildActivity(schemaFields, { ...(data.data || {}), items }, { title: step.title, agentName: agent.name });
+    activity = attachSources(buildActivity(schemaFields, { ...(data.data || {}), items }, { title: step.title, agentName: agent.name }), Array.isArray(data.sources) ? data.sources : []);
   } catch {
     activity = null;
   }
@@ -142,6 +190,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   });
   if (step.concepts?.length) resource.concepts = step.concepts.map((name, index) => ({ id: `c_plan_${index}`, name, detail: "", level: "understand" }));
   if (learnerNote) resource.context = learnerNote;
+  if (coverage) resource.coverage = coverage;
 
   const content = JSON.stringify(resource, null, 2);
   const tags = [RESOURCE_TAG, ...(resource.activity ? ["activity"] : []), ...(step.dueDate ? [`due:${step.dueDate}`] : [])];
@@ -149,7 +198,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
     { folderIds, tags, file: { name: `${step.title}.resource.json`, content, preview: `${blocks ? blocks.length : items.length} ${blocks ? "blocks" : "items"}`, sizeBytes: content.length } },
     subjectId
   );
-  return { documentId: saved?.id || saved?.documentId || "", title: step.title, questions: activity?.questions?.length || 0, kind: recipe.label };
+  return { documentId: saved?.id || saved?.documentId || "", title: step.title, questions: activity?.questions?.length || 0, kind: recipe.label, coverage };
 }
 
 /**
@@ -167,7 +216,7 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], w
     onProgress?.({ index, total: pending.length, title: step.title });
     try {
       const source = documents.find((document) => document.id === step.sourceDocumentId);
-      const sourceIds = source ? [source.id] : (plan.materialIds || []).slice(0, 3);
+      const sourceIds = source ? [source.id] : (plan.materialIds || []);
       const result = await runStep({
         step,
         sourceDocumentIds: sourceIds,

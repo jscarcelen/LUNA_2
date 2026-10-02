@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ResourceExports } from "./ResourceExports";
-import { ResourceStyle, resourceBlocks } from "./ResourceStyle";
+import { ResourceStyle } from "./ResourceStyle";
+import { resourceBlocks } from "./look";
 import { SKILLS } from "../activities/engine/activity";
 import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
 

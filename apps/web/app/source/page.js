@@ -42,7 +42,13 @@ export default async function SourcePage({ searchParams }) {
       chunks = chunkDocuments([{ ...document, documentId: document.id, documentName }], { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS });
     }
   }
-  const index = Math.min(chunkNumber, chunks.length) - 1;
+  let index = Math.min(chunkNumber, chunks.length) - 1;
+  // The words are the reliable address: if the document was re-chunked or edited since the link was
+  // made, open the passage that really contains the quote.
+  if (quote && chunks.length && !(chunks[index] && findQuote(String(chunks[index].content || ""), quote))) {
+    const found = chunks.findIndex((candidate) => findQuote(String(candidate.content || ""), quote));
+    if (found >= 0) index = found;
+  }
   const chunk = chunks[index];
 
   if (!chunk) {
@@ -68,7 +74,7 @@ export default async function SourcePage({ searchParams }) {
       <div style={card}>
         <p style={kicker}>Source passage</p>
         <h1 style={{ margin: "8px 0 2px", fontSize: 24, letterSpacing: "-0.01em" }}>{documentName}</h1>
-        <p style={{ margin: 0, color: "#6e6e73", fontSize: 14 }}>{heading ? `${heading} · ` : ""}passage {chunk.chunkIndex + 1} of {chunks.length}</p>
+        <p style={{ margin: 0, color: "#6e6e73", fontSize: 14 }}>{heading ? `${heading} · ` : ""}{chunk.page ? (chunk.pageEnd && chunk.pageEnd !== chunk.page ? `pages ${chunk.page}–${chunk.pageEnd} · ` : `page ${chunk.page} · `) : ""}passage {chunk.chunkIndex + 1} of {chunks.length}</p>
         <div style={{ marginTop: 20, padding: "18px 20px", background: "#fafafa", borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
           {hit ? (
             <>

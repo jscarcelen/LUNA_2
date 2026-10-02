@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PLAN_COLOURS, buildPlan, newDeadline, newGoal, newItem } from "./plan";
 import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
+import { capConceptTree } from "./conceptTree";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
 
@@ -91,7 +92,7 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], conceptMap = [], onCancel, onDone, onSavePlan, onBuild }) {
+export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], workspaceId = "", onCancel, onDone, onSavePlan, onBuild }) {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [minutes, setMinutes] = useState(120);
@@ -100,6 +101,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   const [busy, setBusy] = useState(false);
   const [buildNow, setBuildNow] = useState(true);
   const [error, setError] = useState("");
+  const [stage, setStage] = useState("");
 
   const material = useMemo(() => documents.filter((document) => document.sourceType !== "generated" || (document.tags || []).includes("resource")), [documents]);
   const resourceByDocumentId = useMemo(() => new Map(resources.map((row) => [row.document.id, row.resource])), [resources]);
@@ -135,10 +137,33 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   const agentScope = useMemo(() => scopeFromIds(agentIds, agents), [agentIds, agents]);
   const toggleDoc = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]);
 
+  /**
+   * The concepts of the picked material, which the plan must cover exhaustively. Documents that have
+   * none yet are read first, so the planner never works without the map.
+   */
+  async function loadConceptMap() {
+    if (!workspaceId) return [];
+    const url = `/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent(picked.join(","))}`;
+    const fetchMap = async () => fetch(url).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] }));
+    let data = await fetchMap();
+    const have = new Set((data.concepts || []).map((concept) => concept.source_document_id));
+    const missing = picked.filter((id) => !have.has(id) && documents.find((doc) => doc.id === id)?.sourceType !== "generated");
+    if (missing.length) {
+      setStage("Reading the concepts in your material…");
+      const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
+      await Promise.allSettled(missing.map((documentId) => fetch("/api/concepts/extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId, workspaceId, ownerUserId }) }).then((r) => r.json())));
+      data = await fetchMap();
+    }
+    const graph = capConceptTree(Array.isArray(data.concepts) ? data.concepts : [], Array.isArray(data.prerequisites) ? data.prerequisites : []);
+    return graph.concepts.map((concept) => ({ name: concept.name, topic: concept.topic || "" })).filter((concept) => concept.name);
+  }
+
   async function generate() {
     setBusy(true);
     setError("");
     try {
+      const conceptMap = await loadConceptMap();
+      setStage("Planning every concept into the schedule…");
       const response = await fetch("/api/plans/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -151,7 +176,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
           performance,
           // Concept map: canonical concept list so the AI only uses these names as tags
           // and covers all of them across the plan.
-          conceptMap: conceptMap.map((c) => ({ name: c.name, topic: c.topic || "" })),
+          conceptMap,
           materials: picked.map((id) => {
             const document = documents.find((item) => item.id === id);
             const resource = resourceByDocumentId.get(id);
@@ -197,7 +222,11 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         agentScope
       });
       const saved = await onSavePlan?.(plan);
-      const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.`;
+      const cov = data.coverage;
+      const coverageNote = cov
+        ? ` ${cov.tested === cov.total ? `All ${cov.total} concepts are tested.` : `${cov.tested} of ${cov.total} concepts are tested.`}${cov.repairs?.length ? ` The coverage check added ${cov.repairs.length} that the first draft missed.` : ""}`
+        : "";
+      const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.${coverageNote}`;
       if (buildNow && onBuild && items.some((item) => item.generate)) {
         const result = await onBuild(plan, saved?.id || saved?.documentId || "");
         onDone?.(`${planned} ${result?.created || 0} resource${result?.created === 1 ? "" : "s"} generated and filed${result?.failures?.length ? `, ${result.failures.length} still to build` : ""}.`);
@@ -208,6 +237,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
       setError(String(problem.message || problem));
     } finally {
       setBusy(false);
+      setStage("");
     }
   }
 
@@ -304,7 +334,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={busy || !deadline || !picked.length} onClick={generate}>{busy ? "Planning…" : "Build my plan"}</button>
+          <button type="button" className={primaryBtn} disabled={busy || !deadline || !picked.length} onClick={generate}>{busy ? (stage || "Planning…") : "Build my plan"}</button>
         </div>
       </div>
     </div>

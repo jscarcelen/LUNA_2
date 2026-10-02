@@ -16,6 +16,7 @@
  */
 import { addDays, newGoal, newItem, planProgress } from "./plan.js";
 import { generateKeys, generateLabel } from "./agents.js";
+import { ensureCoverage } from "./coverage.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -102,7 +103,7 @@ export function buildRevisePayload({ plan, doneIds, newUploaded = [], resourceNa
  * `keepId` retain their built resource, the others are new steps. Dates are forced inside the
  * window, and any step without a usable date is spread over what is left.
  */
-export function applyRevision(plan, revision, { doneIds, window, generatedIds = new Set() }) {
+export function applyRevision(plan, revision, { doneIds, window, generatedIds = new Set(), conceptNames = [] }) {
   const items = plan.items || [];
   const done = items.filter((item) => doneIds.has(item.id));
   const pendingById = new Map(items.filter((item) => !doneIds.has(item.id)).map((item) => [item.id, item]));
@@ -158,10 +159,20 @@ export function applyRevision(plan, revision, { doneIds, window, generatedIds = 
   }
   next.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
 
+  // Exhaustive coverage survives re-planning: every concept still gets studied and tested. Finished
+  // steps count as covered; what is missing is added to the steps that are still to do.
+  let coverageRepairs = [];
+  if (conceptNames.length) {
+    const checked = ensureCoverage([...done, ...next], conceptNames);
+    coverageRepairs = checked.repairs.filter((entry) => entry.as !== "exam");
+    next.splice(0, next.length, ...checked.items.slice(done.length));
+  }
+
   return {
     plan: { ...plan, goals, items: [...done, ...next], note: revision.note ? revision.note : plan.note, updatedAt: new Date().toISOString() },
     summary: { kept: done.length, moved, added, dropped, remaining: next.length, days: window.days },
     added: next.filter((item) => !pendingById.has(item.id)),
+    coverageRepairs,
     droppedItems: [...pendingById.values()].filter((item) => !used.has(item.id) && item.generate && !item.resourceId)
   };
 }

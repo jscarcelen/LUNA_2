@@ -9,6 +9,7 @@ import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
 import { isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "../../resources/resource";
 import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
 import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
+import { activityLook } from "../../resources/look";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -723,7 +724,7 @@ export function WorkspaceBrowser({
 
       {playing ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-          <ActivityPlayer activity={playing.resource.activity} onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)} onClose={() => setPlaying(null)} />
+          <ActivityPlayer activity={playing.resource.activity} look={activityLook(playing.resource)} onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)} onClose={() => setPlaying(null)} />
         </div>
       ) : null}
 

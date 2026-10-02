@@ -15,7 +15,7 @@ import { assembleTemplate, defaultToggles, findBlock, variantsOf } from "../engi
 import { compileForSave } from "../adapters/agentTemplate";
 import { fieldsFromAgentFields, slug } from "../engine/model";
 import { templateFromFields } from "../engine/autoTemplate";
-import { locateSource, type SourcePassage } from "../../activities/engine/activity";
+import { locateSource, sourceUrl, type SourcePassage } from "../../activities/engine/activity";
 import { localizeTemplate, wordsFor, type LabelLanguage } from "./labels";
 import { PALETTES } from "../engine/design";
 import type { DataObject, Element, GroupElement, Template } from "../engine/types";
@@ -362,11 +362,11 @@ function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string
   const found = locateSource(prompt, answer, passages);
   if (!found) return null;
   const words = wordsFor(language);
-  const quote = found.extract.length > 120 ? `${found.extract.slice(0, 117)}…` : found.extract;
+  const quote = found.extract.length > 260 ? `${found.extract.slice(0, 257)}…` : found.extract;
   const place = [found.passage.documentName || "—", found.passage.heading].filter(Boolean).join(" › ");
-  const label = `${words.source}: ${place} · ${words.passage} ${found.passage.chunkIndex}`;
+  const label = `${words.source}: ${place}${found.passage.page ? ` · p. ${found.passage.page}` : ""} · ${words.passage} ${found.passage.chunkIndex}`;
   const url = found.passage.documentId
-    ? `${linkBase}/source?d=${encodeURIComponent(found.passage.documentId)}&c=${found.passage.chunkIndex}&q=${encodeURIComponent(found.extract.slice(0, 200))}`
+    ? sourceUrl({ documentId: found.passage.documentId, chunkIndex: found.passage.chunkIndex, extract: found.extract }, linkBase)
     : "";
   return { text: quote ? `${label} — “${quote}”` : label, url };
 }

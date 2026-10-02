@@ -27,7 +27,29 @@ function shuffle(list, seed) {
  */
 const CONFIDENCE = [["high", "Sure"], ["medium", "Fairly sure"], ["low", "Guessing"]];
 
-export function ActivityPlayer({ activity, onSubmit, onClose }) {
+/** The document's colour and format, applied to the player through the same variables the rest of the app uses. */
+function lookStyle(look) {
+  if (!look?.accent) return undefined;
+  return { "--accent": look.accent.main, "--accent-soft": look.accent.tint, "--accent-ink": `color-mix(in srgb, ${look.accent.main} 65%, #000)` };
+}
+
+/** Where the answer can be traced: document, place in it, the exact words, and a link to that passage. */
+function SourceNote({ source }) {
+  const url = source.documentId ? `/source?d=${encodeURIComponent(source.documentId)}&c=${source.chunkIndex || 1}&q=${encodeURIComponent(String(source.extract || "").slice(0, 200))}` : "";
+  return (
+    <div className="mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">
+      <p className="m-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span aria-hidden>📖</span>
+        {source.documentName ? <strong className="text-ink">{source.documentName}</strong> : <strong className="text-ink">Source</strong>}
+        {source.locator ? <span>· {source.locator}</span> : null}
+        {url ? <a href={url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-[var(--accent)] hover:underline">Open this part of the document →</a> : null}
+      </p>
+      <p className="m-0 mt-1 border-l-2 border-[var(--accent)] pl-2 italic text-ink">“{source.extract}”</p>
+    </div>
+  );
+}
+
+export function ActivityPlayer({ activity, onSubmit, onClose, look = null }) {
   const [answers, setAnswers] = useState({});
   const [confidence, setConfidence] = useState({});
   const [attempt, setAttempt] = useState(null);
@@ -60,8 +82,8 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
   }
 
   return (
-    <section className="tw-scope mx-auto grid max-w-3xl gap-3">
-      <header className={`${card} p-5`}>
+    <section className="tw-scope mx-auto grid max-w-3xl gap-3" style={lookStyle(look)}>
+      <header className={`${card} p-5`} style={look?.accent ? { borderTop: "6px solid var(--accent)" } : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h3 className="m-0 text-2xl font-bold tracking-tight text-ink">{activity.title}</h3>{activity.subtitle ? <p className="m-0 mt-1 text-sm text-soft-ink">{activity.subtitle}</p> : null}</div>
           {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? "Done" : "Leave"}</button> : null}
@@ -105,10 +127,10 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
 
                 {q.kind === "choice" ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {(q.options || []).map((option) => {
+                    {(q.options || []).map((option, optionIndex) => {
                       const on = answers[q.id] === option;
                       const isAnswer = result && option === result.expected;
-                      return <button key={option} type="button" disabled={locked} onClick={() => set(q.id, option)} className={`rounded-xl border px-3 py-2 text-left text-sm transition ${on ? "border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-ink" : "border-ink/10 text-ink hover:bg-[var(--surface-soft)]"} ${isAnswer ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{option}</button>;
+                      return <button key={option} type="button" disabled={locked} onClick={() => set(q.id, option)} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition ${on ? "border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-ink" : "border-ink/10 text-ink hover:bg-[var(--surface-soft)]"} ${isAnswer ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{look?.letters ? <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold ${on ? "bg-[var(--accent)] text-white" : "bg-[var(--accent-soft)] text-[var(--accent-ink)]"}`}>{String.fromCharCode(65 + optionIndex)}</span> : null}<span>{option}</span></button>;
                     })}
                   </div>
                 ) : null}
@@ -119,7 +141,19 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
                   </div>
                 ) : null}
 
-                {q.kind === "text" || q.kind === "number" ? (
+                {q.kind === "text" && look?.ruled ? (
+                  <textarea
+                    className={`${input} mt-3`}
+                    rows={3}
+                    disabled={locked}
+                    value={answers[q.id] || ""}
+                    onChange={(event) => set(q.id, event.target.value)}
+                    placeholder="Write your answer"
+                    style={{ lineHeight: "28px", backgroundImage: "repeating-linear-gradient(transparent, transparent 27px, var(--accent-soft) 27px, var(--accent-soft) 28px)", backgroundPositionY: "8px" }}
+                  />
+                ) : null}
+
+                {(q.kind === "text" && !look?.ruled) || q.kind === "number" ? (
                   <input className={`${input} mt-3 max-w-sm`} inputMode={q.kind === "number" ? "decimal" : "text"} disabled={locked} value={answers[q.id] || ""} onChange={(event) => set(q.id, event.target.value)} placeholder={q.kind === "number" ? "Your result" : "Your answer"} />
                 ) : null}
 
@@ -222,7 +256,7 @@ export function ActivityPlayer({ activity, onSubmit, onClose }) {
                   </p>
                 ) : null}
                 {result && result.correct === false && q.kind !== "match" ? <p className="m-0 mt-2 text-sm text-[var(--color-danger)]">Correct answer: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
-                {result && q.source?.extract ? <p className="m-0 mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">📖 {q.source.documentName ? <strong className="text-ink">{q.source.documentName}</strong> : null}{q.source.locator ? ` · ${q.source.locator}` : ""}: “{q.source.extract}”</p> : null}
+                {result && q.source?.extract ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 text-xs text-soft-ink">{q.explanation}</p> : null}
               </div>

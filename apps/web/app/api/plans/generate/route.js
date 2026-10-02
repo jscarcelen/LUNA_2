@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { conceptNames, coverageOf, ensureCoverage } from "../../../../modules/plans/coverage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,15 @@ const SCHEMA = {
         type: "object", additionalProperties: false,
         properties: { title: { type: "string" }, concepts: { type: "array", items: { type: "string" } }, targetScore: { type: "number", description: "0–1" } },
         required: ["title", "concepts", "targetScore"]
+      }
+    },
+    coverage: {
+      type: "array",
+      description: "The coverage ledger, written BEFORE the schedule is final: one entry for EVERY concept of the concept map, naming the step where it is first studied and the activity step that tests it.",
+      items: {
+        type: "object", additionalProperties: false,
+        properties: { concept: { type: "string" }, studiedIn: { type: "string", description: "Title of the step where it is studied." }, testedIn: { type: "string", description: "Title of the generated activity step that tests it with at least one question." } },
+        required: ["concept", "studiedIn", "testedIn"]
       }
     },
     items: {
@@ -37,7 +47,7 @@ const SCHEMA = {
       }
     }
   },
-  required: ["name", "note", "goals", "items"]
+  required: ["name", "note", "goals", "coverage", "items"]
 };
 
 /** The schema with `generate` limited to what the learner's agent scope can make. */
@@ -87,7 +97,7 @@ export async function POST(request) {
     // Every concept map node must appear in at least one activity's concepts array.
     const conceptMap = Array.isArray(body?.conceptMap) ? body.conceptMap : [];
     const conceptMapSection = conceptMap.length
-      ? `\n\nConcept map (CANONICAL — the ONLY allowed concept names for tags):\n${conceptMap.map((c) => `- ${c.name}${c.topic ? ` (under: ${c.topic})` : ""}`).join("\n")}\n\nRules for concept tags:\n1. Every step's "concepts" array MUST use names EXACTLY as listed above — no paraphrasing, no synonyms.\n2. Every concept in the map must appear in at least one step's concepts array across the whole plan — no concept may be omitted entirely.\n3. A step may tag a subset (the concepts most relevant to that step's material).`
+      ? `\n\nConcept map (CANONICAL — the ONLY allowed concept names, used EXACTLY as written):\n${conceptMap.map((c) => `- ${c.name}${c.topic ? ` (under: ${c.topic})` : ""}`).join("\n")}\n\nEXHAUSTIVE COVERAGE — the most important rule of this plan. The learner must be tested on EVERYTHING in the material, so:\n1. Every one of the ${conceptMap.length} concepts above must be STUDIED in a step and TESTED by at least one generated activity (quiz, exam, worksheet or flashcards). A concept that is only read is NOT covered.\n2. Each activity is generated from the concepts you list on its step, with at least one question per listed concept. A concept you leave out of every activity's "concepts" list gets no question at all.\n3. Keep each step to at most 8 concepts: group related concepts together and use more steps rather than overloading one.\n4. The final practice exam lists ALL ${conceptMap.length} concepts.\n5. Weak concepts are tested in at least two separate steps, spaced apart.\n6. Before you finish, fill the "coverage" ledger: one entry per concept, with the step that studies it and the activity step that tests it. If you cannot name a testing step for a concept, add a step.\n7. Use names EXACTLY as listed — no paraphrasing, no synonyms, no concepts that are not in the map.`
       : "";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -101,7 +111,7 @@ export async function POST(request) {
           {
             role: "system",
             content: `You are a study planner. Turn material and a deadline into a schedule that a person can actually keep.
-Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${agentSection}${conceptMapSection}`
+Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Cover EVERYTHING: no part of the material may be left without practice. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${agentSection}${conceptMapSection}`
           },
           {
             role: "user",
@@ -113,7 +123,19 @@ Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} m
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error?.message || "Model request failed");
     const parsed = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
-    return NextResponse.json({ plan: parsed });
+
+    // Trust but verify: whatever the model's ledger says, check the schedule itself and fill any gap.
+    const names = conceptNames(conceptMap);
+    let coverage = null;
+    if (names.length && Array.isArray(parsed.items)) {
+      const before = coverageOf(parsed.items, names);
+      const repaired = ensureCoverage(parsed.items, names);
+      parsed.items = repaired.items;
+      const after = coverageOf(parsed.items, names);
+      coverage = { total: names.length, tested: after.tested.length, studied: after.studied.length, repairs: repaired.repairs.filter((entry) => entry.as !== "exam"), plannedGaps: { study: before.missingStudy.length, test: before.missingTest.length } };
+    }
+    delete parsed.coverage;
+    return NextResponse.json({ plan: parsed, coverage });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { OutputPreviewPane, OutputStylePanel } from "../template-studio/output/OutputDesigner";
-import { buildOutputDocument, itemsToBlocks, planOutput } from "../template-studio/output/outputDocument";
+import { buildOutputDocument, planOutput } from "../template-studio/output/outputDocument";
+import { resourceBlocks } from "./look";
 import { resolveOutputLanguage } from "../template-studio/output/labels";
 
 /** Plain-text reading of typed blocks, for the Raw tab. */
@@ -18,20 +19,6 @@ function blocksToText(blocks = []) {
     if (type === "flashcard") return `${block.front || ""}: ${block.back || ""}`;
     return "";
   }).filter(Boolean).join("\n\n");
-}
-
-/** The typed blocks a saved resource is made of, or null when it has no component layout. */
-export function resourceBlocks(resource) {
-  const data = resource?.data || {};
-  if (data.isBlockOutput && Array.isArray(data.blocks)) return data.blocks;
-  const items = Array.isArray(data.items) ? data.items : [];
-  if (!items.length) return null;
-  try {
-    const blocks = itemsToBlocks(items);
-    return Array.isArray(blocks) && blocks.length ? blocks : null;
-  } catch {
-    return null;
-  }
 }
 
 /**

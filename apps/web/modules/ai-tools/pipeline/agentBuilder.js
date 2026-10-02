@@ -124,8 +124,15 @@ function buildChunksContext(chunks, maxChunks = 40) {
     section: chunk.section || "",
     headingPath: Array.isArray(chunk.headingPath) ? chunk.headingPath.join(" > ") : "",
     chunkIndex: (chunk.chunkIndex || 0) + 1,
+    page: chunk.page ?? null,
     content: String(chunk.content || "")
   }));
+}
+
+/** buildChunksContext drops the document id; it is recovered from the chunk at the same position. */
+function resolvedDocumentId(entry, rankedChunks) {
+  const position = Number(String(entry.sourceId || "").replace(/^S/, "")) - 1;
+  return rankedChunks[position]?.documentId || "";
 }
 
 /** The passages a run read, for citing where each answer comes from (chunkIndex is 1-based, as shown to people). */
@@ -135,7 +142,9 @@ function sourcesFromChunks(chunks = []) {
     documentName: chunk.documentName || "",
     chunkIndex: (chunk.chunkIndex || 0) + 1,
     heading: Array.isArray(chunk.headingPath) && chunk.headingPath.length ? chunk.headingPath.join(" › ") : String(chunk.section || ""),
-    content: String(chunk.content || "").slice(0, 1200)
+    page: chunk.page ?? null,
+    pageEnd: chunk.pageEnd ?? null,
+    content: String(chunk.content || "").slice(0, 4000)
   }));
 }
 
@@ -794,7 +803,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     return {
       ...item,
       _sourceResolved: resolved
-        ? { documentName: resolved.documentName, section: resolved.section, headingPath: resolved.headingPath }
+        ? { documentId: resolvedDocumentId(resolved, rankedChunks), documentName: resolved.documentName, section: resolved.section, headingPath: resolved.headingPath, chunkIndex: resolved.chunkIndex, page: resolved.page }
         : null
     };
   });

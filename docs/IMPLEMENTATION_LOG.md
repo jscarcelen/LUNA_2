@@ -750,3 +750,17 @@
 - Resource detail has a "Format & colour" tab (`resources/ResourceStyle.js`): the same component/format/colour panel and page-size × view preview as
   Configure output, rebuilt from the saved data; the look is autosaved in `request.outputStyles` and exports come from the same preview.
   New resources keep their source passages (`data.sources`) so answer citations survive restyling.
+
+## 2026-10-02 — Semantic chunking, traceable sources, exhaustive study plans, interactive look
+- Chunking (`ai-tools/pipeline/chunking.js`): chunks start where their heading path says (it used the last unit's), carry `page`/`pageEnd` and the
+  headings inside (`<!-- page N -->` markers are location data, not text), no longer split at every `##` (a chunk only ends at a section heading once it
+  is big enough: 40/220/380 tokens for #/##/###), cut long sections where the vocabulary changes most (TextTiling-style cohesion), end on a clear topic shift
+  and join tiny chunks to their neighbour. Accounting.pdf: 18 chunks of 42–487 tokens → 9 of 257–635.
+- Interactive answer sources: items keep the passage the agent cited (`_source` → document, section path, page, passage); the player shows document ›
+  section · page · passage, the exact sentence(s) that back the answer and "Open this part of the document →". `/source` finds the passage by its quote when
+  the chunk number no longer matches. `pick()` ignores `_`-prefixed system fields (a "S5" citation used to be shown as the quote).
+- Interactive look: the player takes the colour (and Lettered options / Ruled lines formats) of the resource's Format & colour choice (`resources/look.js`).
+- Study plan exhaustivity (`plans/coverage.js`): the planner prompt demands every concept be studied AND tested (coverage ledger in the schema), the route
+  verifies and repairs the schedule in code, re-planning does the same, the final exam lists all concepts, and the plan page shows "all N concepts studied and
+  tested" or what is missing with a one-click fix. Concepts of the picked material are read (and extracted if missing) before planning. Each generated
+  activity is told its concepts (≥1 question each, `topic` = concept), checked afterwards, and topped up for any concept still missing.

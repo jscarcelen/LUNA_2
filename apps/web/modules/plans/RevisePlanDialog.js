@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dueLabel } from "./plan";
 import { generateLabel } from "./agents";
+import { conceptNames } from "./coverage";
 import { applyRevision, buildRevisePayload, doneItemIds, fallbackRevision, reviseWindow } from "./revise";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
@@ -52,7 +53,7 @@ export function RevisePlanDialog({ row, documents = [], resources = [], attempts
         revision = fallbackRevision({ plan: row.plan, doneIds, newUploaded, window: span });
         setUsedFallback(true);
       }
-      setProposal(applyRevision(row.plan, revision, { doneIds, window: span, generatedIds }));
+      setProposal(applyRevision(row.plan, revision, { doneIds, window: span, generatedIds, conceptNames: conceptNames(conceptMap) }));
       setPhase("ready");
     })();
   }, [ready]);
@@ -83,6 +84,7 @@ export function RevisePlanDialog({ row, documents = [], resources = [], attempts
               ))}
             </div>
             {usedFallback ? <p className="m-0 rounded-xl bg-[rgba(178,94,0,0.08)] px-3 py-2 text-xs text-[var(--color-warn)]">The planner model was not available, so the steps were spread evenly over the time left. You can still move any step afterwards.</p> : null}
+            {proposal.coverageRepairs?.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-soft-ink">Coverage check: {proposal.coverageRepairs.length} concept{proposal.coverageRepairs.length === 1 ? " was" : "s were"} missing from the new schedule and added to its steps, so nothing in the material goes untested.</p> : null}
             {proposal.plan.note && proposal.plan.note !== row.plan.note ? <p className="m-0 text-xs text-soft-ink">{proposal.plan.note}</p> : null}
 
             {proposal.added.length ? (

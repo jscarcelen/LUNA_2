@@ -772,3 +772,14 @@
 - "Iterate" on a generated result (steps 2 and 3): the user types a twist ("focus more on cash flow", chips for common ones), Luna rewrites the result from
   the same material using `refinementPrompt` + `previousOutput` (now explained to the model in both the items and the block pipelines, and used to rank
   the retrieved passages); earlier versions are kept ("Previous version (n)").
+
+## 2026-10-02 (2) — Text keeps its size and flows; Iterate gets a prompt improver
+- Layout engine: in paged layouts text is never shrunk to fit a height — the box grows, and a block taller than the page is cut at a text line and
+  continues on the next page (`splitAtLimit`; boxes and rules that straddle the cut are split with it). On slides a component stays on one slide and its
+  text shrinks (to 60 %) to the room the slide has. `tests/template-studio/long-text.test.ts`.
+- Iterate: `/api/ai-tools/agent-builder/iterate` (dashboard A7) turns the typed request into a brief + checklist and names the original limits it overrides
+  (e.g. "one page"); the UI shows "Luna understood: …". The revision note now says the request beats conflicting limits and that cosmetic edits do not
+  count; the block composition rules also see the request. Measured on the Accounting summary: "give more examples" → 0 → 8 example cues without the
+  improver, 24 with it.
+- Reliability: OpenAI calls wait out a 429 rate limit (`openAiFetch`) instead of falling back to a placeholder; block replies are filtered to the allowed
+  block types (the model once echoed the schema as a single "object" block).

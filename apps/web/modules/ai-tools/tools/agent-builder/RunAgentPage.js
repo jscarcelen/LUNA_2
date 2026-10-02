@@ -252,6 +252,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   /** "Iterate": the twist the user is typing, and the earlier versions of this result (newest last). */
   const [iterateText, setIterateText] = useState("");
   const [versions, setVersions] = useState([]);
+  const [improving, setImproving] = useState(false);
+  const [understood, setUnderstood] = useState("");
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
@@ -523,7 +525,40 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     const { items: _items, ...rootOnly } = output.data || {};
     const previousOutput = outputBlocks ? outputBlocks : { ...rootOnly, items: strip(output.items) };
     try {
-      const data = await generation.generate({ ...runConfig, refinementPrompt: prompt, previousOutput });
+      // The prompt improver first: a few words become a precise brief and a checklist, and the
+      // original limits the request overrides ("one page") are named.
+      setImproving(true);
+      let refinementPrompt = prompt;
+      setUnderstood("");
+      try {
+        const improved = await fetch("/api/ai-tools/agent-builder/iterate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            request: prompt,
+            agentName: agentConfig.name,
+            instructions: agentConfig.instructions,
+            choices: runConfig.questionAnswers,
+            currentResult: rawText,
+            earlier: versions.map((version) => version.prompt)
+          })
+        }).then((response) => response.json());
+        if (improved?.improved && improved.brief) {
+          refinementPrompt = [
+            `REQUEST: ${prompt}`,
+            `BRIEF: ${improved.brief}`,
+            improved.checklist?.length ? `CHECKLIST (all must be true in the new result):\n${improved.checklist.map((entry) => `- ${entry}`).join("\n")}` : "",
+            improved.relax?.length ? `ORIGINAL LIMITS THIS REQUEST OVERRIDES:\n${improved.relax.map((entry) => `- ${entry}`).join("\n")}` : "",
+            improved.keep?.length ? `KEEP:\n${improved.keep.map((entry) => `- ${entry}`).join("\n")}` : ""
+          ].filter(Boolean).join("\n\n");
+          setUnderstood(improved.understood || "");
+        }
+      } catch {
+        // Without the improver the user's own words are sent.
+      } finally {
+        setImproving(false);
+      }
+      const data = await generation.generate({ ...runConfig, creativity: runConfig.creativity === "low" ? "medium" : runConfig.creativity, refinementPrompt, previousOutput });
       chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
       setVersions((list) => [...list, { output, prompt }]);
       setOutput(data);
@@ -828,7 +863,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         className={`${fieldClass} mt-3`}
         rows={3}
         value={iterateText}
-        disabled={generation.isGenerating}
+        disabled={generation.isGenerating || improving}
         onChange={(event) => setIterateText(event.target.value)}
         placeholder="e.g. Focus more on cash flow · make it shorter · explain it for a first-year student"
       />
@@ -838,9 +873,10 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         ))}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" className={primaryBtn} disabled={!iterateText.trim() || generation.isGenerating} onClick={handleIterate}>{generation.isGenerating ? "Rewriting…" : "Apply to the result"}</button>
+        <button type="button" className={primaryBtn} disabled={!iterateText.trim() || generation.isGenerating || improving} onClick={handleIterate}>{improving ? "Understanding your request…" : generation.isGenerating ? "Rewriting…" : "Apply to the result"}</button>
         {versions.length ? <button type="button" className={ghostBtn} disabled={generation.isGenerating} onClick={handleUndoIterate}>↶ Previous version ({versions.length})</button> : null}
       </div>
+      {understood ? <p className="m-0 mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-ink"><strong>Luna understood:</strong> {understood}</p> : null}
       {versions.length ? <p className="m-0 mt-2 text-[11px] text-soft-ink">Applied: {versions.map((version) => `“${version.prompt}”`).join(" → ")}</p> : null}
     </section>
   ) : null;

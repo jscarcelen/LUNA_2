@@ -165,9 +165,26 @@ export function approxTokens(text) {
  * "Iterate": the user has seen a result and asks for a twist ("focus more on cash flow"). The model
  * gets the previous result and the request, and writes a complete new one.
  */
+/**
+ * OpenAI call that waits out a rate limit (HTTP 429, "try again in 2s") instead of failing: a run
+ * right after another can hit the tokens-per-minute cap and would otherwise fall back to a
+ * placeholder. Streaming bodies are fine: only the response is awaited here.
+ */
+async function openAiFetch(url, init, attempts = 4) {
+  let response = await fetch(url, init);
+  for (let attempt = 1; attempt < attempts && response.status === 429; attempt += 1) {
+    const detail = await response.clone().json().catch(() => ({}));
+    const hinted = /try again in ([\d.]+)(ms|s)/i.exec(String(detail?.error?.message || ""));
+    const waitMs = hinted ? Math.ceil(Number(hinted[1]) * (hinted[2].toLowerCase() === "ms" ? 1 : 1000)) + 250 : 1500 * attempt;
+    await new Promise((resolve) => setTimeout(resolve, Math.min(waitMs, 15000)));
+    response = await fetch(url, init);
+  }
+  return response;
+}
+
 const REVISION_NOTE = `
 
-REVISION: previousOutput is the result the user has already seen and refinementPrompt is what they want changed (for example: focus on a topic, shorten, simplify, add detail). Produce a COMPLETE new output that applies that change while keeping whatever still fits. Obey every rule, count and schema above, keep drawing only from the reference material, and keep citing the source of each item. Do not mention the revision.`;
+REVISION: previousOutput is the result the user has already seen and refinementPrompt is what they want changed (it holds their request, a precise brief and a checklist). Produce a COMPLETE new output that applies the change visibly and substantively — in every part it concerns, not in a single place — and do not return previousOutput with cosmetic edits. Where the request conflicts with the original instructions (length, page or item limits, brevity) the request wins: you may exceed those limits sensibly and the output may grow. Satisfy every checklist item; keep what the request does not touch. Obey the schema and rules above, keep drawing only from the reference material, and keep citing the source of each item. Do not mention the revision.`;
 
 function withRevision(text, config) {
   return config.refinementPrompt ? `${text}${REVISION_NOTE}` : text;
@@ -342,7 +359,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
   const model = resolveAgentModel(config.model);
   const streaming = typeof onToken === "function";
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -471,7 +488,7 @@ RULES FOR YOUR OUTPUT:
 6. Only use block types from the ALLOWED list provided.
 Output only the ruleset + JSON skeleton. No preamble, no explanation.`;
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -512,7 +529,8 @@ async function callOpenAiAgentBlocks(config, chunks, blockSchema, selectedBlockI
   const rawInstructions = config.instructions || "Generate content based on the reference material.";
   // Enhance vague instructions into a precise numbered ruleset before the main generation call.
   // Falls back silently to rawInstructions on any failure so the pipeline is never broken.
-  const enhancedRules = await enhanceOutputInstructions(rawInstructions, selectedBlockIds, blockSchemaSummary);
+  const revisionNote = config.refinementPrompt ? `\n\nREVISION REQUEST (it overrides any conflicting length or count above):\n${config.refinementPrompt}` : "";
+  const enhancedRules = await enhanceOutputInstructions(`${rawInstructions}${revisionNote}`, selectedBlockIds, blockSchemaSummary);
 
   const systemPrompt = `You are a content generation assistant creating structured educational content.
 
@@ -548,7 +566,7 @@ Additional hard rules:
       : null,
   });
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -606,13 +624,20 @@ Additional hard rules:
     parsed = Array.isArray(obj) ? obj : (Array.isArray(obj?.items) ? obj.items : null);
     // The model does not always keep the wrapper's key: accept any array of blocks, or one bare block.
     if (!parsed && obj && typeof obj === "object") {
-      parsed = Object.values(obj).find((value) => Array.isArray(value) && value.some((entry) => entry && typeof entry === "object" && "type" in entry)) || (typeof obj.type === "string" ? [obj] : null);
+      parsed = Object.values(obj).find((value) => Array.isArray(value) && value.some((entry) => entry && typeof entry === "object" && "type" in entry)) || (selectedBlockIds.includes(obj.type) ? [obj] : null);
     }
   } catch {
     const match = String(content || "").match(/\[[\s\S]*\]/);
     if (match) {
       try { parsed = JSON.parse(match[0]); } catch { /* ignore */ }
     }
+  }
+
+  // Only blocks of the allowed types count: the model sometimes echoes the schema or invents a type.
+  if (Array.isArray(parsed)) {
+    const allowed = new Set(selectedBlockIds);
+    parsed = parsed.filter((block) => block && typeof block === "object" && allowed.has(block.type));
+    if (!parsed.length) parsed = null;
   }
 
   if (!Array.isArray(parsed)) {

@@ -50,14 +50,19 @@ interface Ctx {
    * the next, rather than running off the bottom.
    */
   windows?: Map<ID, { from: number; to: number }>;
+  /** Slides: one component per slide, so long text shrinks to the slide instead of flowing on. */
+  slides?: boolean;
+  /** Lowest y a slide's content may reach. */
+  contentBottom?: number;
 }
 
 interface Laid { items: LaidOutItem[]; bottom: number; right: number; height: number }
 
 /**
- * Fit-to-box: AI content can be longer than the designer planned. The font shrinks (down to 60 %
- * of the designed size) until the longest word fits the width and the wrapped text fits the
- * designed height; only then does the box grow.
+ * Fit-to-box. In a document the font size is never reduced for height: longer text simply makes the
+ * box taller and the document runs onto more pages (the font only shrinks, down to 60 %, when a
+ * single word is wider than the box). On a slide a component is at most one slide, so the text
+ * shrinks (down to 60 % of the designed size) until it fits the room the slide has.
  */
 function fitFont(paragraphs: string[], style: LaidOutTextItem["style"], widthMm: number, heightMm: number): { fontSize: number; lines: string[] } {
   const designed = style.fontSize;
@@ -82,7 +87,8 @@ function textItem(element: TextElement, x: number, y: number, scopes: Scope[], c
   const hasValue = !isField || value !== undefined;
   const raw = isField && value === undefined ? (element.placeholder ? element.placeholder : `{${fieldName(ctx.fields, element)}}`) : valueToText(value);
   const paragraphs = element.format === "rich" ? richTextToLines(raw) : raw.split(/\r?\n/);
-  const fitted = fitFont(paragraphs, designedStyle, element.frame.w, element.frame.h);
+  const room = ctx.slides ? Math.max(element.frame.h, (ctx.contentBottom ?? y + element.frame.h) - y) : 0;
+  const fitted = fitFont(paragraphs, designedStyle, element.frame.w, room);
   const style = { ...designedStyle, fontSize: fitted.fontSize };
   const lines = fitted.lines;
   const height = Math.max(element.frame.h, lines.length * lineHeightMm(style) + 1);
@@ -309,6 +315,47 @@ function scopeMatches(element: Element, position: "first" | "middle" | "last" | 
 }
 
 /**
+ * A laid-out block that runs past the bottom of the page is cut where the text lines allow, and the
+ * rest continues at the top of the next page (long text means more pages, not smaller text).
+ * Everything below the cut moves with it; boxes and lines that straddle the cut are split in two.
+ * Returns null when no text straddles the limit (nothing sensible to cut at).
+ */
+function splitAtLimit(items: LaidOutItem[], limit: number, nextTop: number): { head: LaidOutItem[]; tail: LaidOutItem[] } | null {
+  const straddling = items
+    .filter((item): item is LaidOutTextItem => item.type === "text" && item.y < limit - 0.5 && item.y + item.h > limit + 0.5 && item.lines.length > 1)
+    .sort((a, b) => a.y - b.y)[0];
+  if (!straddling) return null;
+  const lh = lineHeightMm(straddling.style);
+  let take = Math.floor((limit - straddling.y - 0.5) / lh);
+  const total = straddling.lines.length;
+  // Keep at least two lines on each side when the text allows it (no lone first or last lines).
+  if (total - take === 1 && take > 2) take -= 1;
+  if (take < 1) return null;
+  const splitY = straddling.y + take * lh;
+  const head: LaidOutItem[] = [];
+  const tail: LaidOutItem[] = [];
+  const shift = nextTop - splitY;
+  for (const item of items) {
+    const bottom = item.y + item.h;
+    if (bottom <= splitY + 0.01) { head.push(item); continue; }
+    if (item.y >= splitY - 0.01) { tail.push({ ...item, y: item.y + shift }); continue; }
+    // Straddles the cut.
+    if (item.type === "text") {
+      const itemLh = lineHeightMm(item.style);
+      const keep = Math.max(1, Math.min(item.lines.length - 1, Math.round((splitY - item.y) / itemLh)));
+      head.push({ ...item, lines: item.lines.slice(0, keep), h: keep * itemLh + 1 });
+      tail.push({ ...item, lines: item.lines.slice(keep), y: nextTop, h: (item.lines.length - keep) * itemLh + 1, hasValue: item.hasValue });
+    } else {
+      head.push({ ...item, h: Math.max(0.3, splitY - item.y) });
+      tail.push({ ...item, y: nextTop, h: Math.max(0.3, bottom - splitY) });
+    }
+  }
+  return { head, tail };
+}
+
+const bottomOf = (items: LaidOutItem[], fallback: number) => items.reduce((max, item) => Math.max(max, item.y + item.h), fallback);
+
+/**
  * Lays out one template page. Top-level flow groups paginate: an instance that would cross the
  * bottom margin opens a continuation page carrying the background and every element whose page
  * scope is "every" (or that sits above the group, for "page"-scoped headers).
@@ -464,6 +511,24 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           onPage += 1;
           continue;
         }
+        // Text longer than the rest of the page continues on the next one at the same font size.
+        if (!isSlides && !bleeds && laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip") {
+          let cut = splitAtLimit(laid.items, pageLimit, contentTop);
+          if (cut) {
+            let rest = laid.items;
+            for (let guard = 0; cut && guard < 60; guard += 1) {
+              current.items.push(...cut.head);
+              newPage(element);
+              rest = cut.tail;
+              cut = bottomOf(rest, 0) > contentLimit + 0.5 ? splitAtLimit(rest, contentLimit, contentTop) : null;
+            }
+            current.items.push(...rest);
+            pageLimit = contentLimit;
+            c = bottomOf(rest, contentTop) + gap;
+            onPage += 1;
+            continue;
+          }
+        }
         if (laid.bottom > (bleeds ? layout.canvas.height : pageLimit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: element.pagination.overflow === "clip" ? "clipped" : "exceeds-page" });
         current.items.push(...laid.items);
         c = laid.bottom + gap;
@@ -482,9 +547,22 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
         laid = layoutElement({ ...element, frame: { ...element.frame, y } } as Element, 0, 0, scopes, ctx, limit);
       }
       const fullBleed = element.frame.w >= layout.canvas.width * 0.9;
-      if (laid.bottom > (fullBleed ? layout.canvas.height : limit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: "exceeds-page" });
-      current.items.push(...laid.items);
-      cursor = laid.bottom;
+      // A single block of text longer than a page: same font size, more pages.
+      let placed = laid.items;
+      let placedBottom = laid.bottom;
+      if (!isSlides && !fullBleed && laid.bottom > contentLimit + 0.5) {
+        let cut = splitAtLimit(placed, contentLimit, contentTop);
+        for (let guard = 0; cut && guard < 60; guard += 1) {
+          current.items.push(...cut.head);
+          newPage(element);
+          placed = cut.tail;
+          placedBottom = bottomOf(placed, contentTop);
+          cut = placedBottom > contentLimit + 0.5 ? splitAtLimit(placed, contentLimit, contentTop) : null;
+        }
+      }
+      if (placedBottom > (fullBleed ? layout.canvas.height : limit) + 0.5) ctx.overflows.push({ elementId: element.id, pageIndex: out.indexOf(current), reason: "exceeds-page" });
+      current.items.push(...placed);
+      cursor = placedBottom;
     }
     previousDesignedBottom = element.frame.y + element.frame.h;
   }
@@ -507,6 +585,8 @@ export function layoutDocument(template: Template, rawData: DataObject, options:
   const ctx: Ctx = { fields: template.fields, overflows: [], itemCounts: {}, pageIndex: () => 0 };
   const out: LaidOutPage[] = [];
   if (!layout) return { pages: out, overflows: [], itemCounts: {} };
+  ctx.slides = layout.class === "slides";
+  ctx.contentBottom = layout.canvas.height - layout.margins.bottom;
   const pages = resolveView(layout, options.viewId ?? null);
   const root: Scope[] = [{ data, index: 0 }];
 

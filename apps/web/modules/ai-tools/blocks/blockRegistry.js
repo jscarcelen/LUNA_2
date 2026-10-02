@@ -82,7 +82,8 @@ export const BLOCKS = {
     icon: '!',
     aiFields: {
       text: { type: 'string', description: 'The callout text', required: true, example: 'Remember: osmosis only applies to water molecules, not solutes.' },
-      type: { type: 'string', description: 'Callout type: info, tip, warning, or note', required: true, example: 'tip' },
+      // Not called `type`: that name is the block discriminator in the flat block schema.
+      callout_type: { type: 'string', description: 'Callout type: info, tip, warning, or note', required: true, example: 'tip' },
     },
   },
 
@@ -228,6 +229,9 @@ export function buildJsonSchema(selectedBlockIds) {
   const fieldMap = {}; // fieldName → def (first seen wins for type info)
   for (const id of ids) {
     for (const [name, def] of Object.entries(BLOCKS[id].aiFields)) {
+      // `type` is the discriminator; a block field with that name would duplicate it in `required`
+      // (OpenAI rejects the whole schema) and overwrite its definition.
+      if (name === 'type') continue;
       if (!fieldMap[name]) fieldMap[name] = def;
     }
   }

@@ -590,6 +590,10 @@ Additional hard rules:
     const obj = JSON.parse(text);
     // Response may be wrapped { items: [...] } (json_schema object wrapper) or a bare array.
     parsed = Array.isArray(obj) ? obj : (Array.isArray(obj?.items) ? obj.items : null);
+    // The model does not always keep the wrapper's key: accept any array of blocks, or one bare block.
+    if (!parsed && obj && typeof obj === "object") {
+      parsed = Object.values(obj).find((value) => Array.isArray(value) && value.some((entry) => entry && typeof entry === "object" && "type" in entry)) || (typeof obj.type === "string" ? [obj] : null);
+    }
   } catch {
     const match = String(content || "").match(/\[[\s\S]*\]/);
     if (match) {
@@ -716,7 +720,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     if (!blockResult) {
       // Minimal local fallback for block-based generation
       blockResult = {
-        blocks: [{ type: "heading", text: config.name || "Generated Content", level: 1 }, { type: "paragraph", text: "Content could not be generated. Please check your OpenAI API key." }],
+        blocks: [{ type: "heading", text: config.name || "Generated Content", level: 1 }, { type: "paragraph", text: blockFallback ? `Content could not be generated: ${blockFallback}` : "Content could not be generated. Please check your OpenAI API key." }],
         model: "local-heuristic-v1"
       };
     }

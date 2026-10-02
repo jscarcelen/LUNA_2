@@ -214,8 +214,8 @@ export const REQUESTS = [
     model: "gpt-4o", modelEnv: "LUNA_PLAN_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.3, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "Deadline, minutes per week, the agents the learner put in scope (built-in and their own, each with what it can make), the learner's performance history, the document's concept map (canonical names only) and the list of chosen material.",
-    output: "Plan name and note, 2–6 goals, and dated steps (read / activity / review / exam) saying what Luna should generate for each.",
-    fallbacks: "Error shown; nothing saved.",
+    output: "Plan name and note, 2–6 goals, a coverage ledger (every concept → where it is studied and tested) and dated steps (read / activity / review / exam) saying what Luna should generate for each. The result is then checked in code: any concept not studied and tested is added to a step, and the final exam lists them all.",
+    fallbacks: "Error shown; nothing saved. Before the call, concepts are read from the material (U7) if the documents have none yet.",
     tokens: { basis: "measured", scale: { unit: "step", label: "plan step", fixedIn: 1500, inPer: 0, outPer: 85, units: 9 } },
     seconds: { typical: 5, note: "measured 4.7 s for 9 steps" },
     prompts: [
@@ -477,7 +477,7 @@ export const REQUESTS = [
 export const FREE_STEPS = [
   { name: "DOCX parsing", note: "Local OOXML parser: text, tables, equations, images. No model call.", cost: "$0 AI" },
   { name: "Markdown / HTML / text import", note: "Parsed locally.", cost: "$0 AI" },
-  { name: "Chunking & ranking", note: "700-word chunks with 80-word overlap; keyword/heading scoring picks the best chunks within a 48,000-character budget.", cost: "compute only" },
+  { name: "Semantic chunking & ranking", note: "Chunks follow headings and topic shifts (lexical cohesion), keep page numbers and the heading where they start, and never leave a three-line subsection on its own; keyword/heading scoring then picks the best chunks within a 48,000-character budget.", cost: "compute only" },
   { name: "Template rendering", note: "One layout engine renders HTML, PDF, DOCX and PPTX on the server.", cost: "compute only" },
   { name: "Grading & activities", note: "Answers are checked in the browser/server with rules, not a model.", cost: "$0 AI" },
   { name: "Mastery & error classification", note: "Rule-based engines (mastery, retention, patterns, priority).", cost: "$0 AI" },

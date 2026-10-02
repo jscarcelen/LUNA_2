@@ -8,7 +8,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
 
 /** Name, folder, tags and difficulty before a generated resource is saved. */
-export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId = "", summary = "", busy = false, onCancel, onSave, onCreateFolder }) {
+export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId = "", summary = "", busy = false, hideUnfiled = false, onCancel, onSave, onCreateFolder }) {
   const [name, setName] = useState(defaultName || "");
   const [folderId, setFolderId] = useState(defaultFolderId);
   const [tags, setTags] = useState("");
@@ -38,8 +38,8 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
         <div className="mt-4 grid gap-3">
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input autoFocus className={input} value={name} onChange={(event) => setName(event.target.value)} placeholder="Biology quiz · chapter 3" /></label>
           <div className="grid gap-1 text-xs font-semibold text-soft-ink">
-            <span>Folder <span className="font-normal">· where it is filed in this space</span></span>
-            <FolderPicker folders={folders} selectedId={folderId} onSelect={setFolderId} />
+            <span>Where to file it <span className="font-normal">· {hideUnfiled ? "pick a subject or a folder inside it" : "where it is filed in this space"}</span></span>
+            <FolderPicker folders={folders} selectedId={folderId} onSelect={setFolderId} hideUnfiled={hideUnfiled} />
             {onCreateFolder ? (
               <div className="flex items-center gap-2">
                 <input

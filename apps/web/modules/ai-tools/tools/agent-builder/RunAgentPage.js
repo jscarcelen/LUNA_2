@@ -16,6 +16,8 @@ import { ActivityPlayer } from "../../../activities/ActivityPlayer";
 import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
 import { buildResource, parseResource, trimSources } from "../../../resources/resource";
 import { activityLook } from "../../../resources/look";
+import { FolderPicker } from "../../../ui/FolderTree";
+import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const OUTPUT_STYLES_KEY = "luna.outputStyles.v1";
@@ -224,6 +226,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const selectedSubject = selectedWorkspace?.subjects?.find((subject) => subject.id === subjectId) || null;
   const agentDocument = (selectedSubject?.documents || []).find((document) => document.id === agentDocumentId) || null;
   const folders = selectedSubject?.folders || [];
+  // Where a result can be filed: the whole workspace tree (subjects are its top-level folders), not just the open subject.
+  const filingFolders = useMemo(() => foldersOf(selectedWorkspace), [selectedWorkspace]);
 
   const [agentConfig, setAgentConfig] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -245,13 +249,21 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [selection, setSelection] = useState({ layoutIndex: 0, viewIndex: 0 });
 
   const [output, setOutput] = useState(null);
+  /** "Iterate": the twist the user is typing, and the earlier versions of this result (newest last). */
+  const [iterateText, setIterateText] = useState("");
+  const [versions, setVersions] = useState([]);
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
   const [replanSuggestion, setReplanSuggestion] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
+  /** A node of the workspace tree ("s:<subject>" or "f:<subject>:<folder>"); empty means the open subject. */
   const [saveFolderId, setSaveFolderId] = useState("");
+  const filingTarget = (node) => {
+    const target = parseNode(node || subjectNode(subjectId));
+    return { subjectId: target.subjectId || subjectId, folderIds: target.folderId ? [target.folderId] : [] };
+  };
 
   const generation = useAgentGenerationStream();
 
@@ -502,6 +514,31 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     }
   }
 
+  /** Rewrites the current result with an extra instruction ("focus more on cash flow"), keeping the old version to go back to. */
+  async function handleIterate() {
+    const prompt = iterateText.trim();
+    if (!runConfig || !prompt || !output || generation.isGenerating) return;
+    setStatusMessage("");
+    const strip = (list) => (list || []).map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !key.startsWith("_"))));
+    const { items: _items, ...rootOnly } = output.data || {};
+    const previousOutput = outputBlocks ? outputBlocks : { ...rootOnly, items: strip(output.items) };
+    try {
+      const data = await generation.generate({ ...runConfig, refinementPrompt: prompt, previousOutput });
+      chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
+      setVersions((list) => [...list, { output, prompt }]);
+      setOutput(data);
+      setIterateText("");
+    } catch {
+      // The hook exposes the error state to the preview pane; the current result stays.
+    }
+  }
+  function handleUndoIterate() {
+    const last = versions[versions.length - 1];
+    if (!last) return;
+    setOutput(last.output);
+    setVersions((list) => list.slice(0, -1));
+  }
+
   async function handleSavePreset() {
     if (!agentDocument || typeof onUpdateGeneratedDocument !== "function") return;
     setIsSavingPreset(true);
@@ -594,7 +631,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       setIsSavingDocument(true);
       try {
         const content = JSON.stringify({ kind: "activity", activity, data: { ...(output.data || {}), items: output.items || [] }, agentName: agentConfig?.name, createdAt: new Date().toISOString() }, null, 2);
-        const saved = await onSaveGeneratedQuizDocument({ folderIds: saveFolderId ? [saveFolderId] : [], tags: ["activity"], file: { name: `${activity.title}.activity.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } });
+        const where = filingTarget(saveFolderId);
+        const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: ["activity"], file: { name: `${activity.title}.activity.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } }, where.subjectId);
         documentId = saved?.id || "";
         setStatusMessage(`"${activity.title}" saved as an activity — find it under Workspaces → Activities.`);
       } catch (error) {
@@ -694,7 +732,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       });
       const content = JSON.stringify(payload, null, 2);
       const allTags = ["resource", ...(activity && activity.questions.length ? ["activity"] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
-      const saved = await onSaveGeneratedQuizDocument({ folderIds: folderId ? [folderId] : [], tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } });
+      const where = filingTarget(folderId);
+      const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
       setSaveOpen(false);
       setStatusMessage(`Saved “${name}” to your resources.`);
       if (openAfter) {
@@ -715,7 +754,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     try {
       const { html, textContent } = await renderFinalHtml(true);
       const name = `${agentConfig?.name || "Agent Output"}.html`;
-      const saved = await onSaveGeneratedQuizDocument({ folderIds: saveFolderId ? [saveFolderId] : [], tags: [], file: { name, content: html, preview: textContent, sizeBytes: html.length } });
+      const where = filingTarget(saveFolderId);
+      const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: [], file: { name, content: html, preview: textContent, sizeBytes: html.length } }, where.subjectId);
       if (!saved) throw new Error("Output could not be saved to the workspace.");
       setStatusMessage(`Saved "${name}" to your workspace.`);
     } catch (error) {
@@ -779,6 +819,31 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const unlockedStep = hasOutput ? 3 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : "Luna 3 Pro";
 
+
+  const iterateCard = hasOutput ? (
+    <section className={cardClass}>
+      <p className={kicker}>Iterate</p>
+      <p className="m-0 mt-1 text-xs text-soft-ink">Not quite right? Say what to change and Luna rewrites the result from the same material — then you can still choose its format and colour.</p>
+      <textarea
+        className={`${fieldClass} mt-3`}
+        rows={3}
+        value={iterateText}
+        disabled={generation.isGenerating}
+        onChange={(event) => setIterateText(event.target.value)}
+        placeholder="e.g. Focus more on cash flow · make it shorter · explain it for a first-year student"
+      />
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {["Focus more on…", "Make it shorter", "Add more detail", "Simpler language", "Add examples", "Cover the formulas"].map((chip) => (
+          <button key={chip} type="button" className="rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-soft-ink transition hover:bg-[var(--surface-soft)]" onClick={() => setIterateText((current) => (current.trim() ? `${current.trim()}. ${chip}` : chip))}>{chip}</button>
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" className={primaryBtn} disabled={!iterateText.trim() || generation.isGenerating} onClick={handleIterate}>{generation.isGenerating ? "Rewriting…" : "Apply to the result"}</button>
+        {versions.length ? <button type="button" className={ghostBtn} disabled={generation.isGenerating} onClick={handleUndoIterate}>↶ Previous version ({versions.length})</button> : null}
+      </div>
+      {versions.length ? <p className="m-0 mt-2 text-[11px] text-soft-ink">Applied: {versions.map((version) => `“${version.prompt}”`).join(" → ")}</p> : null}
+    </section>
+  ) : null;
 
   const previewPane = (
     <OutputPreviewPane
@@ -905,6 +970,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {flowStep === 2 ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
+            {iterateCard}
             <OutputStylePanel
               plan={plan}
               styles={outputStyles}
@@ -932,6 +998,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {flowStep === 3 ? (
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
+            {iterateCard}
             <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
               <p className={kicker}>Save as a resource · recommended</p>
               <p className="m-0 mt-2 text-sm text-soft-ink">Keep it in your library: give it a name, a folder and tags. From there you can do it on Luna, download every view of its template, or regenerate it.</p>
@@ -958,10 +1025,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             <section className={cardClass}>
               <p className={kicker}>Save to workspace</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <select className={`${fieldClass} flex-1`} value={saveFolderId} onChange={(event) => setSaveFolderId(event.target.value)}>
-                  <option value="">Unfiled</option>
-                  {folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}
-                </select>
+                <div className="min-w-0 flex-1"><FolderPicker folders={filingFolders} selectedId={saveFolderId || subjectNode(subjectId)} onSelect={setSaveFolderId} maxHeight={170} hideUnfiled /></div>
                 <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !doc} className={primaryBtn}>{isSavingDocument ? "Saving…" : "Save"}</button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
@@ -978,9 +1042,15 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {saveOpen ? (
         <SaveResourceDialog
           defaultName={agentConfig?.name || "Generated resource"}
-          folders={folders}
-          defaultFolderId={saveFolderId}
-          onCreateFolder={toolContext?.onCreateFolder}
+          folders={filingFolders}
+          hideUnfiled
+          defaultFolderId={saveFolderId || subjectNode(subjectId)}
+          onCreateFolder={toolContext?.onCreateFolder ? async (name, parentNode) => {
+            const parent = parseNode(parentNode || subjectNode(subjectId));
+            const target = parent.subjectId || subjectId;
+            const created = await toolContext.onCreateFolder(name, parent.folderId, target);
+            return created?.id ? { id: folderNode(target, created.id) } : null;
+          } : undefined}
           busy={isSavingDocument}
           summary={`${activity?.questions.length ? `${activity.questions.length} questions · ` : ""}${agentConfig?.name || "Agent output"}`}
           onCancel={() => setSaveOpen(false)}

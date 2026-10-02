@@ -764,3 +764,11 @@
   verifies and repairs the schedule in code, re-planning does the same, the final exam lists all concepts, and the plan page shows "all N concepts studied and
   tested" or what is missing with a one-click fix. Concepts of the picked material are read (and extracted if missing) before planning. Each generated
   activity is told its concepts (≥1 question each, `topic` = concept), checked afterwards, and topped up for any concept still missing.
+
+## 2026-10-02 — File results anywhere in the workspace; iterate on a result
+- RunAgentPage files results into the whole workspace tree (`foldersOf(workspace)`: subjects are the top-level folders), not only the open subject's
+  folders, which was empty when the subject had none — so a saved result could only go to "Unfiled". The picker is shared by the Save dialog and the
+  step-3 save; new folders can be created under any node; the result is saved into the chosen subject.
+- "Iterate" on a generated result (steps 2 and 3): the user types a twist ("focus more on cash flow", chips for common ones), Luna rewrites the result from
+  the same material using `refinementPrompt` + `previousOutput` (now explained to the model in both the items and the block pipelines, and used to rank
+  the retrieved passages); earlier versions are kept ("Previous version (n)").

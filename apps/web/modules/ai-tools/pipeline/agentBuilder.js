@@ -161,6 +161,18 @@ export function approxTokens(text) {
   return Math.ceil(String(text || "").length / 4);
 }
 
+/**
+ * "Iterate": the user has seen a result and asks for a twist ("focus more on cash flow"). The model
+ * gets the previous result and the request, and writes a complete new one.
+ */
+const REVISION_NOTE = `
+
+REVISION: previousOutput is the result the user has already seen and refinementPrompt is what they want changed (for example: focus on a topic, shorten, simplify, add detail). Produce a COMPLETE new output that applies that change while keeping whatever still fits. Obey every rule, count and schema above, keep drawing only from the reference material, and keep citing the source of each item. Do not mention the revision.`;
+
+function withRevision(text, config) {
+  return config.refinementPrompt ? `${text}${REVISION_NOTE}` : text;
+}
+
 function buildUserMessage(config, chunks, styleChunks) {
   return JSON.stringify({
     task: "Generate agent output",
@@ -223,7 +235,7 @@ async function prepareMaterial(config, emit = () => {}) {
 
   emit({ step: "retrieve", status: "start" });
   const selection = chunks.length
-    ? selectChunksWithinBudget(chunks, { topicPrompt: config.instructions, title: config.name, scope: config.scope || {} })
+    ? selectChunksWithinBudget(chunks, { topicPrompt: `${config.instructions || ""} ${config.refinementPrompt || ""}`.trim(), title: config.name, scope: config.scope || {} })
     : { chunks: [], truncated: false, totalChars: 0 };
   emit({ step: "retrieve", status: "end", chunkCount: selection.chunks.length, truncated: selection.truncated });
   return { scopedDocuments, styleDocuments, chunks, rankedChunks: selection.chunks, styleChunks, truncated: selection.truncated };
@@ -353,7 +365,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
       messages: [
         {
           role: "system",
-          content: "You are a configurable AI agent runtime. Follow the operator's instructions and the user's question answers. Use the supplied reference material or context prompt as the source content, and the output example as a formatting guide. Output only valid JSON matching the schema."
+          content: withRevision("You are a configurable AI agent runtime. Follow the operator's instructions and the user's question answers. Use the supplied reference material or context prompt as the source content, and the output example as a formatting guide. Output only valid JSON matching the schema.", config)
         },
         {
           role: "user",
@@ -522,11 +534,13 @@ ${enhancedRules}
 
 Additional hard rules:
 - Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
-- Never omit a required field; set optional fields to null if unused.`;
+- Never omit a required field; set optional fields to null if unused.${config.refinementPrompt ? REVISION_NOTE : ""}`;
 
   const userMessage = JSON.stringify({
     task: "Generate content blocks",
     contextPrompt: config.contextPrompt || "",
+    refinementPrompt: config.refinementPrompt || "",
+    previousOutput: config.previousOutput || null,
     questionAnswers: Array.isArray(config.questionAnswers) ? config.questionAnswers : [],
     referenceMaterial: buildChunksContext(chunks),
     styleExamples: styleChunks.length

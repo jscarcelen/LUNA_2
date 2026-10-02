@@ -727,3 +727,13 @@
   the header title is written by the AI. Save-resource dialog uses a collapsible folder picker.
 - Study plans: the material picker separates uploaded material from generated resources; adding either re-plans what
   is still to do (`plans/revise.js`, `/api/plans/revise`, `RevisePlanDialog`) while finished work stays untouched.
+
+## 2026-10-01 — Presentation dashboard (docs/dashboard)
+- `docs/dashboard/` generates one self-contained HTML (`versions/luna-dashboard-<date>.html`): the 4-step process,
+  data-driven information-flow diagram, a catalogue of the 21 AI requests (model, params, tokens, cost, exact prompt
+  extracted from the source at build time, measured vs estimated), unit costs (PDF/DOCX/PPTX upload, cloud storage,
+  plan, agent runs, coach), operating-cost and lunas/marketplace calculators, performance metrics, status and risks.
+- Every change writes a new dated version (never overwrites); `npm run dashboard:publish` commits and pushes it.
+  Findings worth knowing: uploads are not charged in lunas, 1 luna = 1 token whatever the model, and originals are
+  stored as base64 in Postgres.
+

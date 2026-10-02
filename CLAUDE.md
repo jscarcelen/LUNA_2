@@ -242,6 +242,11 @@ See `apps/web/modules/README.md`.
 - **Before responding to any multi-part request: list every bullet/numbered item the user asked for
   and confirm each is addressed in the current response. Do not mark a session as done until all
   sub-requests are implemented. If a request has 5 sections, implement all 5 in one session.**
+- **Dashboard (`docs/dashboard/`)**: a generated, dated HTML presentation of the product, its flows, every AI
+  request (exact prompts, models, tokens, cost) and the economics. The user has given **standing permission**
+  to commit + push new dashboard versions. When you change an AI prompt, model, price, AI request, flow step or
+  the lunas/marketplace model, update `docs/dashboard/manifest.mjs` and run `npm run dashboard:publish` (see the
+  `luna-dashboard` skill). It writes a new `versions/luna-dashboard-YYYY-MM-DD[-n].html`, never overwrites.
 - Don't commit or push unless asked. `main` deploys to production on Vercel — do feature work on a
   branch (`feat/...`) and let the user merge.
 - Long-running AI work must stream (see the agent-builder `/stream` route) rather than rely on Edge

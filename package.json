@@ -12,7 +12,10 @@
     "dev:admin": "npm run dev --workspace @luna/admin",
     "build": "npm run build --workspace @luna/web && npm run build --workspace @luna/admin",
     "lint": "npm run lint --workspace @luna/web && npm run lint --workspace @luna/admin",
-    "db:migration:apply": "echo 'Apply SQL in supabase/migrations using Supabase SQL editor or CLI.'"
+    "db:migration:apply": "echo 'Apply SQL in supabase/migrations using Supabase SQL editor or CLI.'",
+    "dashboard": "node docs/dashboard/build.mjs",
+    "dashboard:check": "node docs/dashboard/build.mjs --check",
+    "dashboard:publish": "node docs/dashboard/build.mjs --publish"
   },
   "engines": {
     "node": ">=20.9.0 <25"

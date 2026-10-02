@@ -4,8 +4,25 @@
     {
       "name": "luna-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--workspace", "@luna/web"],
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--workspace",
+        "@luna/web"
+      ],
       "port": 3000
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "4173",
+        "--directory",
+        "docs/dashboard"
+      ],
+      "port": 4173
     }
   ]
 }

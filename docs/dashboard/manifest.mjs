@@ -28,9 +28,9 @@ export const EXTRA_PRICES = {
 };
 
 export const MODELS = [
-  { id: "gpt-4o", label: "GPT-4o", brand: "Luna 3 Pro", use: "Reading documents (PDF, slides, images), study plans, template design" },
-  { id: "gpt-4o-mini", label: "GPT-4o mini", brand: "Luna 3 Mini", use: "Agent runs (default), concept maps, coaching, prompt refinement" },
-  { id: "gpt-4.1", label: "GPT-4.1", brand: "Luna 3 Max", use: "Optional upgrade for agent runs" },
+  { id: "gpt-4o", label: "GPT-4o", brand: "Luna 3 Pro", use: "Every generation call: documents, concept maps, plans, agent runs, coaching, refinement, template design. The quality floor." },
+  { id: "gpt-4o-mini", label: "GPT-4o mini", brand: "Luna 3 Mini", use: "Retired: too inaccurate. Any request for it is run on Pro. Kept in the price table only." },
+  { id: "gpt-4.1", label: "GPT-4.1", brand: "Luna 3 Max", use: "Optional upgrade for agent runs (cheaper per token than GPT-4o)" },
   { id: "text-embedding-3-small", label: "text-embedding-3-small", brand: "—", use: "Embeddings of every chunk of an uploaded document" },
   { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", brand: "—", use: "Fallback for scanned PDFs without selectable text" }
 ];
@@ -189,7 +189,7 @@ export const REQUESTS = [
     position: "Right after the document is saved (non-blocking), and again when a plan is opened or the map is rebuilt.",
     trigger: "Document saved · plan opened without concepts · 'Rebuild concept map'",
     file: SRC.concepts, anchor: /export async function extractConcepts/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_CONCEPT_MODEL / LUNA_AGENT_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_CONCEPT_MODEL / LUNA_AGENT_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "System prompt + the first 12,000 characters of the document text.",
     output: "≤ 20 concepts, each with name, parent, description, topic, Bloom level, difficulty, importance, question types, source pages. Saved as concepts + concept_prerequisites.",
@@ -249,7 +249,7 @@ export const REQUESTS = [
     position: "When a resource is opened in the library and its concepts are requested.",
     trigger: "Resource detail → concepts",
     file: SRC.resConcepts, anchor: /export async function POST/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_CONCEPT_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_CONCEPT_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "Resource name, source material names, up to 40 questions and a 4,000-character content sample.",
     output: "A one-sentence context and 3–12 concepts (name, detail, level).",
@@ -270,7 +270,7 @@ export const REQUESTS = [
     position: "When the user presses Generate on any agent (Quiz Generator, Flashcards, custom agents).",
     trigger: "Agent run page → Generate (streamed)",
     file: SRC.agent, anchor: /async function callOpenAiAgent\(/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_AGENT_MODEL (user can pick Pro = gpt-4o, Max = gpt-4.1)", provider: "OpenAI · chat/completions (streaming)",
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro; the runner can upgrade to Max = gpt-4.1)", provider: "OpenAI · chat/completions (streaming)",
     params: { temperature: "0.2 low · 0.55 medium · 0.9 high", maxTokens: 6000, format: "JSON schema (strict), built from the agent's output fields + a _source field", streaming: true },
     input: "System prompt + one JSON message: agent instructions, output fields, the learner's answers (count, difficulty, language…), the best-matching chunks of the material (up to 48,000 characters ≈ 12k tokens) and optional style examples.",
     output: "{ items: [...] } validated against the agent's rules; each item cites the passage it came from (_source) which becomes the source link in the answer key.",
@@ -289,7 +289,7 @@ export const REQUESTS = [
     position: "When a block-based agent is run.",
     trigger: "Agent run page → Generate (block agent)",
     file: SRC.agent, anchor: /async function callOpenAiAgentBlocks/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_AGENT_MODEL", provider: "OpenAI · chat/completions (streaming)",
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions (streaming)",
     params: { temperature: "0.2 / 0.55 / 0.9", maxTokens: 6000, format: "JSON schema (non-strict) — flat array of typed blocks", streaming: true },
     input: "System prompt listing the allowed block types and their fields + the composition rules produced by A3 + the material.",
     output: "A list of typed blocks; the planner maps them onto Template Studio components.",
@@ -308,7 +308,7 @@ export const REQUESTS = [
     position: "Just before A2, in the same run.",
     trigger: "Block agent run (only when the agent has instructions)",
     file: SRC.agent, anchor: /async function enhanceOutputInstructions/,
-    model: "gpt-4o-mini", modelEnv: "(fixed)", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "(fixed: MIN_AGENT_MODEL)", provider: "OpenAI · chat/completions",
     params: { temperature: 0, maxTokens: 500, format: "Free text", streaming: false },
     input: "The creator's instructions + the allowed block types and fields.",
     output: "A numbered ruleset and a JSON skeleton, injected into A2's system prompt.",
@@ -327,7 +327,7 @@ export const REQUESTS = [
     position: "While creating or saving an agent in Agent Studio.",
     trigger: "Agent Studio → generate/refine recipe",
     file: SRC.refine, anchor: /export async function POST/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_REFINER_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_REFINER_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "The agent spec: name, purpose, instructions, inputs, material slots, output fields, one example.",
     output: "Rewritten instructions, a style line, ≤ 6 constraints, field descriptions, a note for the creator.",
@@ -346,7 +346,7 @@ export const REQUESTS = [
     position: "In Agent Studio's test step.",
     trigger: "Test run → feedback",
     file: SRC.improve, anchor: /export async function POST/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_AGENT_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "Agent spec (name, purpose, instructions, fields) + last run + the feedback.",
     output: "A list of patches (instructions.core / style / constraints / field.description) and a short reasoning.",
@@ -365,7 +365,7 @@ export const REQUESTS = [
     position: "Not part of the current flow.",
     trigger: "POST /api/ai-tools/quiz (no UI calls it)",
     file: SRC.quiz, anchor: /async function callOpenAiQuiz/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_QUIZ_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_QUIZ_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "700 × questions (2,400–12,000)", format: "JSON schema (strict)", streaming: false },
     input: "Quiz config + context chunks.", output: "Quiz JSON with source references.", fallbacks: "Local provider.",
     tokens: { basis: "estimated", typical: { in: 4000, out: 1500 }, scale: null },
@@ -458,7 +458,7 @@ export const REQUESTS = [
     position: "On the Performance page, when the user asks the coach to read the results.",
     trigger: "Performance → Coach",
     file: SRC.coach, anchor: /export async function POST/,
-    model: "gpt-4o-mini", modelEnv: "LUNA_COACH_MODEL", provider: "OpenAI · chat/completions",
+    model: "gpt-4o", modelEnv: "LUNA_COACH_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.3, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "Per-topic mastery, accuracy, retention, trend; error-type shares; the questions that keep going wrong; the plan being tracked.",
     output: "Headline, diagnosis, 2–5 actions (kind, topic, effort) and three messages (student / parent / teacher).",
@@ -499,8 +499,8 @@ export const MEASURED = {
     { doc: "Accounting.pdf", in: 4436, out: 1063, seconds: 9.8, concepts: 16 }
   ],
   quizRun: [
-    { doc: "Statistics.pdf", chunks: 6, in: 2554, out: 847, seconds: 12.1, items: 10, model: "gpt-4o-mini" },
-    { doc: "Accounting.pdf", chunks: 18, in: 6445, out: 878, seconds: 11.6, items: 10, model: "gpt-4o-mini" }
+    { doc: "Statistics.pdf", chunks: 6, in: 2554, out: 847, seconds: 12.1, items: 10, model: "gpt-4o-mini (before Pro floor)" },
+    { doc: "Accounting.pdf", chunks: 18, in: 6445, out: 878, seconds: 11.6, items: 10, model: "gpt-4o-mini (before Pro floor)" }
   ],
   planGenerate: { steps: 9, outChars: 3065, seconds: 4.7, model: "gpt-4o" },
   storage: [
@@ -548,9 +548,9 @@ export const BUSINESS = {
       { id: "parent", label: "Parent", priceUsd: 12, lunas: 700000, storageGb: 3 }
     ],
     usage: [
-      { id: "student", label: "Student", users: 1000, uploadsPdf: 2, uploadsDocx: 2, pages: 10, plans: 1, revises: 1, agentRunsMini: 8, agentRunsPro: 0, resourceConcepts: 8, coach: 4, templateDesigns: 0, storageMb: 6 },
-      { id: "teacher", label: "Teacher", users: 200, uploadsPdf: 6, uploadsDocx: 6, pages: 12, plans: 2, revises: 4, agentRunsMini: 32, agentRunsPro: 8, resourceConcepts: 30, coach: 10, templateDesigns: 6, storageMb: 40 },
-      { id: "parent", label: "Parent", users: 300, uploadsPdf: 1, uploadsDocx: 1, pages: 8, plans: 1, revises: 1, agentRunsMini: 6, agentRunsPro: 0, resourceConcepts: 6, coach: 6, templateDesigns: 0, storageMb: 4 }
+      { id: "student", label: "Student", users: 1000, uploadsPdf: 2, uploadsDocx: 2, pages: 10, plans: 1, revises: 1, agentRuns: 8, agentRunsMax: 0, resourceConcepts: 8, coach: 4, templateDesigns: 0, storageMb: 6 },
+      { id: "teacher", label: "Teacher", users: 200, uploadsPdf: 6, uploadsDocx: 6, pages: 12, plans: 2, revises: 4, agentRuns: 32, agentRunsMax: 8, resourceConcepts: 30, coach: 10, templateDesigns: 6, storageMb: 40 },
+      { id: "parent", label: "Parent", users: 300, uploadsPdf: 1, uploadsDocx: 1, pages: 8, plans: 1, revises: 1, agentRuns: 6, agentRunsMax: 0, resourceConcepts: 6, coach: 6, templateDesigns: 0, storageMb: 4 }
     ],
     marketplace: { salePriceUsd: 5, platformFeePct: 25, redemptionHaircutPct: 0 }
   }
@@ -573,20 +573,20 @@ export const NODES = [
   { id: "store", col: 2, lane: 1, label: "Chunk · embed · save", sub: "700-word chunks", reqs: ["U6"], phase: "upload" },
   { id: "embed", col: 2, lane: 2, label: "Embeddings", sub: "text-embedding-3-small", reqs: ["U6"], phase: "upload" },
   { id: "db", col: 3, lane: 3, label: "documents · chunks · vectors", sub: "Supabase Postgres + pgvector", phase: "upload" },
-  { id: "cmap", col: 3, lane: 2, label: "Concept tree", sub: "GPT-4o mini · ≤ 20 concepts", reqs: ["U7"], phase: "upload" },
+  { id: "cmap", col: 3, lane: 2, label: "Concept tree", sub: "GPT-4o · ≤ 20 concepts", reqs: ["U7"], phase: "upload" },
   { id: "plan", col: 4, lane: 0, label: "Plan it for me", sub: "material + deadline", phase: "plan" },
   { id: "planapi", col: 5, lane: 1, label: "Plan builder", sub: "/api/plans/generate · revise", phase: "plan" },
   { id: "plangpt", col: 5, lane: 2, label: "GPT-4o schedules", sub: "dated steps, goals", reqs: ["P1", "P2"], phase: "plan" },
   { id: "plandb", col: 6, lane: 3, label: "Plan · goals · steps", sub: "saved as a document", phase: "plan" },
   { id: "run", col: 6, lane: 0, label: "Run an agent", sub: "choices + material", phase: "agents" },
   { id: "retr", col: 7, lane: 1, label: "Retrieve passages", sub: "≤ 48k characters", phase: "agents" },
-  { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Mini / Pro / Max", reqs: ["A1", "A2", "A3"], phase: "agents" },
+  { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Pro (default) / Max", reqs: ["A1", "A2", "A3"], phase: "agents" },
   { id: "tpl", col: 8, lane: 1, label: "Template Studio engine", sub: "HTML · PDF · DOCX · PPTX", phase: "agents" },
   { id: "design", col: 8, lane: 2, label: "AI template design", sub: "optional", reqs: ["T1", "T2", "T3", "T4"], phase: "design" },
   { id: "res", col: 9, lane: 3, label: "Resources", sub: "quiz · flashcards · summary", phase: "agents" },
   { id: "doit", col: 9, lane: 0, label: "Do it on LUNA", sub: "answer · export", phase: "track" },
   { id: "perf", col: 10, lane: 1, label: "Mastery engine", sub: "rules, no AI", phase: "track" },
-  { id: "coach", col: 11, lane: 2, label: "AI coach", sub: "GPT-4o mini", reqs: ["F1"], phase: "track" },
+  { id: "coach", col: 11, lane: 2, label: "AI coach", sub: "GPT-4o", reqs: ["F1"], phase: "track" },
   { id: "attempts", col: 10, lane: 3, label: "Attempts · mastery", sub: "per concept", phase: "track" },
   { id: "market", col: 11, lane: 0, label: "Marketplace", sub: "sell agents, templates, resources, plans", phase: "track" },
   { id: "lunas", col: 11, lane: 3, label: "Lunas ledger", sub: "buy · spend · earn", phase: "track" }
@@ -649,7 +649,7 @@ export const PERFORMANCE_METRICS = [
 
 export const RISKS = [
   { level: "high", title: "Uploads are not charged in lunas", body: "A 10-page PDF costs ≈ $0.06 in OpenAI fees, but only agent runs deduct lunas today. Upload cost is absorbed by the subscription." },
-  { level: "high", title: "1 luna = 1 token regardless of model", body: "Luna 3 Pro (GPT-4o) output costs ~17× Luna 3 Mini's per token. A Pro run and a Mini run are charged the same number of lunas for very different costs." },
+  { level: "high", title: "Quality floor raised to Pro: agent calls cost ~17× more", body: "Luna 3 Mini was too inaccurate, so every generation call now runs on GPT-4o. A 10-question quiz costs ≈ $0.02 instead of ≈ $0.001. With 1 luna = 1 token and the same number of lunas charged for every model, the gross margin on agent runs depends heavily on the luna price — see the lunas section." },
   { level: "med", title: "Ledger and marketplace live in the browser", body: "Balances, listings and stores are in localStorage: not shareable between devices, and editable by the user. Payments and server-side accounting are the next build." },
   { level: "med", title: "Original files kept as base64 in Postgres", body: "+33 % size and ~6× the price per GB of Supabase Storage. Moving originals to Storage shrinks the database and the bill." },
   { level: "med", title: "Output caps can cut long files", body: "Slides/images/backup PDF path are capped at 8,192 output tokens; Claude scan fallback at 4,096. Very long decks or scans may be truncated." },

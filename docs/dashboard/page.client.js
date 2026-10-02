@@ -100,17 +100,17 @@
 
   var USAGE_ROWS = [
     ["uploadsPdf", "PDF uploads"], ["pages", "Pages per PDF"], ["uploadsDocx", "Word uploads"],
-    ["plans", "Study plans generated"], ["revises", "Re-plans"], ["agentRunsMini", "Agent runs · Mini"], ["agentRunsPro", "Agent runs · Pro"],
+    ["plans", "Study plans generated"], ["revises", "Re-plans"], ["agentRuns", "Agent runs · Pro"], ["agentRunsMax", "Agent runs · Max"],
     ["resourceConcepts", "Resources tagged"], ["coach", "Coach readings"], ["templateDesigns", "AI template designs"], ["storageMb", "Stored (MB, total)"]
   ];
 
   function perUser(u) {
     var uploads = u.uploadsPdf * (u.pages * (U.pdfPage + U.chunksPerPage * U.embedChunk) + U.concepts) + u.uploadsDocx * U.docxUpload;
     var plans = u.plans * U.plan + u.revises * U.revise;
-    var agents = u.agentRunsMini * U.agentMini + u.agentRunsPro * U.agentPro;
+    var agents = u.agentRuns * U.agentPro + u.agentRunsMax * U.agentMax;
     var coach = u.resourceConcepts * U.resourceConcepts + u.coach * U.coach;
     var design = u.templateDesigns * U.design;
-    var lunas = (u.agentRunsMini + u.agentRunsPro) * U.agentTokens;
+    var lunas = (u.agentRuns + u.agentRunsMax) * U.agentTokens;
     return { uploads: uploads, plans: plans, agents: agents, coach: coach, design: design, total: uploads + plans + agents + coach + design, lunas: lunas };
   }
 
@@ -230,7 +230,7 @@
     if (!$("#money-unit")) return;
     var perLuna = S.lunaPriceM / 1e6;
     var tokens = U.agentTokens;
-    var models = [["Luna 3 Mini", "gpt-4o-mini", U.agentMini], ["Luna 3 Pro", "gpt-4o", U.agentPro], ["Luna 3 Max", "gpt-4.1", U.agentMax]];
+    var models = [["Luna 3 Pro (default)", "gpt-4o", U.agentPro], ["Luna 3 Max", "gpt-4.1", U.agentMax]];
     var rows = models.map(function (m) {
       var charged = tokens * perLuna;
       var margin = (charged - m[2]) / charged;
@@ -248,7 +248,7 @@
     var seller = gross - fee;
     $("#money-market").innerHTML =
       '<div class="tiles small">' + tile("Buyers pay", usd(gross), n0(gross / Math.max(perLuna, 1e-9)) + " lunas") + tile("Platform keeps", usd(fee), pct(m.fee / 100) + " fee") + tile("Seller earns", usd(seller), n0(seller / Math.max(perLuna, 1e-9)) + " lunas") + "</div>" +
-      '<p class="note">The seller\'s earned lunas can pay for ≈ <b>' + n0(seller / Math.max(U.agentMini, 1e-9)) + "</b> more 10-question quizzes on Luna 3 Mini — or, once cash-out exists, be withdrawn.</p>";
+      '<p class="note">The seller\'s earned lunas can pay for ≈ <b>' + n0(seller / Math.max(U.agentPro, 1e-9)) + "</b> more 10-question quizzes on Luna 3 Pro — or, once cash-out exists, be withdrawn.</p>";
 
     var tierRows = T.usage.map(function (u) {
       var id = u.id;

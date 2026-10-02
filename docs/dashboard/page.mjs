@@ -131,15 +131,14 @@ function unitRows(data) {
     { name: "Upload a photo / handwriting", usd: u.image + u.concepts, tokens: tok(R("U3")), stage: "upload", basis: "estimated", note: "Vision transcription (U3) + concept tree" },
     { name: "Upload a Word document (.docx)", usd: u.docxUpload, tokens: 0, stage: "upload", basis: "estimated", note: "Parsed locally — only embeddings and the concept tree use AI" },
     { name: "Save to the cloud · per document, per month", usd: u.storageDocMonth, tokens: 0, stage: "upload", basis: "measured", note: `≈ ${u.storageDocMb.toFixed(2)} MB per document in Postgres (original + text + preview + vectors)` },
-    { name: "Build the concept map", usd: u.concepts, tokens: tok(R("U7")), stage: "upload", basis: "measured", note: "U7 · GPT-4o mini" },
+    { name: "Build the concept map", usd: u.concepts, tokens: tok(R("U7")), stage: "upload", basis: "measured", note: "U7 · GPT-4o" },
     { name: "Generate a study plan", usd: u.plan, tokens: tok(R("P1")), stage: "plan", basis: "measured", note: "P1 · GPT-4o" },
     { name: "Re-plan after adding material", usd: u.revise, tokens: tok(R("P2")), stage: "plan", basis: "estimated", note: "P2 · GPT-4o" },
-    { name: "Run an agent · Luna 3 Mini · 10 questions", usd: u.agentMini, tokens: u.agentTokens, stage: "agents", basis: "measured", note: "A1 · GPT-4o mini" },
-    { name: "Run an agent · Luna 3 Pro · 10 questions", usd: u.agentPro, tokens: u.agentTokens, stage: "agents", basis: "estimated", note: "A1 · GPT-4o (same tokens, higher price)" },
+    { name: "Run an agent · Luna 3 Pro (default) · 10 questions", usd: u.agentPro, tokens: u.agentTokens, stage: "agents", basis: "estimated", note: "A1 · GPT-4o (tokens measured on Mini, priced at Pro)" },
     { name: "Run an agent · Luna 3 Max · 10 questions", usd: u.agentMax, tokens: u.agentTokens, stage: "agents", basis: "estimated", note: "A1 · GPT-4.1" },
-    { name: "Tag a resource with concepts", usd: u.resourceConcepts, tokens: tok(R("P3")), stage: "plan", basis: "estimated", note: "P3 · GPT-4o mini" },
+    { name: "Tag a resource with concepts", usd: u.resourceConcepts, tokens: tok(R("P3")), stage: "plan", basis: "estimated", note: "P3 · GPT-4o" },
     { name: "Design a custom template (AI)", usd: u.design, tokens: tok(R("T1")) + tok(R("T2")) + tok(R("T3")), stage: "design", basis: "estimated", note: "T1 + T2 + T3 (+ T4 about 30% of the time)" },
-    { name: "Performance coach reading", usd: u.coach, tokens: tok(R("F1")), stage: "track", basis: "estimated", note: "F1 · GPT-4o mini" },
+    { name: "Performance coach reading", usd: u.coach, tokens: tok(R("F1")), stage: "track", basis: "estimated", note: "F1 · GPT-4o" },
     { name: "Mastery, charts, grading, exports", usd: 0, tokens: 0, stage: "track", basis: "measured", note: "Rule-based — no AI call" }
   ];
   return rows;
@@ -224,7 +223,7 @@ export function renderPage({ data, css, client }) {
       <div class="kpi"><strong>${totalCalls}</strong><span>AI requests catalogued</span></div>
       <div class="kpi"><strong>${prompts}</strong><span>exact prompts, read from the code</span></div>
       <div class="kpi"><strong>${usd(data.unit.pdfUpload10)}</strong><span>to upload a 10-page PDF</span></div>
-      <div class="kpi"><strong>${usd(data.unit.agentMini)}</strong><span>to generate a 10-question quiz</span></div>
+      <div class="kpi"><strong>${usd(data.unit.agentPro)}</strong><span>to generate a 10-question quiz</span></div>
     </div>
     <p class="hint">Press <kbd>P</kbd> for presentation mode · click any box in the diagram to jump to its request · open any request to see its prompt</p>
     ${warningBanner}
@@ -280,7 +279,7 @@ export function renderPage({ data, css, client }) {
   <div class="wrap wide">
     <p class="eyebrow">4 · Unit costs</p>
     <h2>What one action costs</h2>
-    <p class="lead">Uploading is the most expensive thing a user does because the model reads every page. Everything after that — plans, quizzes, coaching — costs a fraction of a cent.</p>
+    <p class="lead">Uploading is the most expensive thing a user does because the model reads every page. Everything after that — plans, quizzes, coaching — costs about a cent or two.</p>
     <div class="toolbar"><span>Bar scale</span><button type="button" class="seg on" data-scale="linear">Linear</button><button type="button" class="seg" data-scale="log">Log (see the small ones)</button></div>
     ${unitChart(data)}
     <ul class="insights">${data.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>

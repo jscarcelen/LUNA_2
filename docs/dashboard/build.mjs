@@ -113,7 +113,6 @@ const unit = {
   image: costOf("gpt-4o", image.fixedIn, image.outPer),
   plan: byId.P1.costUsd,
   revise: byId.P2.costUsd,
-  agentMini: agentCost("gpt-4o-mini"),
   agentPro: agentCost("gpt-4o"),
   agentMax: agentCost("gpt-4.1"),
   agentTokens: byId.A1.tokens.in + byId.A1.tokens.out,

@@ -10,7 +10,8 @@ import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
 import { isGeneratedDocument, splitDocuments } from "./revise";
-import { ensurePlanFolders, linkMaterial } from "./folders";
+import { planAgentCatalog } from "./agents";
+import { deletePlanEverything, ensurePlanFolders, linkMaterial, planDeletionScope } from "./folders";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
@@ -292,10 +293,13 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
+  // Agents anywhere in the workspace (like the AI Tools hub) can be put in a plan's scope.
+  const agentDocuments = useMemo(() => (workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects || []).flatMap((s) => s.documents || []).filter((d) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")), [workspaces, selectedWorkspaceId]);
+  const agentCatalog = useMemo(() => planAgentCatalog(agentDocuments), [agentDocuments]);
   const folders = subject?.folders || [];
   const [openId, setOpenId] = useState("");
   const [tab, setTab] = useState("plans");
@@ -513,6 +517,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       const result = await executePlan({
         plan: row.plan,
         documents,
+        agentDocuments,
         workspaceId: selectedWorkspaceId,
         subjectId: selectedSubjectId,
         folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
@@ -529,43 +534,36 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   }
 
   /**
-   * Delete a study plan and — optionally — the auto-generated materials it produced and/or
-   * the activity-attempt records for its resources.
+   * Delete a study plan together with its folder and the material generated into it. Uploaded
+   * material is only unlinked from the plan's folders. Recorded attempts (performance metrics) go
+   * only if asked.
    */
-  async function deletePlan(planRow, { materials, metrics }) {
+  async function deletePlan(planRow, { metrics }) {
     if (!onRemoveDocument) return;
     setBusy(true);
     try {
       const plan = planRow.plan;
-      const toDelete = [planRow.document.id];
-
-      if (materials) {
-        // Only remove documents that were auto-generated (item.generate) and still exist
-        const generatedIds = (plan.items || [])
-          .filter((item) => item.generate && item.resourceId)
-          .map((item) => item.resourceId);
-        toDelete.push(...generatedIds);
-      }
+      const scope = planDeletionScope(planRow.document, plan, { folders, documents });
+      // Practice the plan built for itself, even if it was filed somewhere else since.
+      const built = (plan.items || []).filter((item) => item.generate && item.resourceId).map((item) => item.resourceId);
+      const extra = built.filter((id) => documents.some((doc) => doc.id === id));
 
       if (metrics) {
         // Remove activity-attempt documents for any resource in this plan
         const resourceIds = new Set((plan.items || []).map((item) => item.resourceId).filter(Boolean));
-        const attemptIds = documents
+        extra.push(...documents
           .filter((doc) => {
             if (!(doc.tags || []).includes("activity-attempt")) return false;
             try { return resourceIds.has(JSON.parse(doc.content || "{}").activityDocumentId); }
             catch { return false; }
           })
-          .map((doc) => doc.id);
-        toDelete.push(...attemptIds);
+          .map((doc) => doc.id));
       }
 
-      for (const id of [...new Set(toDelete)]) {
-        await onRemoveDocument(id);
-      }
+      await deletePlanEverything(scope, { planDocumentId: planRow.document.id, extraDocumentIds: [...new Set(extra)], documents, folders, onRemoveDocument, onUpdateDocumentMeta, onRemoveFolder });
       setOpenId("");
       setDeletingPlan(null);
-      setStatus(`Plan "${plan.name}" deleted.`);
+      setStatus(`Plan "${plan.name}" deleted${scope.folderId ? ", with its folder and generated material" : ""}.`);
     } catch (error) {
       setStatus(String(error.message || error));
     } finally {
@@ -637,6 +635,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 {children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"} (${wholeProgress.done}/${wholeProgress.total} in total)` : ""}
               </p>
               {plan.note ? <p className="m-0 mt-2 max-w-2xl text-sm text-ink">{plan.note}</p> : null}
+              {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Agents in scope: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none — studying the material only"}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               {plan.items.some((item) => item.generate && !item.resourceId) ? (
@@ -962,7 +961,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
         {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
-        {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
+        {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
         {/* ── Rebuild confirmation modal ── */}
         {rebuildConfirmOpen && (
@@ -1230,11 +1229,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       )}
 
       {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
-      {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
+      {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
       {generating ? (
         <GeneratePlanDialog
           documents={documents}
+          agents={agentCatalog}
           folders={folders}
           resources={resources}
           attempts={attempts}
@@ -1252,6 +1252,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             const result = await executePlan({
               plan,
               documents,
+              agentDocuments,
               workspaceId: selectedWorkspaceId,
               subjectId: selectedSubjectId,
               folderIds: planFolders.generatedId ? [planFolders.generatedId] : [],
@@ -1267,9 +1268,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   );
 }
 
-function DeletePlanDialog({ planRow, documents, busy, onCancel, onConfirm }) {
+function DeletePlanDialog({ planRow, documents, folders, busy, onCancel, onConfirm }) {
   const plan = planRow.plan;
-  const generatedCount = (plan.items || []).filter((item) => item.generate && item.resourceId).length;
+  const scope = planDeletionScope(planRow.document, plan, { folders, documents });
+  const built = new Set((plan.items || []).filter((item) => item.generate && item.resourceId).map((item) => item.resourceId));
+  const generatedCount = new Set([...scope.generatedIds, ...[...built].filter((id) => documents.some((doc) => doc.id === id))]).size;
   const resourceIds = new Set((plan.items || []).map((item) => item.resourceId).filter(Boolean));
   const metricsCount = documents.filter((doc) => {
     if (!(doc.tags || []).includes("activity-attempt")) return false;
@@ -1277,28 +1280,21 @@ function DeletePlanDialog({ planRow, documents, busy, onCancel, onConfirm }) {
     catch { return false; }
   }).length;
 
-  const [delMaterials, setDelMaterials] = useState(false);
   const [delMetrics, setDelMetrics] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
         <h4 className="m-0 text-lg font-bold text-ink">Delete &ldquo;{plan.name}&rdquo;?</h4>
-        <p className="m-0 mt-1 text-sm text-soft-ink">The plan document will be permanently removed. Choose what else to delete:</p>
+        <p className="m-0 mt-1 text-sm text-soft-ink">This permanently removes:</p>
+        <ul className="m-0 mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
+          <li>the plan</li>
+          {scope.folderId ? <li>its folder &ldquo;{scope.folderName}&rdquo; in the workspace</li> : null}
+          <li>{generatedCount ? `${generatedCount} generated resource${generatedCount === 1 ? "" : "s"} (quizzes, summaries…) built for it` : "no generated resources (none were built)"}</li>
+        </ul>
+        <p className="m-0 mt-2 text-xs text-soft-ink">Your uploaded material is not deleted — it just leaves the plan&rsquo;s folder and stays wherever else it is filed.</p>
 
         <div className="mt-4 grid gap-3">
-          <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${delMaterials ? "border-[var(--color-danger)]/40 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 hover:border-ink/20"}`}>
-            <input type="checkbox" className="mt-0.5 accent-[var(--color-danger)]" checked={delMaterials} onChange={(e) => setDelMaterials(e.target.checked)} disabled={!generatedCount} />
-            <div>
-              <p className="m-0 text-sm font-semibold text-ink">Also delete generated materials</p>
-              <p className="m-0 mt-0.5 text-xs text-soft-ink">
-                {generatedCount
-                  ? `${generatedCount} auto-built resource${generatedCount === 1 ? "" : "s"} will be removed from the workspace.`
-                  : "No auto-generated materials found for this plan."}
-              </p>
-            </div>
-          </label>
-
           <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${delMetrics ? "border-[var(--color-danger)]/40 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 hover:border-ink/20"}`}>
             <input type="checkbox" className="mt-0.5 accent-[var(--color-danger)]" checked={delMetrics} onChange={(e) => setDelMetrics(e.target.checked)} disabled={!metricsCount} />
             <div>
@@ -1318,7 +1314,7 @@ function DeletePlanDialog({ planRow, documents, busy, onCancel, onConfirm }) {
             type="button"
             disabled={busy}
             className="inline-flex items-center justify-center rounded-full bg-[var(--color-danger)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-            onClick={() => onConfirm({ materials: delMaterials, metrics: delMetrics })}
+            onClick={() => onConfirm({ metrics: delMetrics })}
           >
             {busy ? "Deleting…" : "Delete plan"}
           </button>

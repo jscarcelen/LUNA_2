@@ -16,6 +16,8 @@ import {
   splitDocumentsByFolder,
   normalizeWorkspaceColor
 } from "../modules/core";
+import { parsePlan } from "../modules/plans/plan";
+import { deletePlanEverything, planDeletionScope } from "../modules/plans/folders";
 
 function getUploadedDocuments(documents = []) {
   return documents.filter((doc) => doc.sourceType !== "generated");
@@ -2093,6 +2095,18 @@ export function WorkspacesManagerView({
   }
 
   function handleRemoveDoc(documentId) {
+    // A study plan takes its folder and the material generated into it along with it.
+    const planDoc = documents.find((item) => item.id === documentId);
+    const plan = planDoc ? parsePlan(planDoc) : null;
+    if (plan) {
+      const scope = planDeletionScope(planDoc, plan, { folders, documents });
+      const parts = [scope.folderId ? `its folder "${scope.folderName}"` : "", scope.generatedIds.length ? `${scope.generatedIds.length} generated resource${scope.generatedIds.length === 1 ? "" : "s"}` : ""].filter(Boolean);
+      if (!window.confirm(`Delete the study plan "${plan.name}"${parts.length ? ` together with ${parts.join(" and ")}` : ""}? Uploaded material is kept.`)) return;
+      deletePlanEverything(scope, { planDocumentId: documentId, documents, folders, onRemoveDocument, onUpdateDocumentMeta, onRemoveFolder });
+      if (previewDoc?.id === documentId) setPreviewDoc(null);
+      if (scope.treeIds.includes(activeFolderId)) setActiveFolderId("");
+      return;
+    }
     if (!window.confirm("Remove this document?")) return;
     onRemoveDocument(documentId);
     if (previewDoc?.id === documentId) setPreviewDoc(null);

@@ -4,6 +4,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+/** The schema with `generate` limited to the plan's agent scope (plus anything already planned). */
+function schemaFor(keys) {
+  const schema = JSON.parse(JSON.stringify(SCHEMA));
+  schema.properties.items.items.properties.generate.enum = ["", ...keys];
+  return schema;
+}
+
 const SCHEMA = {
   type: "object", additionalProperties: false,
   properties: {
@@ -59,7 +66,16 @@ export async function POST(request) {
     const done = Array.isArray(body?.done) ? body.done : [];
     const pending = Array.isArray(body?.pending) ? body.pending : [];
     const fresh = Array.isArray(body?.newUploaded) ? body.newUploaded : [];
-    const kinds = Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"];
+    // The agents the learner allowed when the plan was made; new practice stays inside that scope.
+    const scoped = Array.isArray(body?.agents);
+    const agents = scoped ? body.agents.filter((agent) => agent?.id && Array.isArray(agent.makes) && agent.makes.length) : [];
+    const kinds = scoped ? [...new Set(agents.flatMap((agent) => agent.makes))] : (Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"]);
+    const schemaKeys = [...new Set([...kinds, ...pending.map((item) => item.generate).filter(Boolean)])];
+    const agentSection = scoped && !agents.length
+      ? `\n\nThe learner allowed NO agents: do not ask Luna to generate any resource (generate must be empty on every step); schedule studying the material itself.`
+      : agents.length
+      ? `\nAgents Luna may use (the learner's chosen scope; use only what is needed):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}\n`
+      : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
     const performance = body?.performance || null;
     const conceptMap = Array.isArray(body?.conceptMap) ? body.conceptMap : [];
@@ -78,7 +94,7 @@ export async function POST(request) {
       body: JSON.stringify({
         model: process.env.LUNA_PLAN_MODEL || "gpt-4o",
         temperature: 0.2,
-        response_format: { type: "json_schema", json_schema: { name: "revised_plan", strict: true, schema: SCHEMA } },
+        response_format: { type: "json_schema", json_schema: { name: "revised_plan", strict: true, schema: schemaFor(schemaKeys) } },
         messages: [
           {
             role: "system",
@@ -89,7 +105,7 @@ Hard rules:
 3. Keep each pending step that is still useful: return it with its keepId (you may move its date and change its minutes). Steps that Luna has already built (built=true) must be kept. Planned-but-unbuilt practice (built=false, generate set) may be replaced.
 4. For each NEW uploaded document add a reading step (generate "", sourceId = the document id) and practice generated from it, using only these kinds: ${kinds.join(", ")} (generate = the kind, sourceId = the document id). New GENERATED resources are already pending steps: keep them (keepId) and place them in the schedule.
 5. Space repetition, give weak concepts more time and earlier practice, and leave the last fifth of the remaining time for review and a practice exam instead of new content.
-6. Every step names the concepts it serves.${conceptSection}
+6. Every step names the concepts it serves.${agentSection}${conceptSection}
 Dates are YYYY-MM-DD, between ${today} and ${deadline}.`
           },
           {

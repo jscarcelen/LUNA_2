@@ -40,6 +40,13 @@ const SCHEMA = {
   required: ["name", "note", "goals", "items"]
 };
 
+/** The schema with `generate` limited to what the learner's agent scope can make. */
+function schemaFor(keys) {
+  const schema = JSON.parse(JSON.stringify(SCHEMA));
+  schema.properties.items.items.properties.generate.enum = ["", ...keys];
+  return schema;
+}
+
 /**
  * Builds a study plan from material and a deadline.
  *
@@ -54,7 +61,15 @@ export async function POST(request) {
     const deadline = String(body?.deadline || "").trim();
     const today = new Date().toISOString().slice(0, 10);
     const materials = Array.isArray(body?.materials) ? body.materials.slice(0, 40) : [];
-    const kinds = Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"];
+    // The agents the learner allowed (a scope, not a checklist). Older callers send plain kinds.
+    const scoped = Array.isArray(body?.agents);
+    const agents = scoped ? body.agents.filter((agent) => agent?.id && Array.isArray(agent.makes) && agent.makes.length) : [];
+    const kinds = scoped ? [...new Set(agents.flatMap((agent) => agent.makes))] : (Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"]);
+    const agentSection = scoped && !agents.length
+      ? `\n\nThe learner allowed NO agents: do not ask Luna to generate any resource (generate must be empty on every step); schedule studying the material itself.`
+      : agents.length
+      ? `\n\nAgents Luna may use to build resources (the learner chose this scope; use only what the plan needs — you do not have to use all of them, and never anything else):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
+      : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
     const performance = body?.performance || null;
     if (!deadline) return NextResponse.json({ error: "A deadline is needed." }, { status: 400 });
@@ -81,12 +96,12 @@ export async function POST(request) {
       body: JSON.stringify({
         model: process.env.LUNA_PLAN_MODEL || "gpt-4o",
         temperature: 0.3,
-        response_format: { type: "json_schema", json_schema: { name: "study_plan", strict: true, schema: SCHEMA } },
+        response_format: { type: "json_schema", json_schema: { name: "study_plan", strict: true, schema: schemaFor(kinds) } },
         messages: [
           {
             role: "system",
             content: `You are a study planner. Turn material and a deadline into a schedule that a person can actually keep.
-Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${conceptMapSection}`
+Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${agentSection}${conceptMapSection}`
           },
           {
             role: "user",

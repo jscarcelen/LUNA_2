@@ -14,7 +14,7 @@ import { attachSources, buildActivity } from "../../../activities/engine/activit
 import { renderActivityHtml } from "../../../activities/engine/html";
 import { ActivityPlayer } from "../../../activities/ActivityPlayer";
 import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
-import { buildResource, parseResource } from "../../../resources/resource";
+import { buildResource, parseResource, trimSources } from "../../../resources/resource";
 
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const OUTPUT_STYLES_KEY = "luna.outputStyles.v1";
@@ -678,7 +678,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const payload = buildResource({
         name,
         activity: activity && activity.questions.length ? { ...activity, title: name } : null,
-        data: { ...(output?.data || {}), items: output?.items || [], ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
+        data: { ...(output?.data || {}), items: output?.items || [], sources: trimSources(output?.sources), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
         request: currentRequest(),
         meta: {
           agentId: agentDocument?.id || "",

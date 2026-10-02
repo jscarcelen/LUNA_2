@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ResourceExports } from "./ResourceExports";
+import { ResourceStyle, resourceBlocks } from "./ResourceStyle";
 import { SKILLS } from "../activities/engine/activity";
 import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
 
@@ -13,6 +14,7 @@ const field = "rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs text
 
 const TABS = [
   ["do", "Do it on Luna"],
+  ["style", "Format & colour"],
   ["concepts", "What it teaches"],
   ["questions", "Questions & sources"],
   ["export", "Downloads"],
@@ -36,6 +38,7 @@ export function ResourceDetail({
   onClassify,
   onBulkClassify,
   onSaveConcepts,
+  onSaveStyles,
   onStatus
 }) {
   const [tab, setTab] = useState(row.resource.activity?.questions?.length ? "do" : "concepts");
@@ -87,7 +90,7 @@ export function ResourceDetail({
 
   return (
     <div className="tw-scope fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-      <div className="mx-auto grid max-w-4xl gap-3">
+      <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
           <div className="min-w-0">
             <h3 className="m-0 truncate text-2xl font-bold tracking-tight text-ink">{row.resource.name}</h3>
@@ -107,13 +110,21 @@ export function ResourceDetail({
         </header>
 
         <div className="flex flex-wrap gap-1 self-start rounded-xl bg-[var(--surface-soft)] p-1">
-          {TABS.map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
+          {TABS.filter(([value]) => value !== "style" || resourceBlocks(row.resource)).map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
         </div>
 
         {tab === "do" ? (
           row.resource.activity?.questions?.length
             ? <section className={`${card} p-5`}><p className="m-0 text-sm text-soft-ink">{row.resource.activity.questions.length} questions. Answers are checked and every attempt is recorded.</p><button type="button" className={`${primaryBtn} mt-3`} onClick={() => onPlay?.(row)}>{stats?.times ? "Do it again" : "Start"}</button></section>
             : <section className={`${card} p-5`}><p className="m-0 text-sm text-soft-ink">This resource has nothing to answer — it is a reading document. Use Downloads.</p></section>
+        ) : null}
+
+        {tab === "style" ? (
+          <section className={`${card} p-5`}>
+            <p className={kicker}>Format &amp; colour</p>
+            <p className="m-0 mb-3 mt-1 text-xs text-soft-ink">Restyle this resource whenever you like: pick the format and colour of each component, check every page size and view, and export from here. The content stays exactly the same.</p>
+            <ResourceStyle resource={row.resource} onSaveStyles={(styles) => onSaveStyles?.(row, styles)} onStatus={onStatus} />
+          </section>
         ) : null}
 
         {tab === "concepts" ? (
@@ -189,7 +200,7 @@ export function ResourceDetail({
           </section>
         ) : null}
 
-        {tab === "export" ? <section className={`${card} p-5`}><p className={kicker}>Every view of its template</p><div className="mt-3"><ResourceExports resource={row.resource} template={template} onStatus={onStatus} /></div></section> : null}
+        {tab === "export" ? <section className={`${card} p-5`}><p className={kicker}>Every view of its template</p>{!template && resourceBlocks(row.resource) ? <p className="m-0 mt-2 text-sm text-soft-ink">Preview and export this resource from the <button type="button" className="font-semibold text-[var(--accent)]" onClick={() => setTab("style")}>Format &amp; colour</button> tab.</p> : null}<div className="mt-3"><ResourceExports resource={row.resource} template={template} onStatus={onStatus} /></div></section> : null}
 
         {tab === "results" ? (
           <section className={`${card} p-5`}>

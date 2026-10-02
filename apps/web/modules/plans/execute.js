@@ -10,7 +10,8 @@ import { QUIZ_AGENT } from "../ai-tools/tools/quiz-generator/quizAgent";
 import { createVocabularyFlashcardsSpec } from "../agent-studio/engine/model";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { buildActivity } from "../activities/engine/activity";
-import { buildResource, RESOURCE_TAG } from "../resources/resource";
+import { buildResource, RESOURCE_TAG, trimSources } from "../resources/resource";
+import { isCustomKey } from "./agents";
 
 const FLASHCARDS_AGENT = runConfigFromSpec(createVocabularyFlashcardsSpec());
 
@@ -63,26 +64,53 @@ export const STEP_RECIPES = {
 };
 
 function answersFor(agent, preset) {
-  return (agent.questions || []).map((question) => ({ question: question.text, answer: preset[question.id] ?? question.default ?? "" }));
+  return (agent.questions || []).map((question) => ({
+    question: question.text,
+    // A saved agent's own default, else its first option, so a required choice is never left blank.
+    answer: preset[question.id] ?? question.default ?? question.defaultValue ?? (question.type === "multi-select" ? [] : question.options?.[0] ?? "")
+  }));
+}
+
+/** A saved agent, read from its document and recompiled from its spec like the run page does. */
+function customRecipe(agentDocuments, key) {
+  const documentId = String(key).slice("agent:".length);
+  const document = agentDocuments.find((item) => item.id === documentId);
+  if (!document) throw new Error("This plan uses an agent that is no longer in the workspace.");
+  let parsed = JSON.parse(String(document.content || "{}"));
+  if (parsed.spec && Array.isArray(parsed.spec.outputSchema)) {
+    try {
+      const { spec, ...rest } = parsed;
+      parsed = { ...rest, ...runConfigFromSpec(spec), scope: rest.scope };
+    } catch { /* keep the stored config */ }
+  }
+  return { agent: parsed, label: parsed.name || "Agent", answers: {}, custom: true, documentId };
 }
 
 /**
  * Runs one step: generates with the right agent, saves the result as a resource in the plan's
  * folder, and returns what the step should now point at.
  */
-export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "" }) {
-  const recipe = STEP_RECIPES[step.generate] || STEP_RECIPES.quiz;
+export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "", agentDocuments = [] }) {
+  const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
+  const answers = answersFor(agent, recipe.answers);
   const config = {
     name: agent.name,
     instructions: agent.instructions,
-    knowledgeText: "",
-    questionAnswers: answersFor(agent, recipe.answers),
+    knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
+    questionAnswers: answers,
     outputExample: agent.outputExample || "",
     model: agent.model,
     creativity: agent.creativity,
     template: agent.template,
-    scope: { workspaceId, subjectId, documentIds: sourceDocumentIds, styleDocumentIds: [] }
+    ...(recipe.custom ? {
+      outputJsonSchema: agent.outputJsonSchema || null,
+      validationRules: agent.validationRules || [],
+      spec: agent.spec || null,
+      contextPrompt: "",
+      inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
+    } : {}),
+    scope: { workspaceId, subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
   };
 
   const response = await fetch("/api/ai-tools/agent-builder", {
@@ -93,11 +121,13 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || `Could not generate the ${recipe.label.toLowerCase()}`);
 
-  const items = Array.isArray(data.items) ? data.items : [];
-  if (!items.length) throw new Error(`The agent returned nothing for “${step.title}”.`);
+  const blocks = data.isBlockOutput && Array.isArray(data.blocks) ? data.blocks : null;
+  const items = blocks ? [] : (Array.isArray(data.items) ? data.items : []);
+  if (!items.length && !blocks?.length) throw new Error(`The agent returned nothing for “${step.title}”.`);
 
   let activity = null;
   try {
+    if (blocks) throw new Error("block output has no questions");
     const schemaFields = Array.isArray(agent.spec?.outputSchema) && agent.spec.outputSchema.length ? agent.spec.outputSchema : fieldDefs(agent.template.fields);
     activity = buildActivity(schemaFields, { ...(data.data || {}), items }, { title: step.title, agentName: agent.name });
   } catch {
@@ -106,7 +136,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   const resource = buildResource({
     name: step.title,
     activity: activity?.questions?.length ? activity : null,
-    data: { items },
+    data: blocks ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources) } : { items, sources: trimSources(data.sources) },
     request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds },
     meta: { agentName: agent.name, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
   });
@@ -116,7 +146,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   const content = JSON.stringify(resource, null, 2);
   const tags = [RESOURCE_TAG, ...(resource.activity ? ["activity"] : []), ...(step.dueDate ? [`due:${step.dueDate}`] : [])];
   const saved = await onSaveGeneratedQuizDocument(
-    { folderIds, tags, file: { name: `${step.title}.resource.json`, content, preview: `${items.length} items`, sizeBytes: content.length } },
+    { folderIds, tags, file: { name: `${step.title}.resource.json`, content, preview: `${blocks ? blocks.length : items.length} ${blocks ? "blocks" : "items"}`, sizeBytes: content.length } },
     subjectId
   );
   return { documentId: saved?.id || saved?.documentId || "", title: step.title, questions: activity?.questions?.length || 0, kind: recipe.label };
@@ -126,7 +156,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
  * Runs every step of a plan that promised material and has none yet, in order, reporting progress.
  * The plan is returned with each step pointing at the resource that was created for it.
  */
-export async function executePlan({ plan, documents = [], workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onProgress }) {
+export async function executePlan({ plan, documents = [], agentDocuments = [], workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onProgress }) {
   const pending = (plan.items || []).filter((item) => item.generate && !item.resourceId);
   if (!pending.length) return { plan, created: 0, failures: [] };
   const failures = [];
@@ -145,7 +175,8 @@ export async function executePlan({ plan, documents = [], workspaceId, subjectId
         subjectId,
         folderIds,
         onSaveGeneratedQuizDocument,
-        learnerNote: plan.note || ""
+        learnerNote: plan.note || "",
+        agentDocuments
       });
       const position = items.findIndex((item) => item.id === step.id);
       if (position >= 0) {
@@ -164,7 +195,10 @@ export async function executePlan({ plan, documents = [], workspaceId, subjectId
   }
 
   // Auto-generate summaries for reading steps that reference a document and have none yet.
-  const readingPending = (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId);
+  // Plans only use the agents of the AI agents tab, and the summary writer is not one of them, so a
+  // summary is built only for plans whose scope already includes it (made before that rule).
+  const summariesAllowed = Array.isArray(plan.agentScope) && plan.agentScope.some((agent) => (agent.makes || []).includes("summary"));
+  const readingPending = summariesAllowed ? (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId) : [];
   for (const step of readingPending) {
     onProgress?.({ index: created, total: pending.length + readingPending.length, title: `Summarising: ${step.title}` });
     try {

@@ -702,6 +702,7 @@ export function WorkspaceBrowser({
           onClassify={classify}
           onBulkClassify={bulkClassify}
           onSaveConcepts={(row, { concepts, context }) => updateResource(row, (resource) => ({ ...resource, concepts, context }))}
+          onSaveStyles={(row, outputStyles) => updateResource(row, (resource) => ({ ...resource, request: { ...(resource.request || {}), outputStyles } }))}
           onStatus={setStatus}
         />
       ) : null}

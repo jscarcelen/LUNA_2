@@ -206,6 +206,7 @@ export function AppShell() {
         <PlansPage
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onCreateFolder={handleCreateFolder}
+          onRemoveFolder={handleRemoveFolder}
           role={role}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}

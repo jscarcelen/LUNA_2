@@ -17,6 +17,14 @@ export function parseResource(document) {
 }
 
 /** Builds the stored payload. `request` is everything needed to regenerate (config + mapping). */
+/**
+ * The passages an output was written from, kept with the resource so restyling it later still cites
+ * and links the source of every answer. Trimmed: it is only needed to find the matching passage.
+ */
+export function trimSources(sources = []) {
+  return (Array.isArray(sources) ? sources : []).slice(0, 30).map((source) => ({ ...source, content: String(source?.content || "").slice(0, 800) }));
+}
+
 export function buildResource({ name, activity = null, data = {}, request = {}, meta = {} }) {
   return {
     kind: "resource",

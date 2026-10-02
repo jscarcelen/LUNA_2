@@ -737,3 +737,16 @@
   Findings worth knowing: uploads are not charged in lunas, 1 luna = 1 token whatever the model, and originals are
   stored as base64 in Postgres.
 
+
+## 2026-10-01 — Deleting a study plan cleans up after itself
+- `plans/folders.js` `planDeletionScope` / `deletePlanEverything`: deleting a plan (Plans page or the workspace tree) removes the plan
+  document, its folder (and subfolders) and the generated resources filed in it; uploaded material is only unlinked from the
+  plan's folders. "Study plans" is removed when it is left empty. Attempts are erased only if the checkbox is ticked.
+
+## 2026-10-01 — Agent scope for study plans; restyle any saved resource
+- Study plans choose their agents from the AI agents tab only: Quiz Generator and Vocabulary Flashcards (defaults) plus the learner's own and bought
+  agents (`plans/agents.js`; the plan stores `agentScope`, re-planning stays inside it). The Summary writer is no longer a plan agent and reading steps
+  no longer auto-summarise. Custom agents are run from their saved config (items or blocks).
+- Resource detail has a "Format & colour" tab (`resources/ResourceStyle.js`): the same component/format/colour panel and page-size × view preview as
+  Configure output, rebuilt from the saved data; the look is autosaved in `request.outputStyles` and exports come from the same preview.
+  New resources keep their source passages (`data.sources`) so answer citations survive restyling.

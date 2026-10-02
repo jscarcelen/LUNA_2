@@ -50,7 +50,7 @@ export function parsePlan(document) {
   }
 }
 
-export function buildPlan({ name, examDate = "", deadlines = [], startDate = "", learner = "", colour = PLAN_COLOURS[0], note = "", goals = [], items = [], materialIds = [], parentPlanId = "" }) {
+export function buildPlan({ name, examDate = "", deadlines = [], startDate = "", learner = "", colour = PLAN_COLOURS[0], note = "", goals = [], items = [], materialIds = [], parentPlanId = "", agentScope = null }) {
   return {
     kind: "study-plan",
     version: 2,
@@ -64,6 +64,7 @@ export function buildPlan({ name, examDate = "", deadlines = [], startDate = "",
     goals,
     items,
     materialIds,
+    agentScope,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };

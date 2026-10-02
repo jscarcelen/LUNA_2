@@ -15,6 +15,7 @@
  * turns its answer (or a local fallback) into the next plan.
  */
 import { addDays, newGoal, newItem, planProgress } from "./plan.js";
+import { generateKeys, generateLabel } from "./agents.js";
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -57,6 +58,8 @@ export function minutesPerWeek(plan, window) {
 
 /** Which practice the plan has been generating, so new material gets the same treatment. */
 export function plannedKinds(plan) {
+  // The agent scope chosen when the plan was made wins; older plans fall back to what they already generate.
+  if (Array.isArray(plan.agentScope)) return generateKeys(plan.agentScope);
   const kinds = [...new Set((plan.items || []).map((item) => item.generate).filter(Boolean))];
   return kinds.length ? kinds : ["quiz", "flashcards"];
 }
@@ -83,6 +86,7 @@ export function buildRevisePayload({ plan, doneIds, newUploaded = [], resourceNa
     deadlines: (plan.deadlines || []).map((deadline) => ({ title: deadline.title, date: deadline.date, kind: deadline.kind })),
     minutesPerWeek: minutesPerWeek(plan, window),
     kinds: plannedKinds(plan),
+    ...(Array.isArray(plan.agentScope) ? { agents: plan.agentScope } : {}),
     done: items.filter((item) => doneIds.has(item.id)).map(describe),
     pending: items.filter((item) => !doneIds.has(item.id)).map(describe),
     newUploaded: newUploaded.map((document) => ({ id: document.id, name: document.name, concepts: conceptsFor(document.id) })),
@@ -131,7 +135,7 @@ export function applyRevision(plan, revision, { doneIds, window, generatedIds = 
       generate: isResource ? "" : proposed.generate || "",
       sourceDocumentId: isResource ? "" : proposed.sourceId || "",
       concepts: proposed.concepts || [],
-      note: proposed.generate ? `Luna will generate a ${proposed.generate} from the new material.` : ""
+      note: proposed.generate ? `Luna will generate ${generateLabel(proposed.generate, plan.agentScope)} from the new material.` : ""
     });
   }
 
@@ -162,6 +166,13 @@ export function applyRevision(plan, revision, { doneIds, window, generatedIds = 
   };
 }
 
+const titleFor = (kind, scope) => {
+  const known = { flashcards: "Flashcards", summary: "Summary", exam: "Practice exam", worksheet: "Worksheet", quiz: "Quiz" }[kind];
+  if (known) return known;
+  const label = generateLabel(kind, scope || []);
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "Practice";
+};
+
 /**
  * The schedule without a model: the pending steps stay in order, every new document gets a
  * reading step plus the kinds of practice the plan already generates, every new resource is
@@ -172,7 +183,7 @@ export function fallbackRevision({ plan, doneIds, newUploaded = [], window }) {
   const kinds = plannedKinds(plan);
   const fresh = newUploaded.flatMap((document) => [
     { keepId: "", title: `Read: ${document.name}`, kind: "read", dueDate: "", minutes: 30, sourceId: document.id, generate: "", goal: "", concepts: [] },
-    ...kinds.map((kind) => ({ keepId: "", title: `${kind === "flashcards" ? "Flashcards" : kind === "summary" ? "Summary" : kind === "exam" ? "Practice exam" : kind === "worksheet" ? "Worksheet" : "Quiz"}: ${document.name}`, kind: kind === "exam" ? "exam" : "activity", dueDate: "", minutes: 30, sourceId: document.id, generate: kind, goal: "", concepts: [] }))
+    ...kinds.map((kind) => ({ keepId: "", title: `${titleFor(kind, plan.agentScope)}: ${document.name}`, kind: kind === "exam" ? "exam" : "activity", dueDate: "", minutes: 30, sourceId: document.id, generate: kind, goal: "", concepts: [] }))
   ]);
   const old = pending.map((item) => ({ keepId: item.id, title: item.title, kind: item.kind, dueDate: "", minutes: item.minutes || 30, sourceId: item.resourceId || "", generate: item.generate || "", goal: "", concepts: item.concepts || [] }));
   const isFinal = (entry) => entry.kind === "exam" || entry.kind === "review";

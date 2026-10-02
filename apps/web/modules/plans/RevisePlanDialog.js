@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dueLabel } from "./plan";
+import { generateLabel } from "./agents";
 import { applyRevision, buildRevisePayload, doneItemIds, fallbackRevision, reviseWindow } from "./revise";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
@@ -91,7 +92,7 @@ export function RevisePlanDialog({ row, documents = [], resources = [], attempts
                   {proposal.added.map((item) => (
                     <li key={item.id} className="flex items-center gap-2 rounded-lg border border-ink/8 px-2.5 py-1.5 text-sm text-ink">
                       <span className="min-w-0 flex-1 truncate">{item.title}</span>
-                      <span className="shrink-0 rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">{item.resourceId ? "generated resource" : item.generate ? `new ${item.generate}` : "from uploaded material"}</span>
+                      <span className="shrink-0 rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-semibold text-soft-ink">{item.resourceId ? "generated resource" : item.generate ? `new ${generateLabel(item.generate, row.plan.agentScope)}` : "from uploaded material"}</span>
                       <span className="shrink-0 text-xs text-soft-ink">{dueLabel(item.dueDate)}</span>
                     </li>
                   ))}

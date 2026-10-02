@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { PLAN_COLOURS, buildPlan, newDeadline, newGoal, newItem } from "./plan";
+import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
 
@@ -9,14 +10,6 @@ const input = "w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
 const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold";
-
-const KINDS = [
-  { id: "quiz", label: "Quizzes" },
-  { id: "flashcards", label: "Flashcards" },
-  { id: "summary", label: "Summaries" },
-  { id: "worksheet", label: "Worksheets" },
-  { id: "exam", label: "Practice exams" }
-];
 
 /**
  * Build a nested folder tree from a flat folders array.
@@ -98,11 +91,11 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], folders = [], resources = [], attempts = [], conceptMap = [], onCancel, onDone, onSavePlan, onBuild }) {
+export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], conceptMap = [], onCancel, onDone, onSavePlan, onBuild }) {
   const [name, setName] = useState("");
   const [deadline, setDeadline] = useState("");
   const [minutes, setMinutes] = useState(120);
-  const [kinds, setKinds] = useState(["quiz", "flashcards"]);
+  const [agentIds, setAgentIds] = useState(DEFAULT_PLAN_AGENT_IDS);
   const [picked, setPicked] = useState([]);
   const [busy, setBusy] = useState(false);
   const [buildNow, setBuildNow] = useState(true);
@@ -138,7 +131,8 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
     };
   }, [attempts]);
 
-  const toggleKind = (id) => setKinds((prev) => prev.includes(id) ? prev.filter((k) => k !== id) : [...prev, id]);
+  const toggleAgent = (id) => setAgentIds((prev) => prev.includes(id) ? prev.filter((k) => k !== id) : [...prev, id]);
+  const agentScope = useMemo(() => scopeFromIds(agentIds, agents), [agentIds, agents]);
   const toggleDoc = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((d) => d !== id) : [...prev, id]);
 
   async function generate() {
@@ -151,7 +145,9 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
         body: JSON.stringify({
           deadline,
           minutesPerWeek: minutes,
-          kinds,
+          // The scope of agents the plan may use to build resources.
+          agents: agentScope,
+          kinds: generateKeys(agentScope),
           performance,
           // Concept map: canonical concept list so the AI only uses these names as tags
           // and covers all of them across the plan.
@@ -184,7 +180,7 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
             goalId: goal?.id || "",
             minutes: item.minutes || 30
           }),
-          note: item.generate ? `Luna will generate a ${item.generate} from "${known?.name || "the material"}".` : (known ? `Material: ${known.name}` : ""),
+          note: item.generate ? `Luna will generate ${generateLabel(item.generate, agentScope)} from "${known?.name || "the material"}".` : (known ? `Material: ${known.name}` : ""),
           generate: item.generate || "",
           sourceDocumentId: item.sourceId || "",
           concepts: item.concepts || []
@@ -197,7 +193,8 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
         note: proposal.note || "",
         goals,
         items,
-        materialIds: picked
+        materialIds: picked,
+        agentScope
       });
       const saved = await onSavePlan?.(plan);
       const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.`;
@@ -237,10 +234,23 @@ export function GeneratePlanDialog({ documents = [], folders = [], resources = [
             </select>
           </label>
           <div>
-            <p className="m-0 text-xs font-semibold text-soft-ink">Practice to generate</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => toggleKind(entry.id)} className={`${chip} ${kinds.includes(entry.id) ? "bg-[var(--accent)] text-white" : "border border-ink/15 text-soft-ink"}`}>{entry.label}</button>)}
+            <p className="m-0 text-xs font-semibold text-soft-ink">Agents the plan can use</p>
+            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">A scope, not a checklist: Luna only uses the ones the plan needs, and nothing outside this list.</p>
+            <div className="mt-1.5 grid max-h-44 gap-1 overflow-y-auto rounded-xl border border-ink/10 p-1.5">
+              {agents.map((agent) => (
+                <label key={agent.id} className={`flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 transition ${agentIds.includes(agent.id) ? "bg-[var(--accent)]/6" : "hover:bg-ink/5"}`}>
+                  <input type="checkbox" className="mt-0.5 shrink-0" checked={agentIds.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                      <span className="truncate">{agent.label}</span>
+                      {agent.custom ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{agent.bought ? "bought" : "mine"}</span> : null}
+                    </span>
+                    {agent.purpose ? <span className="block truncate text-[11px] text-soft-ink">{agent.purpose}</span> : null}
+                  </span>
+                </label>
+              ))}
             </div>
+            {!agentIds.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">No agent selected — the plan will only schedule studying your material.</p> : null}
           </div>
 
           {/* Material picker — collapsible folder tree */}

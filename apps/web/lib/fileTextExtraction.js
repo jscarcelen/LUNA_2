@@ -43,7 +43,7 @@ const MATH_OCR_APP_KEY = String(process.env.MATH_OCR_APP_KEY || "").trim();
 const MATH_OCR_ENDPOINT = String(process.env.MATH_OCR_ENDPOINT || "https://api.mathpix.com/v3/text").trim();
 const OPENAI_API_KEY = String(process.env.OPENAI_API_KEY || "").trim();
 const ANTHROPIC_API_KEY = String(process.env.ANTHROPIC_API_KEY || "").trim();
-/** Model for image vision calls. gpt-4o-mini is fast+cheap; gpt-4o for higher quality. */
+/** Model for image vision calls. Luna 3 Pro (gpt-4o) is the quality floor. */
 const LUNA_VISION_MODEL = String(process.env.LUNA_VISION_MODEL || "gpt-4o").trim();
 
 const MARKDOWN_TARGET_TOKENS = 700;

@@ -299,7 +299,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           { question: "Question types", answer: "Multiple choice" }
         ],
         outputExample: "",
-        model: "gpt-4o-mini",
+        model: "gpt-4o",
         creativity: "low",
         template: {
           fields: [

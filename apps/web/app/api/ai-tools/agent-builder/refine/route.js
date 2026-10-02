@@ -22,7 +22,7 @@ export async function POST(request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.LUNA_REFINER_MODEL || "gpt-4o-mini",
+        model: process.env.LUNA_REFINER_MODEL || "gpt-4o",
         temperature: 0.2,
         response_format: { type: "json_schema", json_schema: { name: "refined_brief", strict: true, schema: {
           type: "object", additionalProperties: false,

@@ -1,4 +1,4 @@
-const DEFAULT_QUIZ_MODEL = process.env.LUNA_QUIZ_MODEL || "gpt-4o-mini";
+const DEFAULT_QUIZ_MODEL = process.env.LUNA_QUIZ_MODEL || "gpt-4o";
 
 function required(name) {
   const value = process.env[name];

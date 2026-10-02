@@ -15,7 +15,7 @@ import { readBlockLibrary, saveBlockToLibrary } from "../../template-studio/engi
 const fieldClass = "w-full rounded-xl border border-ink/10 bg-bg/60 px-3 py-2 text-sm text-ink placeholder:text-soft-ink/60 outline-none transition focus:border-teal/60 focus:ring-2 focus:ring-teal/20";
 const chipClass = "inline-flex items-center rounded-full bg-ink/5 px-2.5 py-0.5 text-[11px] font-semibold text-soft-ink ring-1 ring-ink/10";
 
-const MODEL_LABELS = { "gpt-4o-mini": "Luna 3 Mini", "gpt-4o": "Luna 3 Pro", "gpt-4.1": "Luna 3 Max" };
+const MODEL_LABELS = { "gpt-4o-mini": "Luna 3 Pro", "gpt-4o": "Luna 3 Pro", "gpt-4.1": "Luna 3 Max" };
 
 function priceLabel(listing) {
   const price = Number(listing.price || 0);

@@ -5,12 +5,22 @@ import { validateOutput } from "../../agent-studio/engine/validate";
 import { buildJsonSchema as buildBlockJsonSchema, BLOCKS } from "../blocks/blockRegistry.js";
 
 export const AGENT_MODEL_OPTIONS = [
-  { value: "gpt-4o-mini", label: "Luna 3 Mini (Recommended, low cost)", tier: "cheap" },
-  { value: "gpt-4o", label: "Luna 3 Pro (Upgrade, higher quality)", tier: "upgrade" },
+  { value: "gpt-4o", label: "Luna 3 Pro (Recommended, high quality)", tier: "standard" },
   { value: "gpt-4.1", label: "Luna 3 Max (Upgrade, most capable)", tier: "upgrade" }
 ];
 
-const DEFAULT_AGENT_MODEL = process.env.LUNA_AGENT_MODEL || AGENT_MODEL_OPTIONS[0].value;
+/**
+ * Quality floor: Luna 3 Pro (gpt-4o). Luna 3 Mini was too inaccurate for generation, so a request for
+ * it — from an old saved agent, a marketplace listing or an environment override — runs on Pro.
+ */
+export const MIN_AGENT_MODEL = "gpt-4o";
+export function resolveAgentModel(requested) {
+  const model = String(requested || "").trim();
+  if (!model || /mini/i.test(model)) return MIN_AGENT_MODEL;
+  return model;
+}
+
+const DEFAULT_AGENT_MODEL = resolveAgentModel(process.env.LUNA_AGENT_MODEL);
 
 /**
  * Hard ceiling on the number of cards/flashcards returned by any single generation.
@@ -218,10 +228,10 @@ export async function estimateAgentRun(config) {
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   const material = await prepareMaterial(config);
   const schema = injectSourceFieldIntoSchema(config.outputJsonSchema || buildJsonSchemaFromFields(fields));
-  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const model = resolveAgentModel(config.model);
   const inputTokens = approxTokens(buildUserMessage(config, material.rankedChunks, material.styleChunks)) + approxTokens(JSON.stringify(schema)) + 120;
   const outputTokens = estimateOutputTokens(config);
-  const price = MODEL_PRICING[model] || MODEL_PRICING["gpt-4o-mini"];
+  const price = MODEL_PRICING[model] || MODEL_PRICING[MIN_AGENT_MODEL];
   const costUsd = (inputTokens * price.input + outputTokens * price.output) / 1e6;
   return {
     model,
@@ -308,7 +318,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
   if (!apiKey) {
     throw new Error("Missing required environment variable: OPENAI_API_KEY");
   }
-  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const model = resolveAgentModel(config.model);
   const streaming = typeof onToken === "function";
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -447,7 +457,7 @@ Output only the ruleset + JSON skeleton. No preamble, no explanation.`;
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: MIN_AGENT_MODEL,
         temperature: 0,
         max_tokens: 500,
         messages: [
@@ -474,7 +484,7 @@ async function callOpenAiAgentBlocks(config, chunks, blockSchema, selectedBlockI
   if (!apiKey) {
     throw new Error("Missing required environment variable: OPENAI_API_KEY");
   }
-  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const model = resolveAgentModel(config.model);
   const streaming = typeof onToken === "function";
 
   const blockSchemaSummary = buildBlockSchemaSummary(selectedBlockIds);
@@ -677,7 +687,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     const { scopedDocuments: blockDocs, rankedChunks: blockChunks, styleChunks: blockStyleChunks } = await prepareMaterial(config, emit);
     let blockResult = null;
     let blockFallback = "";
-    const blockModel = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+    const blockModel = resolveAgentModel(config.model);
     emit({ step: "generate", status: "start", model: isAgentLlmConfigured() ? blockModel : "local-heuristic-v1" });
     if (isAgentLlmConfigured()) {
       try {
@@ -734,7 +744,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   let result = null;
   let fallbackReason = "";
 
-  const model = String(config.model || "").trim() || DEFAULT_AGENT_MODEL;
+  const model = resolveAgentModel(config.model);
   emit({ step: "generate", status: "start", model: isAgentLlmConfigured() ? model : "local-heuristic-v1" });
   if (isAgentLlmConfigured()) {
     try {

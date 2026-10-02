@@ -72,7 +72,7 @@ export const STARTER_AGENTS = [
       ],
       outputExample: "",
       template: { fields: [field("front", "Front"), field("back", "Back"), field("topic", "Topic"), field("difficulty", "Difficulty")] },
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       creativity: "low",
       scope: { workspaceId: "", subjectId: "", documentIds: [] }
     }
@@ -124,7 +124,7 @@ export const STARTER_AGENTS = [
       ],
       outputExample: "",
       template: { fields: [field("word", "Word"), field("translation", "Translation"), field("partOfSpeech", "Part of speech"), field("example", "Example sentence")] },
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       creativity: "medium",
       scope: { workspaceId: "", subjectId: "", documentIds: [] }
     }

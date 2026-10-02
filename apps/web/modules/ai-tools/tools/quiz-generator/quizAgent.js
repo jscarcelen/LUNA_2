@@ -35,7 +35,7 @@ export const QUIZ_AGENT = {
       { name: "difficulty", label: "Difficulty", type: "string", repeatScope: "per-output", description: "easy, medium or hard." }
     ]
   },
-  model: "gpt-4o-mini",
+  model: "gpt-4o",
   creativity: "low",
   scope: { workspaceId: "", subjectId: "", documentIds: [], styleDocumentIds: [] },
   outputMapping: {

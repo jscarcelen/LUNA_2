@@ -87,7 +87,7 @@ export async function POST(request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: process.env.LUNA_COACH_MODEL || "gpt-4o-mini",
+        model: process.env.LUNA_COACH_MODEL || "gpt-4o",
         temperature: 0.3,
         response_format: { type: "json_schema", json_schema: { name: "performance_coach", strict: true, schema: SCHEMA } },
         messages: [{ role: "system", content: SYSTEM }, { role: "user", content: evidence }]

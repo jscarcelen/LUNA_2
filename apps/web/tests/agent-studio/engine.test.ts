@@ -39,7 +39,7 @@ describe("compiler", () => {
     expect(compiled.user).toContain("Language 1: French");
     expect(compiled.user).toContain("Language 2: English (default)");
     expect(compiled.user).toContain("EXAMPLES OF GOOD OUTPUT");
-    expect(compiled.model).toBe("gpt-4o-mini");
+    expect(compiled.model).toBe("gpt-4o");
   });
 });
 

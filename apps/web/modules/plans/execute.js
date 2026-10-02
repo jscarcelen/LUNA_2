@@ -49,7 +49,7 @@ Rules you MUST follow:
       { name: "topic", label: "Topic", type: "string", repeatScope: "per-output", description: "Short topic tag (2–4 words) from the material." }
     ]
   },
-  model: "gpt-4o-mini",
+  model: "gpt-4o",
   creativity: "low"
 };
 

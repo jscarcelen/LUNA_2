@@ -776,7 +776,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const knowledgeReady = materialOptional || (knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0);
   const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
   const unlockedStep = hasOutput ? 3 : 1;
-  const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : String(agentConfig.model || "").includes("gpt-4o-mini") ? "Luna 3 Mini" : String(agentConfig.model || "") ? "Luna 3 Pro" : "Default model";
+  const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : "Luna 3 Pro";
 
 
   const previewPane = (

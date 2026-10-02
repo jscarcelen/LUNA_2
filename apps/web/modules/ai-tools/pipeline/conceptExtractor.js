@@ -6,7 +6,7 @@
  * GPT-4o-mini is sufficient.
  */
 
-const MODEL = process.env.LUNA_CONCEPT_MODEL || process.env.LUNA_AGENT_MODEL || "gpt-4o-mini";
+const MODEL = process.env.LUNA_CONCEPT_MODEL || process.env.LUNA_AGENT_MODEL || "gpt-4o";
 
 const MAX_CONCEPTS = 20;
 const MAX_DEPTH = 6;

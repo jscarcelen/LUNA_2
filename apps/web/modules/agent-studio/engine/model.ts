@@ -6,8 +6,7 @@ export { createField, createId };
 
 export const LANGUAGES = ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Catalan", "Dutch", "Chinese", "Japanese", "Arabic"];
 export const MODEL_OPTIONS = [
-  { value: "gpt-4o-mini", label: "Luna 3 Mini (fast, low cost)" },
-  { value: "gpt-4o", label: "Luna 3 Pro (higher quality)" },
+  { value: "gpt-4o", label: "Luna 3 Pro (recommended, high quality)" },
   { value: "gpt-4.1", label: "Luna 3 Max (most capable)" }
 ];
 
@@ -36,7 +35,7 @@ export function createAgentSpec(name = "Untitled agent"): AgentSpec {
     outputSchema: [createCollection("Items", [createField("Title", "text", { description: "Short title", required: true })])],
     examples: [],
     validationRules: [{ type: "required_fields" }, { type: "no_duplicates", arrayFieldId: "__primary__", byFieldId: "__first__" }],
-    model: { model: "gpt-4o-mini", creativity: "medium" },
+    model: { model: "gpt-4o", creativity: "medium" },
     createdAt: now,
     updatedAt: now
   };
@@ -91,7 +90,7 @@ export function createVocabularyFlashcardsSpec(): AgentSpec {
   spec.outputSchema = [titleField("A short, specific title for this set, e.g. 'Animals · Spanish → English'"), cards];
   spec.validationRules = [{ type: "required_fields" }, { type: "count_matches_input", arrayFieldId: cards.id, inputId: count.id }, { type: "no_duplicates", arrayFieldId: cards.id, byFieldId: front.id }];
   spec.examples = [{ id: createId("ex"), source: "pasted", inputs: { [count.id]: 3, [lang1.id]: "Spanish", [lang2.id]: "English", [difficulty.id]: "Beginner" }, output: { title: "Animals · Spanish → English", items: [{ front: "perro", back: "dog", topic: "Animals" }, { front: "gato", back: "cat", topic: "Animals" }, { front: "caballo", back: "horse", topic: "Animals" }] }, note: "Simple, everyday words for beginners." }];
-  spec.model = { model: "gpt-4o-mini", creativity: "medium" };
+  spec.model = { model: "gpt-4o", creativity: "medium" };
   return spec;
 }
 
@@ -122,7 +121,7 @@ export function createQuizSpec(): AgentSpec {
   const questions = createCollection("Questions", [question, type, options, answer, explanation, topic, diff]);
   spec.outputSchema = [titleField("A short, specific title for this quiz, written for its content, e.g. 'Median and outliers · Quiz 1'. Never the name of the tool."), questions];
   spec.validationRules = [{ type: "required_fields" }, { type: "count_matches_input", arrayFieldId: questions.id, inputId: count.id }, { type: "no_duplicates", arrayFieldId: questions.id, byFieldId: question.id }, { type: "answer_in_options", arrayFieldId: questions.id, answerFieldId: answer.id, optionsFieldId: options.id }];
-  spec.model = { model: "gpt-4o-mini", creativity: "low" };
+  spec.model = { model: "gpt-4o", creativity: "low" };
   return spec;
 }
 

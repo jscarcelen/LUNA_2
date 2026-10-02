@@ -27,7 +27,7 @@ export function specFromLegacy(config: any): AgentSpec {
   if (config?.contextPrompt) spec.contextSlots.push(createSlot("agent_knowledge", "Reference notes", { description: "Reference text bundled with the agent.", text: String(config.contextPrompt) }));
   const fields = (Array.isArray(config?.template?.fields) ? config.template.fields : []).map((f: any) => (f.type === "array" ? createField(f.label || f.name, "array", { description: f.description, children: [createField(`${f.label || f.name} item`, "text")] }) : createField(f.label || f.name, f.type === "number" ? "number" : f.type === "boolean" ? "boolean" : "text", { description: f.description, required: true })));
   spec.outputSchema = [createCollection("Items", fields)];
-  spec.model = { model: String(config?.model || "gpt-4o-mini"), creativity: (config?.creativity as AgentSpec["model"]["creativity"]) || "medium" };
+  spec.model = { model: String(config?.model || "gpt-4o"), creativity: (config?.creativity as AgentSpec["model"]["creativity"]) || "medium" };
   return spec;
 }
 

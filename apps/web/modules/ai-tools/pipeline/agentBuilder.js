@@ -2,7 +2,7 @@ import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./ch
 import { selectChunksWithinBudget } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
 import { validateOutput } from "../../agent-studio/engine/validate";
-import { buildJsonSchema as buildBlockJsonSchema, BLOCKS } from "../blocks/blockRegistry.js";
+import { buildJsonSchema as buildBlockJsonSchema, conformBlocks, BLOCKS } from "../blocks/blockRegistry.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o", label: "Luna 3 Pro (Recommended, high quality)", tier: "standard" },
@@ -184,7 +184,7 @@ export async function openAiFetch(url, init, attempts = 4) {
 
 const REVISION_NOTE = `
 
-REVISION: previousOutput is the result the user has already seen and refinementPrompt is what they want changed (it holds their request, a precise brief and a checklist). Produce a COMPLETE new output that applies the change visibly and substantively — in every part it concerns, not in a single place — and do not return previousOutput with cosmetic edits. Where the request conflicts with the original instructions (length, page or item limits, brevity) the request wins: you may exceed those limits sensibly and the output may grow. Satisfy every checklist item; keep what the request does not touch. Obey the schema and rules above, keep drawing only from the reference material, and keep citing the source of each item. Do not mention the revision.`;
+REVISION: previousOutput is the result the user has already seen and refinementPrompt is what they want changed (it holds their request, a precise brief and a checklist). Produce a COMPLETE new output (all items, in the same order) that applies the change visibly and substantively — in every part it concerns, not in a single place — and do not return previousOutput with cosmetic edits. Read SCOPE: when it names TARGETS (specific items) change only those and return every other item exactly as in previousOutput, word for word; when it names a field to change in every item, change that field in every item and leave the other fields untouched; when it asks to add content, keep what exists and add the new parts. A target that gives exact new content (for example 'change question 3 to ask about X') is followed literally. Where the request conflicts with the original instructions (length, page or item limits, brevity) the request wins: you may exceed those limits sensibly and the output may grow. Satisfy every checklist item; keep what the request does not touch. Obey the schema and rules above, keep drawing only from the reference material, and keep citing the source of each item. Do not mention the revision.`;
 
 function withRevision(text, config) {
   return config.refinementPrompt ? `${text}${REVISION_NOTE}` : text;
@@ -582,7 +582,8 @@ Additional hard rules:
         type: "json_schema",
         json_schema: {
           name: "block_array_result",
-          strict: false,
+          // Strict: the model cannot return a block type or a field the registry does not define.
+          strict: true,
           // OpenAI json_schema top-level must be an object — wrap the array inside.
           schema: {
             type: "object",
@@ -636,7 +637,7 @@ Additional hard rules:
   // Only blocks of the allowed types count: the model sometimes echoes the schema or invents a type.
   if (Array.isArray(parsed)) {
     const allowed = new Set(selectedBlockIds);
-    parsed = parsed.filter((block) => block && typeof block === "object" && allowed.has(block.type));
+    parsed = conformBlocks(parsed.filter((block) => block && typeof block === "object" && allowed.has(block.type)));
     if (!parsed.length) parsed = null;
   }
 

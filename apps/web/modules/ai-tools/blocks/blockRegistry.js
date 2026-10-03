@@ -240,6 +240,7 @@ export function buildJsonSchema(selectedBlockIds) {
   const properties = {
     type: {
       type: 'string',
+      enum: ids,
       description: `Block type. Must be one of: ${ids.join(', ')}.`,
     },
   };
@@ -283,4 +284,40 @@ export function getSampleBlocks(selectedBlockIds) {
     if (samples.length >= 3) break;
   }
   return samples;
+}
+
+/**
+ * The model's blocks, held to the registry: each block keeps only the fields its own type defines
+ * (a value that leaked in from another block type is dropped), values have the declared type, and a
+ * block missing a required field is discarded instead of rendering as an empty card.
+ */
+export function conformBlocks(blocks) {
+  const out = [];
+  for (const block of Array.isArray(blocks) ? blocks : []) {
+    const def = block && BLOCKS[block.type];
+    if (!def) continue;
+    const next = { type: block.type };
+    let complete = true;
+    for (const [name, field] of Object.entries(def.aiFields)) {
+      if (name === 'type') continue;
+      const raw = block[name];
+      const isList = field.type === 'string[]' || field.type === 'string[4]';
+      let value = null;
+      if (isList) value = Array.isArray(raw) ? raw.map((entry) => String(entry ?? '').trim()).filter(Boolean) : (typeof raw === 'string' && raw.trim() ? [raw.trim()] : null);
+      else if (field.type === 'boolean') value = typeof raw === 'boolean' ? raw : raw === 'true' ? true : raw === 'false' ? false : null;
+      else if (field.type === 'number') value = raw === null || raw === undefined || raw === '' || !Number.isFinite(Number(raw)) ? null : Number(raw);
+      else value = raw === null || raw === undefined ? null : String(raw).trim() || null;
+      if (isList && value && !value.length) value = null;
+      // A missing number (the question number, the points) is filled in later; missing content is not.
+      if (field.required && value === null && field.type !== 'number') complete = false;
+      if (name === 'level' && value === null) value = 2;
+      next[name] = value;
+    }
+    // A multiple-choice question needs a correct option that exists.
+    if (block.type === 'question_mc' && !(Array.isArray(next.options) && next.options.length >= 2 && Number.isInteger(next.answer_index) && next.answer_index >= 0 && next.answer_index < next.options.length)) complete = false;
+    // Keys the pipeline adds itself (source links…) pass through.
+    for (const key of Object.keys(block)) if (key.startsWith('_')) next[key] = block[key];
+    if (complete) out.push(next);
+  }
+  return out;
 }

@@ -23,6 +23,7 @@ import { newItem, parsePlan } from "../../../plans/plan";
 import { AgentBrief } from "./AgentBrief";
 import { oneLiner } from "./briefParser";
 import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
+import { composeRefinementPrompt, describeResult } from "../../pipeline/iterateContext";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -533,6 +534,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     const strip = (list) => (list || []).map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => !key.startsWith("_"))));
     const { items: _items, ...rootOnly } = output.data || {};
     const previousOutput = outputBlocks ? outputBlocks : { ...rootOnly, items: strip(output.items) };
+    const described = describeResult({ blocks: outputBlocks, items: outputBlocks ? null : strip(output.items) });
     try {
       // The prompt improver first: a few words become a precise brief and a checklist, and the
       // original limits the request overrides ("one page") are named.
@@ -548,18 +550,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             agentName: agentConfig.name,
             instructions: agentConfig.instructions,
             choices: runConfig.questionAnswers,
-            currentResult: rawText,
+            outline: described.outline,
+            fields: described.fieldNames,
             earlier: versions.map((version) => version.prompt)
           })
         }).then((response) => response.json());
         if (improved?.improved && improved.brief) {
-          refinementPrompt = [
-            `REQUEST: ${prompt}`,
-            `BRIEF: ${improved.brief}`,
-            improved.checklist?.length ? `CHECKLIST (all must be true in the new result):\n${improved.checklist.map((entry) => `- ${entry}`).join("\n")}` : "",
-            improved.relax?.length ? `ORIGINAL LIMITS THIS REQUEST OVERRIDES:\n${improved.relax.map((entry) => `- ${entry}`).join("\n")}` : "",
-            improved.keep?.length ? `KEEP:\n${improved.keep.map((entry) => `- ${entry}`).join("\n")}` : ""
-          ].filter(Boolean).join("\n\n");
+          refinementPrompt = composeRefinementPrompt(prompt, improved);
           setUnderstood(improved.understood || "");
         }
       } catch {

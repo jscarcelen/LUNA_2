@@ -861,3 +861,11 @@
 - Workspaces: the filters, upload, review centre and download controls sit behind a "＋" menu (top right of the sidebar card) on phones; Activities: the study-plan / topic / sort filters sit behind a ⚙ button next to "Create with an agent" and are full-width selects.
 - Dropdowns: padding for the arrow is set outside the Tailwind layers so a `px-3` can no longer put text under the arrow (all screens).
 - Template matrix: compact columns on phones (vertical group labels, shorter cells), scrolls both ways inside its box, and no longer pushes the page wider than the screen (`grid-cols-1`, `tw-table` is exempt from the phone "tables scroll" rule).
+
+## 2026-10-03 (8) — Iterate understands what to change; blocks held to the schema
+- Iterate: the prompt improver now reads the result as a numbered outline (`pipeline/iterateContext.js`: `[3] Question 2 (question_mc) — …`) and the output field names, and returns a
+  scope (whole result / specific items / one field in every item / add content), the targets with the exact change ("change question 3 to…"), the fields touched, the brief,
+  checklist, relax and keep. "More detail in the answers" changes only the answer/explanation fields; "change question 3" changes only question 3 and returns the rest word for word;
+  "Luna understood" names the exact place. The writer's revision note reads the scope. Prompt, input and output updated in the dashboard (A7).
+- Output vs template fields: item agents were already strict-schema (A1). Block agents were not: the schema is now strict with the block type as an enum (checked against the API with all 15
+  block types), and `conformBlocks` (`blocks/blockRegistry.js`) holds the result to the registry — leaked fields dropped, values typed, blocks missing their content discarded.

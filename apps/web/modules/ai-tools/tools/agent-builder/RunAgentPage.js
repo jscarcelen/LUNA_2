@@ -613,7 +613,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
    */
   const outputIsBlocks = Boolean(output?.isBlockOutput);
   const outputBlocks = outputIsBlocks && Array.isArray(output?.blocks) ? output.blocks : null;
-  const dataJson = useMemo(() => JSON.stringify(outputBlocks || output?.items || [], null, 2), [outputBlocks, output]);
   const rawText = useMemo(() => (outputBlocks ? blocksToText(outputBlocks) : renderPlainOutputText(Array.isArray(output?.items) ? output.items : [], fields, {})), [outputBlocks, output, fields]);
   /** Words the components print by themselves (Answer, True / False, Name…) follow the output's language. */
   const outputLanguage = useMemo(() => resolveOutputLanguage(agentConfig?.questions || [], answersByQuestionId, rawText), [agentConfig?.questions, answersByQuestionId, rawText]);
@@ -862,8 +861,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       doc={doc}
       selection={selection}
       onSelection={setSelection}
-      dataJson={dataJson}
-      rawText={rawText}
       filename={agentConfig.name || "output"}
       onError={setStatusMessage}
       interactive={readerResource ? <InteractiveView resource={readerResource} /> : null}

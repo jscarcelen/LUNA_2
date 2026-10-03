@@ -245,9 +245,6 @@ export interface OutputPreviewPaneProps {
   doc: OutputDocument | null;
   selection: PreviewSelection;
   onSelection: (next: PreviewSelection) => void;
-  /** Text for the Data and Raw tabs. */
-  dataJson: string;
-  rawText: string;
   /** Progress / error overlay shown while the agent generates. */
   overlay?: ReactNode;
   emptyHint?: string;
@@ -259,8 +256,8 @@ export interface OutputPreviewPaneProps {
 
 const MM_PX = 3.78;
 
-export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawText, overlay, emptyHint, onError, interactive }: OutputPreviewPaneProps) {
-  const [tab, setTab] = useState<"preview" | "interactive" | "data" | "raw">("preview");
+export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyHint, onError, interactive }: OutputPreviewPaneProps) {
+  const [tab, setTab] = useState<"preview" | "interactive">("preview");
   const [html, setHtml] = useState("");
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
@@ -306,7 +303,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-4 py-3">
-        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{tabButton("preview", "Preview")}{interactive ? tabButton("interactive", "Interactive") : null}{tabButton("data", "Data")}{tabButton("raw", "Raw")}</div>
+        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{tabButton("preview", "Preview")}{interactive ? tabButton("interactive", "Interactive") : null}</div>
       </div>
 
       {showMatrix && doc && tab === "preview" ? (
@@ -355,8 +352,6 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
           </div>
         ) : null}
         {doc && tab === "interactive" && interactive ? <div className="h-[640px] overflow-y-auto bg-[var(--bg)]">{interactive}</div> : null}
-        {doc && tab === "data" ? <pre className="m-0 h-[640px] overflow-auto p-4 font-mono text-xs leading-relaxed text-ink/90">{dataJson}</pre> : null}
-        {doc && tab === "raw" ? <pre className="m-0 h-[640px] overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-ink/90">{rawText}</pre> : null}
         {error ? <p className="absolute bottom-2 left-3 right-3 m-0 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-[var(--color-danger)]">{error}</p> : null}
       </div>
     </div>

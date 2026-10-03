@@ -108,8 +108,6 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
           doc={doc}
           selection={selection}
           onSelection={setSelection}
-          dataJson={JSON.stringify(blocks, null, 2)}
-          rawText={rawText}
           filename={resource.name || "resource"}
           onError={onStatus}
           emptyHint="Nothing to show yet."

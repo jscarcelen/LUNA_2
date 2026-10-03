@@ -61,7 +61,8 @@ const SRC = {
   refine: "apps/web/app/api/ai-tools/agent-builder/refine/route.js",
   iterate: "apps/web/app/api/ai-tools/agent-builder/iterate/route.js",
   improve: "apps/web/app/api/ai-tools/agent-builder/improve/route.js",
-  coach: "apps/web/app/api/performance/coach/route.js"
+  coach: "apps/web/app/api/performance/coach/route.js",
+  chat: "apps/web/modules/chat/engine.js"
 };
 
 /**
@@ -376,6 +377,24 @@ export const REQUESTS = [
     seconds: { typical: 4, note: "estimate" },
     prompts: [
       { label: "System prompt", file: SRC.iterate, re: /content: "(You are the prompt improver[\s\S]*?)"\n          \},/ }
+    ]
+  },
+  {
+    id: "A8", stage: "agents", name: "Assistant chat", status: "live",
+    purpose: "The chatbot: answers about the learner's material with references, answers questions about Luna, and proposes cards (run an agent, write a document, create an agent) that do nothing until the user approves them.",
+    why: "One place to ask for anything instead of hunting through pages; it is also how Luna learns which requests it cannot do yet (they are recorded as feature requests).",
+    position: "Every message sent in AI agents → Chatbot. The model can call search tools first (a second call with the passages).",
+    trigger: "Chatbot → Send",
+    file: SRC.chat, anchor: /export async function runChat\(/,
+    model: "gpt-4o", modelEnv: "LUNA_CHAT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions (streaming, function calling)",
+    params: { temperature: 0.3, maxTokens: 2400, format: "Text + tool calls (list_documents, search_material, list_agents, propose_*, log_unsupported_request)", streaming: true },
+    input: "System prompt (scope, the documents in scope, the rules and Luna's guide) + the last 18 messages; with material, up to ~7k tokens of retrieved passages are added by the search tool.",
+    output: "A streamed Markdown answer with [P1] citations, and optionally action cards. The cost is estimated before sending; above 30,000 tokens the user must confirm.",
+    fallbacks: "A clear error message in the chat; nothing is run or saved without the user's approval.",
+    tokens: { basis: "measured", typical: { in: 6000, out: 500 }, scale: null },
+    seconds: { typical: 6, note: "measured 3–9 s" },
+    prompts: [
+      { label: "System prompt", file: SRC.chat, re: /return `(You are Luna's assistant[\s\S]*?)\$\{LUNA_GUIDE\}`;/ }
     ]
   },
   {

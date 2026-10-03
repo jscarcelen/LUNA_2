@@ -215,12 +215,13 @@ function trueFalse(): BlockDef {
     style: cardStyle(accent, "plain", { squareLeft: true }),
     children: [
       accentEdge(accent, 16),
-      label("{{n}}", { x: 6, y: 5.4, w: 7, h: 5.5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep }, { name: "opt:number|Number" }),
-      field(statement.id, "The mean is always larger than the median.", { x: 15, y: 5.2, w: W - 72, h: 6 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" }),
+      // The same round badge as the multiple-choice and open-answer cards.
+      ...numberBadge(accent, 6, 4, 7.4),
+      field(statement.id, "The mean is always larger than the median.", { x: 17, y: 4.9, w: W - 74, h: 6 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" }),
       ...tickBox(accent, W - 54, 5, "True"),
       ...tickBox(accent, W - 30, 5, "False"),
       // "How sure are you?" matters as much here as on a multiple-choice question.
-      ...confidenceRow(accent, 14, W - 24).map((element) => shift(element, 15)),
+      ...confidenceRow(accent, 14, W - 24).map((element) => shift(element, 17)),
       // The answer looks like everywhere else: a full-width green band that says True or False.
       ...answerBand(accent, answer.id, 21, W),
       field(source.id, "Source: Accounting.pdf · passage 12", { x: ANSWER_INSET, y: 28.6, w: W - 2 * ANSWER_INSET, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })

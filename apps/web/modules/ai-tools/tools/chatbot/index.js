@@ -1,13 +1,13 @@
-import { ChatView } from "../../../../components/views";
+import { ChatPage } from "../../../chat/ChatPage";
 
 export const chatbotTool = {
   id: "chatbot",
   name: "Chatbot",
-  description: "General purpose learning assistant for quick questions and summaries.",
+  description: "Your AI tutor, agent builder and Luna guide: ask about your material with references, have it run agents or write documents, and turn routines into agents.",
   runLabel: "Open Chatbot",
-  component: ChatView,
+  component: ChatPage,
   pipelineConfig: {
-    mode: "placeholder",
-    template: "chatbot-v1"
+    mode: "assistant",
+    template: "chatbot-v2"
   }
 };

@@ -113,7 +113,7 @@ function StudentDashboard({ onNavigate }) {
             <button type="button" className={ghostBtn} onClick={() => onNavigate("ai-tool:quiz-generator")}>Practice quiz</button>
             <button type="button" className={ghostBtn} onClick={() => onNavigate("marketplace")}>Find an agent</button>
             <button type="button" className={ghostBtn} onClick={() => onNavigate("workspaces")}>Upload notes</button>
-            <button type="button" className={ghostBtn} onClick={() => onNavigate("ai-tool:ai-tutor")}>Ask the tutor</button>
+            <button type="button" className={ghostBtn} onClick={() => onNavigate("ai-tool:chatbot")}>Ask the tutor</button>
           </div>
         </div>
       </div>

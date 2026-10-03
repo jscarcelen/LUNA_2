@@ -1,4 +1,3 @@
-import { aiTutorTool } from "./tools/ai-tutor";
 import { chatbotTool } from "./tools/chatbot";
 import { quizGeneratorTool } from "./tools/quiz-generator";
 import { agentBuilderTool } from "./tools/agent-builder";
@@ -11,7 +10,6 @@ const toolCandidates = [
   vocabularyFlashcardsTool,
   agentBuilderTool,
   templateBuilderTool,
-  aiTutorTool,
   chatbotTool
 ];
 

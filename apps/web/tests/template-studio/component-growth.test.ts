@@ -211,3 +211,37 @@ describe("question card proportions", () => {
     }
   });
 });
+
+describe("numbering and title", () => {
+  const items: any[] = [
+    { type: "multiple-choice", question: "Q-mc-1", options: ["a", "b"], answer: "a", explanation: "", topic: "t" },
+    { type: "multiple-choice", question: "Q-mc-2", options: ["a", "b"], answer: "a", explanation: "", topic: "t" },
+    { type: "true-false", question: "Q-tf-3", answer: "true", explanation: "", topic: "t" },
+    { type: "short-answer", question: "Q-open-4", answer: "x", explanation: "", topic: "t" },
+    { type: "true-false", question: "Q-tf-5", answer: "false", explanation: "", topic: "t" }
+  ];
+  const build = (styles: any = {}) => {
+    const plan: any = planOutput({ blocks: itemsToBlocks(items) as any, title: "AI title", framed: true });
+    const doc: any = buildOutputDocument(plan, styles);
+    const layout = doc.template.layouts[0];
+    return layoutDocument(doc.template, doc.data, { layoutId: layout.id }).pages.flatMap((p: any) => p.items) as any[];
+  };
+
+  it("questions are numbered through the whole document, whatever their type", () => {
+    const all = build();
+    const numbers = all.filter((i) => i.type === "text" && /^\d+$/.test(i.lines.join("")) && i.style.fontWeight === "bold").map((i) => i.lines.join(""));
+    expect(numbers).toEqual(["1", "2", "3", "4", "5"]);
+  });
+
+  it("true / false uses the same round badge as the other questions", () => {
+    const all = build();
+    const badges = all.filter((i) => i.type === "rect" && i.w < 9 && i.h < 9 && i.w > 5);
+    expect(badges.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("the title in the header can be rewritten", () => {
+    expect(build().some((i) => i.type === "text" && i.lines.join(" ") === "AI title")).toBe(true);
+    const renamed = build({ "block-header-exam": { text: "Midterm — Chapter 2" } });
+    expect(renamed.some((i) => i.type === "text" && i.lines.join(" ") === "Midterm — Chapter 2")).toBe(true);
+  });
+});

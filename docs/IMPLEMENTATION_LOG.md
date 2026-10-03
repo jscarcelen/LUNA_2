@@ -836,3 +836,21 @@
   plan with an optional due date) replaces Save-as-activity, Save-to-workspace and Share; one "Download" card: PDF for any selection of page sizes × views,
   one file each (`OutputDownloads`), and the interactive HTML with a notice that results are not tracked outside Luna. The same panel is under Format &
   colour on a saved resource.
+
+## 2026-10-03 (6) — Numbering, editable title, Chatbot, agents hub, template matrix
+- Quiz: questions (and true/false statements, fill-in sentences) are numbered through the whole document (`__n` assigned in `planOutput`, used by the static
+  `{{n}}`), instead of restarting at 1 per card. True/false uses the same round numbered badge as the other question cards.
+- Titles: the header's title is editable (Structure → Title, like the footer text); the interactive version and the reader show the same title (`outputTitle`).
+- **Chatbot** (`modules/chat/`, `app/api/chat`): a Claude/ChatGPT-style assistant on Luna 3 Pro or better. Scope: whole workspace or focused on a subject/folder;
+  files can be dropped (uploaded to the current subject) and workspace documents referenced with `@`. It answers about the material with numbered references
+  (`[P1]` → passage, heading, page, quote, "Open this part" link to `/source`), answers questions about Luna from `knowledge.js`, and proposes cards that do
+  nothing until approved: run an existing agent (it asks first), write a document with the default template, or turn a process into a new agent (shows its prompt,
+  saves it to AI agents, editable later). Requests Luna cannot do (new template components) get the fixed "not covered… the Luna team will work on it" reply and are
+  recorded in `feature_requests` (**migration `202610030001_feature_requests.sql` must be applied**; until then they are only logged). The cost is estimated before the
+  call and the user is asked to confirm only above 30,000 tokens. Dashboard request A8.
+- `plans/execute.js`: `generateStepResource` (generate without saving) + `answersFromOptions`; `resources/saveFlow.js`: the save flow shared by the run page and the chat.
+- AI agents hub: "Create agent" and "Chatbot" side by side, the gallery of agents underneath. The Template Studio card and the AI Tutor tool are gone (the tutor is
+  now the chatbot).
+- Template Studio gallery: every template shows its category (document / quiz / game & flashcards) with a category filter, and a third view, **Matrix**:
+  templates as columns, the category on top, components as rows grouped by what they are, each cell showing the format and colour used with a "View" button
+  that opens the component viewer in that format and colour (`matrix.ts`, `TemplateMatrix.tsx`).

@@ -32,3 +32,11 @@ describe("reader markdown", () => {
     expect(markdownToHtml("<script>alert(1)</script> & <b>x</b>")).not.toContain("<script>");
   });
 });
+
+describe("chat-style maths", () => {
+  it("renders \\( … \\) and \\[ … \\] as LaTeX", () => {
+    const html = markdownToHtml("The ratio is \\( R = \\frac{CA}{CL} \\) where:\n\n\\[ R_{\\text{current}} = \\frac{CA}{CL} \\]");
+    expect(html).toContain("katex");
+    expect(html).not.toContain("\\frac");
+  });
+});

@@ -14,6 +14,13 @@ export function resourceBlocks(resource) {
   }
 }
 
+/** The title of an output: what the user wrote in the header's Title box, else the AI's own title, else the name. The PDF and the interactive view share it. */
+export function outputTitle(resource) {
+  const styles = resource?.request?.outputStyles || {};
+  const written = String(styles["block-header-exam"]?.text || styles["block-header-minimal"]?.text || "").trim();
+  return written || String(resource?.data?.title || "").trim() || String(resource?.name || "").trim();
+}
+
 /**
  * How the interactive version should look so it matches the document: the colour and the format the
  * resource's template gives its questions (Format & colour). Null when the resource carries no

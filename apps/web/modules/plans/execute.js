@@ -110,20 +110,48 @@ function coverageInstruction(concepts, perConcept) {
   return `\n\nCOVERAGE (mandatory): this set must test EVERY one of the ${concepts.length} concepts below — ${perConcept > 1 ? `at least ${perConcept} questions each` : "at least one question each"}, spread evenly, none skipped, nothing outside the material. Set each item's "topic" to the exact concept name it tests (copy it exactly as written).\nConcepts:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
 }
 
-export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "", agentDocuments = [], subjectName = "" }) {
+/**
+ * What a person said in words (a count, a difficulty, a language…) as answers to the agent's own
+ * questions, matched by what each question asks. Used by the assistant, which does not know ids.
+ */
+export function answersFromOptions(agent, options = {}) {
+  const out = {};
+  const asked = (question) => String(question.text || question.name || "");
+  for (const question of agent.questions || []) {
+    const text = asked(question);
+    let value;
+    if (/how many|number of/i.test(text)) value = options.count;
+    else if (/difficulty|level/i.test(text)) value = options.difficulty;
+    else if (/type/i.test(text)) value = options.types;
+    else if (/language\s*2|second language|to language/i.test(text)) value = options.language2 ?? options.targetLanguage;
+    else if (/language\s*1|first language/i.test(text)) value = options.language1 ?? options.language;
+    else if (/language/i.test(text)) value = options.language;
+    else if (/focus|topic|theme/i.test(text)) value = options.focus;
+    if (value === undefined || value === null || value === "") continue;
+    out[question.id] = question.type === "multi-select" ? (Array.isArray(value) ? value : [value]) : Array.isArray(value) ? value.join(", ") : question.type === "number" ? Number(value) || value : String(value);
+  }
+  return out;
+}
+
+/**
+ * Generates the resource for a step WITHOUT saving it: the caller decides where it goes.
+ * `options` are the user's words ({ count, difficulty, types, language, focus… }); `extraInstructions` a free request.
+ */
+export async function generateStepResource({ step, sourceDocumentIds, workspaceId, subjectId, learnerNote = "", agentDocuments = [], subjectName = "", options = {}, extraInstructions = "" }) {
   const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
   const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
 
+  let tokens = 0;
   /** One call to the agent; `focus` limits it to some concepts (the first pass uses all of them). */
   async function callAgent(focus) {
     const perConcept = step.generate === "exam" || step.kind === "exam" ? 2 : 1;
-    const preset = { ...recipe.answers };
+    const preset = { ...recipe.answers, ...answersFromOptions(agent, options) };
     if (focus.length && !recipe.custom && "q-count" in preset) preset["q-count"] = Math.min(40, Math.max(Number(preset["q-count"]) || 0, focus.length * perConcept));
     const answers = answersFor(agent, preset);
     const config = {
       name: agent.name,
-      instructions: `${agent.instructions}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
+      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
       questionAnswers: answers,
       outputExample: agent.outputExample || "",
@@ -146,6 +174,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || `Could not generate the ${recipe.label.toLowerCase()}`);
+    tokens += Number(result.usage?.total_tokens) || 0;
     return result;
   }
 
@@ -192,13 +221,19 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
   if (learnerNote) resource.context = learnerNote;
   if (coverage) resource.coverage = coverage;
 
-  const content = JSON.stringify(resource, null, 2);
   const tags = [RESOURCE_TAG, ...(resource.activity ? ["activity"] : []), ...(step.dueDate ? [`due:${step.dueDate}`] : [])];
+  return { resource, tags, preview: `${blocks ? blocks.length : items.length} ${blocks ? "blocks" : "items"}`, questions: activity?.questions?.length || 0, kind: recipe.label, coverage, tokens, model: agent.model };
+}
+
+/** Generates a step's resource and files it. */
+export async function runStep({ step, folderIds = [], onSaveGeneratedQuizDocument, subjectId, ...rest }) {
+  const made = await generateStepResource({ step, subjectId, ...rest });
+  const content = JSON.stringify(made.resource, null, 2);
   const saved = await onSaveGeneratedQuizDocument(
-    { folderIds, tags, file: { name: `${step.title}.resource.json`, content, preview: `${blocks ? blocks.length : items.length} ${blocks ? "blocks" : "items"}`, sizeBytes: content.length } },
+    { folderIds, tags: made.tags, file: { name: `${step.title}.resource.json`, content, preview: made.preview, sizeBytes: content.length } },
     subjectId
   );
-  return { documentId: saved?.id || saved?.documentId || "", title: step.title, questions: activity?.questions?.length || 0, kind: recipe.label, coverage };
+  return { documentId: saved?.id || saved?.documentId || "", title: step.title, questions: made.questions, kind: made.kind, coverage: made.coverage };
 }
 
 /**

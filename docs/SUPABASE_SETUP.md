@@ -40,6 +40,7 @@ Apply the SQL migrations in order (all 15, from `supabase/migrations/`):
 - `202608070003_add_document_chunk_markdown_metadata.sql`
 - `202608160001_add_document_block_editor_templates.sql`
 - `202609160001_fix_match_document_chunks_search_path.sql`
+- `202610030001_feature_requests.sql` (requests the chatbot cannot do yet; not applied until run)
 
 From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
 (ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be

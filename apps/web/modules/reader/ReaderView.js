@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
-import { activityLook, resourceBlocks } from "../resources/look";
+import { activityLook, outputTitle, resourceBlocks } from "../resources/look";
 import { MARKDOWN_CSS } from "./markdown";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, overlapping, paintHighlights, supportsHighlights } from "./highlights";
@@ -28,7 +28,7 @@ export function ReaderView({ title = "", resource, activity = null, highlights =
   const html = useMemo(() => {
     if (playable) return "";
     const blocks = resourceBlocks(resource);
-    return blocks ? blocksToReaderHtml(blocks, { title: title || resource?.name || "" }) : "";
+    return blocks ? blocksToReaderHtml(blocks, { title: title || outputTitle(resource) }) : "";
   }, [playable, resource, title]);
 
   // Paint now, and again whenever the content changes underneath (an answer is revealed, a card flips).
@@ -108,7 +108,7 @@ export function ReaderView({ title = "", resource, activity = null, highlights =
       <div className="flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect}>
         <div ref={rootRef}>
           {playable
-            ? <ActivityPlayer activity={playable} look={look} onSubmit={onSubmit} onClose={onClose} />
+            ? <ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} />
             : html
               ? <article className="md mx-auto max-w-3xl rounded-[18px] border border-ink/8 bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] sm:px-10" dangerouslySetInnerHTML={{ __html: html }} />
               : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read in this resource.</p>}

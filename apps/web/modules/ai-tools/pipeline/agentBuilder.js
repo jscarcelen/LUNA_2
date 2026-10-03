@@ -170,7 +170,7 @@ export function approxTokens(text) {
  * right after another can hit the tokens-per-minute cap and would otherwise fall back to a
  * placeholder. Streaming bodies are fine: only the response is awaited here.
  */
-async function openAiFetch(url, init, attempts = 4) {
+export async function openAiFetch(url, init, attempts = 4) {
   let response = await fetch(url, init);
   for (let attempt = 1; attempt < attempts && response.status === 429; attempt += 1) {
     const detail = await response.clone().json().catch(() => ({}));

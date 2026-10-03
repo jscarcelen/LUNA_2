@@ -64,16 +64,16 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
 }
 
 /**
- * AI agents hub: the agents you own (built-in, created, bought) and the two generators. Templates
- * have their own section of the app, so they are not listed here.
+ * AI agents hub: create an agent, open the chatbot (tutor, builder and Luna guide), and underneath
+ * the gallery of the agents you own (built-in, created, bought). Templates have their own section.
  */
-export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onDeleteAgent, onOpenTemplates, workspaces = [], selectedWorkspaceId, selectedSubjectId }) {
+export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onDeleteAgent, workspaces = [], selectedWorkspaceId, selectedSubjectId }) {
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
   // Show agents from all subjects in the workspace — not just the selected one.
   // A user who saves an agent while subject A is selected should still see it when subject B is active.
   const allSubjectDocs = useMemo(() => (selectedWorkspace?.subjects || []).flatMap((s) => s.documents || []), [selectedWorkspace]);
   const customAgents = allSubjectDocs.filter((document) => document.sourceType === "generated" && (document.tags || []).includes("ai-agent"));
-  const builtInAgents = aiToolsRegistry.filter((tool) => !["agent-builder", "template-builder", "ai-tutor", "chatbot"].includes(tool.id));
+  const builtInAgents = aiToolsRegistry.filter((tool) => !["agent-builder", "template-builder", "chatbot"].includes(tool.id));
   const [filter, setFilter] = useState("all");
   const visibleAgents = useMemo(() => customAgents.filter((document) => {
     const parsed = parseAgent(document);
@@ -90,8 +90,8 @@ export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onD
           <button type="button" className={primaryBtn} onClick={() => onOpenTool("agent-builder")}>Create agent</button>
         </div>
         <div className={`${card} flex items-center justify-between gap-4 p-5`}>
-          <div><p className={kicker}>Presentation generator</p><h4 className="m-0 mt-1 text-lg font-bold text-ink">Template Studio</h4><p className="m-0 mt-1 text-sm text-soft-ink">Design the document: static design, AI fields, repeating groups, views — one template, every format.</p></div>
-          <button type="button" className={primaryBtn} onClick={() => (typeof onOpenTemplates === "function" ? onOpenTemplates() : onOpenTool("template-builder"))}>Create template</button>
+          <div><p className={kicker}>Assistant</p><h4 className="m-0 mt-1 text-lg font-bold text-ink">Chatbot</h4><p className="m-0 mt-1 text-sm text-soft-ink">Your AI tutor, agent builder and Luna question answerer: ask about your material, have it run agents or write documents, and turn a routine into an agent.</p></div>
+          <button type="button" className={primaryBtn} onClick={() => onOpenTool("chatbot")}>Open chatbot</button>
         </div>
       </div>
 
@@ -113,12 +113,6 @@ export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onD
             {!visibleAgents.length && filter === "bought" ? <p className="m-0 text-sm text-soft-ink">Nothing bought yet — browse the Marketplace.</p> : null}
           </div>
         </section>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {aiToolsRegistry.filter((tool) => ["ai-tutor", "chatbot"].includes(tool.id)).map((tool) => (
-          <article key={tool.id} className={`${card} flex items-center justify-between gap-3 p-4`}><div><h4 className="m-0 text-sm font-bold text-ink">{tool.name}</h4><p className="m-0 text-xs text-soft-ink">{tool.description}</p></div><button type="button" className={ghostBtn} onClick={() => onOpenTool(tool.id)}>Open</button></article>
-        ))}
       </div>
     </section>
   );

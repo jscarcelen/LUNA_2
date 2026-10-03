@@ -204,6 +204,14 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
                 <input type="checkbox" checked={!styles[component.key]?.hidden} onChange={(event) => set(component.key, { hidden: !event.target.checked })} />
                 {styles[component.key]?.hidden ? "Hidden — tick to show it again" : "Shown on the document (untick to remove it)"}
               </label>
+              {(component.key === "block-header-exam" || component.key === "block-header-minimal") && !styles[component.key]?.hidden ? (
+                <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2 px-2">
+                  <span className="text-xs text-soft-ink">Title</span>
+                  <input className={`${fieldBase} min-w-40 flex-1 py-1 text-xs`} value={styles[component.key]?.text ?? plan.title} onChange={(event) => set(component.key, { text: event.target.value })} />
+                  <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => set(component.key, { text: undefined })}>Default</button>
+                  <span className="basis-full text-[10px] text-soft-ink">Printed in the header and shown on the interactive version too.</span>
+                </div>
+              ) : null}
               {component.key === "block-footer" && !styles[component.key]?.hidden ? (
                 <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2 px-2">
                   <span className="text-xs text-soft-ink">Footer text</span>

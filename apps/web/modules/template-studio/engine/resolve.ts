@@ -83,8 +83,11 @@ export function resolveSource(fields: FieldDef[], source: ContentSource, scopes:
     // `{{n}}` in static text is the 1-based index of the innermost repeated item (question numbers);
     // `{{A}}` is the same index as a letter, which is how answer options are labelled on an exam.
     const index = scopes[0]?.index ?? 0;
+    // A record can carry its own number (`__n`): questions are numbered through the whole document,
+    // not from 1 again in every component.
+    const carried = Number((scopes[0]?.data as Record<string, unknown> | null | undefined)?.__n);
     const value = source.value
-      .replace(/\{\{n\}\}/gi, String(index + 1))
+      .replace(/\{\{n\}\}/gi, String(Number.isFinite(carried) && carried > 0 ? carried : index + 1))
       .replace(/\{\{A\}\}/g, letterFor(index))
       .replace(/\{\{a\}\}/g, letterFor(index).toLowerCase())
       .replace(/\{\{page\}\}/g, pageNumber === undefined ? "{{page}}" : String(pageNumber));

@@ -412,6 +412,15 @@ export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitl
     runs.push({ n: index + 1, componentKey: group.componentKey, data: built.data, autoOff: built.autoOff });
   });
 
+  // Question numbers run through the whole document: 1, 2, 3… across multiple choice, true / false, open…
+  const NUMBERED: Record<string, string> = { "block-exam-question": "questions", "block-open-question": "questions", "block-true-false": "statements", "block-fill-blanks": "sentences" };
+  let counter = 0;
+  for (const run of runs) {
+    const listKey = NUMBERED[run.componentKey];
+    const rows = listKey ? run.data[listKey] : null;
+    if (Array.isArray(rows)) run.data = { ...run.data, [listKey]: rows.map((row) => ({ ...(row as Record<string, unknown>), __n: (counter += 1) })) };
+  }
+
   // An exam header already carries Name and Date: a math set inside it does not repeat them.
   if (input.framed) for (const run of runs) if (run.componentKey === "block-math-practice") run.autoOff = { ...run.autoOff, namedate: false };
 
@@ -486,7 +495,9 @@ export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles, opti
     for (const [key, value] of Object.entries(run.data)) data[`${slug(key)}_${run.n}`] = value as DataObject[string];
   }
   plan.end.forEach(pushFixed);
-  data.title = plan.title;
+  // The title printed in the header can be rewritten by the user (Structure card); the interactive view uses the same words.
+  const headerKey = plan.start.find((key) => key === QUIZ_HEADER || key === CARDS_HEADER);
+  data.title = (headerKey && styles[headerKey]?.text?.trim()) || plan.title;
   data.subtitle = plan.subtitle;
   data.footer_text = styles[FOOTER]?.text?.trim() ? styles[FOOTER].text! : plan.footerText || plan.title;
 

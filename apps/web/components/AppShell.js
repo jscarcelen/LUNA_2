@@ -246,7 +246,6 @@ export function AppShell() {
           onOpenCustomAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
           onEditAgent={(documentId) => setPage(`agent-edit:${documentId}`)}
           onDeleteAgent={handleRemoveDocument}
-          onOpenTemplates={() => setPage("templates")}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -268,6 +267,7 @@ export function AppShell() {
               selectedSubjectId,
               onUploadTxt: handleUploadTxt,
               onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`),
+              onOpenPage: (target) => setPage(target),
               onReviewDocumentExtraction: handleReviewDocumentExtraction,
               onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
               onUpdateGeneratedDocument: handleUpdateGeneratedDocument,

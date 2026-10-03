@@ -18,9 +18,14 @@ export function renderMath(latex, display = false) {
 }
 
 /** Inline formatting of one line of text. Math is lifted out first so its symbols are not read as Markdown. */
+/** `\( … \)` and `\[ … \]` (how chat models write maths) become `$ … $` and `$$ … $$`. */
+export function normaliseMath(value) {
+  return String(value ?? "").replace(/\\\[([\s\S]+?)\\\]/g, (_, latex) => `\n$$${latex}$$\n`).replace(/\\\(([\s\S]+?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
+}
+
 export function renderInline(text) {
   const maths = [];
-  let source = String(text ?? "").replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
+  let source = normaliseMath(text).replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
   source = source.replace(/\$([^$\n]+?)\$/g, (match, latex) => (/^\s|\s$/.test(latex) || /^\d/.test(latex) && !/[\\^_{}=+\-*/]/.test(latex) ? match : (maths.push(renderMath(latex, false)), `\uE000${maths.length - 1}\uE001`)));
   let html = escapeHtml(source);
   html = html
@@ -50,7 +55,7 @@ const splitRow = (line) => line.trim().replace(/^\||\|$/g, "").split("|").map((c
  * Returns an HTML string.
  */
 export function markdownToHtml(markdown, { quote = "" } = {}) {
-  const lines = String(markdown ?? "").replace(/\r/g, "").split("\n");
+  const lines = normaliseMath(markdown).replace(/\r/g, "").split("\n");
   const out = [];
   let marked = false;
   const wrap = (tag, inner, raw, extra = "") => {

@@ -293,7 +293,7 @@ export const REQUESTS = [
     trigger: "Agent run page → Generate (block agent)",
     file: SRC.agent, anchor: /async function callOpenAiAgentBlocks/,
     model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions (streaming)",
-    params: { temperature: "0.2 / 0.55 / 0.9", maxTokens: 6000, format: "JSON schema (non-strict) — flat array of typed blocks", streaming: true },
+    params: { temperature: "0.2 / 0.55 / 0.9", maxTokens: 6000, format: "JSON schema (strict) — flat array of typed blocks; block types are an enum and the result is checked against the block registry", streaming: true },
     input: "System prompt listing the allowed block types and their fields + the composition rules produced by A3 + the material.",
     output: "A list of typed blocks; the planner maps them onto Template Studio components.",
     fallbacks: "Retry at low creativity; then a minimal local result.",
@@ -370,13 +370,13 @@ export const REQUESTS = [
     file: SRC.iterate, anchor: /export async function POST/,
     model: "gpt-4o", modelEnv: "LUNA_REFINER_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
-    input: "The user's request, the agent's name and original instructions, the user's choices, the current result as text (first 6,000 characters) and earlier requests.",
-    output: "A one-sentence 'Luna understood…' (shown to the user), the brief, a 3–6 item checklist, the constraints relaxed and what to keep. The rewrite is then run with all of it plus the previous result.",
+    input: "The user's request, the agent's name and original instructions, the user's choices, the current result as a NUMBERED outline (so 'question 3' or 'the answers' can be located; up to 10,000 characters), the names of the output fields and earlier requests.",
+    output: "A one-sentence 'Luna understood…' naming the exact place (shown to the user), the scope (whole result / specific items / one field in every item / add content), the targets with the exact change, the fields touched, the brief, a 3–6 item checklist, the constraints relaxed and what to keep. The rewrite is then run with all of it plus the previous result.",
     fallbacks: "The user's own words are sent unchanged.",
     tokens: { basis: "estimated", typical: { in: 2400, out: 330 }, scale: null },
     seconds: { typical: 4, note: "estimate" },
     prompts: [
-      { label: "System prompt", file: SRC.iterate, re: /content: "(You are the prompt improver[\s\S]*?)"\n          \},/ }
+      { label: "System prompt", file: SRC.iterate, re: /const SYSTEM = `([\s\S]*?)`;/ }
     ]
   },
   {

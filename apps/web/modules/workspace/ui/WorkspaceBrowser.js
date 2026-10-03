@@ -486,7 +486,12 @@ export function WorkspaceBrowser({
 
         <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" aria-label="Search workspace" />
 
-        <div className={`${toolsOpen ? "grid" : "hidden"} absolute right-3 top-14 z-30 max-h-[70vh] w-[min(92vw,340px)] gap-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.2)] lg:static lg:z-auto lg:grid lg:max-h-none lg:w-auto lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
+        {toolsOpen ? <button type="button" aria-label="Close menu" className="fixed inset-0 z-40 cursor-default bg-black/30 lg:hidden" onClick={() => setToolsOpen(false)} /> : null}
+        <div className={`${toolsOpen ? "grid" : "hidden"} fixed inset-x-3 bottom-24 top-20 z-50 content-start gap-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.25)] lg:static lg:inset-auto lg:z-auto lg:grid lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center justify-between bg-white px-4 py-3 lg:hidden">
+          <p className="m-0 text-sm font-bold text-ink">Filters and tools</p>
+          <button type="button" className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white" onClick={() => setToolsOpen(false)}>Close</button>
+        </div>
         <div>
           <p className={`${kicker} mb-1.5`}>Show</p>
           <div className="flex flex-wrap gap-1">

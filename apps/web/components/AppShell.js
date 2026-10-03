@@ -772,7 +772,7 @@ export function AppShell() {
         <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
         <div className="page-content">{content}</div>
       </main>
-      <BottomTabs navItems={navItems} page={page} onPageChange={setPage} onMore={() => setMenuOpen(true)} />
+      <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />
       <UiCritic enabled={criticOn} />
     </div>
   );

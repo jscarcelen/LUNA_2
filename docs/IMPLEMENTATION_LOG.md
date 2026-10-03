@@ -874,3 +874,6 @@
 - Preview (Configure output): the page preview is laid out in an iframe scaled with CSS `zoom`; iOS Safari inflated the text inside it (so text overflowed boxes sized in mm). The preview document now sets
   `text-size-adjust: 100%`, so the phone shows the same page as the computer. The View \ Page matrix scrolls sideways instead of being cut off.
 - "Apply a saved template" is a button dropdown next to Apply (`output/TemplatePicker.tsx`) on every screen: templates grouped by folder as in Template Studio (named folders A–Z, unfiled last), each with its category.
+
+## 2026-10-03 (10) — Phone: sheets, tab bar
+- Workspaces "＋" menu is a sheet over a dimmed page with its own Close button (it used to scroll away with the card). Tab bar is Workspaces · Study plans · AI agents · Marketplace (the rest is in the menu button); it sits under dialogs (z-30), so a dialog's last button is never covered. Date fields on iOS no longer spill out of their box.

@@ -5612,7 +5612,8 @@ body {
   .bottom-tabs {
     position: fixed;
     inset: auto 0 0 0;
-    z-index: 50;
+    /* Under dialogs and sheets (z-50), which must be able to cover it, and under the top bar. */
+    z-index: 30;
     display: flex;
     align-items: stretch;
     padding: 6px 6px max(6px, env(safe-area-inset-bottom));
@@ -5687,4 +5688,20 @@ body {
 select.input {
   padding-right: 34px;
   text-overflow: ellipsis;
+}
+
+@media (max-width: 760px) {
+  /* A date field on iOS keeps a native minimum width and spills out of its box without this. */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
 }

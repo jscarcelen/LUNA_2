@@ -2,15 +2,14 @@
 
 /**
  * Phone only: the sections you use most, in reach of a thumb, like the tab bar of a native app.
- * "More" opens the full menu. Hidden on larger screens by CSS.
+ * The other sections (Home, Activities, Performance, Templates) are in the menu button at the top left. Hidden on larger screens by CSS.
  */
-const PREFERRED = ["dashboard", "workspaces", "activities", "ai-tools"];
+const PREFERRED = ["workspaces", "plans", "ai-tools", "marketplace"];
 
-export function BottomTabs({ navItems = [], page, onPageChange, onMore }) {
+export function BottomTabs({ navItems = [], page, onPageChange }) {
   const picked = PREFERRED.map((key) => navItems.find((item) => item.key === key)).filter(Boolean);
   const items = (picked.length >= 3 ? picked : navItems.slice(0, 4)).slice(0, 4);
   const isCurrent = (item) => page === item.key || (item.match ? String(page).startsWith(item.match) : false);
-  const inMore = !items.some(isCurrent);
   return (
     <nav className="bottom-tabs" aria-label="Main sections">
       {items.map((item) => (
@@ -19,10 +18,6 @@ export function BottomTabs({ navItems = [], page, onPageChange, onMore }) {
           <span className="bottom-tab-label">{item.label}</span>
         </button>
       ))}
-      <button type="button" className={inMore ? "bottom-tab on" : "bottom-tab"} onClick={onMore}>
-        <span className="bottom-tab-icon" aria-hidden>☰</span>
-        <span className="bottom-tab-label">More</span>
-      </button>
     </nav>
   );
 }

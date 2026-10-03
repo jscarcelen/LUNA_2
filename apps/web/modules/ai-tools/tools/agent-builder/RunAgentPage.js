@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
 import { GenerationProgress } from "./GenerationProgress";
-import { OutputPreviewPane, OutputStylePanel, renderOutputHtml } from "../../../template-studio/output/OutputDesigner";
+import { OutputDownloads, OutputPreviewPane, OutputStylePanel, renderOutputHtml } from "../../../template-studio/output/OutputDesigner";
 import { blocksToActivityItems, buildAutoDocument, buildOutputDocument, itemsToBlocks, planOutput, stylesFromSelectedBlocks } from "../../../template-studio/output/outputDocument";
 import { resolveOutputLanguage } from "../../../template-studio/output/labels";
 import { renderPlainOutputText } from "./previewHtml";
@@ -18,6 +18,8 @@ import { buildResource, parseResource, trimSources } from "../../../resources/re
 import { activityLook } from "../../../resources/look";
 import { FolderPicker } from "../../../ui/FolderTree";
 import { ReaderView } from "../../../reader/ReaderView";
+import { InteractiveView } from "../../../reader/InteractiveView";
+import { newItem, parsePlan } from "../../../plans/plan";
 import { AgentBrief } from "./AgentBrief";
 import { oneLiner } from "./briefParser";
 import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
@@ -232,6 +234,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const folders = selectedSubject?.folders || [];
   // Where a result can be filed: the whole workspace tree (subjects are its top-level folders), not just the open subject.
   const filingFolders = useMemo(() => foldersOf(selectedWorkspace), [selectedWorkspace]);
+  /** Study plans anywhere in the workspace: a saved result can be added to one of them. */
+  const planChoices = useMemo(() => (selectedWorkspace?.subjects || []).flatMap((subject) => (subject.documents || []).map((document) => ({ document, plan: parsePlan(document), subjectId: subject.id })).filter((row) => row.plan).map((row) => ({ id: row.document.id, name: row.plan.name, subjectId: row.subjectId, document: row.document, plan: row.plan }))), [selectedWorkspace]);
 
   const [agentConfig, setAgentConfig] = useState(null);
   const [loadError, setLoadError] = useState("");
@@ -678,25 +682,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return { html: await renderOutputHtml(doc, selection, forPrint), textContent: rawText };
   }
 
-  async function handleDoOnLuna() {
-    if (!activity || !activity.questions.length) return;
-    let documentId = "";
-    if (onSaveGeneratedQuizDocument) {
-      setIsSavingDocument(true);
-      try {
-        const content = JSON.stringify({ kind: "activity", activity, data: { ...(output.data || {}), items: output.items || [] }, agentName: agentConfig?.name, createdAt: new Date().toISOString() }, null, 2);
-        const where = filingTarget(saveFolderId);
-        const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: ["activity"], file: { name: `${activity.title}.activity.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } }, where.subjectId);
-        documentId = saved?.id || "";
-        setStatusMessage(`"${activity.title}" saved as an activity — find it under Workspaces → Activities.`);
-      } catch (error) {
-        setStatusMessage(String(error.message || error));
-      } finally {
-        setIsSavingDocument(false);
-      }
-    }
-    setPlaying({ activity, documentId });
-  }
   function handleDownloadInteractive() {
     if (!activity) return;
     const html = renderActivityHtml(activity);
@@ -763,7 +748,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       outputStyles
     };
   }
-  async function saveResource({ name, folderId, tags, difficulty, favourite, openAfter }) {
+  async function saveResource({ name, folderId, tags, difficulty, favourite, openAfter, addActivity, planId, dueDate }) {
     if (!onSaveGeneratedQuizDocument) return;
     setIsSavingDocument(true);
     try {
@@ -786,33 +771,26 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         }
       });
       const content = JSON.stringify(payload, null, 2);
-      const allTags = ["resource", ...(activity && activity.questions.length ? ["activity"] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
+      const isActivity = Boolean(activity && activity.questions.length && addActivity);
+      const allTags = ["resource", ...(isActivity ? ["activity"] : []), ...(isActivity && dueDate ? [`due:${dueDate}`] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
       const where = filingTarget(folderId);
       const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
+      // Into a study plan: one more step, pointing at the resource just saved.
+      let addedTo = "";
+      const chosenPlan = planId ? planChoices.find((choice) => choice.id === planId) : null;
+      if (chosenPlan && saved?.id && typeof onUpdateGeneratedDocument === "function") {
+        const step = { ...newItem({ resourceId: saved.id, title: name, kind: activity && activity.questions.length ? "activity" : "read", dueDate: dueDate || "", minutes: 30 }), note: "Added from a generated result." };
+        const next = { ...chosenPlan.plan, items: [...(chosenPlan.plan.items || []), step], updatedAt: new Date().toISOString() };
+        const planContent = JSON.stringify(next, null, 2);
+        await onUpdateGeneratedDocument(chosenPlan.document.id, { file: { name: chosenPlan.document.name, content: planContent, preview: chosenPlan.document.preview, sizeBytes: planContent.length } }, chosenPlan.subjectId);
+        addedTo = chosenPlan.name;
+      }
       setSaveOpen(false);
-      setStatusMessage(`Saved “${name}” to your resources.`);
+      setStatusMessage(`Saved “${name}” to your workspace${isActivity ? " and to Activities" : ""}${addedTo ? ` and added to “${addedTo}”` : ""}.`);
       if (openAfter) {
         if (activity && activity.questions.length) setPlaying({ activity: payload.activity, documentId: saved?.id || "" });
-        else toolContext?.onOpenPage?.("resources");
+        else setReaderOpen(true);
       }
-    } catch (error) {
-      setStatusMessage(String(error.message || error));
-    } finally {
-      setIsSavingDocument(false);
-    }
-  }
-
-  async function handleSaveAsDocument() {
-    if (!onSaveGeneratedQuizDocument || !doc) return;
-    setIsSavingDocument(true);
-    setStatusMessage("");
-    try {
-      const { html, textContent } = await renderFinalHtml(true);
-      const name = `${agentConfig?.name || "Agent Output"}.html`;
-      const where = filingTarget(saveFolderId);
-      const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: [], file: { name, content: html, preview: textContent, sizeBytes: html.length } }, where.subjectId);
-      if (!saved) throw new Error("Output could not be saved to the workspace.");
-      setStatusMessage(`Saved "${name}" to your workspace.`);
     } catch (error) {
       setStatusMessage(String(error.message || error));
     } finally {
@@ -829,28 +807,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       anchor.download = `${agentConfig?.name || "output"}.html`;
       anchor.click();
       URL.revokeObjectURL(url);
-    } catch (error) {
-      setStatusMessage(String(error.message || error));
-    }
-  }
-
-  async function handlePrint() {
-    try {
-      const { html } = await renderFinalHtml(true);
-      const frame = document.createElement("iframe");
-      frame.style.position = "fixed";
-      frame.style.right = "0";
-      frame.style.bottom = "0";
-      frame.style.width = "0";
-      frame.style.height = "0";
-      frame.style.border = "0";
-      document.body.appendChild(frame);
-      frame.srcdoc = html;
-      frame.onload = () => {
-        frame.contentWindow?.focus();
-        frame.contentWindow?.print();
-        window.setTimeout(() => frame.remove(), 1000);
-      };
     } catch (error) {
       setStatusMessage(String(error.message || error));
     }
@@ -910,6 +866,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       rawText={rawText}
       filename={agentConfig.name || "output"}
       onError={setStatusMessage}
+      interactive={readerResource ? <InteractiveView resource={readerResource} /> : null}
       emptyHint="Generate in step 1 and your result appears here, laid out with Template Studio's components."
       overlay={generation.isGenerating || generation.error ? (
         <GenerationProgress
@@ -1063,45 +1020,20 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
             {iterateCard}
-            <section className={cardClass}>
-              <p className={kicker}>Interactive HTML view</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">{activity && activity.questions.length ? "Read it, highlight what matters and answer the questions right here, in any browser." : "Read it in person: a clean page you can highlight in colours, with or without the highlights."}</p>
-              <button type="button" className={`${ghostBtn} mt-3`} disabled={!hasOutput || !readerResource} onClick={() => setReaderOpen(true)}>Open the HTML view</button>
-            </section>
             <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
-              <p className={kicker}>Save as a resource · recommended</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">Keep it in your library: give it a name, a folder and tags. From there you can do it on Luna, download every view of its template, or regenerate it.</p>
-              <button type="button" className={`${primaryBtn} mt-3`} disabled={!hasOutput} onClick={() => setSaveOpen(true)}>Save resource…</button>
-            </section>
-            {activity && activity.questions.length ? (
-              <section className={cardClass}>
-                <p className={kicker}>Do it on Luna</p>
-                <p className="m-0 mt-2 text-sm text-soft-ink">{activity.questions.length} question{activity.questions.length === 1 ? "" : "s"} the student can answer online. Every attempt is recorded, mistakes included, so progress is tracked.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className={primaryBtn} disabled={isSavingDocument} onClick={handleDoOnLuna}>{isSavingDocument ? "Saving…" : "Save as activity & open"}</button>
-                  <button type="button" className={ghostBtn} onClick={handleDownloadInteractive}>Interactive HTML</button>
-                </div>
-              </section>
-            ) : null}
-            <section className={cardClass}>
-              <p className={kicker}>{activity && activity.questions.length ? "Download as a file" : "Download"}</p>
-              <div className="mt-3 grid gap-2">
-                <button type="button" className={`${ghostBtn} !justify-between`} onClick={handlePrint}><span>PDF</span><span className="text-xs font-normal text-soft-ink">via print dialog</span></button>
-                <button type="button" className={`${ghostBtn} !justify-between`} onClick={handleDownloadHtml}><span>HTML</span><span className="text-xs font-normal text-soft-ink">opens in any browser</span></button>
-                <p className="m-0 text-xs text-soft-ink">PDF, Word and PowerPoint (slides) downloads are in the preview toolbar on the right — pick the page size and view there first.</p>
-              </div>
-            </section>
-            <section className={cardClass}>
-              <p className={kicker}>Save to workspace</p>
+              <p className={kicker}>Save to your workspace</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">Pick where it is filed, and — if you want — add it straight to Activities or to a study plan, with an optional due date. From there you can open it, restyle it or download it any time.</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <div className="min-w-0 flex-1"><FolderPicker folders={filingFolders} selectedId={saveFolderId || subjectNode(subjectId)} onSelect={setSaveFolderId} maxHeight={170} hideUnfiled /></div>
-                <button type="button" onClick={handleSaveAsDocument} disabled={isSavingDocument || !doc} className={primaryBtn}>{isSavingDocument ? "Saving…" : "Save"}</button>
+                <button type="button" className={primaryBtn} disabled={!hasOutput} onClick={() => setSaveOpen(true)}>Save resource…</button>
+                <button type="button" className={ghostBtn} disabled={!hasOutput || !readerResource} onClick={() => setReaderOpen(true)}>Open the HTML view</button>
               </div>
               {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
             </section>
             <section className={cardClass}>
-              <p className={kicker}>Share with students</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">Saved activities appear under Workspaces → Activities, where students do them and results are tracked. Assigning to a class arrives with student accounts.</p>
+              <p className={kicker}>Download</p>
+              <div className="mt-3">
+                <OutputDownloads doc={doc} filename={agentConfig.name || "output"} onError={setStatusMessage} interactiveKind={activity && activity.questions.length ? "activity" : "document"} onInteractiveHtml={activity && activity.questions.length ? handleDownloadInteractive : handleDownloadHtml} />
+              </div>
             </section>
             <button type="button" className={ghostBtn} onClick={() => setFlowStep(2)}>← Back to output</button>
           </div>
@@ -1121,6 +1053,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           defaultName={agentConfig?.name || "Generated resource"}
           folders={filingFolders}
           hideUnfiled
+          plans={planChoices.map((choice) => ({ id: choice.id, name: choice.name }))}
+          canActivity={Boolean(activity && activity.questions.length)}
           defaultFolderId={saveFolderId || subjectNode(subjectId)}
           onCreateFolder={toolContext?.onCreateFolder ? async (name, parentNode) => {
             const parent = parseNode(parentNode || subjectNode(subjectId));

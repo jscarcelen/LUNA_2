@@ -825,3 +825,14 @@
 - Sources: a question's source is the passage the agent cited (`_sourceResolved` → `__cited`), not only the best keyword match, so a quiz in Spanish about an
   English document shows its source; a card with no source takes no room (`collapseEmpty`) and cards fit their content (`fitContent`) with a little air
   under the last line, so they are no longer too tall; the answer label has room for longer words ("RESPUESTA"); "How sure are you?" has room in Spanish.
+
+## 2026-10-03 (5) — Question cards, Configure output, Export step
+- Question cards: rounded on the right, straight on the left so the card's top line meets the blue bar (`Style.squareLeft`, HTML/PDF); the answer band and the
+  source line are inset to the card's text instead of touching its edges; the space under the last line is a constant 5.5 mm whether or not the answer is
+  shown (cards no longer keep room for a source that is not there; the stretched edge bar no longer inflates the card).
+- Configure output: the preview toolbar lost PDF / DOCX / Copy (export lives in the Export step); a new "Interactive" tab shows the HTML form (quiz you
+  answer and check, flip deck, or reading page) separately from the page-size × view matrix; more air between a Structure card and its "Shown" tick.
+- Export step: one "Save to your workspace" card (Save resource… opens the dialog: name, workspace folder, and optionally add to Activities and/or a study
+  plan with an optional due date) replaces Save-as-activity, Save-to-workspace and Share; one "Download" card: PDF for any selection of page sizes × views,
+  one file each (`OutputDownloads`), and the interactive HTML with a notice that results are not tracked outside Luna. The same panel is under Format &
+  colour on a saved resource.

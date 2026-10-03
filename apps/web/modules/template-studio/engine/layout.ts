@@ -252,6 +252,9 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   const missing = Boolean(group.fitContent) || group.children.some((child) => !isShown(child, scopes, ctx));
   const designedAll = Math.max(group.designedBottom || 0, ...group.children.map((child) => child.frame.y + child.frame.h), 0);
   let designedBottom = 0;
+  // (A bar that sits beside a panel of its own height — the exam header — belongs to that panel, not to the group.)
+  const besidePanel = (bar: Element) => children.some((other) => other !== bar && other.type === "rect" && other.frame.w > 3 && Math.abs(other.frame.y - bar.frame.y) < 0.5 && Math.abs(other.frame.h - bar.frame.h) < 0.5);
+  const edgeIds = new Set(mode === "free" ? children.filter((child) => child.type === "rect" && child.frame.x <= 0.5 && child.frame.w <= 3 && child.frame.y <= 0.5 && child.frame.h >= group.frame.h * 0.4 && !besidePanel(child)).map((child) => child.id) : []);
   const freePlan = mode === "free" ? planFree(group, children.filter((child) => isShown(child, scopes, ctx)), x, y, scopes, ctx, limitBottom) : null;
   for (const child of children) {
     if (!isShown(child, scopes, ctx)) continue;
@@ -268,8 +271,11 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
           ? layoutRepeatedInline(child as GroupElement, x + child.frame.x, y + child.frame.y + offset, scopes, ctx)
           : layoutElement(framed, x, y, scopes, ctx, limitBottom));
       items.push(...laid.items);
-      bottom = Math.max(bottom, laid.bottom);
-      right = Math.max(right, laid.right);
+      // Something that collapsed to nothing (a source line with no source) takes no room at all.
+      if ((laid.items.length || laid.height) && !edgeIds.has(child.id)) {
+        bottom = Math.max(bottom, laid.bottom);
+        right = Math.max(right, laid.right);
+      }
       continue;
     }
     if (mode === "grid") {
@@ -308,17 +314,13 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   // A card missing some of its content fits the same way, so hiding the answer closes the gap.
   const fits = mode === "free" && (conditional || missing);
   // A card keeps some air under its last line even when it ends earlier than it was drawn (no source line).
-  const pad = fits ? Math.max(group.frame.h - designedAll, group.style.fill || group.style.stroke ? 4.5 : 0, 0) : 0;
+  const hasChrome = Boolean(group.style.fill || group.style.stroke);
+  const pad = fits ? (hasChrome ? 5.5 : Math.max(group.frame.h - designedAll, 0)) : 0;
   const height = fits ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + (freePlan?.total || 0) : 0, bottom - y);
   void designedBottom;
   // The coloured edge down a card runs the card's whole height — answer, source and all — so it is
   // plainly one question.
-  if (mode === "free") {
-    // (A bar that sits beside a panel of its own height — the exam header — belongs to that panel, not to the group.)
-    const besidePanel = (bar: Element) => children.some((other) => other !== bar && other.type === "rect" && other.frame.w > 3 && Math.abs(other.frame.y - bar.frame.y) < 0.5 && Math.abs(other.frame.h - bar.frame.h) < 0.5);
-    const edgeIds = new Set(children.filter((child) => (child.type === "rect") && child.frame.x <= 0.5 && child.frame.w <= 3 && child.frame.y <= 0.5 && child.frame.h >= group.frame.h * 0.4 && !besidePanel(child)).map((child) => child.id));
-    if (edgeIds.size) for (const item of items) if (item.type === "rect" && edgeIds.has(item.elementId)) item.h = Math.max(item.h, height - (item.y - y));
-  }
+  if (mode === "free" && edgeIds.size) for (const item of items) if (item.type === "rect" && edgeIds.has(item.elementId)) item.h = height - (item.y - y);
   const chrome: LaidOutItem[] = group.style.fill || group.style.stroke ? [{ type: "rect", x, y, w: group.frame.w, h: height, style: group.style, elementId: group.id }] : [];
   return { items: [...chrome, ...items], bottom: y + height, right, height };
 }

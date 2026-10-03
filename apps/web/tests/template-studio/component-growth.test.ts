@@ -166,3 +166,48 @@ describe("quiz on slides", () => {
     expect(text).toContain("Accounting.pdf");
   });
 });
+
+
+describe("question card proportions", () => {
+  const items: any[] = [
+    { type: "multiple-choice", question: "What is the primary goal of a for-profit firm?", options: ["Maximizing value", "Market share", "Lower costs", "Satisfaction"], answer: "A", explanation: "", topic: "t" },
+    { type: "true-false", question: "Deferred revenues are recognized immediately upon receipt.", answer: "false", explanation: "", topic: "t" }
+  ];
+  const build = (view: RegExp) => {
+    const plan: any = planOutput({ blocks: itemsToBlocks(items) as any, title: "Quiz", framed: true });
+    const doc: any = buildOutputDocument(plan, {});
+    const layout = doc.template.layouts[0];
+    const v = layout.views.find((x: any) => view.test(x.name));
+    return layoutDocument(doc.template, doc.data, { layoutId: layout.id, viewId: v.id }).pages[0].items as any[];
+  };
+
+  it("cards are rounded on the right and straight on the left, so they line up with the blue bar", () => {
+    const plan: any = planOutput({ blocks: itemsToBlocks(items) as any, title: "Quiz", framed: true });
+    const doc: any = buildOutputDocument(plan, {});
+    const cards = (doc.template.layouts[0].pages[0].elements as any[]).filter((el) => el.type === "group" && el.style?.squareLeft);
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("the answer band sits inside the card, in line with its text", () => {
+    const items2 = build(/answer/i);
+    const card = items2.find((i) => i.type === "rect" && i.w > 150 && i.h > 25);
+    const band = items2.find((i) => i.type === "rect" && i.w > 100 && i.w < card.w && i.h < 15 && i.y > card.y);
+    expect(band.x - card.x).toBeGreaterThanOrEqual(5);
+    expect((card.x + card.w) - (band.x + band.w)).toBeGreaterThanOrEqual(5);
+  });
+
+  it("the space under the last line is modest and the same on every card, with or without the answer", () => {
+    for (const view of [/student/i, /answer/i]) {
+      const all = build(view);
+      const cards = all.filter((i) => i.type === "rect" && i.w > 150 && i.h > 20 && i.y > 40).sort((a, b) => a.y - b.y); // below the header panel
+      expect(cards.length).toBeGreaterThanOrEqual(2);
+      for (const card of cards) {
+        const inside = all.filter((i) => i.type === "text").filter((i) => i.y >= card.y && i.y < card.y + card.h);
+        const lowest = Math.max(...inside.map((i) => i.y + i.h));
+        const under = card.y + card.h - lowest;
+        expect(under).toBeGreaterThan(2);
+        expect(under).toBeLessThan(9);
+      }
+    }
+  });
+});

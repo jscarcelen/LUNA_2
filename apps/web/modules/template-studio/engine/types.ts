@@ -138,6 +138,8 @@ export interface Style {
   stroke?: string;
   strokeWidth?: number;
   radius?: number;
+  /** Rounded on the right only: the left edge is straight, so a card lines up with the coloured bar beside it. */
+  squareLeft?: boolean;
   opacity?: number;
   /** Text rotation in degrees about the element centre (90 reads bottom→top, -90 top→bottom). */
   rotate?: number;

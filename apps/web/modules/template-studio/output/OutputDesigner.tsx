@@ -200,12 +200,12 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
           {fixed.map((component) => (
             <div key={component.key}>
               {cardFor(component.key)}
-              <label className="-mt-1 mb-2 flex items-center gap-2 px-2 text-xs text-soft-ink">
+              <label className="mb-3 mt-2.5 flex items-center gap-2 px-2 text-xs text-soft-ink">
                 <input type="checkbox" checked={!styles[component.key]?.hidden} onChange={(event) => set(component.key, { hidden: !event.target.checked })} />
                 {styles[component.key]?.hidden ? "Hidden — tick to show it again" : "Shown on the document (untick to remove it)"}
               </label>
               {component.key === "block-footer" && !styles[component.key]?.hidden ? (
-                <div className="-mt-1 mb-2 flex flex-wrap items-center gap-2 px-2">
+                <div className="-mt-1 mb-3 flex flex-wrap items-center gap-2 px-2">
                   <span className="text-xs text-soft-ink">Footer text</span>
                   <input className={`${fieldBase} min-w-40 flex-1 py-1 text-xs`} value={styles[component.key]?.text ?? plan.footerText} onChange={(event) => set(component.key, { text: event.target.value })} />
                   <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => set(component.key, { text: undefined })}>Default</button>
@@ -245,16 +245,17 @@ export interface OutputPreviewPaneProps {
   emptyHint?: string;
   filename: string;
   onError?: (message: string) => void;
+  /** The interactive HTML form of the output, shown in its own tab (separate from the page-size × view matrix). */
+  interactive?: ReactNode;
 }
 
 const MM_PX = 3.78;
 
-export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawText, overlay, emptyHint, filename, onError }: OutputPreviewPaneProps) {
-  const [tab, setTab] = useState<"preview" | "data" | "raw">("preview");
+export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawText, overlay, emptyHint, onError, interactive }: OutputPreviewPaneProps) {
+  const [tab, setTab] = useState<"preview" | "interactive" | "data" | "raw">("preview");
   const [html, setHtml] = useState("");
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
-  const [exporting, setExporting] = useState("");
   const [width, setWidth] = useState(560);
   const frameBox = useRef<HTMLDivElement>(null);
 
@@ -288,22 +289,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
   const pageWidthPx = (current?.layout.canvas.width || 210) * MM_PX;
   const zoom = Math.max(0.3, Math.min(1.25, (width - 8) / (pageWidthPx + 2 * 10 * MM_PX)));
   const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#e9e9ee}body{padding:10mm;zoom:${zoom.toFixed(3)}}</style></head><body>${html}</body></html>`;
-  const slides = Boolean(doc && doc.layouts[Math.min(selection.layoutIndex, doc.layouts.length - 1)]?.class === "slides");
   const showMatrix = Boolean(doc && (doc.layouts.length > 1 || doc.views.length > 1));
-
-  async function exportAs(format: "pdf" | "docx" | "pptx") {
-    if (!doc) return;
-    setExporting(format);
-    try {
-      await downloadOutput(doc, selection, format, `${filename}${doc.views.length > 1 ? ` - ${current?.view?.name || ""}` : ""}`.trim());
-    } catch (failure) {
-      const message = String((failure as Error).message || failure);
-      setError(message);
-      onError?.(message);
-    } finally {
-      setExporting("");
-    }
-  }
 
   const tabButton = (id: typeof tab, label: string) => (
     <button key={id} type="button" onClick={() => setTab(id)} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${tab === id ? "bg-ink text-white shadow" : "text-soft-ink hover:text-ink"}`}>{label}</button>
@@ -312,17 +298,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-4 py-3">
-        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{tabButton("preview", "Preview")}{tabButton("data", "Data")}{tabButton("raw", "Raw")}</div>
-        <div className="flex items-center gap-2">
-          {doc ? (
-            <>
-              <button type="button" disabled={Boolean(exporting)} onClick={() => exportAs("pdf")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "pdf" ? "…" : "PDF"}</button>
-              <button type="button" disabled={Boolean(exporting)} onClick={() => exportAs("docx")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "docx" ? "…" : "DOCX"}</button>
-              {slides ? <button type="button" disabled={Boolean(exporting)} onClick={() => exportAs("pptx")} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10 disabled:opacity-40">{exporting === "pptx" ? "…" : "PPTX"}</button> : null}
-            </>
-          ) : null}
-          {doc ? <button type="button" onClick={() => navigator.clipboard?.writeText(tab === "data" ? dataJson : rawText).catch(() => undefined)} className="rounded-full px-3 py-1 text-xs font-semibold text-ink ring-1 ring-ink/15 transition hover:bg-ink/10">Copy</button> : null}
-        </div>
+        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{tabButton("preview", "Preview")}{interactive ? tabButton("interactive", "Interactive") : null}{tabButton("data", "Data")}{tabButton("raw", "Raw")}</div>
       </div>
 
       {showMatrix && doc && tab === "preview" ? (
@@ -370,10 +346,99 @@ export function OutputPreviewPane({ doc, selection, onSelection, dataJson, rawTe
             <iframe title="Output preview" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={srcDoc} className="h-full w-full border-0" />
           </div>
         ) : null}
+        {doc && tab === "interactive" && interactive ? <div className="h-[640px] overflow-y-auto bg-[var(--bg)]">{interactive}</div> : null}
         {doc && tab === "data" ? <pre className="m-0 h-[640px] overflow-auto p-4 font-mono text-xs leading-relaxed text-ink/90">{dataJson}</pre> : null}
         {doc && tab === "raw" ? <pre className="m-0 h-[640px] overflow-auto whitespace-pre-wrap p-4 font-mono text-xs leading-relaxed text-ink/90">{rawText}</pre> : null}
         {error ? <p className="absolute bottom-2 left-3 right-3 m-0 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-[var(--color-danger)]">{error}</p> : null}
       </div>
+    </div>
+  );
+}
+
+/* ─── downloads: PDF per page size and view, and the interactive HTML ──────────────────── */
+
+export interface OutputDownloadsProps {
+  doc: OutputDocument | null;
+  filename: string;
+  /** Downloads the interactive HTML file (omit when the output has no interactive form). */
+  onInteractiveHtml?: () => void;
+  interactiveKind?: "activity" | "document";
+  onError?: (message: string) => void;
+}
+
+/**
+ * Pick any page sizes and views (A4 · Letter · Slides × Student view · Answer key…) and download
+ * each as its own PDF — or take the interactive HTML, which works anywhere but is not connected to
+ * Luna, so nothing done in it is tracked.
+ */
+export function OutputDownloads({ doc, filename, onInteractiveHtml, interactiveKind = "activity", onError }: OutputDownloadsProps) {
+  const [picked, setPicked] = useState<Set<string>>(new Set(["0:0"]));
+  const [busy, setBusy] = useState("");
+  const key = (layoutIndex: number, viewIndex: number) => `${layoutIndex}:${viewIndex}`;
+  if (!doc) return <p className="m-0 text-sm text-soft-ink">Generate something first — then choose what to download.</p>;
+  const total = doc.layouts.length * doc.views.length;
+  const toggle = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+
+  async function download() {
+    if (!doc) return;
+    const chosen = [...picked].map((id) => id.split(":").map(Number) as [number, number]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+    for (let index = 0; index < chosen.length; index += 1) {
+      const [layoutIndex, viewIndex] = chosen[index];
+      setBusy(`${index + 1} of ${chosen.length}`);
+      try {
+        await downloadOutput(doc, { layoutIndex, viewIndex }, "pdf", `${filename} - ${doc.views[viewIndex]?.name || "view"} - ${doc.layouts[layoutIndex]?.label || "page"}`.trim());
+        // Browsers ask before saving several files; give them a breath between downloads.
+        await new Promise((resolve) => window.setTimeout(resolve, 350));
+      } catch (failure) {
+        onError?.(String((failure as Error).message || failure));
+        break;
+      }
+    }
+    setBusy("");
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div>
+        <p className={`${kicker} mb-1.5`}>PDF · choose page sizes and views</p>
+        <div className="overflow-x-auto rounded-xl border border-ink/10">
+          <table className="w-full border-collapse text-left text-xs">
+            <thead className="bg-[var(--surface-soft)]">
+              <tr>
+                <th className="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">View \ Page</th>
+                {doc.layouts.map((layout) => <th key={layout.id} className="px-3 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{layout.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {doc.views.map((view, viewIndex) => (
+                <tr key={view.name} className="border-t border-ink/8">
+                  <td className="px-3 py-2 text-[12px] font-semibold text-ink">{view.name}</td>
+                  {doc.layouts.map((layout, layoutIndex) => (
+                    <td key={layout.id} className="px-3 py-2 text-center">
+                      <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={picked.has(key(layoutIndex, viewIndex))} onChange={() => toggle(key(layoutIndex, viewIndex))} aria-label={`${view.name}, ${layout.label}`} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <button type="button" className={ghostBtn} disabled={!picked.size || Boolean(busy)} onClick={download}>{busy ? `Preparing ${busy}…` : `Download ${picked.size || ""} PDF${picked.size === 1 ? "" : "s"}`.replace("Download  ", "Download ")}</button>
+          <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setPicked(picked.size === total ? new Set() : new Set(doc.views.flatMap((_, v) => doc.layouts.map((__, l) => key(l, v)))))}>{picked.size === total ? "Clear" : "Select all"}</button>
+          <span className="text-[11px] text-soft-ink">Each selection is its own file.</span>
+        </div>
+      </div>
+
+      {onInteractiveHtml ? (
+        <div className="border-t border-ink/8 pt-3">
+          <p className={`${kicker} mb-1.5`}>{interactiveKind === "activity" ? "Interactive HTML" : "HTML"}</p>
+          <button type="button" className={ghostBtn} onClick={onInteractiveHtml}>{interactiveKind === "activity" ? "Download the interactive HTML" : "Download the HTML"}</button>
+          <p className="m-0 mt-2 rounded-lg bg-[rgba(178,94,0,0.08)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-warn)]">
+            This file works in any browser but is not connected to Luna. If the task is done in it, outside Luna, your results and performance will <strong>not</strong> be tracked — do it inside Luna to keep them.
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

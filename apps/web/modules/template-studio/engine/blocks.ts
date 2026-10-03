@@ -9,7 +9,7 @@
 
 import type { Element, FieldDef, GroupElement, ID, TextElement } from "./types";
 import { createField, createGroup, createId, createShape, createText, defaultStyle, walkElements } from "./model";
-import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, accentEdge, accentMark, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
+import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, ANSWER_INSET, accentEdge, accentMark, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
 
 export type BlockCategory = "questions" | "cards" | "structure" | "kids" | "custom";
 
@@ -108,7 +108,7 @@ function examQuestion(): BlockDef {
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 52 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
-    style: cardStyle(accent),
+    style: cardStyle(accent, "plain", { squareLeft: true }),
     children: [
       accentEdge(accent, 52),
       ...numberBadge(accent, 6, 6),
@@ -123,7 +123,7 @@ function examQuestion(): BlockDef {
       }),
       ...confidenceRow(accent, 40, W - 24).map((element) => shift(element, 17)),
       ...answerBand(accent, answer.id, 46, W).map((element) => element),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 53.2, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: ANSWER_INSET, y: 53.2, w: W - 2 * ANSWER_INSET, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -162,7 +162,7 @@ function openQuestion(): BlockDef {
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 64 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
-    style: cardStyle(accent),
+    style: cardStyle(accent, "plain", { squareLeft: true }),
     children: [
       accentEdge(accent, 64),
       ...numberBadge(accent, 6, 6),
@@ -171,10 +171,10 @@ function openQuestion(): BlockDef {
       ...[0, 1, 2, 3].map((row) => writingLine(20 + row * 7.5, 17, W - 28)),
       ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17)),
       // The model answer sits in a taller band than a multiple-choice letter: it is a sentence or two.
-      createShape("rect", { name: "opt:answer|Answer band", frame: { x: 0, y: 51, w: W, h: 11.4 }, style: defaultStyle({ fill: palette("green").tint, stroke: "", radius: RADIUS.panel }) }),
-      kicker("Answer", { x: 4, y: 52.6, w: 22, h: 4 }, palette("green").deep, { name: "opt:answer|Answer label" }),
-      field(answer.id, "The median is the middle value, so extreme values do not move it.", { x: 27, y: 52.3, w: W - 31, h: 8.4 }, { fontSize: TYPE.small, fontWeight: "bold", color: palette("green").deep, lineHeight: 1.35 }, { format: "rich", name: "opt:answer|Answer" }),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 63.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
+      createShape("rect", { name: "opt:answer|Answer band", frame: { x: ANSWER_INSET, y: 51, w: W - 2 * ANSWER_INSET, h: 11.4 }, style: defaultStyle({ fill: palette("green").tint, stroke: "", radius: RADIUS.panel }) }),
+      kicker("Answer", { x: ANSWER_INSET + 4, y: 52.6, w: 22, h: 4 }, palette("green").deep, { name: "opt:answer|Answer label" }),
+      field(answer.id, "The median is the middle value, so extreme values do not move it.", { x: ANSWER_INSET + 27, y: 52.3, w: W - 2 * ANSWER_INSET - 31, h: 8.4 }, { fontSize: TYPE.small, fontWeight: "bold", color: palette("green").deep, lineHeight: 1.35 }, { format: "rich", name: "opt:answer|Answer" }),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: ANSWER_INSET, y: 63.6, w: W - 2 * ANSWER_INSET, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -212,7 +212,7 @@ function trueFalse(): BlockDef {
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 16 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: statements.id, mode: "flow" },
-    style: cardStyle(accent),
+    style: cardStyle(accent, "plain", { squareLeft: true }),
     children: [
       accentEdge(accent, 16),
       label("{{n}}", { x: 6, y: 5.4, w: 7, h: 5.5 }, { fontSize: TYPE.small, fontWeight: "bold", color: accent.deep }, { name: "opt:number|Number" }),
@@ -223,7 +223,7 @@ function trueFalse(): BlockDef {
       ...confidenceRow(accent, 14, W - 24).map((element) => shift(element, 15)),
       // The answer looks like everywhere else: a full-width green band that says True or False.
       ...answerBand(accent, answer.id, 21, W),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 28.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: ANSWER_INSET, y: 28.6, w: W - 2 * ANSWER_INSET, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -636,7 +636,7 @@ function fillBlanks(): BlockDef {
     frame: { x: 12, y: 12, w: 186, h: 13 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: items.id, mode: "flow" },
-    style: cardStyle(accent),
+    style: cardStyle(accent, "plain", { squareLeft: true }),
     children: [
       accentEdge(accent, 13),
       st("{{n}}.", { x: 5, y: 3.5, w: 8, h: 6 }, { fontSize: 11, fontWeight: "bold", color: accent.deep }, { name: "opt:number|Number" }),

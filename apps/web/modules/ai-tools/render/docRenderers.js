@@ -33,7 +33,7 @@ export function renderDocHtml(template, data = {}, { showFieldMarkers = false, p
     const pageColor = page.background?.color || "#fff";
     const items = page.items.map((item) => {
       const base = `position:absolute;left:${item.x}mm;top:${item.y}mm;width:${item.w}mm;`;
-      if (item.type === "rect") return `<div style="${base}height:${item.h}mm;background:${item.style.fill || "transparent"};border:${item.style.stroke ? `${item.style.strokeWidth || 0.3}mm solid ${item.style.stroke}` : "0"};border-radius:${item.ellipse ? "50%" : `${item.style.radius || 0}mm`};opacity:${item.style.opacity ?? 1};"></div>`;
+      if (item.type === "rect") return `<div style="${base}height:${item.h}mm;background:${item.style.fill || "transparent"};border:${item.style.stroke ? `${item.style.strokeWidth || 0.3}mm solid ${item.style.stroke}` : "0"};border-radius:${item.ellipse ? "50%" : item.style.squareLeft ? `0 ${item.style.radius || 0}mm ${item.style.radius || 0}mm 0` : `${item.style.radius || 0}mm`};opacity:${item.style.opacity ?? 1};"></div>`;
       if (item.type === "line") return `<div style="${base}height:0;border-top:${Math.max(0.3, item.h)}mm solid ${item.style.stroke || "#d2d2d7"};"></div>`;
       if (item.type === "image") return item.src ? `<img src="${escapeHtml(item.src)}" alt="" style="${base}height:${item.h}mm;object-fit:contain;" />` : `<div style="${base}height:${item.h}mm;border:0.3mm dashed #c7c7cc;border-radius:1mm;"></div>`;
       const marker = showFieldMarkers && item.isField ? `<span style="position:absolute;top:-3.2mm;left:0;font-size:6pt;color:#0060c0;background:#eef2ff;padding:0 1mm;border-radius:1mm;">AI · ${escapeHtml(item.path)}</span>` : "";

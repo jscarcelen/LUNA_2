@@ -100,11 +100,12 @@ export const kicker = (value: string, frame: Frame, colour: string, extra: Parti
   label(value.toUpperCase(), frame, { fontSize: TYPE.micro, fontWeight: "bold", color: colour }, extra);
 
 /** A white card with a hairline: the default container for anything repeated. */
-export const cardStyle = (accent: Palette, variant: "plain" | "tinted" | "outlined" = "plain") => defaultStyle({
+export const cardStyle = (accent: Palette, variant: "plain" | "tinted" | "outlined" = "plain", extra: { squareLeft?: boolean } = {}) => defaultStyle({
   fill: variant === "tinted" ? accent.tint : INK.paper,
   stroke: variant === "outlined" ? accent.line : INK.hairline,
   strokeWidth: 0.3,
-  radius: RADIUS.card
+  radius: RADIUS.card,
+  ...extra
 });
 
 /** The coloured edge down the left of a card — structure from colour, with no slab of it. */
@@ -155,15 +156,18 @@ export function optionRow(accent: Palette, optionFieldId: ID, width: number, let
   });
 }
 
+export const ANSWER_INSET = 6;
+
 /** The answer strip at the foot of a card, shown only in an answer key. */
 export function answerBand(accent: Palette, answerFieldId: ID, y: number, width: number, optionKey = "answer"): Element[] {
   const prefix = `opt:${optionKey}|`;
   void accent;
   const green = palette("green");
+  // Inside the card, in line with its text — never touching the card's own edges.
   return [
-    createShape("rect", { name: `${prefix}Answer band`, frame: { x: 0, y, w: width, h: 6.4 }, style: defaultStyle({ fill: green.tint, stroke: "", radius: RADIUS.panel }) }),
-    kicker("Answer", { x: 4, y: y + 1.6, w: 22, h: 4 }, green.deep, { name: `${prefix}Answer label` }),
-    field(answerFieldId, "B · Absorbs light energy", { x: 27, y: y + 1.3, w: width - 31, h: 4.6 }, { fontSize: TYPE.small, fontWeight: "bold", color: green.deep }, { name: `${prefix}Answer` })
+    createShape("rect", { name: `${prefix}Answer band`, frame: { x: ANSWER_INSET, y, w: width - 2 * ANSWER_INSET, h: 6.4 }, style: defaultStyle({ fill: green.tint, stroke: "", radius: RADIUS.panel }) }),
+    kicker("Answer", { x: ANSWER_INSET + 4, y: y + 1.6, w: 22, h: 4 }, green.deep, { name: `${prefix}Answer label` }),
+    field(answerFieldId, "B · Absorbs light energy", { x: ANSWER_INSET + 27, y: y + 1.3, w: width - 2 * ANSWER_INSET - 31, h: 4.6 }, { fontSize: TYPE.small, fontWeight: "bold", color: green.deep }, { name: `${prefix}Answer` })
   ];
 }
 

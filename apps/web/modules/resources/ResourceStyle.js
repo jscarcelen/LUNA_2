@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { OutputPreviewPane, OutputStylePanel } from "../template-studio/output/OutputDesigner";
+import { OutputDownloads, OutputPreviewPane, OutputStylePanel } from "../template-studio/output/OutputDesigner";
+import { InteractiveView } from "../reader/InteractiveView";
+import { renderActivityHtml } from "../activities/engine/html";
 import { buildOutputDocument, planOutput } from "../template-studio/output/outputDocument";
 import { resourceBlocks } from "./look";
 import { resolveOutputLanguage } from "../template-studio/output/labels";
@@ -75,6 +77,18 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
     return () => window.clearTimeout(timer);
   }, [styles]);
 
+  function downloadInteractive() {
+    const hasActivity = Boolean(resource?.activity?.questions?.length);
+    const html = hasActivity ? renderActivityHtml(resource.activity) : null;
+    if (!html) { onStatus?.("Download the PDF versions on the left, or open the reading view."); return; }
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${resource.name || "resource"}.interactive.html`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   if (!blocks || !plan) {
     return <p className="m-0 text-sm text-soft-ink">This resource has no component layout to restyle. Regenerate it with a current agent to choose its format and colour.</p>;
   }
@@ -84,6 +98,10 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
       <div className="grid gap-2">
         <OutputStylePanel plan={plan} styles={styles} onStylesChange={setStyles} fileName={resource.name || ""} />
         <p className="m-0 text-[11px] text-soft-ink">{saved || "Change a format or colour whenever you like — it is saved with the resource."}</p>
+        <div className="rounded-[18px] border border-ink/8 bg-white p-4">
+          <p className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Download</p>
+          <OutputDownloads doc={doc} filename={resource.name || "resource"} onError={onStatus} interactiveKind={resource?.activity?.questions?.length ? "activity" : "document"} onInteractiveHtml={resource?.activity?.questions?.length ? downloadInteractive : undefined} />
+        </div>
       </div>
       <div className="lg:sticky lg:top-4">
         <OutputPreviewPane
@@ -95,6 +113,7 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
           filename={resource.name || "resource"}
           onError={onStatus}
           emptyHint="Nothing to show yet."
+          interactive={<InteractiveView resource={resource} />}
         />
       </div>
     </div>

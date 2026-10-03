@@ -8,13 +8,17 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
 
 /** Name, folder, tags and difficulty before a generated resource is saved. */
-export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId = "", summary = "", busy = false, hideUnfiled = false, onCancel, onSave, onCreateFolder }) {
+export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId = "", summary = "", busy = false, hideUnfiled = false, plans = [], canActivity = false, onCancel, onSave, onCreateFolder }) {
   const [name, setName] = useState(defaultName || "");
   const [folderId, setFolderId] = useState(defaultFolderId);
   const [tags, setTags] = useState("");
   const [difficulty, setDifficulty] = useState("");
   const [favourite, setFavourite] = useState(false);
   const [openAfter, setOpenAfter] = useState(true);
+  const [addActivity, setAddActivity] = useState(canActivity);
+  const [addPlan, setAddPlan] = useState(false);
+  const [planId, setPlanId] = useState(plans[0]?.id || "");
+  const [dueDate, setDueDate] = useState("");
   const [newFolder, setNewFolder] = useState("");
   const [creating, setCreating] = useState(false);
   async function create() {
@@ -62,12 +66,33 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
             </label>
             <label className="grid gap-1 text-xs font-semibold text-soft-ink">Tags<input className={input} value={tags} onChange={(event) => setTags(event.target.value)} placeholder="exam, unit 2" /></label>
           </div>
+          {canActivity || plans.length ? (
+            <div className="grid gap-2 rounded-xl border border-ink/10 p-3">
+              <p className="m-0 text-xs font-semibold text-soft-ink">Also add it to</p>
+              {canActivity ? <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={addActivity} onChange={(event) => setAddActivity(event.target.checked)} />Activities — to do on Luna, with results tracked</label> : null}
+              {plans.length ? (
+                <div className="grid gap-1.5">
+                  <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={addPlan} onChange={(event) => setAddPlan(event.target.checked)} />A study plan</label>
+                  {addPlan ? (
+                    <select className={input} value={planId} onChange={(event) => setPlanId(event.target.value)}>
+                      {plans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+                    </select>
+                  ) : null}
+                </div>
+              ) : null}
+              {(addActivity && canActivity) || addPlan ? (
+                <label className="grid gap-1 text-xs font-semibold text-soft-ink">Due date <span className="font-normal">· optional</span>
+                  <input type="date" className={input} value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                </label>
+              ) : null}
+            </div>
+          ) : null}
           <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={favourite} onChange={(event) => setFavourite(event.target.checked)} />Mark as favourite</label>
           <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={openAfter} onChange={(event) => setOpenAfter(event.target.checked)} />Open it after saving</label>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={busy || !name.trim()} onClick={() => onSave({ name: name.trim(), folderId, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), difficulty, favourite, openAfter })}>{busy ? "Saving…" : "Save resource"}</button>
+          <button type="button" className={primaryBtn} disabled={busy || !name.trim()} onClick={() => onSave({ name: name.trim(), folderId, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), difficulty, favourite, openAfter, addActivity: canActivity && addActivity, planId: addPlan ? planId : "", dueDate: ((canActivity && addActivity) || addPlan) ? dueDate : "" })}>{busy ? "Saving…" : "Save resource"}</button>
         </div>
       </div>
     </div>

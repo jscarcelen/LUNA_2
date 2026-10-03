@@ -783,3 +783,45 @@
   improver, 24 with it.
 - Reliability: OpenAI calls wait out a 429 rate limit (`openAiFetch`) instead of falling back to a placeholder; block replies are filtered to the allowed
   block types (the model once echoed the schema as a single "object" block).
+
+## 2026-10-03 — Components grow from the top down; page header and footer by default
+- Layout engine (free-mode groups): growth is now positional. What sits below a text that turned out taller moves down by exactly that growth (the old
+  rule pushed every LATER sibling, so a table's last column slid to the bottom when the middle one wrapped); elements beside it are not pushed; a box or
+  rule that contains a grown text stretches; a full-height edge bar stretches with its card. Static headers are measured at their real, laid-out height,
+  so a title that wraps no longer runs into the content (nor its accent rule into the first heading).
+- Components: paragraph, key-point rows and callout use a short accent mark instead of a full-height bar; key-point rows and paragraphs have space
+  between them. Table cells are all top-aligned.
+- Documents (block outputs) get a page header (title, taken from the AI's top heading unless it wrote its own header) and a footer by default; each can be
+  removed from the "Structure" cards in Configure output / Format & colour (`ComponentStyle.hidden`).
+- Tests: `tests/template-studio/component-growth.test.ts`, header/footer cases in `output-document.test.ts`.
+
+## 2026-10-03 (2) — Reader with highlights, question-card polish, source preview, agent description
+- HTML reader (`modules/reader/`): any generated document opens as a clean reflowable page (`documentHtml.js`, LaTeX via KaTeX, tables, callouts) and
+  any quiz/exam/flashcard set opens as the interactive player inside the same page. Select text to highlight in 6 colours, show/hide highlights with one
+  switch, clear them; highlights use the CSS Custom Highlight API (the page is never modified), are stored as text anchors with the words and found again if
+  the text moves, and are saved with the resource (`resource.highlights`). Entry points: resource detail ("Read" / "Open HTML view"), study plans ("Read" on
+  generated-document steps; "Start" now opens the reader), Activities, the workspace, and the agent run page's export step (unsaved outputs too).
+- Source passage page renders the passage as lean HTML (`reader/markdown.js`: headings, lists, tables, LaTeX, page markers) and highlights the block that
+  holds the quote.
+- Question cards: the left edge runs the full card (answer and source included), true/false asks "How sure are you?" and shows its answer as the same
+  full-width green band (True / False), confidence is on by default, at least 4 mm between consecutive components, answer bands cover long answers.
+- Footer text is editable ("Footer text" in the Structure card; default `<subject> – Quiz / Summary…`, or "Use the file name").
+- Run page: the agent description is one line with "Read more", which shows the prompt in sections (what it does, style, rules, what it returns, blocks).
+
+## 2026-10-03 (3) — Flashcards: three views
+- Flashcard component (`engine/blocks.ts`): redesigned card (inset accent tab, FRONT above and BACK below a line across the exact middle that runs the
+  card's full width) and two views of the same component — "Both sides on one page" and "One side per page" (a FRONT page then a BACK page for every card,
+  from the derived `Sides` field, `derive.kind = "sides"`), for printing back to back and memory games. The cover title belongs to the first view only.
+- Layout: a title/cover scoped to the first page is no longer repeated for every record of a page-repeat (it left a blank page before each card); on a
+  card or slide a component stays on one page and its text shrinks to fit instead of flowing on.
+- Interactive: a set of flashcards plays as a deck (`activities/FlashcardDeck.js`): the word, tap to flip, then "How well did you know it?" (Knew it /
+  Almost / Not yet → recorded as confidence and known/unknown), in the colour of the template, with a summary of the cards to see again. Used by every
+  entry point that plays an activity (reader, plans, workspace, run page).
+
+## 2026-10-03 (4) — Quiz on slides; sources in any language
+- Slides: everything in a block is scaled up together (positions, heights, type, rules, corners) instead of only its width, and each question sits in the
+  middle of its slide rather than at the top. The cover centres its title in the blue panel, the Name / Date lines (now part of that option) are gone, and the
+  blue bar matches the panel's height.
+- Sources: a question's source is the passage the agent cited (`_sourceResolved` → `__cited`), not only the best keyword match, so a quiz in Spanish about an
+  English document shows its source; a card with no source takes no room (`collapseEmpty`) and cards fit their content (`fitContent`) with a little air
+  under the last line, so they are no longer too tall; the answer label has room for longer words ("RESPUESTA"); "How sure are you?" has room in Spanish.

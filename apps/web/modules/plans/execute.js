@@ -110,7 +110,7 @@ function coverageInstruction(concepts, perConcept) {
   return `\n\nCOVERAGE (mandatory): this set must test EVERY one of the ${concepts.length} concepts below — ${perConcept > 1 ? `at least ${perConcept} questions each` : "at least one question each"}, spread evenly, none skipped, nothing outside the material. Set each item's "topic" to the exact concept name it tests (copy it exactly as written).\nConcepts:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
 }
 
-export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "", agentDocuments = [] }) {
+export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, learnerNote = "", agentDocuments = [], subjectName = "" }) {
   const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
   const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
@@ -186,7 +186,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
     activity: activity?.questions?.length ? activity : null,
     data: blocks ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources) } : { items, sources: trimSources(data.sources) },
     request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds },
-    meta: { agentName: agent.name, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
+    meta: { agentName: agent.name, subjectName, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
   });
   if (step.concepts?.length) resource.concepts = step.concepts.map((name, index) => ({ id: `c_plan_${index}`, name, detail: "", level: "understand" }));
   if (learnerNote) resource.context = learnerNote;
@@ -205,7 +205,7 @@ export async function runStep({ step, sourceDocumentIds, workspaceId, subjectId,
  * Runs every step of a plan that promised material and has none yet, in order, reporting progress.
  * The plan is returned with each step pointing at the resource that was created for it.
  */
-export async function executePlan({ plan, documents = [], agentDocuments = [], workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onProgress }) {
+export async function executePlan({ plan, documents = [], agentDocuments = [], subjectName = "", workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onProgress }) {
   const pending = (plan.items || []).filter((item) => item.generate && !item.resourceId);
   if (!pending.length) return { plan, created: 0, failures: [] };
   const failures = [];
@@ -225,7 +225,8 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], w
         folderIds,
         onSaveGeneratedQuizDocument,
         learnerNote: plan.note || "",
-        agentDocuments
+        agentDocuments,
+        subjectName
       });
       const position = items.findIndex((item) => item.id === step.id);
       if (position >= 0) {

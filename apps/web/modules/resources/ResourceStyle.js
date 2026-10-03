@@ -43,6 +43,8 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
       title: String(resource.data?.title || "").trim() || resource.name || "",
       subtitle: String(resource.data?.subtitle || ""),
       framed: !isBlocks,
+      subject: resource.meta?.subjectName || "",
+      agentName: resource.meta?.agentName || "",
       passages: Array.isArray(resource.data?.sources) ? resource.data.sources : [],
       linkBase: typeof window !== "undefined" ? window.location.origin : "",
       language
@@ -80,7 +82,7 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
   return (
     <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <div className="grid gap-2">
-        <OutputStylePanel plan={plan} styles={styles} onStylesChange={setStyles} />
+        <OutputStylePanel plan={plan} styles={styles} onStylesChange={setStyles} fileName={resource.name || ""} />
         <p className="m-0 text-[11px] text-soft-ink">{saved || "Change a format or colour whenever you like — it is saved with the resource."}</p>
       </div>
       <div className="lg:sticky lg:top-4">

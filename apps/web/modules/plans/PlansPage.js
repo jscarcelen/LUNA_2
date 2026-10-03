@@ -11,10 +11,9 @@ import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
 import { isGeneratedDocument, splitDocuments } from "./revise";
 import { planAgentCatalog } from "./agents";
-import { activityLook } from "../resources/look";
+import { ReaderView } from "../reader/ReaderView";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, linkMaterial, planDeletionScope } from "./folders";
-import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 
@@ -310,7 +309,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [creating, setCreating] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
-  const [playing, setPlaying] = useState(null); // { activity, documentId, itemId, planDocumentId }
+  const [playing, setPlaying] = useState(null);
+  const [reading, setReading] = useState(null); // { resource, document } — a generated document opened in the HTML reader // { activity, documentId, itemId, planDocumentId }
   const [deletingPlan, setDeletingPlan] = useState(null); // plan row to confirm-delete
   const [planView, setPlanView] = useState("list"); // "list" | "calendar" inside the open plan
   const [replanResult, setReplanResult] = useState(null);
@@ -471,6 +471,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     setRebuildPreview(null);
   }
 
+  /** Highlights made in the reader are kept with the resource they were made on. */
+  async function saveHighlights(document, resource, list) {
+    if (!document || !resource || typeof onUpdateGeneratedDocument !== "function") return;
+    const content = JSON.stringify({ ...resource, highlights: list }, null, 2);
+    await onUpdateGeneratedDocument(document.id, { file: { name: document.name, content, preview: document.preview, sizeBytes: content.length } });
+  }
+
   async function save(plan, documentId) {
     const content = JSON.stringify({ ...plan, updatedAt: new Date().toISOString() }, null, 2);
     const deadline = nextDeadline(plan);
@@ -520,6 +527,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         plan: row.plan,
         documents,
         agentDocuments,
+        subjectName: subject?.name || "",
         workspaceId: selectedWorkspaceId,
         subjectId: selectedSubjectId,
         folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
@@ -875,7 +883,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             />
                             {/* Action buttons */}
                             {activity ? (
-                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, look: activityLook(itemResource), documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                            ) : itemResource ? (
+                              <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Read</button>
                             ) : null}
                             {item.resourceId && onOpenResource ? (
                               <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>
@@ -1133,10 +1143,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           />
         ) : null}
         {playing ? (
-          <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-            <ActivityPlayer
+          <ReaderView
+              resource={playing.resource}
               activity={playing.activity}
-              look={playing.look}
+              highlights={playing.resource?.highlights || []}
+              onSaveHighlights={(list) => saveHighlights(playing.resourceDocument, playing.resource, list)}
               onSubmit={async (attempt) => {
                 await saveAttempt(attempt, playing.documentId);
                 const row = plans.find((r) => r.document.id === playing.planDocumentId);
@@ -1145,7 +1156,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               }}
               onClose={() => setPlaying(null)}
             />
-          </div>
+        ) : null}
+        {reading ? (
+          <ReaderView
+            resource={reading.resource}
+            highlights={reading.resource?.highlights || []}
+            onSaveHighlights={(list) => saveHighlights(reading.document, reading.resource, list)}
+            onClose={() => setReading(null)}
+          />
         ) : null}
       </section>
     );
@@ -1269,6 +1287,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               plan,
               documents,
               agentDocuments,
+              subjectName: subject?.name || "",
               workspaceId: selectedWorkspaceId,
               subjectId: selectedSubjectId,
               folderIds: planFolders.generatedId ? [planFolders.generatedId] : [],

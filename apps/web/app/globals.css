@@ -5519,3 +5519,11 @@ body {
 .tw-scope .flex > * {
   min-width: 0;
 }
+
+/* Reader highlights (CSS Custom Highlight API): colours of the highlighter in the HTML view. */
+::highlight(luna-hl-yellow) { background-color: #fff176; color: inherit; }
+::highlight(luna-hl-orange) { background-color: #ffcc80; color: inherit; }
+::highlight(luna-hl-green) { background-color: #a5d6a7; color: inherit; }
+::highlight(luna-hl-blue) { background-color: #90caf9; color: inherit; }
+::highlight(luna-hl-pink) { background-color: #f8bbd0; color: inherit; }
+::highlight(luna-hl-purple) { background-color: #ce93d8; color: inherit; }

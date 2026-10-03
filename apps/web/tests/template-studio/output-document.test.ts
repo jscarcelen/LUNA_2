@@ -22,12 +22,33 @@ const bulletBlocks: FlatBlock[] = [
 ];
 
 describe("planOutput", () => {
-  it("merges bullets separated by dividers into one Key points list and keeps the heading first", () => {
+  it("merges bullets separated by dividers into one Key points list; the top heading becomes the page header's title", () => {
     const plan = planOutput({ blocks: bulletBlocks })!;
-    expect(plan.runs.map((run) => run.componentKey)).toEqual(["block-headings", "block-key-points"]);
-    expect((plan.runs[1].data.points as unknown[]).length).toBe(3);
-    expect(plan.components.map((component) => component.key)).toEqual(["block-headings", "block-key-points"]);
+    expect(plan.runs.map((run) => run.componentKey)).toEqual(["block-key-points"]);
+    expect((plan.runs[0].data.points as unknown[]).length).toBe(3);
+    expect(plan.title).toBe("1.2. Enterprise value");
+    expect(plan.components.map((component) => component.key)).toEqual(["block-header-minimal", "block-key-points", "block-footer"]);
     expect(plan.kind).toBe("document");
+  });
+
+  it("a document gets a page header and footer by default, but not a second header when the AI wrote one", () => {
+    const own = planOutput({ blocks: [{ type: "document_header", title: "Guide" }, { type: "paragraph", text: "Body." }] })!;
+    expect(own.start).toEqual([]);
+    expect(own.end).toEqual(["block-footer"]);
+    const plain = planOutput({ blocks: [{ type: "paragraph", text: "Body." }], title: "Guide" })!;
+    expect(plain.start).toEqual(["block-header-minimal"]);
+    expect(plain.end).toEqual(["block-footer"]);
+  });
+
+  it("header and footer can be removed", () => {
+    const plan = planOutput({ blocks: [{ type: "paragraph", text: "Body text of the document." }], title: "Guide" })!;
+    const withBoth = allText(buildOutputDocument(plan, {}));
+    expect(withBoth).toContain("Guide");
+    expect(withBoth).toMatch(/Page 1/);
+    const without = allText(buildOutputDocument(plan, { "block-header-minimal": { hidden: true }, "block-footer": { hidden: true } }));
+    expect(without).not.toMatch(/Page 1/);
+    expect(without).not.toContain("Guide");
+    expect(without).toContain("Body text of the document.");
   });
 
   it("starts a new run when another component comes between", () => {

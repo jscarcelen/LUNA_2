@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ResourceExports } from "./ResourceExports";
 import { ResourceStyle } from "./ResourceStyle";
 import { resourceBlocks } from "./look";
+import { ReaderView } from "../reader/ReaderView";
 import { SKILLS } from "../activities/engine/activity";
 import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
 
@@ -40,8 +41,11 @@ export function ResourceDetail({
   onBulkClassify,
   onSaveConcepts,
   onSaveStyles,
+  onSaveHighlights,
+  onSubmitAttempt,
   onStatus
 }) {
+  const [reading, setReading] = useState(false);
   const [tab, setTab] = useState(row.resource.activity?.questions?.length ? "do" : "concepts");
   const [concepts, setConcepts] = useState(resourceConcepts(row.resource));
   const [context, setContext] = useState(row.resource.context || "");
@@ -91,6 +95,7 @@ export function ResourceDetail({
 
   return (
     <div className="tw-scope fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
+      {reading ? <ReaderView resource={row.resource} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onClose={() => setReading(false)} /> : null}
       <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
           <div className="min-w-0">
@@ -104,6 +109,7 @@ export function ResourceDetail({
             {stats?.times ? <p className="m-0 mt-1 text-xs text-soft-ink">Done {stats.times}× · best {Math.round(stats.best * 100)}% · {stats.errors} mistakes recorded</p> : null}
           </div>
           <div className="flex flex-wrap gap-2">
+            {resourceBlocks(row.resource) || row.resource.activity?.questions?.length ? <button type="button" className={primaryBtn} onClick={() => setReading(true)}>{row.resource.activity?.questions?.length ? "Open HTML view" : "Read"}</button> : null}
             {onRegenerate ? <button type="button" className={ghostBtn} onClick={() => onRegenerate(row)}>Regenerate / edit</button> : null}
             {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${row.resource.name}"?`)) { onDelete(row); onClose?.(); } }}>Delete</button> : null}
             <button type="button" className={ghostBtn} onClick={onClose}>Close</button>

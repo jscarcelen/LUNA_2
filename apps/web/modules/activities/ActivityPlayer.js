@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
+import { FlashcardDeck } from "./FlashcardDeck";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -49,7 +50,7 @@ function SourceNote({ source }) {
   );
 }
 
-export function ActivityPlayer({ activity, onSubmit, onClose, look = null }) {
+function QuestionList({ activity, onSubmit, onClose, look = null }) {
   const [answers, setAnswers] = useState({});
   const [confidence, setConfidence] = useState({});
   const [attempt, setAttempt] = useState(null);
@@ -269,4 +270,14 @@ export function ActivityPlayer({ activity, onSubmit, onClose, look = null }) {
       {!activity.questions.length ? <p className={`${card} p-5 text-sm text-soft-ink`}>This document has nothing to answer — it is a reading document. Export it instead.</p> : null}
     </section>
   );
+}
+
+/**
+ * Plays an activity. A set of flashcards is a deck (flip, then say how well you knew it); everything
+ * else is a page of questions answered and checked together.
+ */
+export function ActivityPlayer(props) {
+  const questions = props.activity?.questions || [];
+  if (questions.length && questions.every((question) => question.kind === "flashcard")) return <FlashcardDeck {...props} />;
+  return <QuestionList {...props} />;
 }

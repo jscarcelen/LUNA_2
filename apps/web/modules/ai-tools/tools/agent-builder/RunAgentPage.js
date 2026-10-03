@@ -17,8 +17,12 @@ import { SaveResourceDialog } from "../../../resources/SaveResourceDialog";
 import { buildResource, parseResource, trimSources } from "../../../resources/resource";
 import { activityLook } from "../../../resources/look";
 import { FolderPicker } from "../../../ui/FolderTree";
+import { ReaderView } from "../../../reader/ReaderView";
+import { AgentBrief } from "./AgentBrief";
+import { oneLiner } from "./briefParser";
 import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
 
+const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
 const OUTPUT_STYLES_KEY = "luna.outputStyles.v1";
 
@@ -253,6 +257,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [iterateText, setIterateText] = useState("");
   const [versions, setVersions] = useState([]);
   const [improving, setImproving] = useState(false);
+  const [readerOpen, setReaderOpen] = useState(false);
   const [understood, setUnderstood] = useState("");
   const [playing, setPlaying] = useState(null); // { activity, documentId }
   const [saveOpen, setSaveOpen] = useState(false);
@@ -618,12 +623,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       title: String(rootData?.title || "").trim() || agentConfig?.name || "",
       subtitle: String(rootData?.subtitle || ""),
       framed: !outputBlocks,
+      subject: selectedSubject?.name || "",
+      agentName: agentConfig?.name || "",
       // Each answer cites the passage of the material it came from, and links to it.
       passages: Array.isArray(output.sources) ? output.sources : [],
       linkBase: typeof window !== "undefined" ? window.location.origin : "",
       language: outputLanguage
     });
-  }, [output, outputBlocks, outputIsBlocks, agentConfig?.name, rootData, outputLanguage]);
+  }, [output, outputBlocks, outputIsBlocks, agentConfig?.name, selectedSubject?.name, rootData, outputLanguage]);
   const doc = useMemo(() => {
     if (!output) return null;
     try {
@@ -653,6 +660,18 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       return attachSources(built, Array.isArray(output.sources) ? output.sources : []);
     } catch { return null; }
   }, [output, outputBlocks, agentConfig, fields, agentDocument?.id]);
+
+  /** The current output as a resource, so the HTML view can show, restyle and play it before it is saved. */
+  const readerResource = useMemo(() => {
+    if (!output) return null;
+    return buildResource({
+      name: agentConfig?.name || "Generated document",
+      activity: activity && activity.questions.length ? { ...activity, title: agentConfig?.name || activity.title } : null,
+      data: { ...(output.data || {}), items: output.items || [], sources: trimSources(output.sources), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
+      request: { outputStyles },
+      meta: { agentName: agentConfig?.name || "", subjectName: selectedSubject?.name || "" }
+    });
+  }, [output, activity, outputBlocks, outputStyles, agentConfig?.name, selectedSubject?.name]);
 
   async function renderFinalHtml(forPrint) {
     if (!doc) throw new Error("There is nothing to export yet.");
@@ -757,6 +776,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         meta: {
           agentId: agentDocument?.id || "",
           agentName: agentConfig?.name || "",
+          subjectName: selectedSubject?.name || "",
           templateId: "",
           templateName: "",
           sourceDocumentIds: referenceDocumentIds,
@@ -917,7 +937,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               {output?.model ? <span className={chipClass}>Last run: {output.model}</span> : null}
             </div>
             <h3 className="m-0 text-[26px] font-bold tracking-tight text-ink">{agentConfig.name || "Untitled Agent"}</h3>
-            <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{agentConfig.description || agentConfig.tagline || agentConfig.instructions}</p>
+            <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{oneLiner(agentConfig)}</p>
+            <details className="mt-2 group">
+              <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-ink)] hover:underline">Read more about this agent</summary>
+              <div className="mt-3 max-w-3xl rounded-2xl border border-ink/8 bg-[var(--surface-soft)] p-4">
+                {agentConfig.description && clean(agentConfig.description) !== oneLiner(agentConfig) ? <p className="m-0 mb-3 text-sm leading-relaxed text-ink">{agentConfig.description}</p> : null}
+                <AgentBrief prompt={agentConfig.instructions} />
+              </div>
+            </details>
           </div>
           {resume ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-4 py-2.5">
@@ -1017,6 +1044,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               templatesLoading={templatesLoading}
               onRefreshTemplates={loadTemplates}
               onOpenTemplateStudio={typeof onOpenTool === "function" ? () => onOpenTool("template-builder") : undefined}
+              fileName={agentConfig?.name || ""}
             />
             <section className={cardClass}>
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1035,6 +1063,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
             {iterateCard}
+            <section className={cardClass}>
+              <p className={kicker}>Interactive HTML view</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">{activity && activity.questions.length ? "Read it, highlight what matters and answer the questions right here, in any browser." : "Read it in person: a clean page you can highlight in colours, with or without the highlights."}</p>
+              <button type="button" className={`${ghostBtn} mt-3`} disabled={!hasOutput || !readerResource} onClick={() => setReaderOpen(true)}>Open the HTML view</button>
+            </section>
             <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
               <p className={kicker}>Save as a resource · recommended</p>
               <p className="m-0 mt-2 text-sm text-soft-ink">Keep it in your library: give it a name, a folder and tags. From there you can do it on Luna, download every view of its template, or regenerate it.</p>
@@ -1074,6 +1107,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           </div>
           <div className="lg:sticky lg:top-4">{previewPane}</div>
         </div>
+      ) : null}
+      {readerOpen && readerResource ? (
+        <ReaderView
+          resource={readerResource}
+          notice="Not saved yet — save it as a resource and your highlights are kept with it."
+          onSubmit={handleAttempt}
+          onClose={() => setReaderOpen(false)}
+        />
       ) : null}
       {saveOpen ? (
         <SaveResourceDialog

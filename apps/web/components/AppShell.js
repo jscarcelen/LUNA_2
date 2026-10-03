@@ -142,6 +142,7 @@ export function AppShell() {
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onRemoveDocument={handleRemoveDocument}
           onOpenTool={(target) => setPage(target)}

@@ -9,7 +9,7 @@
 
 import type { Element, FieldDef, GroupElement, ID, TextElement } from "./types";
 import { createField, createGroup, createId, createShape, createText, defaultStyle, walkElements } from "./model";
-import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, accentEdge, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
+import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, accentEdge, accentMark, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
 
 export type BlockCategory = "questions" | "cards" | "structure" | "kids" | "custom";
 
@@ -104,6 +104,7 @@ function examQuestion(): BlockDef {
   const W = PAGE.width;
   const group = createGroup({
     name: "Exam question",
+    fitContent: true,
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 52 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
@@ -122,7 +123,7 @@ function examQuestion(): BlockDef {
       }),
       ...confidenceRow(accent, 40, W - 24).map((element) => shift(element, 17)),
       ...answerBand(accent, answer.id, 46, W).map((element) => element),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 53.2, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 53.2, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -138,7 +139,7 @@ function examQuestion(): BlockDef {
     options: [
       { key: "number", label: "Question number", default: true },
       { key: "points", label: "Points", default: true },
-      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false },
+      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: true },
       { key: "answer", label: "Show answer", default: false, grow: 10 }
     ],
     accent: { main: accent.main, tint: accent.tint },
@@ -157,6 +158,7 @@ function openQuestion(): BlockDef {
   const W = PAGE.width;
   const group = createGroup({
     name: "Open question",
+    fitContent: true,
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 64 },
     layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: questions.id, mode: "flow" },
@@ -170,9 +172,9 @@ function openQuestion(): BlockDef {
       ...confidenceRow(accent, 44, W - 24).map((element) => shift(element, 17)),
       // The model answer sits in a taller band than a multiple-choice letter: it is a sentence or two.
       createShape("rect", { name: "opt:answer|Answer band", frame: { x: 0, y: 51, w: W, h: 11.4 }, style: defaultStyle({ fill: palette("green").tint, stroke: "", radius: RADIUS.panel }) }),
-      kicker("Answer", { x: 4, y: 52.6, w: 14, h: 4 }, palette("green").deep, { name: "opt:answer|Answer label" }),
-      field(answer.id, "The median is the middle value, so extreme values do not move it.", { x: 19, y: 52.3, w: W - 23, h: 8.4 }, { fontSize: TYPE.small, fontWeight: "bold", color: palette("green").deep, lineHeight: 1.35 }, { format: "rich", name: "opt:answer|Answer" }),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 63.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
+      kicker("Answer", { x: 4, y: 52.6, w: 22, h: 4 }, palette("green").deep, { name: "opt:answer|Answer label" }),
+      field(answer.id, "The median is the middle value, so extreme values do not move it.", { x: 27, y: 52.3, w: W - 31, h: 8.4 }, { fontSize: TYPE.small, fontWeight: "bold", color: palette("green").deep, lineHeight: 1.35 }, { format: "rich", name: "opt:answer|Answer" }),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 63.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -188,7 +190,7 @@ function openQuestion(): BlockDef {
     options: [
       { key: "number", label: "Question number", default: true },
       { key: "points", label: "Points", default: true },
-      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: false },
+      { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: true },
       { key: "answer", label: "Show answer", default: false, grow: 10 }
     ],
     accent: { main: accent.main, tint: accent.tint },
@@ -206,8 +208,9 @@ function trueFalse(): BlockDef {
   const W = PAGE.width;
   const group = createGroup({
     name: "True / false",
+    fitContent: true,
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 16 },
-    layout: { mode: "free", gap: SPACE.xs },
+    layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: statements.id, mode: "flow" },
     style: cardStyle(accent),
     children: [
@@ -216,8 +219,11 @@ function trueFalse(): BlockDef {
       field(statement.id, "The mean is always larger than the median.", { x: 15, y: 5.2, w: W - 72, h: 6 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" }),
       ...tickBox(accent, W - 54, 5, "True"),
       ...tickBox(accent, W - 30, 5, "False"),
-      field(answer.id, "true", { x: W - 54, y: 11, w: 46, h: 3.6 }, { fontSize: TYPE.micro, color: palette("green").deep, align: "right" }, { name: "opt:answer|Answer" }),
-      field(source.id, "Source: Accounting.pdf · passage 12", { x: 15, y: 15.8, w: W - 20, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id })
+      // "How sure are you?" matters as much here as on a multiple-choice question.
+      ...confidenceRow(accent, 14, W - 24).map((element) => shift(element, 15)),
+      // The answer looks like everywhere else: a full-width green band that says True or False.
+      ...answerBand(accent, answer.id, 21, W),
+      field(source.id, "Source: Accounting.pdf · passage 12", { x: 4, y: 28.6, w: W - 8, h: 8 }, { fontSize: TYPE.meta, color: INK.muted, lineHeight: 1.3 }, { name: "opt:answer|Source", linkFieldId: sourceLink.id, collapseEmpty: true })
     ]
   });
   return {
@@ -230,7 +236,7 @@ function trueFalse(): BlockDef {
     icon: "☑",
     fields: [statements],
     elements: [group],
-    options: [{ key: "number", label: "Number", default: true }, { key: "answer", label: "Show answer", default: false, grow: 9 }],
+    options: [{ key: "number", label: "Number", default: true }, { key: "confidence", label: "How sure are you? (High / Medium / Low)", default: true, grow: 8 }, { key: "answer", label: "Show answer", default: false, grow: 20 }],
     accent: { main: accent.main, tint: accent.tint },
     builtIn: true
   };
@@ -308,11 +314,11 @@ function keyPoints(): BlockDef {
       createGroup({
         name: "Point",
         frame: { x: 0, y: 13, w: W, h: 13 },
-        layout: { mode: "free", gap: 0 },
+        layout: { mode: "free", gap: SPACE.sm },
         repeat: { fieldId: points.id, mode: "flow" },
         style: defaultStyle({ fill: accent.tint, stroke: "", radius: RADIUS.panel }),
         children: [
-          accentEdge(accent, 13),
+          accentMark(accent, 3.4, 6.2),
           ...numberBadge(accent, 5, 3.4, 6.2),
           field(point.id, "**Central tendency:** the median resists outliers.", { x: 14, y: 3.6, w: W - 19, h: 6.5 }, { fontSize: TYPE.body, color: INK.strong }, { format: "rich" })
         ]
@@ -357,9 +363,9 @@ function examHeader(): BlockDef {
       field(subtitle.id, "Biology · Grade 10", { x: 42, y: 4.4, w: W - 49, h: 5 }, { fontSize: TYPE.meta, color: INK.muted, align: "right" }, { name: "opt:subtitle|Subtitle" }),
       field(title.id, "Biology Midterm Exam", { x: 7, y: 11, w: W - 14, h: 10 }, { fontSize: TYPE.title, fontWeight: "bold", color: INK.strong }),
       label("Name", { x: 0, y: 26, w: 12, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: "opt:namedate|Name label" }),
-      writingLine(30.5, 12, 76),
+      writingLine(30.5, 12, 76, { name: "opt:namedate|Name line" }),
       label("Date", { x: W - 62, y: 26, w: 12, h: 5 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: "opt:namedate|Date label" }),
-      writingLine(30.5, W - 50, 50)
+      writingLine(30.5, W - 50, 50, { name: "opt:namedate|Date line" })
     ]
   });
   return { id: "block-header-exam", family: "Exam header", variant: "Title, name and date", name: "Exam header", description: "Tinted title panel with the subject, plus Name / Date lines on the first page. For exams and worksheets.", category: "structure", icon: "▔", fields: [title, subtitle], elements: [group], options: [{ key: "logo", label: "Logo", default: true }, { key: "subtitle", label: "Subtitle", default: true }, { key: "namedate", label: "Name / Date", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
@@ -384,7 +390,7 @@ function minimalHeader(): BlockDef {
 }
 
 function footer(): BlockDef {
-  const title = createField("Title", "text", { description: "Document title" });
+  const title = createField("Footer text", "text", { description: "Footer text: by default the subject and what this is (Quiz, Summary…); the user can change it" });
   const W = PAGE.width;
   const group = createGroup({
     name: "Footer",
@@ -394,7 +400,7 @@ function footer(): BlockDef {
     pageScope: { mode: "every" },
     children: [
       divider(0, W),
-      field(title.id, "Biology Midterm Exam", { x: 0, y: 2.4, w: 120, h: 5 }, { fontSize: TYPE.micro, color: INK.faint }),
+      field(title.id, "Biology – Quiz", { x: 0, y: 2.4, w: 120, h: 5 }, { fontSize: TYPE.micro, color: INK.faint }),
       label("Page {{page}}", { x: W - 46, y: 2.4, w: 46, h: 5 }, { fontSize: TYPE.micro, color: INK.faint, align: "right" }, { name: "opt:page|Page number" })
     ]
   });
@@ -429,10 +435,10 @@ function bodyText(): BlockDef {
   const group = createGroup({
     name: "Paragraph",
     frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 16 },
-    layout: { mode: "free", gap: 0 },
+    layout: { mode: "free", gap: SPACE.md },
     repeat: { fieldId: paragraphs.id, mode: "flow" },
     children: [
-      accentEdge(accent, 16),
+      accentMark(accent, 2.4, 8),
       field(text.id, "Photosynthesis converts light energy into chemical energy stored in glucose.", { x: 6, y: 2, w: W - 10, h: 12 }, { fontSize: TYPE.body, color: INK.body, lineHeight: 1.5 }, { format: "rich" })
     ]
   });
@@ -510,7 +516,7 @@ function callout(): BlockDef {
     repeat: null,
     style: defaultStyle({ fill: accent.tint, stroke: "", radius: RADIUS.card }),
     children: [
-      accentEdge(accent, 20),
+      accentMark(accent, 5.4, 9),
       createShape("ellipse", { name: "opt:label|Icon", frame: { x: 6, y: 6.4, w: 6, h: 6 }, style: defaultStyle({ fill: accent.main, stroke: "" }) }),
       label("!", { x: 6, y: 7.4, w: 6, h: 4.5 }, { fontSize: TYPE.small, fontWeight: "bold", color: INK.paper, align: "center" }, { name: "opt:label|Icon mark" }),
       kicker("Important", { x: 15, y: 4.6, w: 60, h: 4 }, accent.deep, { name: "opt:label|Label" }),
@@ -520,28 +526,60 @@ function callout(): BlockDef {
   return { id: "block-callout", family: "Callout", variant: "Info box", name: "Callout", description: "Highlighted box for important information, tips or notes.", category: "structure", icon: "ⓘ", fields: [note], elements: [group], options: [{ key: "label", label: "Label", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
+/**
+ * Flashcards, in two views of the same component (placeholders "@both" / "@sides" are turned into
+ * the template's real view ids when it is assembled):
+ *  - both sides on one page: the front above the middle line, the back below it, the line as wide as
+ *    the card;
+ *  - one side per page: a page with the front, a page with the back, for each card — so the deck can
+ *    be printed back to back or played as a memory game.
+ */
+export const FLASH_BOTH = "@both";
+export const FLASH_SIDES = "@sides";
+
 function flashcardSingle(): BlockDef {
   const accent = palette("purple");
   const front = createField("Front", "text");
   const back = createField("Back", "text");
   const cards = createField("Cards", "array", { children: [createField("item", "object", { children: [front, back] })] });
+  // Derived from the cards (never written by the AI): FRONT page, BACK page, for each card.
+  const label_ = createField("Label", "text");
+  const text_ = createField("Text", "text");
+  const sides = createField("Sides", "array", { derive: { kind: "sides", from: "Cards" }, children: [createField("item", "object", { children: [label_, text_] })] });
   const W = PAGE.width;
-  const group = createGroup({
+  const H = 76;
+  const tab = () => createShape("rect", { frame: { x: 10, y: 0, w: W - 20, h: 1.8 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.9 }) });
+  const both = createGroup({
     name: "Flashcard",
-    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 66 },
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: H },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: cards.id, mode: "page" },
     style: cardStyle(accent, "outlined"),
+    visibility: { views: [FLASH_BOTH] },
     children: [
-      createShape("rect", { frame: { x: 0, y: 0, w: W, h: 2.4 }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0 }) }),
-      kicker("Front", { x: 8, y: 7, w: 30, h: 4 }, accent.deep),
-      field(front.id, "Photosynthesis", { x: 8, y: 17, w: W - 16, h: 17 }, { fontSize: 24, fontWeight: "bold", align: "center", color: INK.strong }),
-      divider(40, W - 60, accent.line),
-      kicker("Back", { x: 8, y: 45, w: 30, h: 4 }, INK.faint),
-      field(back.id, "The process by which plants convert light energy into chemical energy.", { x: 14, y: 51, w: W - 28, h: 12 }, { fontSize: TYPE.subtitle, align: "center", color: INK.muted, lineHeight: 1.45 })
+      tab(),
+      kicker("Front", { x: 8, y: 6, w: 30, h: 4 }, accent.deep),
+      field(front.id, "Photosynthesis", { x: 8, y: 13, w: W - 16, h: 17 }, { fontSize: 24, fontWeight: "bold", align: "center", color: INK.strong }),
+      // The middle of the card, edge to edge.
+      divider(H / 2, W, accent.line),
+      kicker("Back", { x: 8, y: H / 2 + 5, w: 30, h: 4 }, INK.faint),
+      field(back.id, "The process by which plants convert light energy into chemical energy.", { x: 14, y: H / 2 + 12, w: W - 28, h: 16 }, { fontSize: TYPE.subtitle, align: "center", color: INK.muted, lineHeight: 1.45 })
     ]
   });
-  return { id: "block-flashcard-single", family: "Flashcard", variant: "One card per page / slide", name: "Flashcard", description: "Large front / back card, one per page or slide.", category: "cards", icon: "▤", fields: [cards], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
+  const oneSide = createGroup({
+    name: "Flashcard side",
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: H },
+    layout: { mode: "free", gap: 0 },
+    repeat: { fieldId: sides.id, mode: "page" },
+    style: cardStyle(accent, "outlined"),
+    visibility: { views: [FLASH_SIDES] },
+    children: [
+      tab(),
+      field(label_.id, "FRONT", { x: 8, y: 6, w: 40, h: 4 }, { fontSize: TYPE.micro, fontWeight: "bold", color: accent.deep }),
+      field(text_.id, "Photosynthesis", { x: 10, y: 27, w: W - 20, h: 30 }, { fontSize: 30, fontWeight: "bold", align: "center", color: INK.strong, lineHeight: 1.25 })
+    ]
+  });
+  return { id: "block-flashcard-single", family: "Flashcard", variant: "One card per page / slide", name: "Flashcard", description: "Large front / back card — both sides on one page, or one side per page for printing back to back and memory games.", category: "cards", icon: "▤", fields: [cards, sides], elements: [both, oneSide], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
 

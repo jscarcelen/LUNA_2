@@ -3,7 +3,7 @@
  * "Configure output" step): component alternatives, default options, and the multi-page-size,
  * multi-view template builder. Pure functions — no React.
  */
-import { ACCENT_PRESETS, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./blocks";
+import { ACCENT_PRESETS, FLASH_BOTH, FLASH_SIDES, builtInBlocks, instantiateBlock, type AccentPreset, type BlockDef } from "./blocks";
 import { createId, createTemplate, createView } from "./model";
 import type { Element, GroupElement, Template } from "./types";
 
@@ -70,6 +70,45 @@ function scaleGroupChildren(el: Element, toContentW: number): Element {
   } as GroupElement;
 }
 
+/**
+ * Slides are 254 mm wide, so a card drawn for an A4 column is both small and sparse there. On slides
+ * everything is scaled up together — positions, heights, type, rules and corners — so the card keeps
+ * its proportions and reads from a distance.
+ */
+function scaleUniform(el: Element, ratio: number): Element {
+  const style = el.style as Record<string, unknown>;
+  const scaled = {
+    ...el,
+    frame: { x: +(el.frame.x * ratio).toFixed(2), y: +(el.frame.y * ratio).toFixed(2), w: +(el.frame.w * ratio).toFixed(2), h: +(el.frame.h * ratio).toFixed(2) },
+    style: {
+      ...el.style,
+      ...(typeof style.fontSize === "number" ? { fontSize: +(style.fontSize * ratio).toFixed(2) } : {}),
+      ...(typeof style.strokeWidth === "number" ? { strokeWidth: +(style.strokeWidth * ratio).toFixed(2) } : {}),
+      ...(typeof style.radius === "number" ? { radius: +(style.radius * ratio).toFixed(2) } : {})
+    }
+  } as Element;
+  if (scaled.type === "group") {
+    const group = scaled as GroupElement;
+    return { ...group, layout: { ...group.layout, gap: +((group.layout.gap ?? 0) * ratio).toFixed(2) }, ...(group.designedBottom ? { designedBottom: group.designedBottom * ratio } : {}), children: group.children.map((child) => scaleUniform(child, ratio)) } as GroupElement;
+  }
+  return scaled;
+}
+
+/** A top-level block for a slide: width as given by `fit`, everything inside scaled up with it. */
+function scaleForSlide(el: Element, toContentW: number): Element {
+  if (el.type !== "group") return el;
+  const group = el as GroupElement;
+  if (group.pageScope?.mode === "every") return scaleGroupChildren(el, toContentW); // footers keep their size
+  const ratio = toContentW / A4_CONTENT_W;
+  return {
+    ...group,
+    frame: { ...group.frame, h: +(group.frame.h * ratio).toFixed(2) },
+    layout: { ...group.layout, gap: +((group.layout.gap ?? 0) * ratio).toFixed(2) },
+    ...(group.designedBottom ? { designedBottom: group.designedBottom * ratio } : {}),
+    children: group.children.map((child) => scaleUniform(child, ratio))
+  } as GroupElement;
+}
+
 /* ─── assembleTemplate ───────────────────────────────────────────── */
 // All blocks go on ONE tall page (no page-break splitting — the renderer handles CSS pagination).
 // Blocks with an "answer" toggle produce two element sets: student view (answer=false) and
@@ -87,7 +126,20 @@ export function assembleTemplate(
   const hasAnswerToggle = selections.some((s) => (s.block.options || []).some((o) => o.key === "answer"));
   const studentView = { ...template.layouts[0].views[0], name: "Student view" };
   const answerKey = hasAnswerToggle ? createView("Answer key") : null;
-  const views = answerKey ? [studentView, answerKey] : [studentView];
+  // Flashcards come in two views: both sides on one page, and one side per page.
+  const hasFlashcards = selections.some((s) => s.block.id === "block-flashcard-single");
+  const sidesView = hasFlashcards && !answerKey ? createView("One side per page") : null;
+  const bothView = sidesView ? { ...studentView, name: "Both sides on one page" } : null;
+  const views = answerKey ? [studentView, answerKey] : sidesView && bothView ? [bothView, sidesView] : [studentView];
+  const viewIds: Record<string, string> = bothView && sidesView ? { [FLASH_BOTH]: bothView.id, [FLASH_SIDES]: sidesView.id } : {};
+  /** Turns the flashcard placeholders into real view ids; a cover or title ("first page") belongs to the both-sides view only. */
+  const resolveViews = (el: Element): Element => {
+    if (!sidesView || !bothView) return el;
+    const wanted = el.visibility?.views;
+    if (wanted) return { ...el, visibility: { ...el.visibility, views: wanted.map((id) => viewIds[id] || id) } };
+    if (el.type === "group" && (el as GroupElement).pageScope?.mode === "first") return { ...el, visibility: { ...el.visibility, views: [bothView.id] } };
+    return el;
+  };
 
   let currentFields = template.fields;
 
@@ -132,7 +184,7 @@ export function assembleTemplate(
         if (single.hasFlow) curY = single.bottom + 2;
       }
     }
-    return { elements: placedElements, bottom: curY };
+    return { elements: placedElements.map(resolveViews), bottom: curY };
   };
 
   const paged = place({});
@@ -164,8 +216,9 @@ export function assembleTemplate(
       return { ...el, frame: { ...el.frame, w: fmtContentW, ...(isFooter ? { y: fmt.h - (297 - el.frame.y) } : {}) } };
     };
     const source = fmt.isSlides ? slideElements : allElements;
+    const scale = (el: Element) => (fmt.isSlides ? scaleForSlide(fit(el), fmtContentW) : scaleGroupChildren(fit(el), fmtContentW));
     if (i === 0) {
-      const scaledElements = source.map((el) => scaleGroupChildren(fit(el), fmtContentW));
+      const scaledElements = source.map(scale);
       const page = { ...template.layouts[0].pages[0], elements: scaledElements };
       const base = { ...baseLayout, pages: [page], canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h } };
       return fmt.isSlides ? { ...base, class: "slides" as const } : base;
@@ -178,7 +231,7 @@ export function assembleTemplate(
       if (!el.visibility?.views) return el;
       return { ...el, visibility: { ...el.visibility, views: el.visibility.views.map((vid) => viewIdMap.get(vid) ?? vid) } };
     };
-    const scaledElements = source.map((el) => scaleGroupChildren(fit(remapVis(el)), fmtContentW));
+    const scaledElements = source.map((el) => (fmt.isSlides ? scaleForSlide(fit(remapVis(el)), fmtContentW) : scaleGroupChildren(fit(remapVis(el)), fmtContentW)));
     const page = { ...template.layouts[0].pages[0], elements: scaledElements };
     const base = { ...baseLayout, pages: [page], id: createId("layout"), name: fmt.label, canvas: { ...baseLayout.canvas, width: fmt.w, height: fmt.h }, views: newViews };
     return fmt.isSlides ? { ...base, class: "slides" as const } : base;

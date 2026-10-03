@@ -4,12 +4,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import { RowMenu } from "../../ui/RowMenu";
 import { ResourceDetail } from "../../resources/ResourceDetail";
-import { ActivityPlayer } from "../../activities/ActivityPlayer";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
 import { isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "../../resources/resource";
 import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
 import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
-import { activityLook } from "../../resources/look";
+import { ReaderView } from "../../reader/ReaderView";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -703,6 +702,8 @@ export function WorkspaceBrowser({
           onClassify={classify}
           onBulkClassify={bulkClassify}
           onSaveConcepts={(row, { concepts, context }) => updateResource(row, (resource) => ({ ...resource, concepts, context }))}
+          onSaveHighlights={(row, list) => updateResource(row, (resource) => ({ ...resource, highlights: list }))}
+          onSubmitAttempt={(attempt, documentId) => saveAttempt(attempt, documentId)}
           onSaveStyles={(row, outputStyles) => updateResource(row, (resource) => ({ ...resource, request: { ...(resource.request || {}), outputStyles } }))}
           onStatus={setStatus}
         />
@@ -723,9 +724,13 @@ export function WorkspaceBrowser({
       ) : null}
 
       {playing ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-          <ActivityPlayer activity={playing.resource.activity} look={activityLook(playing.resource)} onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)} onClose={() => setPlaying(null)} />
-        </div>
+        <ReaderView
+          resource={playing.resource}
+          highlights={playing.resource.highlights || []}
+          onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
+          onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
+          onClose={() => setPlaying(null)}
+        />
       ) : null}
 
       {preview ? (

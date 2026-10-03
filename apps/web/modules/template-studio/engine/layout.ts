@@ -85,6 +85,7 @@ function textItem(element: TextElement, x: number, y: number, scopes: Scope[], c
   const { value, isField } = resolveSource(ctx.fields, element.source, scopes);
   const designedStyle = { fontFamily: "sans", fontSize: 11, fontWeight: "normal", color: "#1d1d1f", align: "left", lineHeight: 1.35, ...element.style } as LaidOutTextItem["style"];
   const hasValue = !isField || value !== undefined;
+  if (element.collapseEmpty && isField && value !== undefined && !valueToText(value).trim()) return { items: [], bottom: y, right: x + element.frame.w, height: 0 };
   const raw = isField && value === undefined ? (element.placeholder ? element.placeholder : `{${fieldName(ctx.fields, element)}}`) : valueToText(value);
   const paragraphs = element.format === "rich" ? richTextToLines(raw) : raw.split(/\r?\n/);
   const room = ctx.slides ? Math.max(element.frame.h, (ctx.contentBottom ?? y + element.frame.h) - y) : 0;
@@ -182,6 +183,53 @@ function fitWindow(group: GroupElement, groupId: ID, from: number, count: number
   return { laid, to: best ? best.to : from + 1 };
 }
 
+/**
+ * Free-mode groups: children keep their designed frames, but text can turn out taller than
+ * designed. Growth runs from the top down and by POSITION (not by the order children happen to be
+ * listed in):
+ *  - whatever sits below a grown element moves down by exactly that growth, so nothing overlaps;
+ *  - elements beside it (another column, a badge) are not pushed;
+ *  - a box or rule that contains a grown element (a card behind its text) stretches to keep it inside;
+ *  - an edge bar that spans the whole card stretches with the card.
+ */
+interface FreePlan { offsets: Map<Element, number>; extras: Map<Element, number>; total: number; probes: Map<Element, Laid> }
+
+function planFree(group: GroupElement, shown: Element[], x: number, y: number, scopes: Scope[], ctx: Ctx, limitBottom: number): FreePlan {
+  const isDecor = (child: Element) => child.type === "rect" || child.type === "ellipse" || child.type === "line" || child.type === "arrow";
+  const top = (child: Element) => child.frame.y;
+  const bottom = (child: Element) => child.frame.y + child.frame.h;
+  const overlapsX = (a: Element, b: Element) => Math.min(a.frame.x + a.frame.w, b.frame.x + b.frame.w) - Math.max(a.frame.x, b.frame.x) > 0.5;
+  const content = shown.filter((child) => !isDecor(child)).sort((a, b) => top(a) - top(b));
+  const decor = shown.filter(isDecor);
+  const growth = new Map<Element, number>();
+  const probes = new Map<Element, Laid>();
+  for (const child of content) {
+    const nestedRepeat = child.type === "group" && child.repeat;
+    const laid = nestedRepeat ? layoutRepeatedInline(child as GroupElement, x + child.frame.x, y + child.frame.y, scopes, ctx) : layoutElement(child, x, y, scopes, ctx, limitBottom);
+    probes.set(child, laid);
+    growth.set(child, Math.max(0, laid.bottom - (y + bottom(child))));
+  }
+  const offsets = new Map<Element, number>();
+  const below = (child: Element, upTo: Element[]) => upTo.reduce((max, other) => (other !== child && bottom(other) <= top(child) + 0.5 ? Math.max(max, (offsets.get(other) || 0) + (growth.get(other) || 0)) : max), 0);
+  content.forEach((child, index) => offsets.set(child, below(child, content.slice(0, index))));
+  const total = Math.max(0, ...content.map((child) => (offsets.get(child) || 0) + (growth.get(child) || 0)));
+
+  const extras = new Map<Element, number>();
+  for (const child of decor) {
+    const offset = below(child, content);
+    offsets.set(child, offset);
+    const contained = content.filter((other) => top(other) >= top(child) - 0.5 && bottom(other) <= bottom(child) + 0.5 && overlapsX(other, child));
+    if (contained.length) {
+      const needed = Math.max(...contained.map((other) => (offsets.get(other) || 0) + (growth.get(other) || 0)));
+      extras.set(child, Math.max(0, needed - offset));
+    } else if (top(child) <= 0.5 && child.frame.h >= group.frame.h - 0.5 && child.frame.h > child.frame.w) {
+      // An edge bar down the whole card stretches with it.
+      extras.set(child, Math.max(0, total - offset));
+    }
+  }
+  return { offsets, extras, total, probes };
+}
+
 /** Lays out the children of ONE instance at (x, y). Stacks by mode; nested repeats expand and push siblings. */
 function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope[], ctx: Ctx, limitBottom: number): Laid {
   const items: LaidOutItem[] = [];
@@ -193,7 +241,6 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   let cursorY = 0;
   let bottom = y;
   let right = x;
-  let shift = 0; // free mode: how far content pushed things down
 
   const conditional = group.children.some((child) => child.type === "group" && child.condition?.fieldId);
   /**
@@ -205,18 +252,22 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   const missing = Boolean(group.fitContent) || group.children.some((child) => !isShown(child, scopes, ctx));
   const designedAll = Math.max(group.designedBottom || 0, ...group.children.map((child) => child.frame.y + child.frame.h), 0);
   let designedBottom = 0;
+  const freePlan = mode === "free" ? planFree(group, children.filter((child) => isShown(child, scopes, ctx)), x, y, scopes, ctx, limitBottom) : null;
   for (const child of children) {
     if (!isShown(child, scopes, ctx)) continue;
     designedBottom = Math.max(designedBottom, child.frame.y + child.frame.h);
     const nestedRepeat = child.type === "group" && child.repeat;
     if (mode === "free") {
-      // Children keep their own positions; a taller-than-designed child pushes later (lower) siblings.
-      const laid = nestedRepeat
-        ? layoutRepeatedInline(child as GroupElement, x + child.frame.x, y + child.frame.y + shift, scopes, ctx)
-        : layoutElement({ ...child, frame: { ...child.frame, y: child.frame.y + shift } } as Element, x, y, scopes, ctx, limitBottom);
+      // Children keep their own positions; growth moves what is below it (see planFree).
+      const offset = freePlan?.offsets.get(child) || 0;
+      const extra = freePlan?.extras.get(child) || 0;
+      const probe = offset === 0 && extra === 0 ? freePlan?.probes.get(child) : undefined;
+      const framed = { ...child, frame: { ...child.frame, y: child.frame.y + offset, h: child.frame.h + extra } } as Element;
+      const laid = probe
+        || (nestedRepeat
+          ? layoutRepeatedInline(child as GroupElement, x + child.frame.x, y + child.frame.y + offset, scopes, ctx)
+          : layoutElement(framed, x, y, scopes, ctx, limitBottom));
       items.push(...laid.items);
-      const designedBottom = y + child.frame.y + shift + child.frame.h;
-      if (laid.bottom > designedBottom) shift += laid.bottom - designedBottom;
       bottom = Math.max(bottom, laid.bottom);
       right = Math.max(right, laid.right);
       continue;
@@ -256,9 +307,18 @@ function layoutInstance(group: GroupElement, x: number, y: number, scopes: Scope
   // With "one of" children the designed height is the tallest variant; fit the one actually shown.
   // A card missing some of its content fits the same way, so hiding the answer closes the gap.
   const fits = mode === "free" && (conditional || missing);
-  const pad = fits ? Math.max(0, group.frame.h - designedAll) : 0;
-  const height = fits ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + shift : 0, bottom - y);
+  // A card keeps some air under its last line even when it ends earlier than it was drawn (no source line).
+  const pad = fits ? Math.max(group.frame.h - designedAll, group.style.fill || group.style.stroke ? 4.5 : 0, 0) : 0;
+  const height = fits ? Math.max(bottom - y + pad, 1) : Math.max(mode === "free" ? group.frame.h + (freePlan?.total || 0) : 0, bottom - y);
   void designedBottom;
+  // The coloured edge down a card runs the card's whole height — answer, source and all — so it is
+  // plainly one question.
+  if (mode === "free") {
+    // (A bar that sits beside a panel of its own height — the exam header — belongs to that panel, not to the group.)
+    const besidePanel = (bar: Element) => children.some((other) => other !== bar && other.type === "rect" && other.frame.w > 3 && Math.abs(other.frame.y - bar.frame.y) < 0.5 && Math.abs(other.frame.h - bar.frame.h) < 0.5);
+    const edgeIds = new Set(children.filter((child) => (child.type === "rect") && child.frame.x <= 0.5 && child.frame.w <= 3 && child.frame.y <= 0.5 && child.frame.h >= group.frame.h * 0.4 && !besidePanel(child)).map((child) => child.id));
+    if (edgeIds.size) for (const item of items) if (item.type === "rect" && edgeIds.has(item.elementId)) item.h = Math.max(item.h, height - (item.y - y));
+  }
   const chrome: LaidOutItem[] = group.style.fill || group.style.stroke ? [{ type: "rect", x, y, w: group.frame.w, h: height, style: group.style, elementId: group.id }] : [];
   return { items: [...chrome, ...items], bottom: y + height, right, height };
 }
@@ -392,13 +452,16 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   // "first"-scoped elements (exam header, title panel) sit in the header band on the FIRST page only.
   const everyEls = staticElements.filter((el) => el.pageScope.mode === "every");
   const firstPageHeaderEls = staticElements.filter((el) => el.pageScope.mode === "every" || el.pageScope.mode === "first");
+  // A header's real height counts, not the one it was drawn with: a long title wraps to a second line
+  // and the content must start below it.
+  const realBottom = (el: Element) => (isShown(el, scopes, ctx) ? Math.max(el.frame.y + el.frame.h, layoutElement(el, 0, 0, scopes, ctx, limit).bottom) : el.frame.y + el.frame.h);
   const headerBottom = everyEls
     .filter((el) => el.frame.y + el.frame.h <= height / 2)
-    .reduce((max, el) => Math.max(max, el.frame.y + el.frame.h), layout.margins.top);
+    .reduce((max, el) => Math.max(max, realBottom(el)), layout.margins.top);
   // On the first page, "first"-scoped elements also occupy the header band, so content must start below them.
   const firstPageHeaderBottom = firstPageHeaderEls
     .filter((el) => el.frame.y + el.frame.h <= height / 2)
-    .reduce((max, el) => Math.max(max, el.frame.y + el.frame.h), layout.margins.top);
+    .reduce((max, el) => Math.max(max, realBottom(el)), layout.margins.top);
   const footerTop = everyEls
     .filter((el) => el.frame.y >= height / 2)
     .reduce((min, el) => Math.min(min, el.frame.y), limit);
@@ -410,6 +473,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
   const contentLimit = Math.min(limit, footerTop);
   // Slides-specific rules: one item per slide; a "first"-scoped element creates a standalone title slide.
   const isSlides = layout.class === "slides";
+  const onePage = isSlides || layout.canvas.width < 200;
   const hasTitleSlide = isSlides && staticElements.some((el) => el.pageScope.mode === "first");
 
   const stamp = (target: LaidOutPage, continuation: boolean) => {
@@ -423,9 +487,13 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
         const dy = centerY - element.frame.y;
         const cx = layout.margins.left;
         const cw = width - layout.margins.left - layout.margins.right;
+        // The title sits in the middle of its panel: the text block is centred on the panel it is drawn on.
+        const panel = laid.items.filter((item) => item.type === "rect" && item.w > cw * 0.6).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+        const lines = laid.items.filter((item) => item.type === "text");
+        const inPanel = panel && lines.length ? (panel.y + panel.h / 2) - ((Math.min(...lines.map((item) => item.y)) + Math.max(...lines.map((item) => item.y + item.h))) / 2) : 0;
         for (const item of laid.items) {
           if (item.type === "text") {
-            target.items.push({ ...item, y: item.y + dy, x: cx, w: cw, style: { ...item.style, align: "center" as const } });
+            target.items.push({ ...item, y: item.y + dy + inPanel, x: cx, w: cw, style: { ...item.style, align: "center" as const } });
           } else {
             target.items.push({ ...item, y: item.y + dy });
           }
@@ -468,7 +536,8 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
     const designedGap = Math.max(0, element.frame.y - previousDesignedBottom);
     // Use cursor for the first flowing element too (not element.frame.y) so content
     // always starts below the header rather than at the raw designed position.
-    let y = firstFlowing ? cursor : cursor + designedGap;
+    // Consecutive components never touch: at least 4 mm between them (answers make cards longer than designed).
+    let y = firstFlowing ? cursor : cursor + Math.max(designedGap, isSlides ? 0 : 4);
     firstFlowing = false;
     const group = element.type === "group" ? element : null;
     if (((group && group.pagination.breakBefore) || element.placement === "new_page") && current.items.length) {
@@ -499,13 +568,18 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           laid = layoutInstance(element, element.frame.x, c, recordScopes, ctx, pageLimit);
         }
         const bleeds = element.frame.w >= layout.canvas.width * 0.9;
+        // On a slide the component sits in the middle of the room it has, not stuck to the top.
+        if (isSlides && element.frame.x > 1 && laid.bottom <= pageLimit && laid.bottom < pageLimit - 6) {
+          const dy = Math.min((pageLimit - laid.bottom) / 2, 45);
+          laid = { ...laid, items: laid.items.map((item) => ({ ...item, y: item.y + dy })), bottom: laid.bottom + dy };
+        }
         // One record taller than a whole page: a section with more questions than fit. Split it at
         // its own list instead of letting it run off the bottom — each page repeats the section's
         // heading and carries as many of its items as fit.
         // A record whose own text is longer than most of a page (one huge paragraph) is cut at its
         // text lines below instead; splitting its small lists would not make it fit.
         const longText = laid.items.some((item) => item.type === "text" && item.h > 0.5 * (contentLimit - contentTop));
-        const splittable = laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip" && !(longText && !isSlides) ? innerList(element, recordScopes, ctx) : null;
+        const splittable = laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip" && !(longText && !onePage) ? innerList(element, recordScopes, ctx) : null;
         if (splittable) {
           let drawn = 0;
           while (drawn < splittable.count) {
@@ -525,7 +599,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
           continue;
         }
         // Text longer than the rest of the page continues on the next one at the same font size.
-        if (!isSlides && !bleeds && laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip") {
+        if (!onePage && !bleeds && laid.bottom > pageLimit + 0.5 && element.pagination.overflow !== "clip") {
           let cut = splitAtLimit(laid.items, pageLimit, contentTop);
           if (cut) {
             let rest = laid.items;
@@ -563,7 +637,7 @@ function layoutSourcePage(page: Page, layout: Layout, scopes: Scope[], ctx: Ctx,
       // A single block of text longer than a page: same font size, more pages.
       let placed = laid.items;
       let placedBottom = laid.bottom;
-      if (!isSlides && !fullBleed && laid.bottom > contentLimit + 0.5) {
+      if (!onePage && !fullBleed && laid.bottom > contentLimit + 0.5) {
         let cut = splitAtLimit(placed, contentLimit, contentTop);
         for (let guard = 0; cut && guard < 60; guard += 1) {
           current.items.push(...cut.head);
@@ -598,7 +672,8 @@ export function layoutDocument(template: Template, rawData: DataObject, options:
   const ctx: Ctx = { fields: template.fields, overflows: [], itemCounts: {}, pageIndex: () => 0 };
   const out: LaidOutPage[] = [];
   if (!layout) return { pages: out, overflows: [], itemCounts: {} };
-  ctx.slides = layout.class === "slides";
+  // On a slide or a small card a component is one page: its text shrinks to fit instead of flowing on.
+  ctx.slides = layout.class === "slides" || layout.canvas.width < 200;
   ctx.contentBottom = layout.canvas.height - layout.margins.bottom;
   const pages = resolveView(layout, options.viewId ?? null);
   const root: Scope[] = [{ data, index: 0 }];
@@ -607,8 +682,10 @@ export function layoutDocument(template: Template, rawData: DataObject, options:
     const pageRepeat = page.elements.find((element): element is GroupElement => element.type === "group" && element.repeat?.mode === "page");
     if (pageRepeat) {
       const records = repeatRecords(pageRepeat, root, ctx);
-      records.forEach((record) => {
-        const clone: Page = { ...page, elements: page.elements.map((element) => (element.id === pageRepeat.id ? { ...element, repeat: null } as Element : element)) };
+      records.forEach((record, recordIndex) => {
+        // A title or cover that belongs to the first page is not repeated for every record: it would
+        // leave a blank page in front of each one.
+        const clone: Page = { ...page, elements: page.elements.filter((element) => recordIndex === 0 || element.pageScope.mode !== "first").map((element) => (element.id === pageRepeat.id ? { ...element, repeat: null } as Element : element)) };
         layoutSourcePage(clone, layout, [record, ...root], ctx, out, record.index + 1);
       });
       continue;

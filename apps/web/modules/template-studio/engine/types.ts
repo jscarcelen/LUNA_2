@@ -40,7 +40,7 @@ export interface FieldDef {
    * Derived lists are computed from another list instead of being generated: e.g. square-puzzle
    * tiles (Top/Right/Bottom/Left) computed from word pairs so matching edges are guaranteed.
    */
-  derive?: { kind: "tarsia"; from: string; size?: number };
+  derive?: { kind: "tarsia" | "sides"; from: string; size?: number };
 }
 
 /* ---------------------------------------------------------------- template → layout → view */
@@ -177,6 +177,8 @@ export interface TextElement extends ElementBase {
   placeholder?: string;
   /** A field holding a URL: the text becomes a link in HTML and PowerPoint (plain text elsewhere). */
   linkFieldId?: ID;
+  /** When the field has a value that is empty, take no room at all (a source line with no source). */
+  collapseEmpty?: boolean;
 }
 export interface ImageElement extends ElementBase {
   type: "image";

@@ -221,7 +221,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
 export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string; page?: number | null; pageEnd?: number | null }
 
 const STOP = new Set(["the", "a", "an", "of", "and", "or", "is", "are", "to", "in", "on", "for", "with", "that", "this", "it", "as", "by", "be", "which", "what", "de", "la", "el", "los", "las", "que", "y", "en", "un", "una"]);
-const terms = (value: string) => [...new Set(String(value || "").toLowerCase().split(/[^a-z0-9áéíóúüñ]+/).filter((word) => word.length > 3 && !STOP.has(word)))];
+export const terms = (value: string) => [...new Set(String(value || "").toLowerCase().split(/[^a-z0-9áéíóúüñ]+/).filter((word) => word.length > 3 && !STOP.has(word)))];
 
 /** "Section › Subsection · page 3 · passage 4" — the place, in the words a reader would use. */
 export function sourceLocator(heading: string, page?: number | null, chunkIndex?: number): string {
@@ -229,7 +229,7 @@ export function sourceLocator(heading: string, page?: number | null, chunkIndex?
 }
 
 /** The heading the quoted words sit under, joined to the chapter above it: "2. Balance sheet › 2.6. Double-entry accounting". */
-function headingFor(passage: SourcePassage, extract: string): string {
+export function headingFor(passage: SourcePassage, extract: string): string {
   const probe = String(extract).toLowerCase().replace(/\s+/g, " ").slice(0, 28);
   let current = "";
   for (const line of String(passage.content || "").split("\n")) {
@@ -245,7 +245,7 @@ function headingFor(passage: SourcePassage, extract: string): string {
 }
 
 /** The sentence(s) of `content` that best match the question and answer — the words we quote (up to ~420 characters). */
-function bestSentences(content: string, keys: string[]): string {
+export function bestSentences(content: string, keys: string[]): string {
   const clean = String(content).replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/^#{1,6}\s+.*$/gm, "");
   // Sentences, but also list items and lines: slides and notes are mostly bullets without full stops.
   const sentences = clean

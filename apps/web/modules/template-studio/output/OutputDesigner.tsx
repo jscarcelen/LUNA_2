@@ -65,6 +65,8 @@ export interface OutputStylePanelProps {
   templatesLoading?: boolean;
   onRefreshTemplates?: () => void;
   onOpenTemplateStudio?: () => void;
+  /** The name the file is saved under, offered as the footer text. */
+  fileName?: string;
 }
 
 function ColorRow({ selected, onPick, compact = false }: { selected?: string; onPick: (id: string) => void; compact?: boolean }) {
@@ -80,7 +82,7 @@ function ColorRow({ selected, onPick, compact = false }: { selected?: string; on
   );
 }
 
-export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, onAutoAccentChange, savedTemplates = [], templatesLoading, onRefreshTemplates, onOpenTemplateStudio }: OutputStylePanelProps) {
+export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, onAutoAccentChange, savedTemplates = [], templatesLoading, onRefreshTemplates, onOpenTemplateStudio, fileName }: OutputStylePanelProps) {
   const allBlocks = useMemo(() => builtInBlocks(), []);
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   const [visualize, setVisualize] = useState<string | null>(null);
@@ -195,7 +197,23 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
       {fixed.length ? (
         <div>
           <p className={`${kicker} mb-1 px-1`}>Structure</p>
-          {fixed.map((component) => cardFor(component.key))}
+          {fixed.map((component) => (
+            <div key={component.key}>
+              {cardFor(component.key)}
+              <label className="-mt-1 mb-2 flex items-center gap-2 px-2 text-xs text-soft-ink">
+                <input type="checkbox" checked={!styles[component.key]?.hidden} onChange={(event) => set(component.key, { hidden: !event.target.checked })} />
+                {styles[component.key]?.hidden ? "Hidden — tick to show it again" : "Shown on the document (untick to remove it)"}
+              </label>
+              {component.key === "block-footer" && !styles[component.key]?.hidden ? (
+                <div className="-mt-1 mb-2 flex flex-wrap items-center gap-2 px-2">
+                  <span className="text-xs text-soft-ink">Footer text</span>
+                  <input className={`${fieldBase} min-w-40 flex-1 py-1 text-xs`} value={styles[component.key]?.text ?? plan.footerText} onChange={(event) => set(component.key, { text: event.target.value })} />
+                  <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => set(component.key, { text: undefined })}>Default</button>
+                  {fileName ? <button type="button" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => set(component.key, { text: fileName })}>Use the file name</button> : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
       {content.length ? (

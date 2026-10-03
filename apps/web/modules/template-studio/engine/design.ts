@@ -111,6 +111,10 @@ export const cardStyle = (accent: Palette, variant: "plain" | "tinted" | "outlin
 export const accentEdge = (accent: Palette, height: number, extra: Partial<ShapeElement> = {}): ShapeElement =>
   createShape("rect", { frame: { x: 0, y: 0, w: 1.4, h: height }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.7 }), ...extra });
 
+/** A short coloured mark at the left of a block (not the whole height): it signals the block without growing with it. */
+export const accentMark = (accent: Palette, y: number, length = 8): ShapeElement =>
+  createShape("rect", { frame: { x: 0, y, w: 1.4, h: length }, style: defaultStyle({ fill: accent.main, stroke: "", radius: 0.7 }) });
+
 /** A round number badge and its numeral, optically centred. */
 export function numberBadge(accent: Palette, x: number, y: number, size = 8, optionKey = "number"): Element[] {
   const prefix = optionKey ? `opt:${optionKey}|` : "";
@@ -158,8 +162,8 @@ export function answerBand(accent: Palette, answerFieldId: ID, y: number, width:
   const green = palette("green");
   return [
     createShape("rect", { name: `${prefix}Answer band`, frame: { x: 0, y, w: width, h: 6.4 }, style: defaultStyle({ fill: green.tint, stroke: "", radius: RADIUS.panel }) }),
-    kicker("Answer", { x: 4, y: y + 1.6, w: 14, h: 4 }, green.deep, { name: `${prefix}Answer label` }),
-    field(answerFieldId, "B · Absorbs light energy", { x: 19, y: y + 1.3, w: width - 23, h: 4.6 }, { fontSize: TYPE.small, fontWeight: "bold", color: green.deep }, { name: `${prefix}Answer` })
+    kicker("Answer", { x: 4, y: y + 1.6, w: 22, h: 4 }, green.deep, { name: `${prefix}Answer label` }),
+    field(answerFieldId, "B · Absorbs light energy", { x: 27, y: y + 1.3, w: width - 31, h: 4.6 }, { fontSize: TYPE.small, fontWeight: "bold", color: green.deep }, { name: `${prefix}Answer` })
   ];
 }
 
@@ -173,10 +177,10 @@ export function answerBand(accent: Palette, answerFieldId: ID, y: number, width:
 export function confidenceRow(accent: Palette, y: number, width: number, optionKey = "confidence"): Element[] {
   const prefix = `opt:${optionKey}|`;
   const out: Element[] = [
-    label("How sure are you?", { x: 0, y: y + 0.6, w: 32, h: 4.6 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: `${prefix}Confidence label` })
+    label("How sure are you?", { x: 0, y: y + 0.6, w: 40, h: 4.6 }, { fontSize: TYPE.meta, fontWeight: "bold", color: INK.muted }, { name: `${prefix}Confidence label` })
   ];
   CONFIDENCE_LEVELS.forEach((level, index) => {
-    const x = 34 + index * 24;
+    const x = 42 + index * 24;
     out.push(createShape("rect", { name: `${prefix}${level} box`, frame: { x, y: y + 0.8, w: 4.2, h: 4.2 }, style: defaultStyle({ fill: INK.paper, stroke: accent.line, strokeWidth: 0.35, radius: 0.9 }) }));
     out.push(label(level, { x: x + 5.6, y: y + 0.9, w: 17, h: 4.4 }, { fontSize: TYPE.meta, color: INK.muted }, { name: `${prefix}${level}` }));
   });
@@ -189,8 +193,8 @@ export const divider = (y: number, width: number, colour = INK.hairline): ShapeE
   createShape("line", { frame: { x: 0, y, w: width, h: 0.25 }, style: defaultStyle({ stroke: colour, strokeWidth: 0.25 }) });
 
 /** A ruled writing line: darker than a divider, because somebody has to write on it. */
-export const writingLine = (y: number, x: number, width: number): ShapeElement =>
-  createShape("line", { frame: { x, y, w: width, h: 0.3 }, style: defaultStyle({ stroke: INK.rule, strokeWidth: 0.3 }) });
+export const writingLine = (y: number, x: number, width: number, extra: Partial<ShapeElement> = {}): ShapeElement =>
+  createShape("line", { frame: { x, y, w: width, h: 0.3 }, style: defaultStyle({ stroke: INK.rule, strokeWidth: 0.3 }), ...extra });
 
 /** A small tinted pill with a word in it — section badges, topic ribbons, tags. */
 export function chip(value: string, accent: Palette, frame: Frame, extra: Partial<TextElement> = {}): Element[] {

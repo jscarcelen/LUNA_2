@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { loadWorkspaceTreeForAi } from "../../modules/ai-tools/pipeline/workspaceSource.js";
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "../../modules/ai-tools/pipeline/chunking.js";
+import { MARKDOWN_CSS, markdownToHtml } from "../../modules/reader/markdown.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +66,6 @@ export default async function SourcePage({ searchParams }) {
   }
 
   const content = String(chunk.content || "");
-  const hit = quote ? findQuote(content, quote) : null;
   const heading = Array.isArray(chunk.headingPath) && chunk.headingPath.length ? chunk.headingPath.join(" › ") : chunk.section || "";
   const link = (n) => `/source?d=${encodeURIComponent(documentId)}&c=${n}`;
 
@@ -75,15 +75,9 @@ export default async function SourcePage({ searchParams }) {
         <p style={kicker}>Source passage</p>
         <h1 style={{ margin: "8px 0 2px", fontSize: 24, letterSpacing: "-0.01em" }}>{documentName}</h1>
         <p style={{ margin: 0, color: "#6e6e73", fontSize: 14 }}>{heading ? `${heading} · ` : ""}{chunk.page ? (chunk.pageEnd && chunk.pageEnd !== chunk.page ? `pages ${chunk.page}–${chunk.pageEnd} · ` : `page ${chunk.page} · `) : ""}passage {chunk.chunkIndex + 1} of {chunks.length}</p>
-        <div style={{ marginTop: 20, padding: "18px 20px", background: "#fafafa", borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)", fontSize: 15, lineHeight: 1.65, whiteSpace: "pre-wrap" }}>
-          {hit ? (
-            <>
-              {content.slice(0, hit.start)}
-              <mark id="quote" style={{ background: "#fff3b0", borderRadius: 4, padding: "1px 2px" }}>{content.slice(hit.start, hit.end)}</mark>
-              {content.slice(hit.end)}
-            </>
-          ) : content}
-        </div>
+        <style dangerouslySetInnerHTML={{ __html: MARKDOWN_CSS }} />
+        <div className="md" style={{ marginTop: 20, padding: "8px 22px 14px", background: "#fff", borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)" }} dangerouslySetInnerHTML={{ __html: markdownToHtml(content, { quote }) }} />
+        <script dangerouslySetInnerHTML={{ __html: "document.getElementById('quote')&&document.getElementById('quote').scrollIntoView({block:'center'})" }} />
         <nav style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 20, fontSize: 14 }}>
           {index > 0 ? <Link href={link(index)} style={{ color: "#0071e3" }}>← Previous passage</Link> : <span />}
           <Link href="/" style={{ color: "#6e6e73" }}>Back to LUNA</Link>

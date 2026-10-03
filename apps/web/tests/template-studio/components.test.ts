@@ -45,13 +45,14 @@ describe("every built-in component", () => {
   });
 
   it("offers the confidence check on every question card that a learner fills in", () => {
-    // The full-size cards — the ones a learner writes on. The compact and true/false rows are single
-    // lines by design and have nowhere to put it.
-    const cards = blocks.filter((block) => ["block-exam-question", "block-open-question", "block-question-mixed", "block-section-questions"].includes(block.id));
+    // The full-size cards — the ones a learner writes on — and true/false, where how sure someone is
+    // matters just as much. Compact rows are single lines by design and have nowhere to put it.
+    const cards = blocks.filter((block) => ["block-exam-question", "block-open-question", "block-true-false", "block-question-mixed", "block-section-questions"].includes(block.id));
     for (const block of cards) {
       expect(block.options?.some((option) => option.key === "confidence")).toBe(true);
     }
     const withConfidence = templateWith(cards[0], { toggles: { confidence: true } });
+    const withoutConfidence = templateWith(cards[0], { toggles: { confidence: false } });
     const printed: string[] = [];
     const walk = (elements: import("../../modules/template-studio/engine/types").Element[]) => {
       for (const element of elements) {
@@ -59,8 +60,8 @@ describe("every built-in component", () => {
         if (element.type === "group") walk(element.children);
       }
     };
-    walk(templateWith(cards[0]).layouts[0].pages[0].elements);
-    expect(printed).not.toContain("How sure are you?"); // off unless the teacher asks for it
+    walk(withoutConfidence.layouts[0].pages[0].elements);
+    expect(printed).not.toContain("How sure are you?"); // can be switched off
     printed.length = 0;
     walk(withConfidence.layouts[0].pages[0].elements);
     expect(printed).toContain("How sure are you?");

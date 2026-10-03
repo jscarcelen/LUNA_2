@@ -37,6 +37,7 @@ export function buildResource({ name, activity = null, data = {}, request = {}, 
     meta: {
       agentId: meta.agentId || "",
       agentName: meta.agentName || "",
+      subjectName: meta.subjectName || "",
       templateId: meta.templateId || "",
       templateName: meta.templateName || "",
       sourceDocumentIds: meta.sourceDocumentIds || [],

@@ -15,7 +15,7 @@ import { assembleTemplate, defaultToggles, findBlock, variantsOf } from "../engi
 import { compileForSave } from "../adapters/agentTemplate";
 import { fieldsFromAgentFields, slug } from "../engine/model";
 import { templateFromFields } from "../engine/autoTemplate";
-import { locateSource, sourceUrl, type SourcePassage } from "../../activities/engine/activity";
+import { bestSentences, headingFor, locateSource, sourceUrl, terms, type SourcePassage } from "../../activities/engine/activity";
 import { localizeTemplate, wordsFor, type LabelLanguage } from "./labels";
 import { PALETTES } from "../engine/design";
 import type { DataObject, Element, GroupElement, Template } from "../engine/types";
@@ -48,7 +48,7 @@ const QUIZ_HEADER = "block-header-exam";
 const CARDS_HEADER = "block-header-minimal";
 const FOOTER = "block-footer";
 
-export interface ComponentStyle { blockId?: string; accentId?: string; toggles?: Record<string, boolean> }
+export interface ComponentStyle { blockId?: string; accentId?: string; toggles?: Record<string, boolean>; /** Structure components (page header / footer) can be switched off. */ hidden?: boolean; /** Footer: the text printed on the left (default: subject – what it is). */ text?: string }
 export type OutputStyles = Record<string, ComponentStyle>;
 
 const allBlocks = (): BlockDef[] => builtInBlocks();
@@ -158,6 +158,7 @@ export function itemsToBlocks(items: unknown): FlatBlock[] | null {
   }
   if (!rows.every((row) => get(row, "question") !== undefined)) return null;
   return rows.map((row, index) => {
+    const cited = (row as Record<string, unknown>)._sourceResolved || undefined;
     const question = text(get(row, "question"));
     const options = (Array.isArray(get(row, "options")) ? (get(row, "options") as unknown[]) : []).map(text);
     const answer = text(get(row, "answer"));
@@ -166,13 +167,13 @@ export function itemsToBlocks(items: unknown): FlatBlock[] | null {
     const points = get(row, "points");
     const number = index + 1;
     if (/true|false|verdad|v_f|vf/.test(kind) || (options.length === 2 && /^(true|verdadero|cierto|vrai|wahr)/i.test(options[0] || ""))) {
-      return { type: "question_tf", number, statement: question, is_true: isTrue(answer, options), explanation, points };
+      return { type: "question_tf", number, statement: question, is_true: isTrue(answer, options), explanation, points, __cited: cited };
     }
     if (/short|open|abiert|corta|free/.test(kind) || !options.length) {
-      return { type: "question_open", number, question, answer_guide: answer, explanation, points };
+      return { type: "question_open", number, question, answer_guide: answer, explanation, points, __cited: cited };
     }
     const answerIndex = Math.max(0, options.findIndex((option) => option.trim().toLowerCase() === answer.trim().toLowerCase()));
-    return { type: "question_mc", number, question, options, answer_index: answerIndex, explanation, points };
+    return { type: "question_mc", number, question, options, answer_index: answerIndex, explanation, points, __cited: cited };
   });
 }
 
@@ -222,6 +223,8 @@ export interface OutputPlan {
   /** Header / footer components around the content. */
   start: string[];
   end: string[];
+  /** The footer's default left text (subject – Quiz / Summary…). */
+  footerText: string;
   runs: PlannedRun[];
   /** Every component in display order: structure first, then content in order of appearance. */
   components: { key: string; fixed: boolean }[];
@@ -359,7 +362,11 @@ function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string
   const options = (Array.isArray(block.options) ? block.options : []).map(text);
   const prompt = text(block.question || block.statement || block.sentence);
   const answer = [options[Number(block.answer_index) || 0], block.answer_guide, block.answer, block.explanation].map(text).join(" ");
-  const found = locateSource(prompt, answer, passages);
+  // The passage the agent said each item came from wins: it is right whatever the language of the
+  // question (a quiz in Spanish about an English document shares no words with it).
+  const cited = block.__cited as { documentId?: string; chunkIndex?: number } | undefined;
+  const citedPassage = cited?.documentId ? passages.find((passage) => passage.documentId === cited.documentId && passage.chunkIndex === cited.chunkIndex) : undefined;
+  const found = citedPassage ? { passage: { ...citedPassage, heading: headingFor(citedPassage, bestSentences(citedPassage.content, terms(`${prompt} ${answer}`))) }, extract: bestSentences(citedPassage.content, terms(`${prompt} ${answer}`)) } : locateSource(prompt, answer, passages);
   if (!found) return null;
   const words = wordsFor(language);
   const quote = found.extract.length > 260 ? `${found.extract.slice(0, 257)}…` : found.extract;
@@ -376,8 +383,18 @@ function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string
  * items, flashcard sets) get the header/footer Template Studio's quiz and game types always have;
  * block agents bring their own headings, so nothing is added around them.
  */
-export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitle?: string; framed?: boolean; passages?: SourcePassage[]; linkBase?: string; language?: LabelLanguage }): OutputPlan | null {
-  const blocks = input.blocks.filter((block) => block && typeof block.type === "string").map((block) => (QUESTION_TYPES.has(block.type) ? { ...block, __source: sourceFor(block, input.passages || [], input.linkBase || "", input.language || "en") } : block));
+export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitle?: string; subject?: string; agentName?: string; framed?: boolean; passages?: SourcePassage[]; linkBase?: string; language?: LabelLanguage }): OutputPlan | null {
+  let title = input.title || "";
+  let incoming = input.blocks.filter((block) => block && typeof block.type === "string");
+  // A document gets a page header (title) and footer by default — unless the AI wrote its own header.
+  const wantsFrame = !input.framed;
+  const hasOwnHeader = incoming.some((block) => block.type === "document_header" || block.type === "exam_header");
+  if (wantsFrame && !hasOwnHeader && incoming[0]?.type === "heading" && Number(incoming[0].level || 1) <= 1 && String(incoming[0].text || "").trim() && incoming.length > 1) {
+    // The AI's own top heading is the document's title: it goes in the header instead of appearing twice.
+    title = String(incoming[0].text).trim();
+    incoming = incoming.slice(1);
+  }
+  const blocks = incoming.map((block) => (QUESTION_TYPES.has(block.type) ? { ...block, __source: sourceFor(block, input.passages || [], input.linkBase || "", input.language || "en") } : block));
   const runs: PlannedRun[] = [];
   let open: { componentKey: string; blocks: FlatBlock[] } | null = null;
   const groups: { componentKey: string; blocks: FlatBlock[] }[] = [];
@@ -408,17 +425,21 @@ export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitl
   const hasQuestions = blocks.some((block) => QUESTION_TYPES.has(block.type));
   const onlyCards = blocks.every((block) => block.type === "flashcard" || COMPONENT_FOR_BLOCK[block.type] === null);
   const kind: OutputKind = onlyCards ? "cards" : input.framed && hasQuestions ? "quiz" : "document";
-  const start = input.framed ? [kind === "quiz" ? QUIZ_HEADER : CARDS_HEADER] : [];
-  const end = input.framed && kind === "quiz" ? [FOOTER] : [];
+  const framedDocument = wantsFrame && kind === "document";
+  const what = kind === "cards" ? "Flashcards" : kind === "quiz" ? (/exam/i.test(`${input.agentName || ""} ${title}`) ? "Exam" : "Quiz") : /summar/i.test(input.agentName || "") ? "Summary" : (input.agentName || "Document");
+  const footerText = input.subject ? `${input.subject} – ${what}` : title || what;
+  const start = input.framed ? [kind === "quiz" ? QUIZ_HEADER : CARDS_HEADER] : framedDocument && !hasOwnHeader ? [CARDS_HEADER] : [];
+  const end = (input.framed && kind === "quiz") || framedDocument ? [FOOTER] : [];
 
   const content: string[] = [];
   for (const run of runs) if (!content.includes(run.componentKey)) content.push(run.componentKey);
   return {
     kind,
-    title: input.title || "Untitled",
+    title: title || "Untitled",
     subtitle: input.subtitle || "",
     start,
     end,
+    footerText,
     runs,
     components: [...start.map((key) => ({ key, fixed: true })), ...content.map((key) => ({ key, fixed: false })), ...end.map((key) => ({ key, fixed: true }))]
   };
@@ -439,7 +460,7 @@ export interface OutputDocument {
 /** Gives every top-level field of a block a unique name, so two runs of one component never share data. */
 function renameFields(block: BlockDef, n: number): BlockDef {
   const copy = JSON.parse(JSON.stringify(block)) as BlockDef;
-  copy.fields = copy.fields.map((field) => ({ ...field, name: `${field.name} ${n}` }));
+  copy.fields = copy.fields.map((field) => ({ ...field, name: `${field.name} ${n}`, ...(field.derive ? { derive: { ...field.derive, from: `${field.derive.from} ${n}` } } : {}) }));
   return copy;
 }
 
@@ -449,6 +470,7 @@ export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles, opti
   const data: DataObject = {};
 
   const pushFixed = (key: string) => {
+    if (styles[key]?.hidden) return;
     const resolved = resolveStyle(key, styles);
     if (!resolved) return;
     const autoOff = off("subtitle", key === QUIZ_HEADER && !plan.subtitle);
@@ -466,6 +488,7 @@ export function buildOutputDocument(plan: OutputPlan, styles: OutputStyles, opti
   plan.end.forEach(pushFixed);
   data.title = plan.title;
   data.subtitle = plan.subtitle;
+  data.footer_text = styles[FOOTER]?.text?.trim() ? styles[FOOTER].text! : plan.footerText || plan.title;
 
   const cards = plan.kind === "cards";
   const template = localizeTemplate(assembleTemplate(plan.title || "Output", cards ? 148 : 210, cards ? 105 : 297, selections), options.language || "en");

@@ -1,10 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ActivityPlayer } from "./ActivityPlayer";
 import { defaultLearner } from "../performance/learners";
 import { daysUntil, parsePlan } from "../plans/plan";
-import { activityLook } from "../resources/look";
+import { ReaderView } from "../reader/ReaderView";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -28,7 +27,7 @@ function scoreTone(pct) {
  * subject, with due dates and results. Attempts are recorded per question so mistakes can be
  * reviewed and, later, fed into performance tracking.
  */
-export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool }) {
+export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const docs = subject?.documents || [];
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
@@ -221,9 +220,14 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
       )}
 
       {playing ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-          <ActivityPlayer activity={playing.parsed.activity} look={activityLook(playing.parsed)} onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)} onClose={() => setPlaying(null)} />
-        </div>
+        <ReaderView
+          resource={playing.parsed}
+          activity={playing.parsed.activity}
+          highlights={playing.parsed.highlights || []}
+          onSaveHighlights={onUpdateGeneratedDocument ? (list) => { const content = JSON.stringify({ ...playing.parsed, highlights: list }, null, 2); return onUpdateGeneratedDocument(playing.document.id, { file: { name: playing.document.name, content, sizeBytes: content.length } }); } : undefined}
+          onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
+          onClose={() => setPlaying(null)}
+        />
       ) : null}
     </section>
   );

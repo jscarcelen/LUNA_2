@@ -27,6 +27,19 @@ export function tilesFromPairs(pairs: Row[], size = 4): Row[] {
   return tiles;
 }
 
+/**
+ * Flashcards, one SIDE per page: every card becomes two entries — its front, then its back — so
+ * printing the pages in order (or duplex) gives a front page and a back page for each card, and
+ * the deck can be played as a memory game.
+ */
+export function sidesFromCards(cards: Row[]): Row[] {
+  const text = (row: Row, names: string[]) => { const key = Object.keys(row).find((k) => names.includes(slug(k))); return key === undefined ? "" : String(row[key] ?? ""); };
+  return cards.flatMap((card) => [
+    { label: "FRONT", text: text(card, ["front", "word", "term", "question"]) },
+    { label: "BACK", text: text(card, ["back", "translation", "definition", "answer"]) }
+  ]);
+}
+
 /** Number of pairs a tarsia of `size` needs (internal edges). */
 export function tarsiaPairCount(size = 4): number {
   return 2 * size * (size - 1);
@@ -42,6 +55,7 @@ export function deriveData(fields: FieldDef[], data: DataObject): DataObject {
     if (!Array.isArray(source)) continue;
     const size = field.derive.size || (field.sampleCount ? Math.round(Math.sqrt(field.sampleCount)) : 4);
     if (field.derive.kind === "tarsia") out = { ...out, [slug(field.name)]: tilesFromPairs(source as Row[], size) };
+    if (field.derive.kind === "sides") out = { ...out, [slug(field.name)]: sidesFromCards(source as Row[]) };
   }
   return out;
 }

@@ -9,10 +9,11 @@ const KIND_LABEL = {
   review: "Review",
   "spaced-recall": "Come back to it",
   "exam-technique": "Exam technique",
+  deadline: "Due soon",
   habit: "Habit"
 };
 
-const cacheKey = (signature) => `luna.performance.coach.${signature}`;
+const cacheKey = (signature) => `luna.performance.coach.v2.${signature}`;
 
 /**
  * Luna's read of the results.
@@ -25,7 +26,7 @@ const cacheKey = (signature) => `luna.performance.coach.${signature}`;
  */
 export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, onPractise, onSchedule }) {
   const [state, setState] = useState({ status: "idle", read: null, error: "" });
-  const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}`;
+  const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
   const digest = hash(signature);
 
   useEffect(() => {
@@ -65,8 +66,9 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
         <>
           <p className="m-0 text-[15px] font-semibold leading-snug text-ink">{result.headline}</p>
           <p className="m-0 text-sm leading-relaxed text-soft-ink">{result.diagnosis}</p>
+          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Your top 5 next actions</p>
           <div className="grid gap-2">
-            {(result.actions || []).map((action, index) => (
+            {(result.actions || []).slice(0, 5).map((action, index) => (
               <div key={`${action.title}-${index}`} className="rounded-xl border border-ink/10 p-3">
                 <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
                   <span className="min-w-0">{index + 1}. {action.title}</span>

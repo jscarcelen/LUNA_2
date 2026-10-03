@@ -177,6 +177,15 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     }).sort((a, b) => b.mastery - a.mastery);
   }, [evidence, subject]);
 
+  /* The study plans, most recently active first: "Topic by topic" and Luna's read follow one of them. */
+  const [topicPlanId, setTopicPlanId] = useState("");
+  const planChoices = useMemo(() => plans.map((row) => {
+    const latest = forPlan(all, row.plan).reduce((max, attempt) => Math.max(max, new Date(attempt.at).getTime() || 0), 0);
+    return { id: row.document.id, name: row.plan.name, colour: row.plan.colour, materialIds: row.plan.materialIds || [], lastAt: latest || new Date(row.plan.updatedAt || row.plan.createdAt || 0).getTime() || 0, plan: row.plan };
+  }).sort((a, b) => b.lastAt - a.lastAt), [plans, all]);
+  const focusPlan = planChoices.find((entry) => entry.id === topicPlanId) || planChoices[0] || null;
+  const coachPlan = activePlan ? { plan: activePlan.plan } : focusPlan;
+
   const stats = summarise(attempts);
   const planStats = activePlan ? planProgress(activePlan.plan, all) : null;
   const sessionsPerWeek = attempts.length ? (attempts.length / Math.max(7, range || 30)) * 7 : 0;
@@ -265,7 +274,14 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     sessionsPerWeek,
     activePlan,
     planStats,
-    planSummary: activePlan && planStats ? { name: activePlan.plan.name, deadline: planStats.deadline?.date || "", done: planStats.done, total: planStats.total, late: planStats.late.length } : null,
+    planSummary: coachPlan ? (() => {
+      const progress = planProgress(coachPlan.plan, all);
+      return { name: coachPlan.plan.name, deadline: progress.deadline?.date || "", done: progress.done, total: progress.total, late: progress.late.length, upcoming: progress.next.slice(0, 6).map((item) => ({ title: item.title, dueDate: item.dueDate || "", kind: item.kind })) };
+    })() : null,
+    planChoices,
+    focusPlanId: focusPlan?.id || "",
+    setFocusPlanId: setTopicPlanId,
+    workspaceId: selectedWorkspaceId,
     selectedTopic,
     selected: topics.find((entry) => entry.topic === selectedTopic) || null,
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),
@@ -471,26 +487,25 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       ) : null}
 
       {!evidence.length ? (
-        <section className={`${card} p-6`}>
-          <p className="m-0 text-sm text-soft-ink">
-            Nothing measured in this selection yet. {trackBy === "plan" && plans.length === 0 ? "Make a study plan — its goals become the topics this screen tracks — then do an activity on Luna." : "Do an activity on Luna, or widen the filters, and this screen fills itself in."}
-          </p>
-        </section>
+        <>
+          <section className={`${card} p-6`}>
+            <p className="m-0 text-sm text-soft-ink">
+              Nothing measured in this selection yet. {trackBy === "plan" && plans.length === 0 ? "Make a study plan — its goals become the topics this screen tracks — then do an activity on Luna." : "Do an activity on Luna, or widen the filters, and this screen fills itself in."}
+            </p>
+          </section>
+          {panels.filter(({ panel }) => panel.id === "mastery-map").map(({ panel, definition }) => (
+            <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
+              <p className={kicker}>{definition.title}</p>
+              <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
+            </section>
+          ))}
+        </>
       ) : (
-        <div className="grid items-stretch gap-3 lg:grid-cols-2">
+        <div className="grid gap-3">
           {panels.map(({ panel, definition }) => (
-            <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5 ${panel.size === "full" || definition.size === "full" ? "lg:col-span-2" : ""}`}>
+            <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className={kicker}>{definition.title}</p>
-                {definition.modes.length > 1 ? (
-                  <span className="flex gap-1">
-                    {definition.modes.map((mode) => (
-                      <button key={mode} type="button" onClick={() => changeView({ ...view, panels: view.panels.map((entry) => (entry.id === panel.id ? { ...entry, mode } : entry)) })} className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${panel.mode === mode ? "bg-ink text-white" : "bg-[var(--surface-soft)] text-soft-ink"}`}>
-                        {mode === "value" ? "Now" : mode === "history" ? "Over time" : "Detail"}
-                      </button>
-                    ))}
-                  </span>
-                ) : null}
               </div>
               <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>

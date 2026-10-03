@@ -26,6 +26,7 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
 
   return (
     <aside className={`side-nav nav-rail${collapsed ? " nav-rail-collapsed" : ""}`}>
+     <div className="nav-rail-inner">
       <div className="nav-rail-brand">
         <span className="brand-dot" />
         {collapsed ? null : <span className="nav-rail-word">{appName}</span>}
@@ -49,6 +50,7 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
           </button>
         ))}
       </nav>
+     </div>
     </aside>
   );
 }

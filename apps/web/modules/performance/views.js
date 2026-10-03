@@ -10,7 +10,7 @@
  */
 
 const KEY = "luna.performance.views";
-export const VIEW_VERSION = 1;
+export const VIEW_VERSION = 2;
 
 /** How a panel can read. Not every panel offers every mode; the registry says which. */
 export const MODES = [
@@ -32,17 +32,17 @@ const DEFAULTS = {
   student: {
     name: "How I am doing",
     trackBy: "plan",
-    panels: ["headline", "coach", "mastery-map", "next-actions", "error-breakdown", "mastery-trend", "plan-progress"]
+    panels: ["headline", "coach", "mastery-map", "error-breakdown"]
   },
   parent: {
     name: "How my child is doing",
     trackBy: "plan",
-    panels: ["parent-summary", "mastery-map", "coach", "habit", "plan-progress"]
+    panels: ["parent-summary", "coach", "mastery-map", "error-breakdown", "habit"]
   },
   teacher: {
     name: "How the class is doing",
     trackBy: "plan",
-    panels: ["headline", "class-heatmap", "attention", "error-breakdown", "coach", "class-topics"]
+    panels: ["headline", "coach", "class-heatmap", "attention", "error-breakdown", "class-topics"]
   }
 };
 
@@ -57,7 +57,7 @@ export function defaultView(role = "student") {
     role,
     trackBy: base.trackBy,
     filters: {},
-    panels: base.panels.map((id) => ({ id, visible: true, mode: "value", size: "half" }))
+    panels: base.panels.map((id) => ({ id, visible: true, mode: "value", size: "full" }))
   };
 }
 
@@ -68,7 +68,8 @@ export function readViews(role = "student") {
   try {
     const stored = JSON.parse(window.localStorage.getItem(`${KEY}.${role}`) || "[]");
     const mine = Array.isArray(stored) ? stored.filter((view) => view && view.id && Array.isArray(view.panels)) : [];
-    const overridden = mine.find((view) => view.id === base.id);
+    // The built-in view was rearranged in version 2 (full-width panels, plan topics); an older saved copy of it is replaced.
+    const overridden = mine.find((view) => view.id === base.id && view.version === VIEW_VERSION);
     return [overridden || base, ...mine.filter((view) => view.id !== base.id)];
   } catch {
     return [base];
@@ -97,7 +98,7 @@ export function duplicateView(view, name) {
 
 /** A view built from scratch: nothing on it but the headline, so the user adds what they want. */
 export function blankView(role, name = "New view") {
-  return { id: uid(), version: VIEW_VERSION, name, role, trackBy: "plan", filters: {}, panels: [{ id: "headline", visible: true, mode: "value", size: "half" }] };
+  return { id: uid(), version: VIEW_VERSION, name, role, trackBy: "plan", filters: {}, panels: [{ id: "headline", visible: true, mode: "value", size: "full" }] };
 }
 
 /* ------------------------------------------------------------------ editing */

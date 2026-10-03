@@ -5207,13 +5207,25 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
    The rail is only about where you are going; the account (credit, storage, profile) sits top right.
    ======================================================== */
 
+/* The column runs the whole height of the page (its background and border do); what is in it stays in view while the page scrolls. */
 .nav-rail {
+  position: relative;
+  align-self: stretch;
+  height: auto;
+  min-height: 100vh;
+  padding: 0;
+  gap: 0;
+  overflow: visible;
+}
+
+.nav-rail-inner {
   position: sticky;
   top: 0;
-  align-self: start;
-  height: 100vh;
-  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  max-height: 100vh;
+  padding: 16px 12px;
   overflow-y: auto;
 }
 
@@ -5460,6 +5472,15 @@ body {
   overflow-x: hidden;
 }
 
+/* `hidden` turns the page into a scroll container and silently stops every `position: sticky` (the menu column, the top bar);
+   `clip` cuts the overflow without doing that. */
+@supports (overflow: clip) {
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
+
 .page-content table {
   max-width: 100%;
 }
@@ -5566,6 +5587,14 @@ body {
     z-index: 60;
     padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
     background: #fff;
+    overflow-y: auto;
+  }
+
+  .nav-rail-inner {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
   }
 
   .nav-rail .nav-rail-item {

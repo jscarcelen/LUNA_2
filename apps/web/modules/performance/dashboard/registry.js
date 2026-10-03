@@ -3,8 +3,9 @@
 import { MASTERY_THRESHOLD, statusOf } from "../mastery";
 import { activityKindLabel } from "../metrics";
 import { dueLabel } from "../../plans/plan";
-import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, MasteryMap, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
+import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
 import { CoachPanel } from "./CoachPanel";
+import { PlanTopics } from "./PlanTopics";
 
 /**
  * Every panel the performance screen can show.
@@ -46,9 +47,9 @@ export const PANELS = [
   {
     id: "coach",
     title: "Luna's read",
-    blurb: "The model reads the mistakes and says what to do about them.",
+    blurb: "The model reads the mistakes and the plan's deadlines and gives the five best next actions.",
     roles: ALL,
-    size: "half",
+    size: "full",
     modes: ["value"],
     render: (ctx) => (
       <CoachPanel
@@ -66,33 +67,11 @@ export const PANELS = [
   {
     id: "mastery-map",
     title: "Topic by topic",
-    blurb: "What is known and what is not, weighed by recency, difficulty, coverage and retention.",
+    blurb: "The study plan's own topics: the five furthest behind, the five strongest and how many are not assessed yet.",
     roles: ALL,
-    size: "half",
-    modes: ["value", "detail"],
-    render: (ctx, mode) => (
-      <>
-        <MasteryMap topics={ctx.topics} selected={ctx.selectedTopic} onSelect={ctx.onSelectTopic} />
-        {mode === "detail" && ctx.selected ? (
-          <div className="mt-3 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/30 p-4">
-            <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
-              <span className="min-w-0 truncate">{ctx.selected.topic}</span>
-              <span className={trendTone(ctx.selected.trend)}>{trendArrow(ctx.selected.trend)} {Math.abs(Math.round(ctx.selected.trend * 100))} pts recently</span>
-            </p>
-            <p className="m-0 mt-1 text-[11px] text-soft-ink">
-              Mastery {ctx.selected.mastery}% · accuracy {percent(ctx.selected.accuracy)} · recent {percent(ctx.selected.recentAccuracy)} · {ctx.selected.questions} questions
-              {ctx.selected.retention !== null && ctx.selected.retention !== undefined ? ` · retention ${percent(ctx.selected.retention)}` : ""}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(ctx.errors.byTopic.get(ctx.selected.topic) || []).map((type) => <span key={type.id} className={chip} style={{ background: `${type.colour}1f`, color: type.ink || type.colour }}>{type.label} {Math.round(type.share * 100)}%</span>)}
-            </div>
-            {ctx.errors.rows.filter((row) => row.topic === ctx.selected.topic).slice(0, 3).map((row, index) => (
-              <p key={index} className="m-0 mt-1.5 text-[11px] text-ink">✗ {row.prompt} <span className="text-soft-ink">→ {row.expected}</span> <TypeChip id={row.errorType} /></p>
-            ))}
-          </div>
-        ) : null}
-      </>
-    )
+    size: "full",
+    modes: ["value"],
+    render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} />
   },
   {
     id: "next-actions",

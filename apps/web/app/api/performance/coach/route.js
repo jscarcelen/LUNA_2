@@ -11,14 +11,14 @@ const SCHEMA = {
     diagnosis: { type: "string", description: "Two or three sentences explaining what the pattern of mistakes says about what is actually going wrong, in plain words." },
     actions: {
       type: "array",
-      description: "Two to five things to do next, most useful first. Each one must be doable on Luna this week.",
+      description: "Exactly five things to do next, most useful first — a mix of fixing the way answers go wrong, the plan steps that are due soonest, the weakest topics and topics that are slipping. Each one must be doable on Luna this week.",
       items: {
         type: "object", additionalProperties: false,
         properties: {
           title: { type: "string", description: "The action in under 8 words, as an instruction ('Re-read the mitosis notes, then 10 questions')." },
           why: { type: "string", description: "One sentence: which evidence makes this the right next move." },
           topic: { type: "string", description: "The topic it addresses, exactly as given in the evidence, or an empty string." },
-          kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit"] },
+          kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit", "deadline"] },
           effort: { type: "string", enum: ["10 minutes", "30 minutes", "an hour", "a few sessions"] }
         },
         required: ["title", "why", "topic", "kind", "effort"]
@@ -46,7 +46,8 @@ Rules:
 - A topic that was strong and has slipped needs recall practice, not reteaching.
 - Never recommend "do more questions" on its own, and never mention how much time was spent as if it were an achievement.
 - Name topics exactly as the evidence names them, so Luna can link each action to the right material.
-- No jargon, no praise inflation, no more than five actions.`;
+- Give exactly five actions, and make them a mixture, not five versions of the same thing: (1) at least one that fixes the most common kind of mistake, using the advice for that kind; (2) at least one that is the plan step due soonest or already late (kind "deadline", name the step as the plan names it); (3) at least one for the weakest topic; (4) one to bring back a topic that was strong and is slipping, if there is one; then fill the rest from the evidence. Order them by what helps most, weighing how close a deadline is.
+- No jargon, no praise inflation.`;
 
 /**
  * The coach.
@@ -72,6 +73,7 @@ export async function POST(request) {
     const evidence = [
       `Learner: ${learner}. This is read by a ${role}.`,
       plan ? `Study plan being tracked: “${plan.name}”${plan.deadline ? `, next deadline ${plan.deadline}` : ""}${plan.done !== undefined ? `, ${plan.done} of ${plan.total} steps done` : ""}${plan.late ? `, ${plan.late} steps late` : ""}.` : "No study plan is being tracked.",
+      ...(Array.isArray(plan?.upcoming) && plan.upcoming.length ? ["Plan steps still to do, soonest first (title · due · kind):", ...plan.upcoming.slice(0, 8).map((step) => `- ${String(step.title).slice(0, 120)} · ${step.dueDate || "no date"} · ${step.kind || ""}`)] : []),
       "",
       "Mastery per topic (mastery% · accuracy% · recent% · questions asked · retention% · trend in points):",
       ...topics.map((topic) => `- ${topic.topic}: ${topic.mastery}% · acc ${Math.round((topic.accuracy || 0) * 100)}% · recent ${Math.round((topic.recentAccuracy || 0) * 100)}% · ${topic.questions} q · retention ${topic.retention === null || topic.retention === undefined ? "n/a" : `${Math.round(topic.retention * 100)}%`} · trend ${Math.round((topic.trend || 0) * 100)}`),
@@ -99,7 +101,7 @@ export async function POST(request) {
     return NextResponse.json({
       headline: parsed.headline || "",
       diagnosis: parsed.diagnosis || "",
-      actions: Array.isArray(parsed.actions) ? parsed.actions : [],
+      actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 5) : [],
       messages: parsed.messages || { student: "", parent: "", teacher: "" },
       readAt: new Date().toISOString()
     });

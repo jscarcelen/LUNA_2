@@ -893,3 +893,9 @@
 - Hard margins in every HTML view (`MARKDOWN_CSS`): long formulas wrap at an operator (KaTeX bases), tables scroll inside their box, long words break. The downloaded HTML carries KaTeX's stylesheet and table styles.
 - "$40,000 cash … a $5,000" is no longer read as a formula (reader: the closing $ must follow a non-space and not precede a digit; upload: prose between dollar signs is left as text; formulas keep `data-latex`). Documents already extracted keep the
   broken rendering until re-uploaded or edited.
+
+## 2026-10-03 (13) — Performance default view; menu column full height
+- Performance default view (student): Where things stand → Luna's read → Topic by topic → Why answers are wrong, all full width; "Mastery over time", "This plan" and "What to work on next" are off by default; the Now / Over time / Detail buttons are gone from every panel. A saved copy of the old built-in view is replaced (view version 2); views you made are kept.
+- Topic by topic follows the study plan's own concepts (the same tree and indentation as the plan's Student model): the 5 assessed topics furthest behind, the 5 strongest, and how many are not assessed yet (listed on request). Plan chips choose the plan (the most recently active one by default). (`dashboard/PlanTopics.js`)
+- Luna's read gives exactly five next actions, a mix of fixing the kind of mistake, plan steps due soonest, the weakest topic and topics slipping (kind "deadline" added; the plan's upcoming steps go to the model). Dashboard F1 updated.
+- Menu column (computer): the column runs the full page height; the content inside is the sticky part. `overflow-x: hidden` on html/body (added with the phone work) had silently stopped every `position: sticky` — it is `clip` now.

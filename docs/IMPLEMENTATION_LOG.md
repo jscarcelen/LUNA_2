@@ -869,3 +869,8 @@
   "Luna understood" names the exact place. The writer's revision note reads the scope. Prompt, input and output updated in the dashboard (A7).
 - Output vs template fields: item agents were already strict-schema (A1). Block agents were not: the schema is now strict with the block type as an enum (checked against the API with all 15
   block types), and `conformBlocks` (`blocks/blockRegistry.js`) holds the result to the registry — leaked fields dropped, values typed, blocks missing their content discarded.
+
+## 2026-10-03 (9) — Phone: output preview and template picker
+- Preview (Configure output): the page preview is laid out in an iframe scaled with CSS `zoom`; iOS Safari inflated the text inside it (so text overflowed boxes sized in mm). The preview document now sets
+  `text-size-adjust: 100%`, so the phone shows the same page as the computer. The View \ Page matrix scrolls sideways instead of being cut off.
+- "Apply a saved template" is a button dropdown next to Apply (`output/TemplatePicker.tsx`) on every screen: templates grouped by folder as in Template Studio (named folders A–Z, unfiled last), each with its category.

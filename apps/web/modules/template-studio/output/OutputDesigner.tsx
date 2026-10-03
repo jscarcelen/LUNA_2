@@ -5,6 +5,7 @@ import { ACCENT_PRESETS, builtInBlocks } from "../engine/blocks";
 import { defaultToggles, findBlock } from "../engine/outputTemplate";
 import type { Template } from "../engine/types";
 import { FormatCard, VisualizeModal } from "../TemplateWizard";
+import { TemplatePicker } from "./TemplatePicker";
 import { card, fieldBase, ghostBtn, kicker } from "../ui";
 import { formatsOf, resolveStyle, styleFromTemplate, type OutputDocument, type OutputPlan, type OutputStyles } from "./outputDocument";
 
@@ -178,11 +179,8 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-ink/8 pt-3">
-            <span className="text-[12px] font-semibold text-soft-ink">Apply a saved template:</span>
-            <select className={`${fieldBase} min-w-40 flex-1 py-1.5 text-sm`} value={templateId} onChange={(event) => { setTemplateId(event.target.value); setNote(""); }}>
-              <option value="">{templatesLoading ? "Loading templates…" : savedTemplates.length ? "Choose a template…" : "No saved templates yet"}</option>
-              {savedTemplates.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-            </select>
+            <span className="basis-full text-[12px] font-semibold text-soft-ink sm:basis-auto">Apply a saved template:</span>
+            <TemplatePicker templates={savedTemplates} value={templateId} loading={templatesLoading} onChange={(id) => { setTemplateId(id); setNote(""); }} />
             <button type="button" className={ghostBtn} disabled={!templateId} onClick={applyTemplate}>Apply</button>
             {Object.keys(styles).length ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { onStylesChange({}); setNote("Back to Template Studio's default look."); }}>Reset</button> : null}
           </div>
@@ -293,7 +291,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
   const current = doc ? idsFor(doc, selection) : null;
   const pageWidthPx = (current?.layout.canvas.width || 210) * MM_PX;
   const zoom = Math.max(0.3, Math.min(1.25, (width - 8) / (pageWidthPx + 2 * 10 * MM_PX)));
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#e9e9ee}body{padding:10mm;zoom:${zoom.toFixed(3)}}</style></head><body>${html}</body></html>`;
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}html,body{margin:0;background:#e9e9ee}body{padding:10mm;zoom:${zoom.toFixed(3)}}</style></head><body>${html}</body></html>`;
   const showMatrix = Boolean(doc && (doc.layouts.length > 1 || doc.views.length > 1));
 
   const tabButton = (id: typeof tab, label: string) => (
@@ -307,8 +305,8 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
       </div>
 
       {showMatrix && doc && tab === "preview" ? (
-        <div className="border-b border-ink/8 px-4 py-2.5">
-          <table className="border-separate border-spacing-1 text-xs">
+        <div className="overflow-x-auto border-b border-ink/8 px-4 py-2.5">
+          <table className="tw-table border-separate border-spacing-1 text-xs">
             <thead>
               <tr>
                 <th className="pr-2 text-left text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">View \ Page</th>

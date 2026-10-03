@@ -13,3 +13,4 @@ yarn.lock
 auxiliary/**/node_modules/
 auxiliary/**/output/
 !.env.example
+.claude/worktrees/

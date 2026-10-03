@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SideNav } from "./SideNav";
+import { BottomTabs } from "./BottomTabs";
 import { TopBar } from "./TopBar";
 import { navByRole, pageTitles, roleProfiles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
@@ -751,6 +752,7 @@ export function AppShell() {
         <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
         <div className="page-content">{content}</div>
       </main>
+      <BottomTabs navItems={navItems} page={page} onPageChange={setPage} onMore={() => setMenuOpen(true)} />
       <UiCritic enabled={criticOn} />
     </div>
   );

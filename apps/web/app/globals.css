@@ -5527,3 +5527,156 @@ body {
 ::highlight(luna-hl-blue) { background-color: #90caf9; color: inherit; }
 ::highlight(luna-hl-pink) { background-color: #f8bbd0; color: inherit; }
 ::highlight(luna-hl-purple) { background-color: #ce93d8; color: inherit; }
+
+/* ========================================================
+   Phone: feels like an app
+   Last in the file on purpose: `.nav-rail { position: sticky; height: 100vh }` above used to beat the
+   phone drawer's `position: fixed`, which left the menu in the page and a screen-high empty gap above
+   the content. Here the menu is a drawer again, navigation is a tab bar under the thumb, the top bar is
+   slim, and text is large enough to read (16px also stops iOS zooming into fields).
+   ======================================================== */
+
+.bottom-tabs {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    font-size: 16px;
+    line-height: 1.45;
+  }
+
+  .app-shell {
+    min-height: 100dvh;
+    display: block;
+  }
+
+  /* The drawer: out of the page, over it. */
+  .nav-rail {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(84vw, 320px);
+    height: 100dvh;
+    z-index: 60;
+    padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
+    background: #fff;
+  }
+
+  .nav-rail .nav-rail-item {
+    padding: 13px 14px;
+    font-size: 16px;
+    gap: 14px;
+  }
+
+  .nav-rail .nav-rail-icon {
+    font-size: 18px;
+    width: 24px;
+  }
+
+  /* Slim, solid top bar: menu, where you are, credits, you. */
+  .top-bar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+    gap: 8px;
+    background: #fff;
+    backdrop-filter: none;
+  }
+
+  .top-bar h2 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .top-bar .storage-chip {
+    display: none;
+  }
+
+  .top-account {
+    gap: 8px;
+  }
+
+  .page-content {
+    padding: 14px 14px calc(84px + env(safe-area-inset-bottom));
+  }
+
+  /* The tab bar. */
+  .bottom-tabs {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 50;
+    display: flex;
+    align-items: stretch;
+    padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+    background: #fff;
+    border-top: 1px solid var(--line);
+  }
+
+  .bottom-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 52px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 12px;
+    background: none;
+    color: var(--soft-ink);
+    font: inherit;
+    cursor: pointer;
+    transition: color 0.18s ease, background 0.18s ease;
+  }
+
+  .bottom-tab-icon {
+    font-size: 21px;
+    line-height: 1;
+  }
+
+  .bottom-tab-label {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .bottom-tab.on {
+    color: var(--accent);
+    background: var(--accent-soft, rgba(0, 113, 227, 0.08));
+  }
+
+  .bottom-tab:active {
+    transform: scale(0.96);
+  }
+
+  /* iOS zooms into any field under 16px. */
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  /* Floating helpers stay clear of the tab bar. */
+  .ui-critic {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
+  /* Rounder, calmer cards. */
+  .panel,
+  .tw-scope .rounded-\[18px\] {
+    border-radius: 16px;
+  }
+}

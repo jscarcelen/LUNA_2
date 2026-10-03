@@ -114,6 +114,7 @@ export function WorkspaceBrowser({
   onRemoveDocument,
   onUpload,
   onDownloadDocument,
+  onUpdateDocumentContent,
   onUpdateGeneratedDocument,
   onSaveGeneratedQuizDocument,
   onRegenerateResource,
@@ -758,6 +759,7 @@ export function WorkspaceBrowser({
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}
           onDownloadDocument={onDownloadDocument}
+          onUpdateDocumentContent={onUpdateDocumentContent}
         />
       ) : null}
     </section>

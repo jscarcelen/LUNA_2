@@ -295,7 +295,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -900,7 +900,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             ) : itemResource ? (
                               <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Open</button>
                             ) : readable || linkedDocument ? (
-                              <button type="button" className={primaryBtn} onClick={() => setReadingDoc(readable || linkedDocument)}>Open</button>
+                              <button type="button" className={primaryBtn} onClick={() => setReadingDoc({ ...(readable || linkedDocument), focus: item.kind === "read" || item.kind === "review" ? { title: item.title, concepts: item.concepts || [] } : null })}>Open</button>
                             ) : (
                               <button type="button" className={primaryBtn} disabled title={item.generate ? "Not generated yet — build the plan's material first" : "Nothing is attached to this step yet"}>Open</button>
                             )}
@@ -1164,6 +1164,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
             onUpdateGeneratedDocument={onUpdateGeneratedDocument}
             onDownloadDocument={onDownloadDocument}
+            onUpdateDocumentContent={onUpdateDocumentContent}
+            focus={readingDoc.focus}
           />
         ) : null}
         {reading ? (

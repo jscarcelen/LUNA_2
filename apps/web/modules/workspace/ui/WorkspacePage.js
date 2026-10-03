@@ -41,6 +41,7 @@ export function WorkspacePage(props) {
       onRemoveDocument={props.onRemoveDocument}
       onUpload={props.onUploadTxt}
       onDownloadDocument={props.onDownloadDocument}
+      onUpdateDocumentContent={props.onUpdateDocumentContent}
       onUpdateGeneratedDocument={props.onUpdateGeneratedDocument}
       onSaveGeneratedQuizDocument={props.onSaveGeneratedQuizDocument}
       onRegenerateResource={props.onRegenerateResource}

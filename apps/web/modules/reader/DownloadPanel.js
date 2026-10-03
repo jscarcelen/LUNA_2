@@ -21,7 +21,7 @@ function save(name, body, type) {
 /** One reading page as a standalone HTML file. */
 export function standalonePage(title, body) {
   const safe = String(title || "Document").replace(/</g, "&lt;");
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safe}</title><style>body{margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}article{max-width:760px;margin:24px auto;background:#fff;border-radius:18px;padding:28px 36px;box-shadow:0 1px 2px rgba(0,0,0,.05)}mark{border-radius:3px;padding:0 1px}.luna-notes{margin-top:2em;border-top:1px solid #e5e5ea;padding-top:1em;font-size:.92em}${MARKDOWN_CSS}${READER_CSS}</style></head><body><article class="md">${body}</article></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safe}</title><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css"><style>body{margin:0;background:#f5f5f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}article{max-width:760px;margin:24px auto;background:#fff;border-radius:18px;padding:28px 36px;box-shadow:0 1px 2px rgba(0,0,0,.05);box-sizing:border-box}@media (max-width:640px){article{margin:0;border-radius:0;padding:20px 16px}}mark{border-radius:3px;padding:0 1px}.luna-notes{margin-top:2em;border-top:1px solid #e5e5ea;padding-top:1em;font-size:.92em}${MARKDOWN_CSS}${READER_CSS}</style></head><body><article class="md">${body}</article></body></html>`;
 }
 
 /**

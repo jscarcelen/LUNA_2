@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { activityLook, outputTitle, resourceBlocks } from "../resources/look";
-import { MARKDOWN_CSS } from "./markdown";
+import { MARKDOWN_CSS, renderMath } from "./markdown";
+import { htmlToMarkdown } from "./documentView";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { DownloadPanel } from "./DownloadPanel";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
@@ -20,7 +21,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * `html` replaces the generated reading page (an uploaded document); `resource` still describes it
  * for the PDF; `onDownloadOriginal` adds "original file" to the download panel.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "" }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -30,6 +31,14 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const [notesOpen, setNotesOpen] = useState(false);
   const [focusId, setFocusId] = useState("");
   const [problem, setProblem] = useState("");
+  const [saveState, setSaveState] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [articleKey, setArticleKey] = useState(0);
+  const listRef = useRef(list);
+  const onSaveRef = useRef(onSaveHighlights);
+  listRef.current = list;
+  onSaveRef.current = onSaveHighlights;
   const supported = typeof window !== "undefined" ? supportsHighlights() : true;
 
   const playable = activity || (resource?.activity?.questions?.length ? resource.activity : null);
@@ -43,7 +52,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
 
   // A document opens as its original unless it already has notes; a quiz or flashcard set always allows highlighting.
   const [view, setView] = useState(initialView || (playable || list.length ? "notes" : "original"));
-  const noting = view === "notes" && supported;
+  const noting = view === "notes" && supported && !editing;
 
   // Paint now, and again whenever the content changes underneath (an answer is revealed, a card flips).
   useEffect(() => {
@@ -58,12 +67,93 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   }, [list, noting, html, playable]);
   useEffect(() => () => clearHighlights(), []);
 
-  // Save a moment after the last change.
+  // Notes and highlights save by themselves a moment after the last change, and when the reader is closed.
   useEffect(() => {
     if (list === saved.current) return undefined;
-    const timer = window.setTimeout(() => { saved.current = list; onSaveHighlights?.(list); }, 600);
+    setSaveState("Saving…");
+    const timer = window.setTimeout(async () => {
+      saved.current = list;
+      try { await onSaveHighlights?.(list); setSaveState("Saved ✓"); } catch { setSaveState("Not saved"); }
+    }, 600);
     return () => window.clearTimeout(timer);
   }, [list]);
+  useEffect(() => () => {
+    if (listRef.current !== saved.current) { saved.current = listRef.current; onSaveRef.current?.(listRef.current); }
+  }, []);
+
+  /* ------------------------------------------------------------ the content editor */
+  const exec = (command, value = null) => { rootRef.current?.querySelector("article")?.focus(); document.execCommand(command, false, value); setDirty(true); };
+  const outerMath = (element) => { let found = element.closest?.("[data-latex], .katex-display, .katex") || null; while (found?.parentElement?.closest?.("[data-latex], .katex-display, .katex")) found = found.parentElement.closest("[data-latex], .katex-display, .katex"); return found; };
+  const mathHtml = (tex, display) => `<span class="math-${display ? "display" : "inline"} nicer-latex" data-latex="${tex.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}" contenteditable="false">${renderMath(tex, display)}</span>${display ? "" : "&nbsp;"}`;
+  function insertMath() {
+    const tex = window.prompt("LaTeX formula (for example: \\frac{a}{b} or x^2 + 1)");
+    if (!tex?.trim()) return;
+    exec("insertHTML", mathHtml(tex.trim(), false));
+  }
+  function insertTable() {
+    const answer = window.prompt("Table: type its size (for example 3x4 = 3 rows, 4 columns), or paste the rows, one per line, cells separated by commas or tabs.");
+    if (!answer?.trim()) return;
+    const size = /^\s*(\d+)\s*[x×]\s*(\d+)\s*$/i.exec(answer);
+    const rows = size
+      ? Array.from({ length: Math.min(30, Number(size[1])) }, () => Array.from({ length: Math.min(12, Number(size[2])) }, () => ""))
+      : answer.split(/\n/).map((line) => line.trim()).filter(Boolean).map((line) => line.split(/\t|\s*[,;|]\s*/));
+    const width = Math.max(...rows.map((row) => row.length));
+    const escape = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const cells = (row, tag) => Array.from({ length: width }, (_, index) => `<${tag}>${escape(row[index]) || "<br>"}</${tag}>`).join("");
+    exec("insertHTML", `<div class="md-table"><table><thead><tr>${cells(rows[0], "th")}</tr></thead><tbody>${rows.slice(1).map((row) => `<tr>${cells(row, "td")}</tr>`).join("")}</tbody></table></div><p><br></p>`);
+  }
+  function editMath(event) {
+    if (!editing) return;
+    const target = outerMath(event.target);
+    if (!target) return;
+    const current = target.getAttribute("data-latex") || target.querySelector?.('annotation[encoding="application/x-tex"]')?.textContent || "";
+    const tex = window.prompt("Edit the LaTeX formula", current);
+    if (tex === null || !tex.trim()) return;
+    const display = target.classList.contains("katex-display") || target.classList.contains("math-display");
+    const holder = document.createElement("span");
+    holder.innerHTML = mathHtml(tex.trim(), display);
+    target.replaceWith(holder.firstChild);
+    setDirty(true);
+  }
+  function startEditing() {
+    onEditStart?.();
+    setView("original");
+    setNotesOpen(false);
+    setToolbar(null);
+    setEditing(true);
+    setDirty(false);
+    window.setTimeout(() => {
+      // Formulas are one piece: you edit them with a double tap, not letter by letter.
+      rootRef.current?.querySelectorAll(".katex-display, .katex, [data-latex]").forEach((element) => element.setAttribute("contenteditable", "false"));
+      rootRef.current?.querySelector("article")?.focus();
+    }, 0);
+  }
+  function stopEditing() {
+    setEditing(false);
+    setDirty(false);
+    setArticleKey((key) => key + 1);
+  }
+  function cancelEditing() {
+    if (dirty && !window.confirm("Discard your changes?")) return;
+    stopEditing();
+  }
+  async function saveEditing() {
+    const article = rootRef.current?.querySelector("article");
+    if (!article || !onSaveContent) return;
+    if (!window.confirm("Save these changes? They replace the document itself, so they show in the Original view and in the Notes view. Your highlights and notes are kept.")) return;
+    const copy = article.cloneNode(true);
+    copy.querySelectorAll("[contenteditable]").forEach((element) => element.removeAttribute("contenteditable"));
+    copy.removeAttribute("contenteditable");
+    setSaveState("Saving…");
+    try {
+      await onSaveContent({ html: copy.innerHTML, markdown: htmlToMarkdown(copy) });
+      setSaveState("Document saved ✓");
+      stopEditing();
+    } catch (error) {
+      setProblem(`Could not save the changes: ${String(error?.message || error)}`);
+      setSaveState("Not saved");
+    }
+  }
 
   function onSelect() {
     if (!noting) { setToolbar(null); return; }
@@ -123,23 +213,16 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
           <p className="m-0 truncate text-sm font-bold text-ink">{title || resource?.name || "Document"}</p>
           <p className="m-0 text-[11px] text-soft-ink">{playable ? "Interactive view — read, highlight and answer" : view === "notes" ? "Select text to highlight it or add a note" : "Original text"}</p>
         </div>
-        {!playable ? (
+        {!playable && !editing ? (
           <div className="flex items-center gap-1 rounded-full bg-[var(--surface-soft)] p-1" role="group" aria-label="View">
             {[["original", "Original"], ["notes", `Notes${list.length ? ` (${list.length})` : ""}`]].map(([value, label]) => (
               <button key={value} type="button" onClick={() => { setView(value); setToolbar(null); if (value === "original") setNotesOpen(false); }} className={`rounded-full px-3 py-1 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.1)]" : "text-soft-ink"}`}>{label}</button>
             ))}
           </div>
         ) : null}
-        {noting ? (
-          <>
-            <div className="flex items-center gap-1" role="group" aria-label="Highlight colour">
-              {HIGHLIGHT_COLORS.map((entry) => (
-                <button key={entry.id} type="button" title={entry.label} aria-label={`${entry.label} highlighter`} onClick={() => setColor(entry.id)} className={`size-5 rounded-full border-2 transition ${color === entry.id ? "border-ink" : "border-transparent hover:border-ink/30"}`} style={{ background: entry.css }} />
-              ))}
-            </div>
-            <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ Notes{list.length ? ` (${noted}/${list.length})` : ""}</button>
-          </>
-        ) : view === "notes" ? <span className="text-xs text-soft-ink">Highlighting needs a newer browser.</span> : null}
+        {noting ? <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ Notes{list.length ? ` (${noted}/${list.length})` : ""}</button> : view === "notes" && !editing ? <span className="text-xs text-soft-ink">Highlighting needs a newer browser.</span> : null}
+        {saveState ? <span className="text-[11px] text-soft-ink" aria-live="polite">{saveState}</span> : null}
+        {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ Edit content</button> : null}
         <button type="button" className={ghostBtn} aria-label="Download" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">Download</span></button>
         <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
         {downloadOpen ? (
@@ -154,13 +237,37 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         ) : null}
       </header>
       {notice ? <p className="m-0 bg-[var(--accent-soft)] px-4 py-1.5 text-xs text-[var(--accent-ink)]">{notice}</p> : null}
+      {focusInfo?.focused && !editing ? (
+        <p className="m-0 flex flex-wrap items-center gap-2 bg-[var(--accent-soft)] px-4 py-1.5 text-xs text-[var(--accent-ink)]">
+          {showingAll ? "Showing the whole document." : `Showing the part for this step: ${focusInfo.label || "the relevant sections"}.`}
+          <button type="button" className="font-semibold underline" onClick={onToggleFocus}>{showingAll ? "Show only this step's part" : "Show the whole document"}</button>
+          <span className="text-soft-ink">Notes are kept with the whole document.</span>
+        </p>
+      ) : null}
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-ink/10 bg-white px-4 py-2" onMouseDown={(event) => { if (event.target.closest("button")) event.preventDefault(); }}>
+          <button type="button" className={ghostBtn} onClick={() => exec("bold")}><strong>B</strong></button>
+          <button type="button" className={ghostBtn} onClick={() => exec("italic")}><em>I</em></button>
+          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "h2")}>Heading</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "p")}>Text</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("insertUnorderedList")}>• List</button>
+          <button type="button" className={ghostBtn} onClick={insertMath}>Σ Formula</button>
+          <button type="button" className={ghostBtn} onClick={insertTable}>▦ Table</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("undo")}>↶</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("redo")}>↷</button>
+          <span className="flex-1" />
+          <span className="hidden text-[11px] text-soft-ink md:inline">Double-tap a formula to edit it.</span>
+          <button type="button" className={ghostBtn} onClick={cancelEditing}>Cancel</button>
+          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white" onClick={saveEditing}>Save changes</button>
+        </div>
+      ) : null}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect} onClick={onPageClick}>
           <div ref={rootRef}>
             {playable
               ? <ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} />
               : html
-                ? <article className="md mx-auto max-w-3xl rounded-[18px] border border-ink/8 bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] sm:px-10" dangerouslySetInnerHTML={{ __html: html }} />
+                ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
                 : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read here.</p>}
           </div>
         </div>

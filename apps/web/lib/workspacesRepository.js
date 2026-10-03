@@ -723,6 +723,13 @@ function htmlToMarkdownDocument(html = "", fallbackText = "") {
   }
 }
 
+/** Prose between two dollar signs ("$40,000 cash. It expects … a $5,000"): currency, not a formula. */
+function isProseLatex(latex = "") {
+  const text = String(latex || "");
+  if (/[\\^_{}=]/.test(text)) return false;
+  return /[A-Za-z]{3,}\s+[A-Za-z]{2,}\s+[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(text);
+}
+
 function renderKatexSafe(latex, displayMode) {
   const clean = String(latex || "").trim();
   if (!clean) return "";
@@ -742,36 +749,39 @@ function renderLatexWithKatex(html = "") {
   rendered = rendered.replace(/<div\b[^>]*class=["'][^"']*cdm-display-math[^"']*["'][^>]*data-latex="([^"]*)"[^>]*>[\s\S]*?<\/div>/gi, (_, latexAttr) => {
     const latex = decodeHtmlEntities(latexAttr);
     const result = renderKatexSafe(latex, true);
-    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
+    return result ? `<div class="math-display nicer-latex" data-latex="${escapeHtml(latex)}">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
   });
   // Also handle data-latex before class (attribute order may vary)
   rendered = rendered.replace(/<div\b[^>]*data-latex="([^"]*)"[^>]*class=["'][^"']*cdm-display-math[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, (_, latexAttr) => {
     const latex = decodeHtmlEntities(latexAttr);
     const result = renderKatexSafe(latex, true);
-    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
+    return result ? `<div class="math-display nicer-latex" data-latex="${escapeHtml(latex)}">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(latex)}\n$$</pre>`;
   });
 
   // Inline math: <span class="cdm-inline-math" data-latex="LATEX">$LATEX$</span>
   rendered = rendered.replace(/<span\b[^>]*class=["'][^"']*cdm-inline-math[^"']*["'][^>]*data-latex="([^"]*)"[^>]*>[\s\S]*?<\/span>/gi, (_, latexAttr) => {
     const latex = decodeHtmlEntities(latexAttr);
+    if (isProseLatex(latex)) return `$${escapeHtml(latex)}$`;
     const result = renderKatexSafe(latex, false);
-    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
+    return result ? `<span class="math-inline nicer-latex" data-latex="${escapeHtml(latex)}">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
   });
   rendered = rendered.replace(/<span\b[^>]*data-latex="([^"]*)"[^>]*class=["'][^"']*cdm-inline-math[^"']*["'][^>]*>[\s\S]*?<\/span>/gi, (_, latexAttr) => {
     const latex = decodeHtmlEntities(latexAttr);
+    if (isProseLatex(latex)) return `$${escapeHtml(latex)}$`;
     const result = renderKatexSafe(latex, false);
-    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
+    return result ? `<span class="math-inline nicer-latex" data-latex="${escapeHtml(latex)}">${result}</span>` : `<code class="math-inline">$${escapeHtml(latex)}$</code>`;
   });
 
   // ── Legacy / DOCX auxiliary output ─────────────────────────────────────
   rendered = rendered.replace(/<pre\b[^>]*class=["'][^"']*math-display[^"']*["'][^>]*>\s*\$\$([\s\S]*?)\$\$\s*<\/pre>/gi, (_, expr) => {
     const result = renderKatexSafe(expr, true);
-    return result ? `<div class="math-display nicer-latex">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(expr)}\n$$</pre>`;
+    return result ? `<div class="math-display nicer-latex" data-latex="${escapeHtml(expr)}">${result}</div>` : `<pre class="math-display">$$\n${escapeHtml(expr)}\n$$</pre>`;
   });
 
   rendered = rendered.replace(/<code\b[^>]*class=["'][^"']*math-inline[^"']*["'][^>]*>\s*\$([^$\n]+?)\$\s*<\/code>/gi, (_, expr) => {
+    if (isProseLatex(expr)) return `$${escapeHtml(expr)}$`;
     const result = renderKatexSafe(expr, false);
-    return result ? `<span class="math-inline nicer-latex">${result}</span>` : `<code class="math-inline">$${escapeHtml(expr)}$</code>`;
+    return result ? `<span class="math-inline nicer-latex" data-latex="${escapeHtml(expr)}">${result}</span>` : `<code class="math-inline">$${escapeHtml(expr)}$</code>`;
   });
 
   return rendered;

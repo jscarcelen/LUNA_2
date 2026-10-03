@@ -26,7 +26,7 @@ export function normaliseMath(value) {
 export function renderInline(text) {
   const maths = [];
   let source = normaliseMath(text).replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
-  source = source.replace(/\$([^$\n]+?)\$/g, (match, latex) => (/^\s|\s$/.test(latex) || /^\d/.test(latex) && !/[\\^_{}=+\-*/]/.test(latex) ? match : (maths.push(renderMath(latex, false)), `\uE000${maths.length - 1}\uE001`)));
+  source = source.replace(/\$(?!\s)([^$\n]*?[^\s$])\$(?!\d)/g, (match, latex) => (/^\s|\s$/.test(latex) || /^\d/.test(latex) && !/[\\^_{}=+\-*/]/.test(latex) ? match : (maths.push(renderMath(latex, false)), `\uE000${maths.length - 1}\uE001`)));
   let html = escapeHtml(source);
   html = html
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => `<span class="md-figure">Figure${alt ? `: ${alt}` : ""}</span>`)
@@ -165,4 +165,17 @@ export const MARKDOWN_CSS = `
 .md table{border-collapse:collapse;width:100%;font-size:.93em}.md th{background:#f5f5f7;text-align:left;font-weight:650}
 .md th,.md td{padding:8px 12px;border-bottom:1px solid #eeeef0;vertical-align:top}.md tr:last-child td{border-bottom:0}
 .md .hit{background:#fff3b0;border-radius:8px;box-shadow:-10px 0 0 #fff3b0,10px 0 0 #fff3b0}
+/* Hard margins: nothing runs past the page. Long words break, wide tables scroll inside their box, and a long formula
+   wraps onto a second line at an operator (KaTeX's bases are the break points) instead of running off the page. */
+.md{overflow-wrap:anywhere;max-width:100%}
+.md img,.md svg,.md video{max-width:100%;height:auto}
+.md table{display:block;max-width:100%;overflow-x:auto}
+.md .katex,.md .katex-display>.katex{white-space:normal}
+.md .katex-html{white-space:normal}
+.md .katex-display{margin:.8em 0;max-width:100%}
+.md .katex-display>.katex{display:block;text-align:center;max-width:100%}
+.md .katex-display>.katex>.katex-html{display:block}
+.md .math-display,.md .math-inline{max-width:100%}
+.md .math-display{overflow-x:visible}
+.md mark{border-radius:3px;padding:0 1px}
 `;

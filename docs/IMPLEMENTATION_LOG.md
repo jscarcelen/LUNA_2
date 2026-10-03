@@ -883,3 +883,13 @@
 - Reader (`reader/ReaderView.js`): a document has two views — Original and **Notes** (select text → colour highlight or ✎ Note; tap a highlight to edit its note; notes panel). Highlights carry a `note`. Top right: **Download** — the PDF page-size × view matrix and the HTML (`reader/DownloadPanel.js`; the HTML can carry the highlights and a "My notes" list, `highlights.markedHtml`); also on the in-place interactive view (`InteractiveView`).
 - Uploaded documents open in the same reader (`reader/DocumentReader.js`, `reader/documentView.js`): their own HTML or their text, a PDF layout via the default document template, "Original file" in the download panel. Notes and highlights are kept in a `doc-notes` file next to the document (hidden from folders).
 - Workspaces on a phone: Open/Preview, favourites and download moved into the ⋯ menu of a row.
+
+## 2026-10-03 (12) — Reader: edit content, hard margins, step focus, money is not maths
+- Content editor (reader "✎ Edit content", uploaded documents): bold, italic, heading, list, formula (LaTeX, double-tap a formula to edit it) and table (type 3x4 or paste rows); Save asks first, then replaces the document itself
+  (HTML + Markdown text, re-chunked) so the Original and Notes views both show it; Cancel drops the changes. `documentView.htmlToMarkdown` turns the edited page back into Markdown.
+- Study-plan reading steps open the document cut to the part the step is about (`documentView.focusSections`: the step's title and concepts are looked for in each section's heading and text); other sections are
+  hidden, not removed, so highlights and notes stay in the same place and sync with the whole document; "Show the whole document" toggles. Notes/edits are the document's, wherever it is opened.
+- Notes save by themselves (and when the reader is closed); the header shows Saving… / Saved ✓. The colour dots in the header are gone (colours are in the menu that appears on a selection).
+- Hard margins in every HTML view (`MARKDOWN_CSS`): long formulas wrap at an operator (KaTeX bases), tables scroll inside their box, long words break. The downloaded HTML carries KaTeX's stylesheet and table styles.
+- "$40,000 cash … a $5,000" is no longer read as a formula (reader: the closing $ must follow a non-space and not precede a digit; upload: prose between dollar signs is left as text; formulas keep `data-latex`). Documents already extracted keep the
+  broken rendering until re-uploaded or edited.

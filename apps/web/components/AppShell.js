@@ -238,6 +238,7 @@ export function AppShell() {
           onRemoveDocument={handleRemoveDocument}
           onOpenResource={(documentId) => setPage(documentId ? `workspaces?doc=${documentId}` : "workspaces")}
           onDownloadDocument={handleDownloadDocument}
+          onUpdateDocumentContent={handleUpdateDocumentContent}
         />
       );
     }
@@ -625,10 +626,11 @@ export function AppShell() {
   }
 
   async function handleUpdateDocumentContent(documentId, options = {}) {
-    if (!selectedWorkspaceId || !selectedSubjectId || !documentId) return null;
+    const targetSubjectId = options?.subjectId || selectedSubjectId;
+    if (!selectedWorkspaceId || !targetSubjectId || !documentId) return null;
     const payload = {
       workspaceId: selectedWorkspaceId,
-      subjectId: selectedSubjectId,
+      subjectId: targetSubjectId,
       documentId,
       correctedHtml: typeof options.correctedHtml === "string" ? options.correctedHtml : "",
       correctedContent: typeof options.correctedContent === "string" ? options.correctedContent : ""

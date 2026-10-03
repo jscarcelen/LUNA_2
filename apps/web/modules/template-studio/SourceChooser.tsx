@@ -29,7 +29,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
   const KindChip = ({ row }: { row: SavedTemplateRow }) => <span className="rounded-full bg-[var(--surface-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-soft-ink">{KIND_LABEL[kindOf(row)].icon} {KIND_LABEL[kindOf(row)].label}</span>;
 
   return (
-    <section className="tw-scope grid gap-4">
+    <section className="tw-scope grid grid-cols-1 gap-4">
       {/* Header */}
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
@@ -54,7 +54,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
       </div>
 
       {/* Gallery */}
-      <div className={`${card} p-5`}>
+      <div className={`${card} min-w-0 overflow-hidden p-4 md:p-5`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className={kicker}>All templates</p>
           <div className="flex items-center gap-2">

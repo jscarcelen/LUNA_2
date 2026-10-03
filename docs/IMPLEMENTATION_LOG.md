@@ -854,3 +854,10 @@
 - Template Studio gallery: every template shows its category (document / quiz / game & flashcards) with a category filter, and a third view, **Matrix**:
   templates as columns, the category on top, components as rows grouped by what they are, each cell showing the format and colour used with a "View" button
   that opens the component viewer in that format and colour (`matrix.ts`, `TemplateMatrix.tsx`).
+
+## 2026-10-03 (7) — Phone UI
+- Back button: every page change in the app is a history entry (`AppShell.setPage` pushes state, `popstate` restores it), so Back and the iPhone swipe return to the previous page instead of the landing page.
+- Landing page: on phones the bar keeps the logo, Try demo and Log in; Home / Demo / Pricing / Training / Sign up fold into a dropdown; the headline's letter-spacing no longer crams the words.
+- Workspaces: the filters, upload, review centre and download controls sit behind a "＋" menu (top right of the sidebar card) on phones; Activities: the study-plan / topic / sort filters sit behind a ⚙ button next to "Create with an agent" and are full-width selects.
+- Dropdowns: padding for the arrow is set outside the Tailwind layers so a `px-3` can no longer put text under the arrow (all screens).
+- Template matrix: compact columns on phones (vertical group labels, shorter cells), scrolls both ways inside its box, and no longer pushes the page wider than the screen (`grid-cols-1`, `tw-table` is exempt from the phone "tables scroll" rule).

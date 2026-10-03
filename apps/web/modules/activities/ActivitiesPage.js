@@ -34,6 +34,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const attempts = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity-attempt")).map((d) => parse(d)).filter((p) => p?.attempt).map((p) => p), [docs]);
   const [playing, setPlaying] = useState(null);
   const [view, setView] = useState("todo");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState("");
   const [errorFilter, setErrorFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("");
@@ -120,21 +121,23 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", "To do"], ["done", "Done"], ["all", "All"], ["errors", `Mistakes (${allErrors.length})`]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
           {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("ai-tools")}>＋ Create with an agent</button> : null}
+          {/* Phone: the study-plan, topic and sort filters sit behind this button so the activities are what you see. */}
+          {view !== "errors" ? <button type="button" className={`grid size-10 place-items-center rounded-full border text-lg leading-none md:hidden ${filtersOpen ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink"}`} aria-label="Filter and sort" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>⚙</button> : null}
         </div>
         {view !== "errors" ? (
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}>
+          <div className={`${filtersOpen ? "grid" : "hidden"} w-full gap-2 md:flex md:flex-wrap md:items-center`}>
+            <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}>
               <option value="">Every study plan</option>
               {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
               <option value="__none">Not in a plan</option>
             </select>
             {allTopics.length ? (
-              <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
+              <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
                 <option value="">All topics</option>
                 {allTopics.map((topic) => <option key={topic} value={topic}>⬡ {topic}</option>)}
               </select>
             ) : null}
-            <select className="rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-xs" value={sort} onChange={(event) => setSort(event.target.value)}>
+            <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={sort} onChange={(event) => setSort(event.target.value)}>
               <option value="priority">Sort: what is most urgent</option>
               <option value="due">Sort: due date</option>
               <option value="plan">Sort: study plan</option>

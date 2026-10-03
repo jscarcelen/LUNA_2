@@ -5181,8 +5181,8 @@ button, a, .nav-item, .ws-card, .panel, .ai-tool-card { transition-timing-functi
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
 
-  /* Wide tables scroll sideways instead of squashing. */
-  table {
+  /* Wide tables scroll sideways instead of squashing (tables that scroll inside their own box keep their layout). */
+  table:not(.tw-table) {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
@@ -5679,4 +5679,12 @@ body {
   .tw-scope .rounded-\[18px\] {
     border-radius: 16px;
   }
+}
+
+/* A dropdown's text never runs under its arrow: this is outside the Tailwind layers so a utility's
+   `px-3` cannot cancel the room the arrow needs. */
+.tw-scope select:not([multiple]),
+select.input {
+  padding-right: 34px;
+  text-overflow: ellipsis;
 }

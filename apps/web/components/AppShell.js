@@ -20,7 +20,27 @@ const WORKSPACES_API = "/api/workspaces-supabase";
 
 export function AppShell() {
   const [role, setRole] = useState("student");
-  const [page, setPage] = useState(defaultPage.student);
+  const [page, setPageState] = useState(defaultPage.student);
+  // Every move to another page is a history entry, so the browser's Back button (and an iPhone swipe)
+  // returns to the page you were on instead of leaving the app.
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  function setPage(next) {
+    const value = typeof next === "function" ? next(pageRef.current) : next;
+    if (!value || value === pageRef.current) return;
+    try { window.history.pushState({ lunaPage: value }, ""); } catch { /* history unavailable */ }
+    pageRef.current = value;
+    setPageState(value);
+  }
+  useEffect(() => {
+    try { window.history.replaceState({ ...(window.history.state || {}), lunaPage: pageRef.current }, ""); } catch { /* history unavailable */ }
+    function onPop(event) {
+      const target = event.state?.lunaPage;
+      if (target) { pageRef.current = target; setPageState(target); setMenuOpen(false); }
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
   const [workspaces, setWorkspaces] = useState([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");

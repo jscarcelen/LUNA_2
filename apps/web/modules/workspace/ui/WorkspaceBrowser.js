@@ -125,6 +125,7 @@ export function WorkspaceBrowser({
   const [nodeId, setNodeId] = useState("");
   const [kind, setKind] = useState("all");
   const [query, setQuery] = useState("");
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [tag, setTag] = useState("");
   const [topicFilter, setTopicFilter] = useState("");
   const [dateSort, setDateSort] = useState("newest");
@@ -473,14 +474,19 @@ export function WorkspaceBrowser({
     <section className="tw-scope grid items-start gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
 
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className={`${card} grid min-w-0 content-start gap-3 p-4 lg:sticky lg:top-4`}>
-        <div>
-          <p className={kicker}>{workspace.name}</p>
-          <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} item{allDocuments.length === 1 ? "" : "s"}</p>
+      <aside className={`${card} relative grid min-w-0 content-start gap-3 p-4 lg:sticky lg:top-4`}>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className={kicker}>{workspace.name}</p>
+            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} item{allDocuments.length === 1 ? "" : "s"}</p>
+          </div>
+          {/* Phone: the filters, uploads and downloads fold into this menu so the folders are what you see. */}
+          <button type="button" className="grid size-10 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xl leading-none text-ink lg:hidden" aria-label={toolsOpen ? "Close menu" : "Filters, upload and more"} aria-expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>{toolsOpen ? "✕" : "＋"}</button>
         </div>
 
         <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" aria-label="Search workspace" />
 
+        <div className={`${toolsOpen ? "grid" : "hidden"} absolute right-3 top-14 z-30 max-h-[70vh] w-[min(92vw,340px)] gap-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.2)] lg:static lg:z-auto lg:grid lg:max-h-none lg:w-auto lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
         <div>
           <p className={`${kicker} mb-1.5`}>Show</p>
           <div className="flex flex-wrap gap-1">
@@ -547,6 +553,7 @@ export function WorkspaceBrowser({
           <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
           <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
           {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
+        </div>
         </div>
       </aside>
 

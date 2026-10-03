@@ -46,50 +46,77 @@ function Btn({ children, primary, ghost, sm, onClick, href, style = {} }) {
 
 // ─── Nav ──────────────────────────────────────────────────────────────────────
 function LandingNav({ tab, setTab, onSignIn, onSignUp }) {
+  const [open, setOpen] = useState(false);
   const tabs = [
     { id: 'home', label: 'Home' },
     { id: 'demo', label: 'Demo' },
     { id: 'pricing', label: 'Pricing' },
     { id: 'training', label: 'Training' },
   ];
+  const pick = (id) => { setTab(id); setOpen(false); };
   return (
-    <nav style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 100,
-      height: 52, display: 'flex', alignItems: 'center',
-      padding: '0 24px',
-      background: 'rgba(255,255,255,0.94)',
-      borderBottom: '1px solid ' + T.line,
-    }}>
-      <a href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', marginRight: 32, flexShrink: 0 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 8, background: T.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 2L13 5.5V10.5L8 14L3 10.5V5.5L8 2Z" fill="white" fillOpacity="0.9"/>
-            <circle cx="8" cy="8" r="2" fill="white"/>
-          </svg>
-        </span>
-        <span style={{ fontSize: 17, fontWeight: 600, color: T.ink, letterSpacing: '-0.3px' }}>LUNA</span>
-      </a>
-      <div style={{ display: 'flex', gap: 2, flex: 1, alignItems: 'center' }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{
-            padding: '6px 14px', borderRadius: 6, border: 'none',
-            background: tab === t.id ? T.bg : 'transparent',
-            color: tab === t.id ? T.ink : T.sub,
-            fontSize: 14, fontWeight: tab === t.id ? 500 : 400,
-            cursor: 'pointer', transition: 'all 0.18s',
-          }}>{t.label}</button>
-        ))}
-        <a href="/app" style={{
-          padding: '6px 14px', borderRadius: 6,
-          color: T.sub, fontSize: 14, textDecoration: 'none',
-          display: 'inline-flex', alignItems: 'center', gap: 4,
-        }}>Try Demo ↗</a>
-      </div>
-      <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-        <Btn sm ghost onClick={onSignIn}>Sign in</Btn>
-        <Btn sm primary onClick={onSignUp}>Get started</Btn>
-      </div>
-    </nav>
+    <>
+      {/* Wide screens: the sections sit in the bar. Phones: they fold into a dropdown, and the bar keeps only
+          the logo, Try demo and Log in. */}
+      <style>{`
+        .ln-bar{position:fixed;top:0;left:0;right:0;z-index:100;height:52px;display:flex;align-items:center;gap:8px;padding:0 24px;background:rgba(255,255,255,0.97);border-bottom:1px solid ${T.line}}
+        .ln-tabs{display:flex;gap:2px;flex:1;align-items:center}
+        .ln-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
+        .ln-burger,.ln-menu,.ln-try{display:none}
+        .ln-desktop-only{display:inline-flex}
+        @media (max-width:760px){
+          .ln-bar{padding:0 12px;padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+          .ln-tabs{display:none}
+          .ln-brand{margin-right:auto!important}
+          .ln-desktop-only{display:none}
+          .ln-try{display:inline-flex}
+          .ln-actions button,.ln-actions a{padding:7px 12px!important;font-size:13px!important}
+          .ln-burger{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid ${T.line};border-radius:10px;background:#fff;color:${T.ink};font-size:18px;cursor:pointer}
+          .ln-menu{display:grid;position:fixed;top:52px;left:0;right:0;z-index:99;gap:2px;padding:8px 12px 12px;background:#fff;border-bottom:1px solid ${T.line};box-shadow:0 12px 24px rgba(0,0,0,0.08)}
+          .ln-menu button{padding:13px 12px;border:0;border-radius:10px;background:transparent;text-align:left;font-size:16px;color:${T.ink};cursor:pointer}
+          .ln-menu button.on{background:${T.bg};font-weight:600}
+        }
+      `}</style>
+      <nav className="ln-bar">
+        <a className="ln-brand" href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', marginRight: 24, flexShrink: 0 }}>
+          <span style={{ width: 28, height: 28, borderRadius: 8, background: T.accent, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2L13 5.5V10.5L8 14L3 10.5V5.5L8 2Z" fill="white" fillOpacity="0.9"/>
+              <circle cx="8" cy="8" r="2" fill="white"/>
+            </svg>
+          </span>
+          <span style={{ fontSize: 17, fontWeight: 600, color: T.ink, letterSpacing: '-0.3px' }}>LUNA</span>
+        </a>
+        <div className="ln-tabs">
+          {tabs.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
+              padding: '6px 14px', borderRadius: 6, border: 'none',
+              background: tab === t.id ? T.bg : 'transparent',
+              color: tab === t.id ? T.ink : T.sub,
+              fontSize: 14, fontWeight: tab === t.id ? 500 : 400,
+              cursor: 'pointer', transition: 'all 0.18s',
+            }}>{t.label}</button>
+          ))}
+          <a href="/app" style={{
+            padding: '6px 14px', borderRadius: 6,
+            color: T.sub, fontSize: 14, textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+          }}>Try Demo ↗</a>
+        </div>
+        <div className="ln-actions">
+          <a className="ln-try" href="/app" style={{ alignItems: 'center', padding: '7px 16px', borderRadius: 980, fontSize: 13, fontWeight: 500, textDecoration: 'none', color: T.accent, border: '1.5px solid ' + T.accent }}>Try demo</a>
+          <Btn sm primary onClick={onSignIn}>Log in</Btn>
+          <span className="ln-desktop-only"><Btn sm ghost onClick={onSignUp}>Sign up</Btn></span>
+        </div>
+        <button className="ln-burger" type="button" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(v => !v)}>{open ? '✕' : '☰'}</button>
+      </nav>
+      {open && (
+        <div className="ln-menu" role="menu">
+          {tabs.map(t => <button key={t.id} className={tab === t.id ? 'on' : ''} onClick={() => pick(t.id)}>{t.label}</button>)}
+          <button onClick={() => { setOpen(false); onSignUp(); }}>Sign up</button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -271,12 +298,12 @@ function HomeSection({ onSignUp }) {
   return (
     <div>
       {/* Hero */}
-      <section style={{ textAlign: 'center', padding: '80px 24px 56px', maxWidth: 820, margin: '0 auto' }}>
+      <section style={{ textAlign: 'center', padding: 'clamp(40px, 9vw, 80px) 20px 48px', maxWidth: 820, margin: '0 auto' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 14px', background: T.accent + '14', borderRadius: 980, marginBottom: 24 }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.accent }} />
           <span style={{ fontSize: 13, color: T.accent, fontWeight: 500 }}>Now in beta — join free</span>
         </div>
-        <h1 style={{ fontSize: 'clamp(34px, 6vw, 62px)', fontWeight: 700, color: T.ink, lineHeight: 1.08, letterSpacing: '-2.5px', margin: '0 0 20px' }}>
+        <h1 style={{ fontSize: 'clamp(34px, 6vw, 62px)', fontWeight: 700, color: T.ink, lineHeight: 1.08, letterSpacing: '-0.035em', margin: '0 0 20px' }}>
           The digital environment<br />that grows with every learner.
         </h1>
         <p style={{ fontSize: 18, color: T.sub, lineHeight: 1.65, margin: '0 auto 36px', maxWidth: 520 }}>

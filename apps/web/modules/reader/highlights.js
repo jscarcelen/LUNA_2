@@ -103,3 +103,86 @@ export function overlapping(anchors, anchor, full) {
     return start < to && start + other.text.length > from;
   });
 }
+
+/** The text offset (in the root's text) under a screen point, or -1. */
+function offsetAtPoint(root, x, y) {
+  let node = null;
+  let offset = 0;
+  if (typeof document.caretPositionFromPoint === "function") {
+    const position = document.caretPositionFromPoint(x, y);
+    if (position) { node = position.offsetNode; offset = position.offset; }
+  } else if (typeof document.caretRangeFromPoint === "function") {
+    const range = document.caretRangeFromPoint(x, y);
+    if (range) { node = range.startContainer; offset = range.startOffset; }
+  }
+  if (!node || node.nodeType !== 3 || !root.contains(node)) return -1;
+  let start = 0;
+  for (const candidate of textNodes(root)) {
+    if (candidate === node) return start + offset;
+    start += candidate.nodeValue.length;
+  }
+  return -1;
+}
+
+/** The highlight under a click or tap, so its note can be opened. */
+export function highlightAt(root, anchors, x, y) {
+  if (!root) return null;
+  const at = offsetAtPoint(root, x, y);
+  if (at < 0) return null;
+  const full = root.textContent || "";
+  return (anchors || []).find((anchor) => {
+    const start = locate(full, anchor);
+    const from = start >= 0 ? start : anchor.start;
+    return at >= from && at <= from + anchor.text.length;
+  }) || null;
+}
+
+/**
+ * The reading page as standalone HTML with the highlights drawn in (and, optionally, the notes
+ * listed under the text as numbered footnotes). Works on a copy: the page being read is not touched.
+ */
+export function markedHtml(root, anchors = [], { notes = true } = {}) {
+  const copy = root.cloneNode(true);
+  const full = copy.textContent || "";
+  const colour = (id) => HIGHLIGHT_COLORS.find((entry) => entry.id === id)?.css || "#fff176";
+  const noted = [];
+  for (const anchor of anchors) {
+    const at = locate(full, anchor);
+    if (at < 0) continue;
+    const to = at + anchor.text.length;
+    let position = 0;
+    let first = true;
+    for (const node of textNodes(copy)) {
+      const length = node.nodeValue.length;
+      const from = Math.max(at, position);
+      const until = Math.min(to, position + length);
+      if (until > from) {
+        const parent = node.parentNode;
+        const value = node.nodeValue;
+        const before = value.slice(0, from - position);
+        const middle = value.slice(from - position, until - position);
+        const after = value.slice(until - position);
+        const mark = document.createElement("mark");
+        mark.style.background = colour(anchor.color);
+        mark.appendChild(document.createTextNode(middle));
+        if (before) parent.insertBefore(document.createTextNode(before), node);
+        parent.insertBefore(mark, node);
+        if (after) parent.insertBefore(document.createTextNode(after), node);
+        parent.removeChild(node);
+        if (first && notes && String(anchor.note || "").trim()) {
+          noted.push(anchor);
+          const sup = document.createElement("sup");
+          sup.textContent = `[${noted.length}]`;
+          mark.appendChild(sup);
+        }
+        first = false;
+      }
+      position += length;
+      if (position >= to) break;
+    }
+  }
+  const footnotes = noted.length
+    ? `<section class="luna-notes"><h2>My notes</h2><ol>${noted.map((anchor) => `<li><em>“${String(anchor.text).slice(0, 120).replace(/</g, "&lt;")}”</em><br>${String(anchor.note).replace(/</g, "&lt;").replace(/\n/g, "<br>")}</li>`).join("")}</ol></section>`
+    : "";
+  return copy.innerHTML + footnotes;
+}

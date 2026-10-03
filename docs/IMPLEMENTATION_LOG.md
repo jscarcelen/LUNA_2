@@ -877,3 +877,9 @@
 
 ## 2026-10-03 (10) — Phone: sheets, tab bar
 - Workspaces "＋" menu is a sheet over a dimmed page with its own Close button (it used to scroll away with the card). Tab bar is Workspaces · Study plans · AI agents · Marketplace (the rest is in the menu button); it sits under dialogs (z-30), so a dialog's last button is never covered. Date fields on iOS no longer spill out of their box.
+
+## 2026-10-03 (11) — Open everything in the HTML reader; notes; download from every view
+- Study plan steps: each step names the agent that made (or will make) its material (✦ tag) and has one primary button: **Do activity** (quiz, flashcards), or **Open** (a summary, or the uploaded document a reading step points at); a step with nothing attached shows Open disabled.
+- Reader (`reader/ReaderView.js`): a document has two views — Original and **Notes** (select text → colour highlight or ✎ Note; tap a highlight to edit its note; notes panel). Highlights carry a `note`. Top right: **Download** — the PDF page-size × view matrix and the HTML (`reader/DownloadPanel.js`; the HTML can carry the highlights and a "My notes" list, `highlights.markedHtml`); also on the in-place interactive view (`InteractiveView`).
+- Uploaded documents open in the same reader (`reader/DocumentReader.js`, `reader/documentView.js`): their own HTML or their text, a PDF layout via the default document template, "Original file" in the download panel. Notes and highlights are kept in a `doc-notes` file next to the document (hidden from folders).
+- Workspaces on a phone: Open/Preview, favourites and download moved into the ⋯ menu of a row.

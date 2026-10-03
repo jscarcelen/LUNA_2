@@ -10,8 +10,9 @@ import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
 import { isGeneratedDocument, splitDocuments } from "./revise";
-import { planAgentCatalog } from "./agents";
+import { BUILTIN_PLAN_AGENTS, planAgentCatalog } from "./agents";
 import { ReaderView } from "../reader/ReaderView";
+import { DocumentReader } from "../reader/DocumentReader";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, linkMaterial, planDeletionScope } from "./folders";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
@@ -310,6 +311,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [generating, setGenerating] = useState(false);
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null);
+  const [readingDoc, setReadingDoc] = useState(null); // an uploaded document opened in the HTML reader
   const [reading, setReading] = useState(null); // { resource, document } — a generated document opened in the HTML reader // { activity, documentId, itemId, planDocumentId }
   const [deletingPlan, setDeletingPlan] = useState(null); // plan row to confirm-delete
   const [planView, setPlanView] = useState("list"); // "list" | "calendar" inside the open plan
@@ -840,6 +842,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                         const itemResource = itemResourceDoc ? parseResource(itemResourceDoc) : null;
                         const activity = itemResource?.activity?.questions?.length ? itemResource.activity : null;
                         const skillTags = inferSkillTags(item, itemResource);
+                        // The agent that made (or will make) this step's material is named on the step.
+                        const agentName = itemResource?.meta?.agentName
+                          || (item.generate && !item.resourceId ? ((plan.agentScope || []).find((entry) => (entry.makes || []).includes(item.generate))?.label || BUILTIN_PLAN_AGENTS.find((entry) => entry.makes.includes(item.generate))?.label || "") : "");
+                        // What "Open" shows: the generated material, or the document the step asks you to read.
+                        const readable = item.sourceDocumentId ? documents.find((entry) => entry.id === item.sourceDocumentId) : null;
+                        const linkedDocument = itemResourceDoc && !itemResource ? itemResourceDoc : null;
                         return (
                           <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
                             <button
@@ -867,6 +875,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                 </p>
                               )}
                               {/* Skill-category tags — fixed palette, square-ish */}
+                              {agentName ? (
+                                <p className="m-0 mt-1 flex flex-wrap gap-1">
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-[#8a4fd6]/30 bg-[#8a4fd6]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#6f3bb5]" title={itemResource ? "Made with this agent" : "Will be made with this agent"}>✦ {agentName}</span>
+                                </p>
+                              ) : null}
                               {skillTags.length > 0 && (
                                 <p className="m-0 mt-1 flex flex-wrap gap-1">
                                   {skillTags.map((tag) => (
@@ -881,30 +894,16 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                               value={item.dueDate || ""}
                               onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
                             />
-                            {/* Action buttons */}
+                            {/* Every step can be opened: the quiz or flashcards to do, the summary to read, the document to study. */}
                             {activity ? (
-                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>▶ Start</button>
+                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>Do activity</button>
                             ) : itemResource ? (
-                              <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Read</button>
-                            ) : null}
-                            {item.resourceId && onOpenResource ? (
-                              <button type="button" className={ghostBtn} onClick={() => onOpenResource(item.resourceId)}>
-                                {item.kind === "read" ? "View material" : activity ? "View" : "Open"}
-                              </button>
-                            ) : null}
-                            {item.kind === "read" && item.resourceId && onDownloadDocument ? (
-                              <button
-                                type="button"
-                                className={ghostBtn}
-                                title="Download reading material"
-                                onClick={async () => {
-                                  const doc = documents.find((d) => d.id === item.resourceId);
-                                  if (doc) await onDownloadDocument(doc);
-                                }}
-                              >
-                                ↓ Download
-                              </button>
-                            ) : null}
+                              <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Open</button>
+                            ) : readable || linkedDocument ? (
+                              <button type="button" className={primaryBtn} onClick={() => setReadingDoc(readable || linkedDocument)}>Open</button>
+                            ) : (
+                              <button type="button" className={primaryBtn} disabled title={item.generate ? "Not generated yet — build the plan's material first" : "Nothing is attached to this step yet"}>Open</button>
+                            )}
                             <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
                           </div>
                         );
@@ -1156,6 +1155,16 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               }}
               onClose={() => setPlaying(null)}
             />
+        ) : null}
+        {readingDoc ? (
+          <DocumentReader
+            document={readingDoc}
+            documents={documents}
+            onClose={() => setReadingDoc(null)}
+            onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+            onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+            onDownloadDocument={onDownloadDocument}
+          />
         ) : null}
         {reading ? (
           <ReaderView

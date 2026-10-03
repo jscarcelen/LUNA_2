@@ -9,6 +9,7 @@ import { isFavourite, parseResource, resourceDifficulty, resourceStats, resource
 import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
 import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
 import { ReaderView } from "../../reader/ReaderView";
+import { DocumentReader } from "../../reader/DocumentReader";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -77,7 +78,7 @@ const KINDS = [
 ];
 
 /** Documents Luna files by itself; they belong to other screens, not to the folder browser. */
-const SYSTEM_TAGS = ["activity-attempt", "study-plan", "study-goal", "ai-agent"];
+const SYSTEM_TAGS = ["activity-attempt", "study-plan", "study-goal", "ai-agent", "doc-notes"];
 
 function download(name, base64, mimeType) {
   const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
@@ -443,9 +444,10 @@ export function WorkspaceBrowser({
     const row = rowsByDocumentId.get(document.id);
     return (
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
-        <button type="button" className={ghostBtn} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
-        <button type="button" className={ghostBtn} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
-        <span className="relative">
+        {/* On a phone Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
+        <button type="button" className={`${ghostBtn} hidden sm:inline-flex`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
+        <button type="button" className={`${ghostBtn} hidden sm:inline-flex`} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
+        <span className="relative hidden sm:block">
           <button type="button" className={ghostBtn} title="Download in any format" aria-label="Download" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
           {formatFor === document.id ? (
             <span className="absolute right-0 top-full z-30 mt-1 grid w-44 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]" onMouseLeave={() => setFormatFor("")}>
@@ -457,6 +459,9 @@ export function WorkspaceBrowser({
         </span>
         <RowMenu
           items={[
+            { label: row ? "Open" : "Preview", icon: "👁", className: "sm:hidden", onSelect: () => (row ? setOpenId(document.id) : setPreview(document)) },
+            { label: isFavourite(document) ? "Remove from favourites" : "Add to favourites", icon: isFavourite(document) ? "★" : "☆", className: "sm:hidden", onSelect: () => toggleFavourite(document) },
+            ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => ({ label: `Download · ${label}`, icon: "⤓", className: "sm:hidden", onSelect: () => downloadOne(document, value) })),
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : null,
@@ -746,25 +751,14 @@ export function WorkspaceBrowser({
       ) : null}
 
       {preview ? (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8" onClick={() => setPreview(null)}>
-          <div className={`${card} mx-auto max-w-3xl p-5`} onClick={(event) => event.stopPropagation()}>
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0"><h3 className="m-0 truncate text-xl font-bold text-ink">{preview.name}</h3><p className="m-0 mt-1 text-xs text-soft-ink">{preview.sizeLabel || ""}{preview.uploadedAt ? ` · ${new Date(preview.uploadedAt).toLocaleDateString()}` : ""}</p></div>
-              <div className="flex gap-2">
-                <button type="button" className={ghostBtn} onClick={() => downloadOne(preview)}>⤓ Download</button>
-                <button type="button" className={ghostBtn} onClick={() => setPreview(null)}>Close</button>
-              </div>
-            </div>
-            {preview.sourceRenderHtml
-              ? <iframe
-                  title="Preview"
-                  sandbox="allow-same-origin"
-                  srcDoc={wrapPreviewHtml(preview.sourceRenderHtml)}
-                  className="mt-3 h-[70vh] w-full rounded-xl border border-ink/10 bg-white"
-                />
-              : <pre className="mt-3 max-h-[70vh] overflow-auto whitespace-pre-wrap rounded-xl bg-[var(--surface-soft)] p-4 text-xs text-ink">{preview.content || preview.preview || "No preview available."}</pre>}
-          </div>
-        </div>
+        <DocumentReader
+          document={preview}
+          documents={rawDocuments}
+          onClose={() => setPreview(null)}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+          onDownloadDocument={onDownloadDocument}
+        />
       ) : null}
     </section>
   );

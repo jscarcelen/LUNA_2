@@ -38,13 +38,13 @@ export function RowMenu({ items = [], label = "More actions", align = "right" })
         ⋯
       </button>
       {open ? (
-        <span className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full z-40 mt-1 grid w-48 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]`}>
+        <span className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full z-40 mt-1 grid w-56 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]`}>
           {usable.map((item) => (
             <button
               key={item.label}
               type="button"
               title={item.title || item.label}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[var(--surface-soft)] ${item.danger ? "text-[var(--color-danger)]" : "text-ink"}`}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-medium hover:bg-[var(--surface-soft)] ${item.danger ? "text-[var(--color-danger)]" : "text-ink"} ${item.className || ""}`}
               onClick={(event) => { event.stopPropagation(); setOpen(false); item.onSelect?.(); }}
             >
               {item.icon ? <span aria-hidden className="w-4 text-center">{item.icon}</span> : null}

@@ -435,9 +435,11 @@ export function OutputDownloads({ doc, filename, onInteractiveHtml, interactiveK
         <div className="border-t border-ink/8 pt-3">
           <p className={`${kicker} mb-1.5`}>{interactiveKind === "activity" ? "Interactive HTML" : "HTML"}</p>
           <button type="button" className={ghostBtn} onClick={onInteractiveHtml}>{interactiveKind === "activity" ? "Download the interactive HTML" : "Download the HTML"}</button>
-          <p className="m-0 mt-2 rounded-lg bg-[rgba(178,94,0,0.08)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-warn)]">
-            This file works in any browser but is not connected to Luna. If the task is done in it, outside Luna, your results and performance will <strong>not</strong> be tracked — do it inside Luna to keep them.
-          </p>
+          {interactiveKind === "activity" ? (
+            <p className="m-0 mt-2 rounded-lg bg-[rgba(178,94,0,0.08)] px-3 py-2 text-[11px] leading-relaxed text-[var(--color-warn)]">
+              This file works in any browser but is not connected to Luna. If the task is done in it, outside Luna, your results and performance will <strong>not</strong> be tracked — do it inside Luna to keep them.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

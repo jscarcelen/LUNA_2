@@ -6,7 +6,8 @@ import { normalizeConfig } from "../../../../../modules/ai-tools/pipeline/agentC
 // function idle timeout, and maxDuration raises the hard ceiling for the largest documents.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
+// The Summary Notes Consolidator reads many documents in several passes, so it gets the longest window.
+export const maxDuration = 300;
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));

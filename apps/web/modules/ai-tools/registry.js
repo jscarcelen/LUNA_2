@@ -3,11 +3,13 @@ import { quizGeneratorTool } from "./tools/quiz-generator";
 import { agentBuilderTool } from "./tools/agent-builder";
 import { templateBuilderTool } from "./tools/template-builder";
 import { vocabularyFlashcardsTool } from "./tools/vocabulary-flashcards";
+import { summaryConsolidatorTool } from "./tools/summary-consolidator";
 import { validateAiToolManifest } from "../core";
 
 const toolCandidates = [
   quizGeneratorTool,
   vocabularyFlashcardsTool,
+  summaryConsolidatorTool,
   agentBuilderTool,
   templateBuilderTool,
   chatbotTool

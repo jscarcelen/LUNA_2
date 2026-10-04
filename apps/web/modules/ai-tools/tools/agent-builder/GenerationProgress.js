@@ -9,7 +9,9 @@ function formatElapsed(ms) {
 function stepMetaLabel(id, meta = {}) {
   if (id === "scope" && meta.documentCount != null) return `${meta.documentCount} document${meta.documentCount === 1 ? "" : "s"}`;
   if (id === "chunk" && meta.chunkCount != null) return `${meta.chunkCount} passages`;
+  if (id === "retrieve" && meta.note) return meta.note;
   if (id === "retrieve" && meta.chunkCount != null) return `${meta.chunkCount} selected`;
+  if (id === "generate" && meta.phase && meta.status === "progress") return meta.label || `${meta.phase} ${meta.done}/${meta.total}`;
   if (id === "generate" && meta.itemCount != null) return `${meta.itemCount} items · ${meta.model || ""}`.trim();
   if (id === "generate" && meta.status === "retry") return "First attempt was incomplete — trying again";
   if (id === "generate" && meta.model) return meta.model;
@@ -99,7 +101,7 @@ export function GenerationProgress({ steps, tokenChars, tokenTail, elapsedMs, is
         })}
       </ol>
 
-      {isGenerating && steps.generate?.status === "active" ? (
+      {isGenerating && steps.generate?.status === "active" && !steps.generate?.meta?.phase ? (
         <div className="mt-3 rounded-2xl border border-ink/8 bg-bg/60 px-3 py-2.5">
           <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-soft-ink">
             <span>Live output</span>

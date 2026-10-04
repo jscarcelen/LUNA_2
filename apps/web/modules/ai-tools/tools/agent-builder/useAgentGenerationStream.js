@@ -69,7 +69,8 @@ export function useAgentGenerationStream() {
     setSteps((previous) => ({
       ...previous,
       [event.step]: {
-        status: event.status === "start" || event.status === "retry" ? "active" : "done",
+        // "progress" = a long step reporting how far it is (the consolidator's passes): still running.
+        status: event.status === "start" || event.status === "retry" || event.status === "progress" ? "active" : "done",
         meta: { ...(previous[event.step]?.meta || {}), ...event }
       }
     }));

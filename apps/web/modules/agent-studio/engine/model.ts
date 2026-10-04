@@ -94,6 +94,32 @@ export function createVocabularyFlashcardsSpec(): AgentSpec {
   return spec;
 }
 
+/**
+ * Merges several documents (from any subject or folder) into ONE exhaustive set of notes organised by
+ * topic, with overlapping information written once and every statement tagged with the original
+ * document and page/section it came from. Runs through its own multi-pass pipeline
+ * (`pipeline: "consolidate"`), so it can read inputs far longer than one model call.
+ */
+export function createSummaryNotesConsolidatorSpec(): AgentSpec {
+  const spec = createAgentSpec("Summary Notes Consolidator");
+  spec.pipeline = "consolidate";
+  spec.purpose = { headline: "Merge several documents into one complete set of notes", description: "Reads every document you choose and writes ONE exhaustive, organised document: all the information, formulas, tables and figure descriptions, with overlapping content written once and every statement traced back to its original document.", category: "Study notes" };
+  spec.instructions = {
+    core: "Consolidate the chosen documents into one exhaustive, structured set of notes. Keep every distinct fact, definition, rule, formula (LaTeX), table row and figure description. Organise by topic, not by document. When the same information appears in several documents write it once, merged. End every statement with a tag naming the original document and page or section it came from.",
+    constraints: ["Never drop information.", "Never repeat the same information twice.", "Every statement is traceable to an original document."]
+  };
+  spec.inputs = [
+    createInput("Language", "language", { default: "English", description: "The language the notes are written in." }),
+    createInput("Focus (optional)", "text", { required: false, description: "A topic to put first and treat in the most depth. Everything else is still included." })
+  ];
+  spec.contextSlots = [createSlot("user_material", "Documents to consolidate", { description: "Pick the documents from any subject or folder of your workspace. All of their information ends up in the notes.", required: true, multiple: true, usage: "source" })];
+  spec.output = {
+    selectedBlocks: ["document_header", "section_header", "heading", "paragraph", "bullet_list", "callout", "vocabulary"].map((blockId) => ({ blockId, formatId: "", color: "blue" }))
+  };
+  spec.model = { model: "gpt-4o", creativity: "low" };
+  return spec;
+}
+
 export function createQuizSpec(): AgentSpec {
   const spec = createAgentSpec("Quiz Generator");
   spec.purpose = { headline: "Quiz or exam questions", description: "Reads the documents you choose and writes exam-quality questions with answer options, the correct answer and a short explanation.", category: "Assessment" };

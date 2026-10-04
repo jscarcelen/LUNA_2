@@ -368,6 +368,24 @@ asking because sure-and-wrong is a misconception to correct while unsure-and-wro
 teach — the error taxonomy uses it, and the result screen says which questions the learner was sure
 about and got wrong.
 
+### 5.1o Ask Luna beside the material, and a very simple Home (founder spec, 2026-10-04)
+
+**Ask Luna.** In every interactive or HTML view of anything on Luna (a quiz, an exam, flashcards, a
+summary, an uploaded document) there is a chat button. It is the same chatbot, with the material
+already chosen: all of the study plan the item belongs to (its documents and master document) and the
+uploaded reference documents it was made from, plus what the user is doing right now (this exam, this
+document and the part shown). It answers only from that material with references, guides instead of
+revealing the answer to a question that has not been checked, and leaves no trace in the performance
+data: chatting is not an attempt. It costs lunas like the Assistant page. Original: "In the interactive
+views of generated material or html document (anything on Luna with html), add a chat so that if they
+have questions, to be answered based on the material".
+
+**Home.** Home is deliberately small: "Hi <name>", one row of at most four study-plan cards (the
+plans with the closest deadlines, the same cards as in Study plans, completion score and all), and
+below it the next steps Luna proposes from performance and plan urgency, as in the Performance tab.
+Nothing else. It looks across every topic of the workspace and is the same for student, teacher and
+parent.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -570,6 +588,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-10-04 — Added §5.1o: Ask Luna beside the material (plan documents + reference documents + what the user is doing, hint-not-answer, no attempts recorded) and the very simple Home (greeting, four most urgent plan cards, next steps).
 - 2026-09-24 — Added §5.1n: templates assembled from components, one design language for the component library, and the confidence check on question cards.
 - 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.

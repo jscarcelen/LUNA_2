@@ -861,7 +861,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       onSelection={setSelection}
       filename={agentConfig.name || "output"}
       onError={setStatusMessage}
-      interactive={readerResource ? <InteractiveView resource={readerResource} /> : null}
+      interactive={readerResource ? <InteractiveView resource={readerResource} chat={{ sourceDocumentIds: referenceDocumentIds, subjectId }} /> : null}
       emptyHint="Generate in step 1 and your result appears here, laid out with Template Studio's components."
       overlay={generation.isGenerating || generation.error ? (
         <GenerationProgress
@@ -1038,6 +1038,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {readerOpen && readerResource ? (
         <ReaderView
           resource={readerResource}
+          chat={{ sourceDocumentIds: referenceDocumentIds, subjectId }}
           notice="Not saved yet — save it as a resource and your highlights are kept with it."
           onSubmit={handleAttempt}
           onClose={() => setReaderOpen(false)}

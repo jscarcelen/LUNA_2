@@ -127,8 +127,8 @@ A template is **a selection of block formats**. Nothing more.
   gradients on controls, pill buttons, 12–18px radii, 180ms `--ease` motion. The user rejected a
   dark theme as "blurry" — do not reintroduce dark mode or glassmorphism.
 - Roles: `student` / `teacher` / `parent` are a client-side switch (`components/data.js`
-  `navByRole`, `roleProfiles`). Each has its own home (`modules/dashboard/ui/DashboardPage.js`).
-  `modules/dashboard/insights.js` is the data seam — sample data now, Supabase later.
+  `navByRole`, `roleProfiles`). Home (`modules/dashboard/ui/DashboardPage.js`) is the same simple page for
+  every role: greeting, a one-row gallery of the 4 most urgent study plans, and Luna's next steps (real data).
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
 

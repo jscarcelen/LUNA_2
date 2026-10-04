@@ -5,7 +5,7 @@ export const navByRole = {
     { key: "dashboard", label: "Home", icon: "⌂" },
     { key: "workspaces", label: "Workspaces", icon: "🗂" },
     { key: "activities", label: "Activities", icon: "✎" },
-    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
     { key: "performance", label: "Performance", icon: "◴" },
     { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
     { key: "templates", label: "Templates", icon: "▦" },
@@ -15,7 +15,7 @@ export const navByRole = {
     { key: "dashboard", label: "Classes", icon: "⌂" },
     { key: "workspaces", label: "Workspaces", icon: "🗂" },
     { key: "activities", label: "Activities", icon: "✎" },
-    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
     { key: "performance", label: "Performance", icon: "◴" },
     { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
     { key: "templates", label: "Templates", icon: "▦" },
@@ -25,7 +25,7 @@ export const navByRole = {
     { key: "dashboard", label: "Children", icon: "⌂" },
     { key: "workspaces", label: "Workspaces", icon: "🗂" },
     { key: "activities", label: "Activities", icon: "✎" },
-    { key: "plans", label: "Study plans", icon: "◷" },
+    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
     { key: "performance", label: "Performance", icon: "◴" },
     { key: "marketplace", label: "Marketplace", icon: "⬡" }
   ]

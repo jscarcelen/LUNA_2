@@ -22,7 +22,7 @@ function saveFile(file, fallbackName) {
  * and the one with my highlights and notes, which are kept next to the document — and a Download
  * button with the PDF page-size × view matrix, the HTML and the original file.
  */
-export function DocumentReader({ document: original, documents = [], focus = null, onClose, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onDownloadDocument, onUpdateDocumentContent }) {
+export function DocumentReader({ document: original, documents = [], focus = null, planId = "", onClose, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onDownloadDocument, onUpdateDocumentContent }) {
   // After an edit is saved the reader shows it at once; the workspace catches up when it reloads.
   const [edited, setEdited] = useState(null);
   const [showAll, setShowAll] = useState(false);
@@ -55,6 +55,7 @@ export function DocumentReader({ document: original, documents = [], focus = nul
   return (
     <ReaderView
       title={doc.name}
+      chat={{ documentId: doc.id, planId, subjectId: doc.subjectId, readSelf: true }}
       resource={resource}
       html={html}
       focusInfo={focused.focused ? focused : null}

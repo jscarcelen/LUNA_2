@@ -23,7 +23,7 @@ export async function POST(request) {
     async start(controller) {
       const emit = (event) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       try {
-        await runChat({ messages: body.messages, scope: body.scope || {}, referencedDocumentIds: body.referencedDocumentIds || [], confirmed: Boolean(body.confirmed), emit, recordRequest });
+        await runChat({ messages: body.messages, scope: body.scope || {}, referencedDocumentIds: body.referencedDocumentIds || [], context: String(body.context || ""), confirmed: Boolean(body.confirmed), emit, recordRequest });
       } catch (error) {
         emit({ type: "error", error: String(error?.message || error) });
       } finally {

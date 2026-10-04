@@ -228,6 +228,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         <ReaderView
           resource={playing.parsed}
           activity={playing.parsed.activity}
+          chat={{ documentId: playing.document.id }}
           highlights={playing.parsed.highlights || []}
           onSaveHighlights={onUpdateGeneratedDocument ? (list) => { const content = JSON.stringify({ ...playing.parsed, highlights: list }, null, 2); return onUpdateGeneratedDocument(playing.document.id, { file: { name: playing.document.name, content, sizeBytes: content.length } }); } : undefined}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}

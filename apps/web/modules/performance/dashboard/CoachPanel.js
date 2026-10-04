@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { card, ghostBtn, kicker } from "./parts";
 
 const KIND_LABEL = {
@@ -24,7 +24,7 @@ const cacheKey = (signature) => `luna.performance.coach.v2.${signature}`;
  * The read is cached against the evidence it was made from, so it is not re-bought on every render
  * and it visibly goes stale when the evidence moves.
  */
-export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, onPractise, onSchedule }) {
+export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, onPractise, onSchedule, practiseLabel = "Do it now", autoRead = false }) {
   const [state, setState] = useState({ status: "idle", read: null, error: "" });
   const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
   const digest = hash(signature);
@@ -54,6 +54,15 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
     }
   }, [role, learner, topics, errorTypes, stuck, plan, digest]);
 
+  // The Home reads by itself the first time it sees a given state of the evidence (the read is cached against it).
+  const triedRef = useRef("");
+  useEffect(() => {
+    if (!autoRead || state.status !== "idle" || state.read || (!topics.length && !errorTypes.length) || triedRef.current === digest) return;
+    triedRef.current = digest;
+    try { if (window.localStorage.getItem(cacheKey(digest))) return; } catch { /* no cache to look in */ }
+    read();
+  }, [autoRead, state.status, state.read, digest, topics.length, errorTypes.length, read]);
+
   const { read: result, status, error } = state;
 
   if (!topics.length && !errorTypes.length) {
@@ -76,7 +85,7 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
                 </p>
                 <p className="m-0 mt-1 text-[11px] text-soft-ink">{action.why}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>Do it now</button> : null}
+                  {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{practiseLabel}</button> : null}
                   {onSchedule ? <button type="button" className={ghostBtn} onClick={() => onSchedule(action)}>Put it in a plan</button> : null}
                 </div>
               </div>

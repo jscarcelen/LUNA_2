@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MARKDOWN_CSS, markdownToHtml } from "../reader/markdown";
+import { MARKDOWN_CSS } from "../reader/markdown";
 import { FolderPicker } from "../ui/FolderTree";
 import { branchOf, foldersOf, parseNode, pathOf, subjectNode } from "../workspace/ui/folderModel";
 import { SaveResourceDialog } from "../resources/SaveResourceDialog";
@@ -10,6 +10,8 @@ import { chargeRun, readCredits } from "../credits/credits";
 import { planChoicesOf, saveResourceFlow } from "../resources/saveFlow";
 import { agentFromAction, documentFromAction, runProposedAgent } from "./actions";
 import { LOOSE_FOLDER } from "../plans/folders";
+import { streamChat } from "./client";
+import { CITE_CSS, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
 
 const STORAGE_KEY = "luna.chat.v1";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -26,11 +28,6 @@ const SUGGESTIONS = [
 let counter = 0;
 const uid = (prefix) => `${prefix}${Date.now().toString(36)}${(counter += 1).toString(36)}`;
 const fmt = (n) => Number(n || 0).toLocaleString("en-US");
-
-/** Markdown → HTML, with the [P1] citations turned into small numbered buttons. */
-function renderAssistant(text) {
-  return markdownToHtml(text).replace(/\[P(\d+)\]/g, '<button type="button" class="md-cite" data-cite="P$1">$1</button>');
-}
 
 /**
  * Luna's assistant: a chat that answers about the user's material with references, answers about
@@ -108,25 +105,13 @@ export function ChatPage({ toolContext = {} }) {
     abortRef.current = controller;
     const patch = (change) => setMessages((current) => current.map((message) => (message.id === reply.id ? (typeof change === "function" ? change(message) : { ...message, ...change }) : message)));
     try {
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      await streamChat({
+        messages: transcript,
+        scope: scopePayload(),
+        referencedDocumentIds: referenced.map((entry) => entry.id),
+        confirmed,
         signal: controller.signal,
-        body: JSON.stringify({ messages: transcript, scope: scopePayload(), referencedDocumentIds: referenced.map((entry) => entry.id), confirmed })
-      });
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          let event;
-          try { event = JSON.parse(line); } catch { continue; }
+        onEvent: (event) => {
           if (event.type === "delta") patch((message) => ({ ...message, text: message.text + event.text, status: "" }));
           else if (event.type === "status") patch({ status: event.text });
           else if (event.type === "estimate") patch({ estimate: event });
@@ -136,7 +121,7 @@ export function ChatPage({ toolContext = {} }) {
           else if (event.type === "usage") { patch({ usage: event }); chargeRun({ agentName: "Assistant", usage: { total_tokens: event.totalTokens }, model: event.model }); }
           else if (event.type === "error") patch({ status: "", error: event.error });
         }
-      }
+      });
     } catch (error) {
       if (error?.name !== "AbortError") patch({ status: "", error: String(error?.message || error) });
     } finally {
@@ -235,15 +220,6 @@ export function ChatPage({ toolContext = {} }) {
   const filteredDocs = documents.filter((document) => !refQuery.trim() || document.name.toLowerCase().includes(refQuery.toLowerCase()));
   const balance = typeof window !== "undefined" ? readCredits().balance : 0;
 
-  function onThreadClick(event) {
-    const cite = event.target.closest?.("[data-cite]");
-    if (!cite) return;
-    const card = document.getElementById(`src-${cite.closest("[data-message]")?.getAttribute("data-message")}-${cite.getAttribute("data-cite")}`);
-    card?.scrollIntoView({ behavior: "smooth", block: "center" });
-    card?.classList.add("ring-2", "ring-[var(--accent)]");
-    window.setTimeout(() => card?.classList.remove("ring-2", "ring-[var(--accent)]"), 1600);
-  }
-
   return (
     <section
       className="tw-scope relative flex min-h-[calc(100vh-150px)] flex-col"
@@ -251,7 +227,7 @@ export function ChatPage({ toolContext = {} }) {
       onDragLeave={(event) => { if (event.currentTarget === event.target) setDragOver(false); }}
       onDrop={(event) => { event.preventDefault(); setDragOver(false); takeFiles(event.dataTransfer?.files); }}
     >
-      <style>{MARKDOWN_CSS}{`.md-cite{display:inline-grid;place-items:center;min-width:17px;height:17px;margin:0 2px;padding:0 4px;border-radius:9px;background:#e8f1fd;color:#0a4aa6;font:700 10px/1 -apple-system,sans-serif;border:0;cursor:pointer;vertical-align:text-top}.md-cite:hover{background:#0071e3;color:#fff}`}</style>
+      <style>{MARKDOWN_CSS}{CITE_CSS}</style>
 
       {dragOver ? <div className="pointer-events-none absolute inset-0 z-30 grid place-items-center rounded-3xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent-soft)]/70"><p className="m-0 text-lg font-bold text-[var(--accent-ink)]">Drop documents, PDFs or images to read them</p></div> : null}
 
@@ -275,7 +251,7 @@ export function ChatPage({ toolContext = {} }) {
       ) : null}
 
       {/* Thread */}
-      <div ref={threadRef} onClick={onThreadClick} className="flex-1 overflow-y-auto rounded-3xl bg-white px-4 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] sm:px-8" style={{ maxHeight: "calc(100vh - 330px)", minHeight: 320 }}>
+      <div ref={threadRef} onClick={jumpToCitation} className="flex-1 overflow-y-auto rounded-3xl bg-white px-4 py-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] sm:px-8" style={{ maxHeight: "calc(100vh - 330px)", minHeight: 320 }}>
         {!messages.length ? (
           <div className="mx-auto grid max-w-2xl gap-4 py-8 text-center">
             <div className="mx-auto grid size-12 place-items-center rounded-2xl bg-[var(--accent-soft)] text-xl text-[var(--accent-ink)]">✦</div>
@@ -308,24 +284,7 @@ export function ChatPage({ toolContext = {} }) {
                           <div className="mt-3 flex gap-2"><button type="button" className={primaryBtn} onClick={() => confirmRun(message)}>Run it</button><button type="button" className={ghostBtn} onClick={() => cancelRun(message)}>Cancel</button></div>
                         </div>
                       ) : null}
-                      {message.sources?.length ? (
-                        <div className="mt-3 grid gap-2">
-                          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">References</p>
-                          {message.sources.map((source) => (
-                            <div key={source.n} id={`src-${message.id}-${source.n}`} className="rounded-xl border border-ink/10 bg-[var(--surface-soft)] px-3 py-2 text-xs transition">
-                              <p className="m-0 flex flex-wrap items-center gap-x-2 text-soft-ink">
-                                <span className="grid size-4 place-items-center rounded-full bg-[#e8f1fd] text-[10px] font-bold text-[#0a4aa6]">{source.n.replace("P", "")}</span>
-                                <strong className="text-ink">{source.documentName}</strong>
-                                {source.heading ? <span>› {source.heading}</span> : null}
-                                {source.page ? <span>· p. {source.page}</span> : null}
-                                <span>· passage {source.chunkIndex}</span>
-                                {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-[var(--accent)] hover:underline">Open this part →</a> : null}
-                              </p>
-                              {source.extract ? <p className="m-0 mt-1 border-l-2 border-[var(--accent)] pl-2 italic text-ink">“{source.extract}”</p> : null}
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
+                      <SourceList messageId={message.id} sources={message.sources} />
                       {(message.actions || []).map((action) => (
                         <ActionCard key={action.id} action={action} state={actions[action.id] || {}} subject={subject} onRun={() => runAgent(action)} onPreview={() => setReading({ resource: actions[action.id]?.resource || openDocumentCard(action), document: null })} onSave={() => setSaving({ id: action.id, resource: actions[action.id]?.resource || openDocumentCard(action) })} onSaveAgent={() => saveAgent(action)} onOpenPage={onOpenPage} />
                       ))}

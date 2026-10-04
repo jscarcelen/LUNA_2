@@ -4,6 +4,7 @@
  * enriched with concept metadata.
  */
 import { NextResponse } from "next/server";
+import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 
 export const runtime = "nodejs";
@@ -21,6 +22,9 @@ export async function GET(request) {
         { status: 400 }
       );
     }
+
+    const denied = await denyUnlessOwner(request, { workspaceId });
+    if (denied) return denied;
 
     const { stateByConceptId, states } = await getSubjectStates(learnerId, workspaceId);
 

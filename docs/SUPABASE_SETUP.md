@@ -17,13 +17,14 @@ Copy values into your local env file (or Vercel env vars):
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `LUNA_DEMO_USER_ID` (UUID for development ownership)
+- `LUNA_DEMO_USER_ID` (UUID of the public demo's owner; real accounts own their data by account id)
+- `LUNA_SESSION_SECRET` (32+ random characters; signs the log-in cookie; required in production)
 
 You can start from `.env.example`.
 
 ## 3) Create database schema
 
-Apply the SQL migrations in order (all 15, from `supabase/migrations/`):
+Apply the SQL migrations in order (all of `supabase/migrations/`):
 
 - `202608040001_init_luna.sql`
 - `202608040002_add_folder_hierarchy.sql`
@@ -41,6 +42,9 @@ Apply the SQL migrations in order (all 15, from `supabase/migrations/`):
 - `202608160001_add_document_block_editor_templates.sql`
 - `202609160001_fix_match_document_chunks_search_path.sql`
 - `202610030001_feature_requests.sql` (requests the chatbot cannot do yet; not applied until run)
+- `202610040001_accounts_links_sharing.sql` (accounts, connections between accounts, sent/assigned items —
+  **must be applied for `/platform` and sign-in to work**; until then the UI says "Accounts need one database
+  step"; see `docs/ACCOUNTS.md`). Also set `LUNA_SESSION_SECRET` (32+ random characters) in the environment.
 
 From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
 (ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be

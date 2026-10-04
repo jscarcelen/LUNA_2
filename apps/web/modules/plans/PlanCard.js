@@ -28,7 +28,7 @@ export function Ring({ ratio, colour, size = 56 }) {
  * the Build and Delete controls only appear when their handlers are given. `subjectName` adds a
  * small line above the title for views that mix several subjects.
  */
-export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", onBuild, onOpen, onDelete }) {
+export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", sharedLabel = "", shareLabel = "Share…", onShare, onBuild, onOpen, onDelete }) {
   const pendingBuilds = plan.items.filter((item) => item.generate && !item.resourceId).length;
   return (
     <article className={`${card} flex flex-col gap-3 p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
@@ -36,6 +36,7 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
         <div className="min-w-0">
           {subjectName ? <p className={`${kicker} truncate`}>{subjectName}</p> : null}
           <h4 className="m-0 truncate text-base font-bold text-ink">{plan.name}</h4>
+          {sharedLabel ? <p className="m-0 mt-0.5 text-[11px] font-semibold text-[#0058b0]">{sharedLabel}</p> : null}
           <p className="m-0 mt-0.5 text-xs text-soft-ink">{progress.deadline ? `${progress.deadline.title} · ${dueLabel(progress.deadline.date)}` : "No deadline"}{subPlans.length ? ` · ${subPlans.length} sub-plan${subPlans.length === 1 ? "" : "s"}` : ""}</p>
         </div>
         <Ring ratio={progress.ratio} colour={plan.colour} />
@@ -67,6 +68,7 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
         ) : null}
         <div className="flex items-center gap-1.5">
           <button type="button" className={`${primaryBtn} flex-1`} onClick={() => onOpen?.(document.id)}>Open plan</button>
+          {onShare ? <button type="button" className={ghostBtn} onClick={onShare}>{shareLabel}</button> : null}
           {onDelete ? (
             <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => onDelete({ document, plan })}>🗑</button>
           ) : null}

@@ -18,6 +18,7 @@ import { DocumentReader } from "../reader/DocumentReader";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./folders";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
+import { isAssignedDocument, isSharedDocument, senderNameOf } from "../accounts/shared";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -284,7 +285,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, onShareDocument }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -1237,9 +1238,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 subPlans={children}
                 progress={progress}
                 building={building}
+                sharedLabel={isSharedDocument(document) ? `${isAssignedDocument(document) ? "Assigned" : "Shared"} by ${senderNameOf(document, folders) || "another account"} · read-only (you can tick steps off)` : ""}
+                shareLabel={role === "teacher" || role === "parent" ? "Assign…" : "Share…"}
+                onShare={onShareDocument && !isSharedDocument(document) ? () => onShareDocument(document) : undefined}
                 onBuild={build}
                 onOpen={setOpenId}
-                onDelete={onRemoveDocument ? setDeletingPlan : undefined}
+                onDelete={onRemoveDocument && !isSharedDocument(document) ? setDeletingPlan : undefined}
               />
             );
           })}

@@ -612,6 +612,7 @@ In study plan, when there are multiple uploaded reference materials, the first s
 ## Appendix B — Change log of this document
 - 2026-10-04 — Added §5.1o: Ask Luna beside the material (plan documents + reference documents + what the user is doing, hint-not-answer, no attempts recorded) and the very simple Home (greeting, four most urgent plan cards, next steps).
 - 2026-10-04 — Added §5.1p: the master document of a study plan and the Summary Notes Consolidator agent.
+- 2026-10-04 — Accounts (see docs/ACCOUNTS.md): sign in with email next to the unchanged demo; teacher↔student and parent↔student connections that need both sides to accept (also requested at sign-up by email); teachers/parents assign activities and study plans and share read-only files that land under "Shared documents / <sender>"; a parent can follow several children's performance. Founder: "Same between parent and students and vice versa."
 - 2026-09-24 — Added §5.1n: templates assembled from components, one design language for the component library, and the confidence check on question cards.
 - 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.

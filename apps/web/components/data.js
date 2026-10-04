@@ -31,6 +31,16 @@ export const navByRole = {
   ]
 };
 
+/**
+ * Pages that exist only in the real platform (/platform, a logged-in account). The demo (/app) never
+ * shows them: AppShell adds these to navByRole only when it is given an account.
+ */
+export const platformNavExtras = {
+  student: [{ key: "connections", label: "Connections", icon: "⇄" }],
+  teacher: [{ key: "students", label: "My students", icon: "☺" }, { key: "connections", label: "Connections", icon: "⇄" }],
+  parent: [{ key: "students", label: "My children", icon: "☺" }, { key: "connections", label: "Connections", icon: "⇄" }]
+};
+
 export const roleProfiles = {
   student: { name: "Maria G.", subtitle: "Student", initials: "MG" },
   teacher: { name: "Prof. Rivera", subtitle: "Teacher · Creator", initials: "PR" },
@@ -50,7 +60,9 @@ export const pageTitles = {
   "ai-tool-chatbot": "Chatbot",
   marketplace: "Agent Marketplace",
   builder: "Agent Builder",
-  revenue: "Creator Revenue"
+  revenue: "Creator Revenue",
+  connections: "Connections",
+  students: "My students"
 };
 
 export const kpiCards = [

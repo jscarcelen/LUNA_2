@@ -51,6 +51,7 @@ const SRC = {
   vision: "apps/web/modules/document-processing/parsers/aiVisionExtractor.js",
   concepts: "apps/web/modules/ai-tools/pipeline/conceptExtractor.js",
   agent: "apps/web/modules/ai-tools/pipeline/agentBuilder.js",
+  consolidator: "apps/web/modules/ai-tools/pipeline/consolidator.js",
   embed: "apps/web/modules/ai-tools/pipeline/embeddings.js",
   quiz: "apps/web/modules/ai-tools/pipeline/provider-openai.js",
   designer: "apps/web/modules/template-studio/server/designer.js",
@@ -398,6 +399,62 @@ export const REQUESTS = [
     ]
   },
   {
+    id: "A9", stage: "agents", name: "Summary Notes Consolidator · read each part of the documents", status: "live",
+    purpose: "First pass of the Summary Notes Consolidator (and of every study plan built from 2+ uploaded documents): the chosen documents are read IN FULL, part by part, and rewritten as topic-titled notes that keep every fact, formula, table row and figure description, with overlaps written once and every statement citing the passages it came from.",
+    why: "One call can read ≈ 48k characters and write ≈ 6k tokens, so a single call would silently drop most of several long documents. Splitting the reading into parts keeps all the information; the later passes merge the parts.",
+    position: "When the user runs the Summary Notes Consolidator, or when a plan with 2+ uploaded documents is built (its first step: the master document). Runs once per ≈ 12,000 characters of material, up to 6 parts at the same time.",
+    trigger: "AI agents → Summary Notes Consolidator → Generate · Plan it for me → build (master document)",
+    file: SRC.consolidator, anchor: /function mapSystemPrompt/,
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro; the runner can upgrade to Max = gpt-4.1)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: 12000, format: "JSON schema (strict): topics → typed notes blocks (heading, paragraph, bullet_list, callout, table_row) each with its source passage ids", streaming: false },
+    input: "System prompt (rules, block types, language, optional focus) + one JSON message with up to ≈ 12,000 characters of passages, each with a sourceId, its document name and its heading/page.",
+    output: "{ topics: [{ title, blocks }] }. A part the model cannot finish is split in halves and retried; a passage it skipped is asked for again, then carried over word for word, so nothing is lost.",
+    fallbacks: "Halve the part and retry → carry the passage over with the local Markdown parser. Without an OpenAI key the whole run is done by the local parser (merged by heading, exact duplicates removed). Past 60 % of the 270 s time budget the remaining parts use the local parser.",
+    tokens: { basis: "estimated", scale: { unit: "12,000-character part of the documents", label: "12k-character part", fixedIn: 0, inPer: 3900, outPer: 2900, units: 8 } },
+    seconds: { typical: 45, note: "estimate per part; parts run 6 at a time" },
+    prompts: [
+      { label: "System prompt", file: SRC.consolidator, re: /function mapSystemPrompt\(options\) \{\n  return `([\s\S]*?)`;\n\}/ },
+      { label: "Rules shared by the reading and merging passes", file: SRC.consolidator, re: /const COMPLETENESS_RULES = `([\s\S]*?)`;/ },
+      { label: "Block types the notes are written in", file: SRC.consolidator, re: /const NOTE_FORMAT = `([\s\S]*?)`;/ }
+    ]
+  },
+  {
+    id: "A10", stage: "agents", name: "Summary Notes Consolidator · outline by topic", status: "live",
+    purpose: "Second pass: sees only the TOPIC TITLES the first pass produced (not the text) and decides the outline of the final document by subject matter — not by source document — assigning every draft topic to exactly one section.",
+    why: "Without it the result would be the documents one after the other. This is the step that makes the same concept from two documents land in the same section.",
+    position: "Once per consolidation, after every part has been read, only when there is more than one draft topic.",
+    trigger: "Summary Notes Consolidator · master document of a plan",
+    file: SRC.consolidator, anchor: /function organiseSystemPrompt/,
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: 4000, format: "JSON schema (strict): title + sections [{ title, topicIds }]", streaming: false },
+    input: "System prompt + the document names and, per draft topic: id, title, which documents it comes from, size and its first 140 characters.",
+    output: "A title for the document and the ordered sections. Topics the model forgets are appended as their own sections (the code checks every id is used exactly once).",
+    fallbacks: "Draft topics with the same title (from any document) share a section.",
+    tokens: { basis: "estimated", typical: { in: 2500, out: 600 }, scale: null },
+    seconds: { typical: 8, note: "estimate" },
+    prompts: [
+      { label: "System prompt", file: SRC.consolidator, re: /function organiseSystemPrompt\(options\) \{\n  return `([\s\S]*?)`;\n\}/ }
+    ]
+  },
+  {
+    id: "A11", stage: "agents", name: "Summary Notes Consolidator · merge each section", status: "live",
+    purpose: "Third pass: for each section of the outline, the drafts from every document that cover it are merged into one integrated section — repeated information once, differences kept (and flagged when documents disagree), sources united.",
+    why: "This is where overlapping information between documents is actually removed, without losing any detail that only one document has.",
+    position: "Once per section of the outline (up to 6 at the same time). A section made of a single draft needs no merge; a section too big for one call is merged in batches and the results merged again.",
+    trigger: "Summary Notes Consolidator · master document of a plan",
+    file: SRC.consolidator, anchor: /function mergeSystemPrompt/,
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: 14000, format: "JSON schema (strict): the same typed notes blocks as the reading pass", streaming: false },
+    input: "System prompt + the section title and its drafts (up to ≈ 28,000 characters), each block with its source passage ids.",
+    output: "One merged section. If a merge loses most of the text the drafts are kept instead (exact duplicates removed), then formulas missing from the result are appended by the code. The notes become the typed blocks of the document, each ending with a [D1 p.3 · D2 §Osmosis] source tag.",
+    fallbacks: "Keep the drafts with exact duplicates removed. Past 90 % of the time budget the remaining sections are only de-duplicated.",
+    tokens: { basis: "estimated", scale: { unit: "section", label: "section of the outline", fixedIn: 0, inPer: 3400, outPer: 2200, units: 6 } },
+    seconds: { typical: 35, note: "estimate per section" },
+    prompts: [
+      { label: "System prompt", file: SRC.consolidator, re: /function mergeSystemPrompt\(options\) \{\n  return `([\s\S]*?)`;\n\}/ }
+    ]
+  },
+  {
     id: "A6", stage: "agents", name: "Legacy quiz endpoint", status: "legacy",
     purpose: "The original quiz generator route. The product now uses A1 through the shared agent flow; this endpoint is kept but not called by the UI.",
     why: "Historical.",
@@ -620,6 +677,7 @@ export const NODES = [
   { id: "run", col: 6, lane: 0, label: "Run an agent", sub: "choices + material", phase: "agents" },
   { id: "retr", col: 7, lane: 1, label: "Retrieve passages", sub: "≤ 48k characters", phase: "agents" },
   { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Pro (default) / Max", reqs: ["A1", "A2", "A3", "A7"], phase: "agents" },
+  { id: "master", col: 7, lane: 3, label: "Master document", sub: "2+ documents → one, traced", reqs: ["A9", "A10", "A11"], phase: "agents" },
   { id: "tpl", col: 8, lane: 1, label: "Template Studio engine", sub: "HTML · PDF · DOCX · PPTX", phase: "agents" },
   { id: "design", col: 8, lane: 2, label: "AI template design", sub: "optional", reqs: ["T1", "T2", "T3", "T4"], phase: "design" },
   { id: "res", col: 9, lane: 3, label: "Resources", sub: "quiz · flashcards · summary", phase: "agents" },
@@ -634,7 +692,7 @@ export const NODES = [
 export const EDGES = [
   ["up", "proc"], ["proc", "vision"], ["vision", "store"], ["proc", "store"], ["store", "embed"], ["store", "db"], ["db", "cmap"],
   ["db", "plan"], ["plan", "planapi"], ["planapi", "plangpt"], ["plangpt", "plandb"],
-  ["plandb", "run"], ["db", "retr"], ["run", "retr"], ["retr", "agent"], ["agent", "tpl"], ["design", "tpl"], ["tpl", "res"],
+  ["plandb", "run"], ["db", "master"], ["master", "retr"], ["db", "retr"], ["run", "retr"], ["retr", "agent"], ["agent", "tpl"], ["design", "tpl"], ["tpl", "res"],
   ["res", "doit"], ["doit", "perf"], ["perf", "attempts"], ["attempts", "coach"], ["attempts", "plandb"],
   ["res", "market"], ["market", "lunas"], ["agent", "lunas"]
 ];
@@ -660,8 +718,8 @@ export const COMPARISON_NOTES = [
 
 export const PROCESS = [
   { n: 1, id: "upload", title: "Upload", color: "#0071e3", line: "Bring your material in.", body: "PDF, Word, slides, photos or handwritten notes. Every file is read in full — text, headings, formulas, tables, figures — split into searchable passages and mapped into a tree of concepts.", out: "Searchable library + concept map", ai: "U1–U7" },
-  { n: 2, id: "plan", title: "Study plan", color: "#2f9e5b", line: "Turn material and a deadline into a schedule.", body: "Pick what to study and when the exam is. LUNA schedules reading, practice, spaced repetition and a final review. Add material later and only the unfinished work is re-planned.", out: "Dated steps, goals, concept tags", ai: "P1–P3" },
-  { n: 3, id: "agents", title: "Agents", color: "#8a4fd6", line: "Create practice that complements the plan.", body: "Pre-built agents (quizzes, flashcards, summaries) or your own, built in four steps. They read your material, answer your settings and produce documents in the formats you pick in Template Studio.", out: "Quizzes · flashcards · summaries · worksheets", ai: "A1–A5 · T1–T4" },
+  { n: 2, id: "plan", title: "Study plan", color: "#2f9e5b", line: "Turn material and a deadline into a schedule.", body: "Pick what to study and when the exam is. LUNA schedules reading, practice, spaced repetition and a final review. Add material later and only the unfinished work is re-planned. With two or more documents the first thing built is a master document that merges them (every fact once, each statement traced to its original), and the plan's quizzes cite it.", out: "Dated steps, goals, concept tags, master document", ai: "P1–P3 · A9–A11" },
+  { n: 3, id: "agents", title: "Agents", color: "#8a4fd6", line: "Create practice that complements the plan.", body: "Pre-built agents (quizzes, flashcards, summaries) or your own, built in four steps. They read your material, answer your settings and produce documents in the formats you pick in Template Studio.", out: "Quizzes · flashcards · summaries · consolidated notes · worksheets", ai: "A1–A5 · A9–A11 · T1–T4" },
   { n: 4, id: "market", title: "Marketplace", color: "#e0730f", line: "Sell what you built, if you want to.", body: "Agents, templates, resources and plans can be listed. Buyers pay in lunas; sellers earn lunas, which they can spend on AI or (planned) cash out.", out: "Lunas earned from sales", ai: "none" }
 ];
 

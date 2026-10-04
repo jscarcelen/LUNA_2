@@ -12,6 +12,10 @@ import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { attachSources, buildActivity } from "../activities/engine/activity";
 import { buildResource, RESOURCE_TAG, trimSources } from "../resources/resource";
 import { isCustomKey } from "./agents";
+import { CONSOLIDATOR_AGENT } from "../ai-tools/tools/summary-consolidator/consolidatorAgent";
+import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
+import { MASTER_TAG } from "../ai-tools/pipeline/masterDocument";
+import { findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, stepSourceIds, uploadedMaterialIds } from "./master";
 
 const FLASHCARDS_AGENT = runConfigFromSpec(createVocabularyFlashcardsSpec());
 
@@ -60,7 +64,16 @@ export const STEP_RECIPES = {
   exam: { agent: QUIZ_AGENT, label: "Practice exam", answers: { "q-count": 12, "q-difficulty": "Mixed", "q-types": ["Multiple choice", "Short answer"] } },
   worksheet: { agent: QUIZ_AGENT, label: "Worksheet", answers: { "q-count": 8, "q-difficulty": "Mixed", "q-types": ["Short answer"] } },
   flashcards: { agent: FLASHCARDS_AGENT, label: "Flashcards", answers: {} },
-  summary: { agent: SUMMARY_AGENT, label: "Summary", answers: {} }
+  summary: { agent: SUMMARY_AGENT, label: "Summary", answers: {} },
+  // Not a step the planner schedules: the first thing built for a plan with 2+ uploaded documents.
+  // Streams (it takes minutes) and reads every document in full. Language "" = the documents' own.
+  master: {
+    agent: CONSOLIDATOR_AGENT,
+    label: "Master document",
+    answers: Object.fromEntries((CONSOLIDATOR_AGENT.questions || []).filter((question) => /language/i.test(question.text)).map((question) => [question.id, ""])),
+    streams: true,
+    tags: [MASTER_TAG]
+  }
 };
 
 function answersFor(agent, preset) {
@@ -137,7 +150,7 @@ export function answersFromOptions(agent, options = {}) {
  * Generates the resource for a step WITHOUT saving it: the caller decides where it goes.
  * `options` are the user's words ({ count, difficulty, types, language, focus… }); `extraInstructions` a free request.
  */
-export async function generateStepResource({ step, sourceDocumentIds, workspaceId, subjectId, learnerNote = "", agentDocuments = [], subjectName = "", options = {}, extraInstructions = "" }) {
+export async function generateStepResource({ step, sourceDocumentIds, workspaceId, subjectId, learnerNote = "", agentDocuments = [], subjectName = "", options = {}, extraInstructions = "", onAgentEvent }) {
   const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
   const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
@@ -153,6 +166,8 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
       name: agent.name,
       instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
+      // The consolidator is recognised by its spec (`pipeline: "consolidate"`).
+      ...(recipe.streams ? { spec: agent.spec } : {}),
       questionAnswers: answers,
       outputExample: agent.outputExample || "",
       model: agent.model,
@@ -167,6 +182,12 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
       } : {}),
       scope: { workspaceId, subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
     };
+    // A long run (the master document) streams its progress; the others are one quick request.
+    if (recipe.streams) {
+      const streamed = await runAgentStreaming(config, onAgentEvent);
+      tokens += Number(streamed.usage?.total_tokens) || 0;
+      return streamed;
+    }
     const response = await fetch("/api/ai-tools/agent-builder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -213,7 +234,9 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
   const resource = buildResource({
     name: step.title,
     activity: activity?.questions?.length ? activity : null,
-    data: blocks ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources) } : { items, sources: trimSources(data.sources) },
+    data: blocks
+      ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources), ...(data.data?.title ? { title: data.data.title } : {}), ...(data.consolidation ? { originals: data.consolidation.originals, coverage: data.consolidation.coverage } : {}) }
+      : { items, sources: trimSources(data.sources) },
     request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds },
     meta: { agentName: agent.name, subjectName, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
   });
@@ -221,7 +244,8 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
   if (learnerNote) resource.context = learnerNote;
   if (coverage) resource.coverage = coverage;
 
-  const tags = [RESOURCE_TAG, ...(resource.activity ? ["activity"] : []), ...(step.dueDate ? [`due:${step.dueDate}`] : [])];
+  if (data.consolidation) resource.master = { originals: data.consolidation.originals, coverage: data.consolidation.coverage, builtAt: new Date().toISOString() };
+  const tags = [RESOURCE_TAG, ...(recipe.tags || []), ...(resource.activity ? ["activity"] : []), ...(step.dueDate ? [`due:${step.dueDate}`] : [])];
   return { resource, tags, preview: `${blocks ? blocks.length : items.length} ${blocks ? "blocks" : "items"}`, questions: activity?.questions?.length || 0, kind: recipe.label, coverage, tokens, model: agent.model };
 }
 
@@ -237,21 +261,74 @@ export async function runStep({ step, folderIds = [], onSaveGeneratedQuizDocumen
 }
 
 /**
+ * Builds the plan's master document: all the uploaded documents merged into one de-duplicated set of
+ * notes that traces every statement to its original. Filed ONCE in the plan's folder; when the plan's
+ * uploads changed since it was built it is rewritten in place (same document, never a second copy).
+ */
+export async function buildMasterDocument({ plan, documents = [], existing = null, workspaceId, subjectId, subjectName = "", folderIds = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onAgentEvent }) {
+  const sourceIds = uploadedMaterialIds(plan, documents);
+  const step = { id: "master", title: masterTitle(plan), kind: "read", generate: "master", concepts: [], dueDate: "" };
+  const made = await generateStepResource({ step, sourceDocumentIds: sourceIds, workspaceId, subjectId, subjectName, onAgentEvent });
+  const content = JSON.stringify(made.resource, null, 2);
+  const file = { name: `${step.title}.resource.json`, content, preview: made.preview, sizeBytes: content.length };
+  if (existing) {
+    // Rewrite the document that already exists; without a way to rewrite it the old one stays (nothing is filed twice).
+    if (typeof onUpdateGeneratedDocument !== "function") return { documentId: existing.id, sourceIds, rebuilt: false };
+    await onUpdateGeneratedDocument(existing.id, { file }, subjectId);
+    return { documentId: existing.id, sourceIds, rebuilt: true };
+  }
+  const saved = await onSaveGeneratedQuizDocument({ folderIds, tags: made.tags, file }, subjectId);
+  return { documentId: saved?.id || saved?.documentId || "", sourceIds, rebuilt: true };
+}
+
+/**
  * Runs every step of a plan that promised material and has none yet, in order, reporting progress.
  * The plan is returned with each step pointing at the resource that was created for it.
+ *
+ * With two or more uploaded documents the FIRST thing built is the master document; every step after
+ * it reads that document instead of the individual files (`plan.masterDocumentId`). If it cannot be
+ * built the steps fall back to the original documents, as before.
+ * onProgress receives { phase: "master" | "steps", index, total, title, detail? }.
  */
-export async function executePlan({ plan, documents = [], agentDocuments = [], subjectName = "", workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onProgress }) {
+export async function executePlan({ plan, documents = [], agentDocuments = [], subjectName = "", workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onProgress }) {
   const pending = (plan.items || []).filter((item) => item.generate && !item.resourceId);
   if (!pending.length) return { plan, created: 0, failures: [] };
   const failures = [];
   let created = 0;
   const items = [...plan.items];
+  let workingPlan = plan;
+  let masterId = findMasterDocument(plan, documents)?.id || "";
+  let masterBuilt = false;
+
+  if (needsMasterDocument(plan, documents) && (!masterId || !masterIsCurrent(plan, documents))) {
+    const title = masterTitle(plan);
+    onProgress?.({ phase: "master", index: 0, total: pending.length, title, detail: "Reading your documents" });
+    try {
+      const master = await buildMasterDocument({
+        plan,
+        documents,
+        existing: masterId ? documents.find((document) => document.id === masterId) : null,
+        workspaceId,
+        subjectId,
+        subjectName,
+        folderIds,
+        onSaveGeneratedQuizDocument,
+        onUpdateGeneratedDocument,
+        onAgentEvent: (event) => { if (event?.phase) onProgress?.({ phase: "master", index: 0, total: pending.length, title, detail: event.label || "", done: event.done, of: event.total }); }
+      });
+      masterId = master.documentId;
+      masterBuilt = Boolean(master.rebuilt);
+      if (masterId) workingPlan = { ...plan, masterDocumentId: masterId, masterSourceIds: master.rebuilt ? master.sourceIds : plan.masterSourceIds || master.sourceIds };
+    } catch (error) {
+      failures.push({ title: "Master document", message: String(error.message || error) });
+    }
+  }
+  const master = masterId ? { id: masterId } : null;
 
   for (const [index, step] of pending.entries()) {
-    onProgress?.({ index, total: pending.length, title: step.title });
+    onProgress?.({ phase: "steps", index, total: pending.length, title: step.title });
     try {
-      const source = documents.find((document) => document.id === step.sourceDocumentId);
-      const sourceIds = source ? [source.id] : (plan.materialIds || []);
+      const sourceIds = stepSourceIds({ step, plan: workingPlan, documents, master });
       const result = await runStep({
         step,
         sourceDocumentIds: sourceIds,
@@ -270,7 +347,7 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
           resourceId: result.documentId,
           generate: "",
           kind: result.questions ? "activity" : items[position].kind,
-          note: `${result.kind} generated from your material${result.questions ? ` · ${result.questions} questions` : ""}.`
+          note: `${result.kind} generated from ${master ? "the master document" : "your material"}${result.questions ? ` · ${result.questions} questions` : ""}.`
         };
       }
       created += 1;
@@ -304,5 +381,5 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
     }
   }
 
-  return { plan: { ...plan, items, updatedAt: new Date().toISOString() }, created, failures };
+  return { plan: { ...workingPlan, items, updatedAt: new Date().toISOString() }, created, failures, masterDocumentId: masterId, masterBuilt };
 }

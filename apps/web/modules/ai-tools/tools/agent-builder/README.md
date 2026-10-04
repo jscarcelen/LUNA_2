@@ -15,6 +15,8 @@ Two pages share one pipeline (`../../pipeline/agentBuilder.js`):
 | `useAgentGenerationStream.js` | Client hook. POSTs to `/api/ai-tools/agent-builder/stream`, parses NDJSON events and exposes `{ steps, tokenChars, tokenTail, elapsedMs, error, generate, cancel }`. |
 | `GenerationProgress.js` | The step-by-step "building" card (scope → chunk → retrieve → generate) with live token ticker. Pure presentation. |
 | `RunAgentPage.js` step 2 | Components, formats and colors come only from Template Studio: `template-studio/output/OutputStylePanel` (one card per component, one color / format for all, apply a saved template) beside `OutputPreviewPane` (view × page-size matrix, Preview / Data / Raw, PDF / DOCX / PPTX). |
+| `WorkspaceDocumentPicker.js` | Documents of the whole workspace grouped by subject and folder, for agents that read from anywhere (the Summary Notes Consolidator). |
+| `readAgentStream.js` | `runAgentStreaming(config, onEvent)`: runs an agent through the stream endpoint from non-React code (study-plan builds) and resolves with the final result. |
 | `previewHtml.js` | Plain-text/HTML renderers still used for the Raw tab and the workspace browser. |
 
 Styling: these components use Tailwind utilities (tokens in `app/globals.css` `@theme`) inside a
@@ -28,6 +30,7 @@ globally. Legacy pages keep the hand-written class system.
 ```
 { step: "scope"|"chunk"|"retrieve"|"generate", status: "start"|"end", ...meta, t }
 { step: "generate", status: "token", chars, delta, t }      // throttled to ~12/s
+{ step: "generate", status: "progress", phase: "map"|"organise"|"merge"|"check", done, total, label, t }   // multi-pass agents (consolidator); the step stays active
 { step: "done", status: "end", result, t }                   // same shape as the non-stream route
 { step: "error", status: "end", error, t }
 ```

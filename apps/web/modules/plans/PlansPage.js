@@ -543,10 +543,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         subjectId: selectedSubjectId,
         folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
         onSaveGeneratedQuizDocument,
-        onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
+        onUpdateGeneratedDocument,
+        onProgress: ({ phase, index, total, title, detail }) => setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`)
       });
       await save(result.plan, row.document.id);
-      setStatus(`${result.created} resource${result.created === 1 ? "" : "s"} generated and filed in your workspace${result.failures.length ? ` · ${result.failures.length} could not be built (${result.failures[0].message})` : ""}.`);
+      setStatus(`${result.masterBuilt ? "Master document built from your documents · " : ""}${result.created} resource${result.created === 1 ? "" : "s"} generated and filed in your workspace${result.failures.length ? ` · ${result.failures.length} could not be built (${result.failures[0].message})` : ""}.`);
     } catch (error) {
       setStatus(String(error.message || error));
     } finally {
@@ -1312,7 +1313,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               subjectId: selectedSubjectId,
               folderIds: planFolders.generatedId ? [planFolders.generatedId] : [],
               onSaveGeneratedQuizDocument,
-              onProgress: ({ index, total, title }) => { setStatus(`Building ${index + 1} of ${total}: ${title}…`); report?.({ index, total, title }); }
+              onUpdateGeneratedDocument,
+              onProgress: (event) => {
+                const { phase, index, total, title, detail } = event;
+                setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`);
+                report?.(event);
+              }
             });
             if (savedDocumentId) await save(result.plan, savedDocumentId);
             return result;

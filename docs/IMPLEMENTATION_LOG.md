@@ -1,5 +1,33 @@
 # Implementation Log
 
+## 2026-10-04 (master document)
+
+### Summary Notes Consolidator and the plan's master document
+
+- New built-in agent **Summary Notes Consolidator** (AI agents tab): pick documents from any subject or
+  folder (`WorkspaceDocumentPicker`), a language and an optional focus; get one exhaustive, de-duplicated
+  document organised by topic, with formulas, tables and figure descriptions, every statement ending in
+  a `[D1 p.3 · D2 §Osmosis]` tag and a source key at the top. Spec `createSummaryNotesConsolidatorSpec`
+  (`pipeline: "consolidate"`), tool `tools/summary-consolidator/`, output blocks = document structure.
+- **Long inputs**: `pipeline/consolidator.js` replaces the single (≈48k chars in / 6k tokens out) call with
+  four passes that keep every passage — map (12k-char parts, halve on failure, re-ask for skipped passages,
+  carry over verbatim as the last resort) → organise (outline from topic titles only) → merge (per section,
+  drafts from all documents) → check (missing LaTeX formulas appended). Streams `progress` events; the
+  stream route now allows 300 s and the pipeline degrades to local parsing/de-duplication past 60 % / 90 %
+  of a 270 s budget. Cost estimate in the run page covers all passes (`estimateConsolidationTokens`).
+- **Study plans**: with 2+ uploaded documents `executePlan` builds the master document FIRST (streamed),
+  files it once in the plan's folder (rewritten in place if the uploads change), stores
+  `plan.masterDocumentId` / `masterSourceIds`, and every later quiz, flashcard set or summary reads it
+  (`scope.documentIds = [master]`), so `attachSources`, `/source` and chat sources point at the
+  consolidated document. `materialIds` stay the uploads (concept maps, the "Reference materials"
+  shortcut); the master is generated material and is deleted with the plan. The dialog shows a "Merging
+  your documents into one master document" step between saving and writing (`planBuildSteps`).
+- `pipeline/masterDocument.js`: a master document is a `resource` tagged `master-document`; the workspace
+  loader reads it as Markdown (tags expanded to the original documents' names) and `collectScopedDocuments`
+  admits it only when picked explicitly. Manually saved consolidations get the tag too.
+- Dashboard: requests A9–A11 (read / outline / merge) and a "Master document" flow node
+  (`npm run dashboard:check` clean; not published). Tests: `tests/consolidation/*`, `tests/plans/master.test.ts`.
+
 ## 2026-09-24 (components)
 
 ### One design language for the components

@@ -6,6 +6,7 @@ import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
+import { PlanCard, Ring } from "./PlanCard";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
@@ -265,19 +266,6 @@ function ConceptMasteryList({ concepts = [], prerequisites = [], masteryByConcep
   );
 }
 
-/** Ring showing how much of a plan is done — the one number a plan is judged on. */
-function Ring({ ratio, colour, size = 56 }) {
-  const radius = (size - 8) / 2;
-  const circumference = 2 * Math.PI * radius;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(0,0,0,0.08)" strokeWidth="6" />
-      <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={colour} strokeWidth="6" strokeLinecap="round" strokeDasharray={`${circumference * Math.max(0, Math.min(1, ratio))} ${circumference}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize={size * 0.26} fontWeight="700" fill="#1d1d1f">{Math.round(ratio * 100)}%</text>
-    </svg>
-  );
-}
-
 /**
  * Study plans: several at once, nested (a final exam made of the topics it covers), each with its
  * deadlines, its goals — expressed as the concepts its resources teach — and its schedule. The
@@ -296,7 +284,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -306,11 +294,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const folders = subject?.folders || [];
   const [openId, setOpenId] = useState("");
   useEffect(() => { setOpenId(""); }, [selectedSubjectId]);
+  // Home links straight to a plan ("plans?open=<id>"): open it once its subject is the selected one.
+  useEffect(() => { if (openPlanId) setOpenId(openPlanId); }, [openPlanId, selectedSubjectId]);
   const [tab, setTab] = useState("plans");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [creating, setCreating] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  const [generating, setGenerating] = useState(Boolean(startGenerating));
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null);
   const [readingDoc, setReadingDoc] = useState(null); // an uploaded document opened in the HTML reader
@@ -1236,47 +1226,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             const children = plans.filter((row) => row.plan.parentPlanId === document.id);
             const progress = planProgress(children.length ? withSubPlans(plan, plans) : plan, attempts);
             return (
-              <article key={document.id} className={`${card} flex flex-col gap-3 p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="m-0 truncate text-base font-bold text-ink">{plan.name}</h4>
-                    <p className="m-0 mt-0.5 text-xs text-soft-ink">{progress.deadline ? `${progress.deadline.title} · ${dueLabel(progress.deadline.date)}` : "No deadline"}{children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"}` : ""}</p>
-                  </div>
-                  <Ring ratio={progress.ratio} colour={plan.colour} />
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{progress.done}/{progress.total} steps</span>
-                  {progress.goals.length ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{progress.goals.filter((goal) => goal.met).length}/{progress.goals.length} goals</span> : null}
-                  {progress.late.length ? <span className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{progress.late.length} late</span> : null}
-                  {progress.average ? <span className={`${chip} bg-[#2f9e5b]/10 text-[#1d7a44]`}>avg {Math.round(progress.average * 100)}%</span> : null}
-                </div>
-                {children.length ? (
-                  <ul className="m-0 grid list-none gap-0.5 p-0">
-                    {children.map((row) => <li key={row.document.id} className="truncate text-[11px] text-soft-ink">↳ {row.plan.name}</li>)}
-                  </ul>
-                ) : null}
-                {progress.next.length ? (
-                  <div>
-                    <p className={kicker}>Next up</p>
-                    <ul className="m-0 mt-1 grid list-none gap-1 p-0">
-                      {progress.next.slice(0, 3).map((item) => <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink"><span className="truncate">{item.title}</span><span className="shrink-0 text-soft-ink">{dueLabel(item.dueDate)}</span></li>)}
-                    </ul>
-                  </div>
-                ) : <p className="m-0 text-xs text-soft-ink">Everything done. 🎉</p>}
-                <div className="mt-auto grid gap-1.5">
-                  {plan.items.some((item) => item.generate && !item.resourceId) ? (
-                    <button type="button" className={ghostBtn} disabled={building === document.id} onClick={() => build({ document, plan })}>
-                      {building === document.id ? "Building…" : `✦ Build ${plan.items.filter((item) => item.generate && !item.resourceId).length} resources`}
-                    </button>
-                  ) : null}
-                  <div className="flex items-center gap-1.5">
-                    <button type="button" className={`${primaryBtn} flex-1`} onClick={() => setOpenId(document.id)}>Open plan</button>
-                    {onRemoveDocument ? (
-                      <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => setDeletingPlan({ document, plan })}>🗑</button>
-                    ) : null}
-                  </div>
-                </div>
-              </article>
+              <PlanCard
+                key={document.id}
+                document={document}
+                plan={plan}
+                subPlans={children}
+                progress={progress}
+                building={building}
+                onBuild={build}
+                onOpen={setOpenId}
+                onDelete={onRemoveDocument ? setDeletingPlan : undefined}
+              />
             );
           })}
           {!plans.length ? <p className="m-0 text-sm text-soft-ink">No plans yet — create one, or let Luna build one from your material.</p> : null}

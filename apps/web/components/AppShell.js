@@ -58,8 +58,12 @@ export function AppShell() {
   const openTemplateId = page.includes("?open=") ? page.split("?open=")[1] : "";
   // "workspaces?doc=<id>" opens the folder browser on one document (from a plan step, say).
   const openDocumentId = page.startsWith("workspaces?doc=") ? page.split("?doc=")[1] : "";
+  // "plans?open=<id>" opens one plan (from Home); "plans?generate=1" opens "Plan it for me".
+  const planParams = page.startsWith("plans?") ? new URLSearchParams(page.split("?")[1]) : null;
+  const openPlanId = planParams?.get("open") || "";
+  const startGenerating = Boolean(planParams?.get("generate"));
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
-  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
+  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page.split("?")[0]] || "LUNA"));
   const navItems = navByRole[role] || [];
 
   useEffect(() => {
@@ -135,7 +139,18 @@ export function AppShell() {
   }
 
   const content = useMemo(() => {
-    if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
+    const home = (
+      <DashboardPage
+        role={role}
+        profileName={roleProfiles[role]?.name || ""}
+        workspaces={workspaces}
+        selectedWorkspaceId={selectedWorkspaceId}
+        loading={isWorking}
+        onOpenPlan={({ documentId, subjectId }) => { if (subjectId) setSelectedSubjectId(subjectId); setPage(`plans?open=${documentId}`); }}
+        onOpenPage={(target) => setPage(target)}
+      />
+    );
+    if (page === "dashboard") return home;
     if (page === "performance") {
       return (
         <PerformancePage
@@ -226,7 +241,7 @@ export function AppShell() {
         />
       );
     }
-    if (page === "plans") {
+    if (page === "plans" || page.startsWith("plans?")) {
       return (
         <PlansPage
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
@@ -243,6 +258,8 @@ export function AppShell() {
           onDownloadDocument={handleDownloadDocument}
           onUpdateDocumentContent={handleUpdateDocumentContent}
           onSelectSubject={handleSelectSubject}
+          openPlanId={openPlanId}
+          startGenerating={startGenerating}
         />
       );
     }
@@ -360,7 +377,7 @@ export function AppShell() {
     }
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
-    return <DashboardPage role={role} onNavigate={setPage} />;
+    return home;
   }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
 
   function handleSelectWorkspace(workspaceId) {

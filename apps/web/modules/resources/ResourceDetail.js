@@ -95,7 +95,7 @@ export function ResourceDetail({
 
   return (
     <div className="tw-scope fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-      {reading ? <ReaderView resource={row.resource} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onClose={() => setReading(false)} /> : null}
+      {reading ? <ReaderView resource={row.resource} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onClose={() => setReading(false)} /> : null}
       <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
           <div className="min-w-0">
@@ -130,7 +130,7 @@ export function ResourceDetail({
           <section className={`${card} p-5`}>
             <p className={kicker}>Format &amp; colour</p>
             <p className="m-0 mb-3 mt-1 text-xs text-soft-ink">Restyle this resource whenever you like: pick the format and colour of each component, check every page size and view, and export from here. The content stays exactly the same.</p>
-            <ResourceStyle resource={row.resource} onSaveStyles={(styles) => onSaveStyles?.(row, styles)} onStatus={onStatus} />
+            <ResourceStyle resource={row.resource} documentId={row.document.id} onSaveStyles={(styles) => onSaveStyles?.(row, styles)} onStatus={onStatus} />
           </section>
         ) : null}
 

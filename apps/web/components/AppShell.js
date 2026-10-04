@@ -15,6 +15,7 @@ import { PlansPage } from "../modules/plans/PlansPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 import { UiCritic } from "../modules/ui/UiCritic";
+import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -778,6 +779,9 @@ export function AppShell() {
     setCriticOn(process.env.NODE_ENV !== "production" || asked);
   }, []);
 
+  // "Ask Luna" next to any reader finds the workspace tree here.
+  const askLunaValue = useMemo(() => ({ workspaces, selectedWorkspaceId, selectedSubjectId }), [workspaces, selectedWorkspaceId, selectedSubjectId]);
+
   function handleRoleChange(nextRole) {
     setRole(nextRole);
     setPage(defaultPage[nextRole]);
@@ -795,7 +799,7 @@ export function AppShell() {
       />
       <main className="main-pane">
         <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
-        <div className="page-content">{content}</div>
+        <div className="page-content"><AskLunaProvider value={askLunaValue}>{content}</AskLunaProvider></div>
       </main>
       <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />
       <UiCritic enabled={criticOn} />

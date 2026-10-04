@@ -7,6 +7,7 @@ import { MARKDOWN_CSS, renderMath } from "./markdown";
 import { htmlToMarkdown } from "./documentView";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { DownloadPanel } from "./DownloadPanel";
+import { AskLuna } from "../chat/AskLuna";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -20,8 +21,12 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  *
  * `html` replaces the generated reading page (an uploaded document); `resource` still describes it
  * for the PDF; `onDownloadOriginal` adds "original file" to the download panel.
+ *
+ * "Ask Luna" (a button at the bottom right) opens the assistant beside the page, answering from the study plan's
+ * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
+ * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -29,6 +34,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const [toolbar, setToolbar] = useState(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatProgress, setChatProgress] = useState(null);
   const [focusId, setFocusId] = useState("");
   const [problem, setProblem] = useState("");
   const [saveState, setSaveState] = useState("");
@@ -53,6 +60,21 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   // A document opens as its original unless it already has notes; a quiz or flashcard set always allows highlighting.
   const [view, setView] = useState(initialView || (playable || list.length ? "notes" : "original"));
   const noting = view === "notes" && supported && !editing;
+
+  // The notes panel and Ask Luna share the right-hand side: opening one closes the other.
+  useEffect(() => { if (notesOpen) setChatOpen(false); }, [notesOpen]);
+  useEffect(() => { if (chatOpen) setNotesOpen(false); }, [chatOpen]);
+  const askOn = chat !== false && !editing;
+  const flashcards = Boolean(playable?.questions?.length) && playable.questions.every((question) => question.kind === "flashcard");
+  const askItem = useMemo(() => ({ documentId: chat?.documentId || "", planId: chat?.planId || "", subjectId: chat?.subjectId || "", sourceDocumentIds: chat?.sourceDocumentIds || resource?.meta?.sourceDocumentIds || [], readSelf: chat?.readSelf ?? !playable }), [chat, resource, playable]);
+  const askView = {
+    kind: playable ? (flashcards ? "flashcards" : "quiz") : htmlOverride ? "document" : "generated",
+    title: title || outputTitle(resource) || resource?.name || "",
+    agentName: resource?.meta?.agentName || "",
+    section: focusInfo?.focused && !showingAll ? focusInfo.label || "" : "",
+    progress: playable ? { ...(chatProgress || { answered: 0, checked: false }), total: playable.questions.length } : null,
+    notesView: view === "notes" && list.length > 0
+  };
 
   // Paint now, and again whenever the content changes underneath (an answer is revealed, a card flips).
   useEffect(() => {
@@ -265,7 +287,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         <div className="min-w-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect} onClick={onPageClick}>
           <div ref={rootRef}>
             {playable
-              ? <ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} />
+              ? <ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} />
               : html
                 ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
                 : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read here.</p>}
@@ -299,6 +321,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
             </div>
           </aside>
         ) : null}
+        {askOn ? <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="aside" launcherClassName={notesOpen && noting ? "lg:right-[21rem]" : ""} /> : null}
       </div>
       {toolbar ? (
         <div className="fixed z-[62] flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]" style={{ left: toolbar.x, top: toolbar.y }} onMouseDown={(event) => event.preventDefault()}>

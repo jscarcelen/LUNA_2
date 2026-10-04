@@ -760,6 +760,7 @@ export function WorkspaceBrowser({
       {playing ? (
         <ReaderView
           resource={playing.resource}
+          chat={{ documentId: playing.document.id }}
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}

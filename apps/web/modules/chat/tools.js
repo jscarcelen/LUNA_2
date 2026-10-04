@@ -2,6 +2,7 @@ import { BLOCKS } from "../ai-tools/blocks/blockRegistry.js";
 import { chunkDocuments } from "../ai-tools/pipeline/chunking.js";
 import { selectTopChunks } from "../ai-tools/pipeline/retrieval.js";
 import { bestSentences, headingFor, terms } from "../activities/engine/activity";
+import { resourceText } from "./materialChat.js";
 
 /**
  * The things the assistant can do. Reading tools run on the server and return what they found;
@@ -32,14 +33,24 @@ const norm = (value) => String(value || "").toLowerCase();
 export function documentsInScope(tree, scope = {}, referenced = []) {
   const refs = new Set((referenced || []).filter(Boolean));
   const folderIds = new Set((scope.folderIds || []).filter(Boolean));
+  // An exact list (the chat beside a study plan's material) beats focus: just those documents, and the generated
+  // ones the caller says may be read (a plan's master document, a summary being read) — never agents or quizzes.
+  const only = new Set((Array.isArray(scope.documentIds) ? scope.documentIds : []).filter(Boolean));
+  const readableGenerated = new Set((Array.isArray(scope.readableGeneratedIds) ? scope.readableGeneratedIds : []).filter(Boolean));
   const out = [];
   for (const workspace of tree) {
     if (scope.workspaceId && workspace.id !== scope.workspaceId) continue;
     for (const subject of workspace.subjects || []) {
       const foldersById = new Map((subject.folders || []).map((folder) => [folder.id, folder]));
       for (const document of subject.documents || []) {
-        if (document.sourceType === "generated" && !(document.tags || []).includes("resource")) continue;
+        const readable = readableGenerated.has(document.id) && !(document.tags || []).includes("ai-agent");
+        if (document.sourceType === "generated" && !(document.tags || []).includes("resource") && !readable) continue;
         if (String(document.reviewStatus || "approved") !== "approved") continue;
+        if (only.size) {
+          if (!only.has(document.id) && !refs.has(document.id)) continue;
+          out.push({ ...document, workspaceId: workspace.id, subjectId: subject.id, subjectName: subject.name, folderName: (document.folderIds || []).map((id) => foldersById.get(id)?.name).filter(Boolean).join(" / ") });
+          continue;
+        }
         const inFolder = !folderIds.size || (document.folderIds || []).some((id) => folderIds.has(id));
         const inSubject = !scope.subjectId || subject.id === scope.subjectId;
         const picked = refs.has(document.id);
@@ -81,9 +92,10 @@ export async function executeTool(name, args, ctx) {
     }
     case "search_material": {
       const wanted = new Set((args.documentIds || []).filter(Boolean));
-      const docs = ctx.documents.filter((document) => document.sourceType !== "generated" && (!wanted.size || wanted.has(document.id)));
+      const docs = ctx.documents.filter((document) => (document.sourceType !== "generated" || ctx.readableGenerated?.has(document.id)) && (!wanted.size || wanted.has(document.id)));
       if (!docs.length) return { passages: [], note: "There is no readable material in scope. Ask the user to choose or upload a document." };
-      const chunks = ctx.chunksFor(docs);
+      // A generated document that may be read (a summary, a master document) is chunked as text, not as its stored JSON.
+      const chunks = ctx.chunksFor(docs.map((document) => (document.sourceType === "generated" ? { ...document, content: resourceText(document.content) } : document)));
       const top = selectTopChunks(chunks, { topicPrompt: String(args.query || ""), title: "", questionCount: 3 }).slice(0, 7);
       const keys = terms(`${args.query || ""} ${ctx.question || ""}`);
       const passages = top.map((chunk) => {

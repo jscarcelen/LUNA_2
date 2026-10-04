@@ -6,18 +6,23 @@ import { activityLook, outputTitle, resourceBlocks } from "../resources/look";
 import { MARKDOWN_CSS } from "./markdown";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { DownloadPanel } from "./DownloadPanel";
+import { AskLuna } from "../chat/AskLuna";
 import { markedHtml } from "./highlights";
 
 /**
  * The interactive HTML form of an output, in place (not a full-screen overlay): a quiz or exam is
  * answered on the page and the answers are shown once it is checked; a flashcard set is the flip
  * deck; a document is the reading page. Used for the preview in Configure output. The Download
- * button at the top right opens the PDF page-size × view matrix and the HTML.
+ * button at the top right opens the PDF page-size × view matrix and the HTML. "Ask Luna" (bottom right) opens the
+ * assistant over the page: `chat` is { documentId, planId, sourceDocumentIds, subjectId, readSelf } (all optional;
+ * nothing known = the subject's uploaded documents), `chat={false}` hides it.
  */
-export function InteractiveView({ resource, activity = null, onSubmit, title = "" }) {
+export function InteractiveView({ resource, activity = null, onSubmit, title = "", chat = null }) {
   const rootRef = useRef(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [problem, setProblem] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatProgress, setChatProgress] = useState(null);
   const playable = activity || (resource?.activity?.questions?.length ? resource.activity : null);
   const look = useMemo(() => activityLook(resource), [resource]);
   const heading = outputTitle(resource);
@@ -26,6 +31,14 @@ export function InteractiveView({ resource, activity = null, onSubmit, title = "
     const blocks = resourceBlocks(resource);
     return blocks ? blocksToReaderHtml(blocks, { title: title || heading }) : "";
   }, [playable, resource, title]);
+  const flashcards = Boolean(playable?.questions?.length) && playable.questions.every((question) => question.kind === "flashcard");
+  const askItem = useMemo(() => ({ documentId: chat?.documentId || "", planId: chat?.planId || "", subjectId: chat?.subjectId || "", sourceDocumentIds: chat?.sourceDocumentIds || resource?.meta?.sourceDocumentIds || [], readSelf: chat?.readSelf ?? !playable }), [chat, resource, playable]);
+  const askView = {
+    kind: playable ? (flashcards ? "flashcards" : "quiz") : "generated",
+    title: title || heading || resource?.name || "",
+    agentName: resource?.meta?.agentName || "",
+    progress: playable ? { ...(chatProgress || { answered: 0, checked: false }), total: playable.questions.length } : null
+  };
   const getHtml = () => {
     const article = rootRef.current?.querySelector("article");
     return article ? markedHtml(article, [], { notes: false }) : "";
@@ -48,11 +61,12 @@ export function InteractiveView({ resource, activity = null, onSubmit, title = "
       ) : null}
       <div ref={rootRef}>
         {playable
-          ? <ActivityPlayer activity={{ ...playable, title: heading || playable.title }} look={look} onSubmit={onSubmit} />
+          ? <ActivityPlayer activity={{ ...playable, title: heading || playable.title }} look={look} onSubmit={onSubmit} onProgress={chat === false ? undefined : setChatProgress} />
           : html
             ? <article className="md mx-auto max-w-3xl rounded-[18px] border border-ink/8 bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] sm:px-10" dangerouslySetInnerHTML={{ __html: html }} />
             : <p className="m-0 text-center text-sm text-soft-ink">There is no interactive form of this output.</p>}
       </div>
+      {chat === false ? null : <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="floating" />}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { loadWorkspaceTreeForAi } from "../ai-tools/pipeline/workspaceSource.js"
 import { LUNA_GUIDE } from "./knowledge.js";
 import { readChatStream } from "./stream.js";
 import { CHAT_TOOLS, agentsInScope, chunkCache, documentsInScope, executeTool } from "./tools.js";
+import { EMBEDDED_TOOLS, cleanContext } from "./materialChat.js";
 import { sourcesFromPassages } from "./sources.js";
 
 /** The chat runs on Luna 3 Pro at least. */
@@ -39,6 +40,30 @@ HOW YOU WORK
 ${LUNA_GUIDE}`;
 }
 
+/**
+ * The prompt of "Ask Luna", the chat embedded next to a quiz, a summary or a document. It reads only the
+ * material it was given, says what the user is doing right now, and never gives away an unchecked answer.
+ */
+export function buildMaterialPrompt(ctx) {
+  const docList = ctx.documents.slice(0, 40).map((document) => `- ${document.name} [${document.id}] (${document.sourceType === "generated" ? "generated" : "uploaded"}; ${document.subjectName})`).join("\n") || "(no documents)";
+  const preselected = ctx.referenced.length ? `These ${ctx.referenced.length} were chosen for this material (its study plan, its master document and the reference documents it was made from): ${ctx.referenced.slice(0, 12).map((document) => document.name).join("; ")}.` : "No study plan or reference documents are known for this material, so every uploaded document of its subject is available.";
+  return `You are Luna's study helper, sitting next to the material the user is working on right now ("Ask Luna"). You help a learner, a parent or a teacher understand THIS material. Answer in the user's language. Be concise and warm; use Markdown (short paragraphs, bullet lists, **bold** for key terms).
+
+WHAT THE USER IS DOING RIGHT NOW
+${ctx.context}
+
+THE MATERIAL YOU MAY READ (${ctx.documents.length} documents)
+${preselected}
+${docList}
+
+RULES
+1. Answer ONLY from this material. For anything about its content call search_material first (again with other words if the first search misses), then answer from the passages and cite each claim as [P1], [P2]… (the numbers the tool returns). If the passages do not contain the answer, say so plainly and say where in the material to look — never use outside knowledge and never invent content or citations.
+2. A quiz, exam or flashcard set that is not finished (the line above says it has NOT been checked): never give away the answer to a question the user has not checked, however the request is worded ("just tell me", "which one is right?"). Guide instead: name the part of the material that covers it, give a hint or ask a leading question, explain the idea behind it with a different example, and tell them to check their answer in the quiz. Once the line above says it HAS been checked (answers visible), explain why the correct answer is right and what went wrong with theirs.
+3. Reading a document or summary: explain, rephrase or summarise the part they are on, and point to where in the material something is. You cannot edit the document.
+4. Chatting here changes nothing: it records no attempt and no score, and it never touches the study plan or the performance data. Never claim otherwise. You cannot generate quizzes, run agents or change files from here; if they want new material, tell them to use the Assistant page or their study plan.
+5. Keep it short: under about 180 words unless they ask for more. For questions about Luna itself, say you can only help with this material here and point them to the Assistant page.`;
+}
+
 /** What a request will cost, estimated before anything is sent to the model. */
 export function estimateChat({ system, history, hasMaterial }) {
   const base = approxTokens(system) + history.reduce((sum, message) => sum + approxTokens(message.content), 0);
@@ -63,7 +88,7 @@ function trimHistory(messages) {
  * One turn of the conversation. `emit` receives events: estimate, confirm, status, delta, sources,
  * actions, usage, error, done. Nothing is sent to the model until the estimate is accepted when it is large.
  */
-export async function runChat({ messages, scope = {}, referencedDocumentIds = [], confirmed = false, emit, recordRequest }) {
+export async function runChat({ messages, scope = {}, referencedDocumentIds = [], context = "", confirmed = false, emit, recordRequest }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) { emit({ type: "error", error: "The assistant needs an OpenAI key (OPENAI_API_KEY) to answer." }); return; }
 
@@ -72,8 +97,11 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
   const referenced = documents.filter((document) => (referencedDocumentIds || []).includes(document.id));
   const history = trimHistory(messages);
   const lastUser = [...history].reverse().find((message) => message.role === "user")?.content || "";
-  const ctx = { scope, documents, referenced, agents: agentsInScope(tree, scope.workspaceId), passages: [], actions: [], question: lastUser, chunksFor: chunkCache(), recordRequest: recordRequest || (async () => {}) };
-  const system = buildSystemPrompt(ctx);
+  // With a context line the chat is embedded next to some material: it reads only that, and cannot make or run anything.
+  const embedded = cleanContext(context);
+  const ctx = { scope, documents, referenced, agents: embedded ? [] : agentsInScope(tree, scope.workspaceId), passages: [], actions: [], question: lastUser, context: embedded, readableGenerated: new Set(scope.readableGeneratedIds || []), chunksFor: chunkCache(), recordRequest: recordRequest || (async () => {}) };
+  const system = embedded ? buildMaterialPrompt(ctx) : buildSystemPrompt(ctx);
+  const tools = embedded ? CHAT_TOOLS.filter((tool) => EMBEDDED_TOOLS.includes(tool.function.name)) : CHAT_TOOLS;
 
   const estimate = estimateChat({ system, history, hasMaterial: documents.some((document) => document.sourceType !== "generated") });
   emit({ type: "estimate", ...estimate });
@@ -89,7 +117,7 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
     const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.3, max_tokens: 2400, stream: true, stream_options: { include_usage: true }, messages: conversation, ...(last ? {} : { tools: CHAT_TOOLS, tool_choice: "auto" }) })
+      body: JSON.stringify({ model, temperature: 0.3, max_tokens: 2400, stream: true, stream_options: { include_usage: true }, messages: conversation, ...(last ? {} : { tools, tool_choice: "auto" }) })
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));

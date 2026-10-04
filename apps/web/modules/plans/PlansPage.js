@@ -1144,6 +1144,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <ReaderView
               resource={playing.resource}
               activity={playing.activity}
+              chat={{ documentId: playing.documentId, planId: playing.planDocumentId }}
               highlights={playing.resource?.highlights || []}
               onSaveHighlights={(list) => saveHighlights(playing.resourceDocument, playing.resource, list)}
               onSubmit={async (attempt) => {
@@ -1165,11 +1166,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             onDownloadDocument={onDownloadDocument}
             onUpdateDocumentContent={onUpdateDocumentContent}
             focus={readingDoc.focus}
+            planId={open.document.id}
           />
         ) : null}
         {reading ? (
           <ReaderView
             resource={reading.resource}
+            chat={{ documentId: reading.document?.id, planId: open.document.id }}
             highlights={reading.resource?.highlights || []}
             onSaveHighlights={(list) => saveHighlights(reading.document, reading.resource, list)}
             onClose={() => setReading(null)}

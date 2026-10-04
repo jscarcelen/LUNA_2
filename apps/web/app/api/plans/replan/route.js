@@ -7,6 +7,8 @@
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
+import { ownerUserIdFor } from "../../../../lib/session.js";
+import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 import { shouldReplan, planProgress } from "../../../../modules/plans/replanDetector.js";
 import { selectResource, getDominantError } from "../../../../modules/performance/resourcePolicy.js";
@@ -20,12 +22,15 @@ export async function POST(request) {
     const body = await request.json();
     const planDocumentId = String(body?.planDocumentId || "").trim();
     const learnerId      = String(body?.learnerId      || "").trim();
-    const ownerUserId    = String(body?.ownerUserId    || process.env.LUNA_DEMO_USER_ID || "").trim();
+    const ownerUserId    = ownerUserIdFor(request); // session account or the demo owner, never the body
     const workspaceId    = String(body?.workspaceId    || "").trim();
 
     if (!planDocumentId || !learnerId || !workspaceId) {
       return NextResponse.json({ shouldReplan: false, reason: "Missing parameters." });
     }
+
+    const denied = await denyUnlessOwner(request, { workspaceId, documentId: planDocumentId });
+    if (denied) return denied;
 
     const supabase = createSupabaseAdminClient();
 

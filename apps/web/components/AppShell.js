@@ -5,7 +5,11 @@ import { SideNav } from "./SideNav";
 import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
-import { navByRole, pageTitles, roleProfiles } from "./data";
+import { navByRole, pageTitles, platformNavExtras, roleProfiles } from "./data";
+import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
+import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
+import { PlatformNotice } from "../modules/accounts/PlatformNotice";
+import { ShareDialog } from "../modules/accounts/ShareDialog";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { MarketplacePage } from "../modules/marketplace/MarketplacePage";
@@ -19,9 +23,17 @@ import { UiCritic } from "../modules/ui/UiCritic";
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
 
-export function AppShell() {
-  const [role, setRole] = useState("student");
-  const [page, setPageState] = useState(defaultPage.student);
+/**
+ * The app. `account` is null for the public demo (/app: sample profile, role switcher, nothing about
+ * connections) and the logged-in account for the real platform (/platform: the role and name come from
+ * the account, there is no role switcher, and Connections / My students are in the menu).
+ */
+export function AppShell({ account = null }) {
+  const [role, setRole] = useState(account?.role || "student");
+  const [page, setPageState] = useState(defaultPage[account?.role || "student"]);
+  const [shareTarget, setShareTarget] = useState(null);
+  const [shareNotice, setShareNotice] = useState("");
+  const profileName = account ? account.displayName : (roleProfiles[role]?.name || "");
   // Every move to another page is a history entry, so the browser's Back button (and an iPhone swipe)
   // returns to the page you were on instead of leaving the app.
   const pageRef = useRef(page);
@@ -59,8 +71,8 @@ export function AppShell() {
   // "workspaces?doc=<id>" opens the folder browser on one document (from a plan step, say).
   const openDocumentId = page.startsWith("workspaces?doc=") ? page.split("?doc=")[1] : "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
-  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (pageTitles[page] || "LUNA"));
-  const navItems = navByRole[role] || [];
+  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (pageTitles[page] || "LUNA")));
+  const navItems = [...(navByRole[role] || []), ...(account ? (platformNavExtras[role] || []) : [])];
 
   useEffect(() => {
     loadWorkspaces();
@@ -136,11 +148,14 @@ export function AppShell() {
 
   const content = useMemo(() => {
     if (page === "dashboard") return <DashboardPage role={role} onNavigate={setPage} />;
+    // The real platform only: connections to other accounts, and a connected student's performance.
+    if (account && page === "connections") return <ConnectionsPage account={account} onOpenPage={setPage} />;
+    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} onOpenPage={setPage} />;
     if (page === "performance") {
       return (
         <PerformancePage
           role={role}
-          profileName={roleProfiles[role]?.name || ""}
+          profileName={profileName}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -160,7 +175,7 @@ export function AppShell() {
       return (
         <ActivitiesPage
           role={role}
-          profileName={roleProfiles[role]?.name || ""}
+          profileName={profileName}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -223,12 +238,14 @@ export function AppShell() {
           onDeleteDocumentBlockTemplate={handleDeleteDocumentBlockTemplate}
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
+          onShareDocument={account ? setShareTarget : undefined}
         />
       );
     }
     if (page === "plans") {
       return (
         <PlansPage
+          onShareDocument={account ? setShareTarget : undefined}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onCreateFolder={handleCreateFolder}
           onRemoveFolder={handleRemoveFolder}
@@ -331,7 +348,7 @@ export function AppShell() {
       return (
         <MarketplacePage
           role={role}
-          profileName={roleProfiles[role]?.name || ""}
+          profileName={profileName}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
@@ -762,6 +779,7 @@ export function AppShell() {
   }, []);
 
   function handleRoleChange(nextRole) {
+    if (account) return; // a real account has one fixed role
     setRole(nextRole);
     setPage(defaultPage[nextRole]);
   }
@@ -777,10 +795,22 @@ export function AppShell() {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} />
-        <div className="page-content">{content}</div>
+        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} />
+        <div className="page-content">
+          {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
+          {shareNotice ? (
+            <div role="status" className="tw-scope mb-3 flex items-center justify-between gap-2 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-sm text-ink">
+              <span>{shareNotice}</span>
+              <button type="button" className="rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold" onClick={() => setShareNotice("")}>OK</button>
+            </div>
+          ) : null}
+          {content}
+        </div>
       </main>
       <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />
+      {account && shareTarget ? (
+        <ShareDialog account={account} document={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
+      ) : null}
       <UiCritic enabled={criticOn} />
     </div>
   );

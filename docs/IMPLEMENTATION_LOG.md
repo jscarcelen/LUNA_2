@@ -1,5 +1,25 @@
 # Implementation Log
 
+## 2026-10-04 (accounts)
+
+### Email accounts, connections, sharing (first version)
+
+- Migration `202610040001_accounts_links_sharing.sql` (**not applied by the agent; apply it**): `accounts`,
+  `account_links`, `shared_items`, RLS on, service-role only. Every accounts route answers
+  `{ error, setupNeeded: true }` (503) until it exists, and the UI renders an explicit notice.
+- `lib/accountsCore.js` (pure: email/password rules, scrypt, signed session tokens, cookies, link state machine,
+  delivery authorisation, setup detection), `lib/session.js` (`ownerUserIdFor(request)`: session account id, else
+  the demo owner; the demo page `/app` never sees account data), `lib/accountsRepository.js`,
+  `lib/sharingRepository.js`, `lib/workspaceGuard.js`, `lib/resourceAccess.js`, routes in `app/api/accounts/*`.
+- `/platform` (AppShell with `account`: fixed role, account menu with Log out, Connections, My students /
+  My children), `/login`, `components/auth/AuthModal.js` (used by the landing page).
+- Workspace route and the routes that took a demo owner (attempts, replan, concepts, mastery, patterns,
+  recommendations, chat, the AI pipeline via `currentOwnerUserId`) now derive the owner from the session; for an
+  account every id in a workspace request is checked for ownership and shared copies are read-only.
+- Share / assign: read-only copies into `Shared documents / <sender>` with `shared-by:` / `assigned-by:` / `due:`
+  tags; plans travel with their activities. Tests: `tests/accounts/*` (117).
+- New env var `LUNA_SESSION_SECRET` (required in production). Details: `docs/ACCOUNTS.md`.
+
 ## 2026-09-24 (components)
 
 ### One design language for the components

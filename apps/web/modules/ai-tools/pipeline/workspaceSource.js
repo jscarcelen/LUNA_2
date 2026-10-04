@@ -1,6 +1,7 @@
 import { listWorkspaceTree } from "../../../lib/workspacesRepository.js";
 import { readWorkspaces } from "../../../lib/mockStore.js";
-import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
+import { isSupabaseConfigured } from "../../../lib/supabaseClient.js";
+import { currentOwnerUserId } from "../../../lib/session.js";
 
 function normalizeTopicTags(topicTags = []) {
   return topicTags.map((tag) => {
@@ -42,9 +43,10 @@ function normalizeSubjects(subjects = []) {
   }));
 }
 
-export async function loadWorkspaceTreeForAi() {
+/** The logged-in account's workspaces during a request, the demo owner's everywhere else. */
+export async function loadWorkspaceTreeForAi({ ownerUserId = "" } = {}) {
   if (isSupabaseConfigured()) {
-    const workspaces = await listWorkspaceTree(getDemoOwnerUserId());
+    const workspaces = await listWorkspaceTree(ownerUserId || await currentOwnerUserId());
     return workspaces.map((workspace) => ({
       ...workspace,
       subjects: normalizeSubjects(workspace.subjects || [])

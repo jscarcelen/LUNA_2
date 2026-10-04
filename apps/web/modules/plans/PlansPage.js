@@ -17,6 +17,7 @@ import { DocumentReader } from "../reader/DocumentReader";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./folders";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
+import { isAssignedDocument, isSharedDocument, senderNameOf } from "../accounts/shared";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -296,7 +297,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, onShareDocument }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -1240,6 +1241,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h4 className="m-0 truncate text-base font-bold text-ink">{plan.name}</h4>
+                    {isSharedDocument(document) ? <p className="m-0 mt-0.5 text-[11px] font-semibold text-[#0058b0]">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"} · read-only (you can tick steps off)</p> : null}
                     <p className="m-0 mt-0.5 text-xs text-soft-ink">{progress.deadline ? `${progress.deadline.title} · ${dueLabel(progress.deadline.date)}` : "No deadline"}{children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"}` : ""}</p>
                   </div>
                   <Ring ratio={progress.ratio} colour={plan.colour} />
@@ -1271,7 +1273,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   ) : null}
                   <div className="flex items-center gap-1.5">
                     <button type="button" className={`${primaryBtn} flex-1`} onClick={() => setOpenId(document.id)}>Open plan</button>
-                    {onRemoveDocument ? (
+                    {onShareDocument && !isSharedDocument(document) ? <button type="button" className={ghostBtn} onClick={() => onShareDocument(document)}>{role === "teacher" || role === "parent" ? "Assign…" : "Share…"}</button> : null}
+                    {onRemoveDocument && !isSharedDocument(document) ? (
                       <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => setDeletingPlan({ document, plan })}>🗑</button>
                     ) : null}
                   </div>

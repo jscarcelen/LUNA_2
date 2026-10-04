@@ -570,6 +570,7 @@ Set de guardrails
 ```
 
 ## Appendix B — Change log of this document
+- 2026-10-04 — Accounts (see docs/ACCOUNTS.md): sign in with email next to the unchanged demo; teacher↔student and parent↔student connections that need both sides to accept (also requested at sign-up by email); teachers/parents assign activities and study plans and share read-only files that land under "Shared documents / <sender>"; a parent can follow several children's performance. Founder: "Same between parent and students and vice versa."
 - 2026-09-24 — Added §5.1n: templates assembled from components, one design language for the component library, and the confidence check on question cards.
 - 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.

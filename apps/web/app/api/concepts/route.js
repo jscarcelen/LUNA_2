@@ -5,6 +5,7 @@
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../lib/supabaseClient.js";
+import { denyUnlessOwner } from "../../../lib/resourceAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,9 @@ export async function GET(request) {
     if (!workspaceId) {
       return NextResponse.json({ concepts: [], prerequisites: [] });
     }
+
+    const denied = await denyUnlessOwner(request, { workspaceId });
+    if (denied) return denied;
 
     const restrictToDocs = searchParams.has("documentIds");
     const documentIds = String(searchParams.get("documentIds") || "").split(",").map((id) => id.trim()).filter(Boolean);

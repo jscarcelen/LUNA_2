@@ -12,9 +12,10 @@ import { RevisePlanDialog } from "./RevisePlanDialog";
 import { isGeneratedDocument, splitDocuments } from "./revise";
 import { BUILTIN_PLAN_AGENTS, planAgentCatalog } from "./agents";
 import { ReaderView } from "../reader/ReaderView";
+import { SubjectTabs } from "../ui/SubjectTabs";
 import { DocumentReader } from "../reader/DocumentReader";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
-import { deletePlanEverything, ensurePlanFolders, linkMaterial, planDeletionScope } from "./folders";
+import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./folders";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 
@@ -295,7 +296,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -304,6 +305,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const agentCatalog = useMemo(() => planAgentCatalog(agentDocuments), [agentDocuments]);
   const folders = subject?.folders || [];
   const [openId, setOpenId] = useState("");
+  useEffect(() => { setOpenId(""); }, [selectedSubjectId]);
   const [tab, setTab] = useState("plans");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -498,6 +500,14 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     }
   }
 
+  /** A plan that is not built straight away still gets its place in the folders: Generated material / Study plans / <plan> / Reference materials. */
+  async function fileNewPlan(plan, documentId) {
+    try {
+      const planFolders = await ensurePlanFolders(plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
+      if (documentId && planFolders.planId) await onUpdateDocumentMeta?.(documentId, { folderIds: [planFolders.planId], tags: [PLAN_TAG] });
+    } catch { /* the plan is saved; it is filed the next time it is built */ }
+  }
+
   function updateOpen(updater) {
     if (!open) return;
     save(updater(open.plan), open.document.id);
@@ -523,7 +533,6 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       // Study plans / <plan> / {Reference material, Generated resources}
       setStatus("Setting up the plan's folders…");
       const planFolders = await ensurePlanFolders(row.plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
-      await linkMaterial(row.plan.materialIds || [], planFolders.materialId, { documents, onUpdateDocumentMeta });
       if (planFolders.planId) await onUpdateDocumentMeta?.(row.document.id, { folderIds: [planFolders.planId], tags: row.document.tags || [] });
       const result = await executePlan({
         plan: row.plan,
@@ -611,7 +620,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     save({ ...row.plan, items: row.plan.items.map((item) => (item.id === itemId ? { ...item, dueDate: date } : item)) }, planId);
   }
 
-  if (!subject) return <section className="tw-scope"><p className="m-0 text-sm text-soft-ink">Choose a folder in your workspace first.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className="m-0 text-sm text-soft-ink">Choose a folder in your workspace first.</p></section>;
 
   /* ---------------------------------------------------------------- one plan */
   if (open) {
@@ -984,7 +993,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         </section>
 
         {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}{busy ? " …" : ""}</p> : null}
-        {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+        {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { const plan = buildPlan(draft); const saved = await save(plan); await fileNewPlan(plan, saved?.id || saved?.documentId || ""); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
         {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
         {/* ── Rebuild confirmation modal ── */}
@@ -1183,6 +1192,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   /* ---------------------------------------------------------------- all plans */
   return (
     <section className="tw-scope grid gap-4">
+      <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
           <p className={kicker}>Study plans · {subject.name}</p>
@@ -1273,7 +1283,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         </div>
       )}
 
-      {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { await save(buildPlan(draft)); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+      {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { const plan = buildPlan(draft); const saved = await save(plan); await fileNewPlan(plan, saved?.id || saved?.documentId || ""); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
       {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
       {generating ? (
@@ -1285,14 +1295,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           resources={resources}
           attempts={attempts}
           onCancel={() => setGenerating(false)}
-          onDone={(message) => { setGenerating(false); setStatus(message); }}
+          onDone={(message, info) => { setGenerating(false); setStatus(message); if (info && info.built === false) fileNewPlan(info.plan, info.savedId); }}
           onSavePlan={(plan) => save(plan)}
-          onBuild={async (plan, savedDocumentId) => {
+          onBuild={async (plan, savedDocumentId, report) => {
             // The plan is worth nothing until its material exists, so it is built immediately —
             // into its own folders, with the material it studies linked rather than copied.
             setStatus("Setting up the plan's folders…");
             const planFolders = await ensurePlanFolders(plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
-            await linkMaterial(plan.materialIds || [], planFolders.materialId, { documents, onUpdateDocumentMeta });
             if (savedDocumentId && planFolders.planId) await onUpdateDocumentMeta?.(savedDocumentId, { folderIds: [planFolders.planId], tags: [PLAN_TAG] });
             const result = await executePlan({
               plan,
@@ -1303,7 +1312,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               subjectId: selectedSubjectId,
               folderIds: planFolders.generatedId ? [planFolders.generatedId] : [],
               onSaveGeneratedQuizDocument,
-              onProgress: ({ index, total, title }) => setStatus(`Building ${index + 1} of ${total}: ${title}…`)
+              onProgress: ({ index, total, title }) => { setStatus(`Building ${index + 1} of ${total}: ${title}…`); report?.({ index, total, title }); }
             });
             if (savedDocumentId) await save(result.plan, savedDocumentId);
             return result;

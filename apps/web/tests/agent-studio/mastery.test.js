@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEvidence, classTopicCoverage, learnerSubjectMatrix, masteryOf, nextActions, overallMastery, statusOf, topicMastery } from "../../modules/performance/mastery";
-import { analyseErrors, classifyError } from "../../modules/performance/errors";
+import { ERROR_TYPES, analyseErrors, classifyError, groupOf } from "../../modules/performance/errors";
 
 const daysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString();
 
@@ -95,8 +95,20 @@ describe("error taxonomy", () => {
     ] })]);
     const analysis = analyseErrors(evidence);
     expect(analysis.total).toBe(3);
-    expect(analysis.types[0].share).toBeCloseTo(2 / 3, 2);
-    expect(analysis.byTopic.get("Ratios")[0].id).toBe("conceptual");
+    // Both the repeated misconception and the unanswered prerequisite question are topic-knowledge gaps.
+    expect(analysis.types[0].id).toBe("knowledge");
+    expect(analysis.types[0].share).toBeCloseTo(1, 2);
+    expect(analysis.byTopic.get("Ratios")[0].id).toBe("knowledge");
+  });
+
+  it("has exactly three kinds of gap, each finer cause in exactly one, and always lists all three", () => {
+    expect(ERROR_TYPES.map((type) => type.id)).toEqual(["knowledge", "analytical", "accuracy"]);
+    const causes = ["conceptual", "gap", "procedural", "calculation", "application", "careless", "interpretation", "incomplete"];
+    expect(causes.map(groupOf)).toEqual(["knowledge", "knowledge", "analytical", "analytical", "analytical", "accuracy", "accuracy", "accuracy"]);
+    const evidence = buildEvidence([attempt({ results: [q("Ratios", false, { given: "", expected: "0.75" }), q("Ratios", true), q("Ratios", true), q("Ratios", true)] })]);
+    const analysis = analyseErrors(evidence);
+    expect(analysis.types).toHaveLength(3);
+    expect(analysis.types.reduce((sum, type) => sum + type.share, 0)).toBeCloseTo(1, 5);
   });
 });
 

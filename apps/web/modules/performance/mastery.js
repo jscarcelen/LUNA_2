@@ -267,8 +267,8 @@ export function attentionFlags(entry, errorsFor = () => []) {
   if (declining.length >= 2) flags.push({ id: "declining", label: `Declining in ${declining.length} topics` });
   const thin = entry.topics.filter((topic) => topic.coverage < 0.3).length;
   if (thin && thin === entry.topics.length) flags.push({ id: "coverage", label: "Too little evidence" });
-  const conceptual = errorsFor(entry).find((error) => error.id === "conceptual");
-  if (conceptual && conceptual.share > 0.4) flags.push({ id: "conceptual", label: "Mostly conceptual errors" });
+  const conceptual = errorsFor(entry).find((error) => error.id === "knowledge");
+  if (conceptual && conceptual.share > 0.4) flags.push({ id: "knowledge", label: "Mostly topic-knowledge gaps" });
   const retention = retentionOf(entry.topics);
   if (retention.value !== null && retention.value < 0.6) flags.push({ id: "retention", label: "Forgets after a gap" });
   return flags;

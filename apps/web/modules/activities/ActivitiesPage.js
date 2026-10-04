@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SubjectTabs } from "../ui/SubjectTabs";
 import { defaultLearner } from "../performance/learners";
 import { daysUntil, parsePlan } from "../plans/plan";
 import { ReaderView } from "../reader/ReaderView";
@@ -27,7 +28,7 @@ function scoreTone(pct) {
  * subject, with due dates and results. Attempts are recorded per question so mistakes can be
  * reviewed and, later, fed into performance tracking.
  */
-export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool }) {
+export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const docs = subject?.documents || [];
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
@@ -108,10 +109,11 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
     await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: date ? [...tags, `due:${date}`] : tags });
   }
 
-  if (!subject) return <section className="tw-scope"><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see its activities.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see its activities.</p></section>;
 
   return (
     <section className="tw-scope grid gap-4">
+      <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
           <p className={kicker}>Activities · {subject.name}</p>

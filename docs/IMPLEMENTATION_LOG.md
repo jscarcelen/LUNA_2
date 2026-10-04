@@ -899,3 +899,10 @@
 - Topic by topic follows the study plan's own concepts (the same tree and indentation as the plan's Student model): the 5 assessed topics furthest behind, the 5 strongest, and how many are not assessed yet (listed on request). Plan chips choose the plan (the most recently active one by default). (`dashboard/PlanTopics.js`)
 - Luna's read gives exactly five next actions, a mix of fixing the kind of mistake, plan steps due soonest, the weakest topic and topics slipping (kind "deadline" added; the plan's upcoming steps go to the model). Dashboard F1 updated.
 - Menu column (computer): the column runs the full page height; the content inside is the sticky part. `overflow-x: hidden` on html/body (added with the phone work) had silently stopped every `position: sticky` — it is `clip` now.
+
+## 2026-10-04 (1) — Topic switcher, performance filters, three gaps, plan folders, plan progress
+- Activities, Study plans and Performance have a "Topic" chip row that switches between main folders (`ui/SubjectTabs.js`); shown only with two or more.
+- Performance filters: only Study plan and Period (all time / 7 / 30 / 90 days / chosen dates); teacher/parent keep a student/child picker. Track-by and the other filters are gone.
+- Knowledge gaps are three, mutually exclusive and exhaustive (`performance/errors.js`): Topic knowledge gap, Analytical gap, Accuracy; the eight finer causes of the mastery engine each belong to exactly one. All three are always listed.
+- Folders (`plans/folders.js`): a new topic gets Uploaded material and Generated material (Study plans, Resources not in study plans). A plan gets Generated material / Study plans / <plan> / Reference materials, which is a shortcut to Uploaded material shown in the tree — documents are never filed twice. New uploads default to Uploaded material, new resources to Resources not in study plans.
+- Building a plan shows a step-by-step progress panel with what each step is doing and a counter for the quizzes and summaries being written (`plans/PlanProgress.js`).

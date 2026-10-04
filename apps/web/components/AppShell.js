@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SideNav } from "./SideNav";
 import { BottomTabs } from "./BottomTabs";
+import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
 import { navByRole, pageTitles, roleProfiles } from "./data";
 import { WorkspacePage } from "../modules/workspace";
@@ -146,6 +147,7 @@ export function AppShell() {
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
           onRemoveDocument={handleRemoveDocument}
           onOpenPage={(target) => setPage(target)}
+          onSelectSubject={handleSelectSubject}
         />
       );
     }
@@ -167,6 +169,7 @@ export function AppShell() {
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onRemoveDocument={handleRemoveDocument}
           onOpenTool={(target) => setPage(target)}
+          onSelectSubject={handleSelectSubject}
         />
       );
     }
@@ -239,6 +242,7 @@ export function AppShell() {
           onOpenResource={(documentId) => setPage(documentId ? `workspaces?doc=${documentId}` : "workspaces")}
           onDownloadDocument={handleDownloadDocument}
           onUpdateDocumentContent={handleUpdateDocumentContent}
+          onSelectSubject={handleSelectSubject}
         />
       );
     }
@@ -420,6 +424,8 @@ export function AppShell() {
     });
     if (result?.created?.id) {
       setSelectedSubjectId(result.created.id);
+      // Every topic starts with the same folders: Uploaded material, and Generated material (Study plans, Resources not in study plans).
+      try { await ensureSubjectStructure({ folders: [], subjectId: result.created.id, onCreateFolder: handleCreateFolder }); } catch { /* the topic exists; the folders are made the next time they are needed */ }
     }
     return result?.created || null;
   }

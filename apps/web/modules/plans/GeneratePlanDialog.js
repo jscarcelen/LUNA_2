@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PlanProgress } from "./PlanProgress";
 import { PLAN_COLOURS, buildPlan, newDeadline, newGoal, newItem } from "./plan";
 import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
 import { capConceptTree } from "./conceptTree";
@@ -101,7 +102,8 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   const [busy, setBusy] = useState(false);
   const [buildNow, setBuildNow] = useState(true);
   const [error, setError] = useState("");
-  const [stage, setStage] = useState("");
+  const [currentId, setCurrentId] = useState("");
+  const [sub, setSub] = useState(null);
 
   const material = useMemo(() => documents.filter((document) => document.sourceType !== "generated" || (document.tags || []).includes("resource")), [documents]);
   const resourceByDocumentId = useMemo(() => new Map(resources.map((row) => [row.document.id, row.resource])), [resources]);
@@ -149,7 +151,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
     const have = new Set((data.concepts || []).map((concept) => concept.source_document_id));
     const missing = picked.filter((id) => !have.has(id) && documents.find((doc) => doc.id === id)?.sourceType !== "generated");
     if (missing.length) {
-      setStage("Reading the concepts in your material…");
+      setCurrentId("concepts");
       const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
       await Promise.allSettled(missing.map((documentId) => fetch("/api/concepts/extract", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ documentId, workspaceId, ownerUserId }) }).then((r) => r.json())));
       data = await fetchMap();
@@ -158,12 +160,21 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
     return graph.concepts.map((concept) => ({ name: concept.name, topic: concept.topic || "" })).filter((concept) => concept.name);
   }
 
+  const documentCount = picked.length;
+  const steps = [
+    { id: "concepts", title: "Reading your material", detail: `Luna is reading ${documentCount} document${documentCount === 1 ? "" : "s"} and listing the concepts in them, so the plan can cover every one.` },
+    { id: "schedule", title: "Planning the schedule", detail: "Spreading the concepts over the weeks until your deadline, fitted to your time per week and what you keep getting wrong — then checking that nothing is left untested." },
+    { id: "save", title: "Saving the plan and setting up its folders", detail: "Filing the plan under Generated material → Study plans, with a link to your uploaded material." },
+    ...(buildNow ? [{ id: "build", title: "Writing the quizzes, flashcards and summaries", detail: "Each study step gets its material, written by the agent you allowed from your documents. This is the longest part." }] : [])
+  ];
+
   async function generate() {
     setBusy(true);
     setError("");
     try {
+      setCurrentId("concepts");
       const conceptMap = await loadConceptMap();
-      setStage("Planning every concept into the schedule…");
+      setCurrentId("schedule");
       const response = await fetch("/api/plans/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -221,6 +232,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         materialIds: picked,
         agentScope
       });
+      setCurrentId("save");
       const saved = await onSavePlan?.(plan);
       const cov = data.coverage;
       const coverageNote = cov
@@ -228,16 +240,18 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         : "";
       const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.${coverageNote}`;
       if (buildNow && onBuild && items.some((item) => item.generate)) {
-        const result = await onBuild(plan, saved?.id || saved?.documentId || "");
-        onDone?.(`${planned} ${result?.created || 0} resource${result?.created === 1 ? "" : "s"} generated and filed${result?.failures?.length ? `, ${result.failures.length} still to build` : ""}.`);
+        setCurrentId("build");
+        const result = await onBuild(plan, saved?.id || saved?.documentId || "", ({ index, total, title }) => setSub({ done: index, total, label: title }));
+        onDone?.(`${planned} ${result?.created || 0} resource${result?.created === 1 ? "" : "s"} generated and filed${result?.failures?.length ? `, ${result.failures.length} still to build` : ""}.`, { built: true });
         return;
       }
-      onDone?.(planned);
+      onDone?.(planned, { built: false, plan, savedId: saved?.id || saved?.documentId || "" });
     } catch (problem) {
       setError(String(problem.message || problem));
     } finally {
       setBusy(false);
-      setStage("");
+      setCurrentId("");
+      setSub(null);
     }
   }
 
@@ -249,8 +263,10 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   });
 
   return (
-    <div className="tw-scope fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/30 p-4" onClick={onCancel}>
+    <div className="tw-scope fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/30 p-4" onClick={busy ? undefined : onCancel}>
       <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>
+        {busy ? <PlanProgress steps={steps} currentId={currentId || steps[0].id} sub={sub} /> : null}
+        <div className={busy ? "hidden" : ""}>
         <h4 className="m-0 text-lg font-bold text-ink">Plan it for me</h4>
         <p className="m-0 mt-1 text-xs text-soft-ink">Choose what to study and when it has to be ready. Luna spreads the work, generates the practice it needs, and gives more time to what you keep getting wrong.</p>
         <div className="mt-4 grid gap-3">
@@ -333,8 +349,9 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         </div>
         {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={busy || !deadline || !picked.length} onClick={generate}>{busy ? (stage || "Planning…") : "Build my plan"}</button>
+          <button type="button" className={ghostBtn} disabled={busy} onClick={onCancel}>Cancel</button>
+          <button type="button" className={primaryBtn} disabled={busy || !deadline || !picked.length} onClick={generate}>{busy ? "Building…" : "Build my plan"}</button>
+        </div>
         </div>
       </div>
     </div>

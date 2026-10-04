@@ -93,27 +93,46 @@ describe("concepts", () => {
 });
 
 describe("plan folders", () => {
-  it("creates Study plans / <plan> / {Reference material, Generated resources} once", async () => {
-    const { ensurePlanFolders } = await import("../../modules/plans/folders");
+  const maker = () => {
     const folders = [];
     let next = 0;
     const onCreateFolder = async (name, parentFolderId) => { const folder = { id: `f${(next += 1)}`, name, parentFolderId }; folders.push(folder); return folder; };
+    return { folders, onCreateFolder };
+  };
+
+  it("creates Generated material / Study plans / <plan> / Reference materials once, with the topic's own folders", async () => {
+    const { ensurePlanFolders } = await import("../../modules/plans/folders");
+    const { folders, onCreateFolder } = maker();
     const first = await ensurePlanFolders("Maths final", { folders, subjectId: "s1", onCreateFolder });
-    expect(folders.map((folder) => folder.name)).toEqual(["Study plans", "Maths final", "Reference material", "Generated resources"]);
+    expect(folders.map((folder) => folder.name)).toEqual(["Uploaded material", "Generated material", "Study plans", "Resources not in study plans", "Maths final", "Reference materials"]);
+    const byName = Object.fromEntries(folders.map((folder) => [folder.name, folder]));
+    expect(byName["Study plans"].parentFolderId).toBe(byName["Generated material"].id);
+    expect(byName["Maths final"].parentFolderId).toBe(byName["Study plans"].id);
+    expect(byName["Reference materials"].parentFolderId).toBe(byName["Maths final"].id);
     // Asked again, it reuses what is there instead of making a second set.
     const again = await ensurePlanFolders("Maths final", { folders, subjectId: "s1", onCreateFolder });
-    expect(folders).toHaveLength(4);
-    expect(again.generatedId).toBe(first.generatedId);
+    expect(folders).toHaveLength(6);
+    expect(again.planId).toBe(first.planId);
   });
 
-  it("links material into the plan's folder without copying the document", async () => {
-    const { linkMaterial } = await import("../../modules/plans/folders");
+  it("a new topic gets Uploaded material and Generated material (with Study plans and Resources not in study plans)", async () => {
+    const { ensureSubjectStructure, subjectStructure } = await import("../../modules/plans/folders");
+    const { folders, onCreateFolder } = maker();
+    const working = [];
+    const made = await ensureSubjectStructure({ folders: working, subjectId: "s1", onCreateFolder });
+    expect(folders.filter((folder) => !folder.parentFolderId).map((folder) => folder.name)).toEqual(["Uploaded material", "Generated material"]);
+    expect(folders).toHaveLength(4);
+    expect(subjectStructure(folders)).toEqual(made);
+  });
+
+  it("does not file the plan's documents a second time: Reference materials is a shortcut, not a copy", async () => {
+    const { linkMaterial, isReferenceShortcut } = await import("../../modules/plans/folders");
     const documents = [{ id: "d1", name: "Notes.pdf", folderIds: ["raw"], tags: [] }];
     const updates = [];
-    const linked = await linkMaterial(["d1"], "material", { documents, onUpdateDocumentMeta: async (id, payload) => updates.push({ id, payload }) });
-    expect(linked).toBe(1);
-    expect(updates[0].payload.folderIds).toEqual(["raw", "material"]);
-    // Nothing was created — the same document is simply filed in both places.
-    expect(documents).toHaveLength(1);
+    expect(await linkMaterial(["d1"], "material", { documents, onUpdateDocumentMeta: async (id, payload) => updates.push({ id, payload }) })).toBe(0);
+    expect(updates).toHaveLength(0);
+    const folders = [{ id: "g", name: "Generated material", parentFolderId: "" }, { id: "r", name: "Study plans", parentFolderId: "g" }, { id: "p", name: "Maths", parentFolderId: "r" }, { id: "m", name: "Reference materials", parentFolderId: "p" }];
+    expect(isReferenceShortcut(folders[3], folders)).toBe(true);
+    expect(isReferenceShortcut(folders[2], folders)).toBe(false);
   });
 });

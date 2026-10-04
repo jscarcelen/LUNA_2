@@ -6,10 +6,10 @@ import { parsePlan, planProgress } from "../plans/plan";
 import { parseResource } from "../resources/resource";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
-import { PhoneCollapse } from "../ui/PhoneCollapse";
+import { SubjectTabs } from "../ui/SubjectTabs";
 import { attentionFlags, buildEvidence, byLearner, classTopicCoverage, classTopicMatrix, learnerSubjectMatrix, masteryOverTime, nextActions, overallMastery, retentionOf, statusOf, topicMastery } from "./mastery";
 import { analyseErrors } from "./errors";
-import { TRACK_BY, coverageOf, targetsFor } from "./targets";
+import { coverageOf, targetsFor } from "./targets";
 import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
 import { panelById } from "./dashboard/registry";
 import { Customise } from "./dashboard/Customise";
@@ -32,7 +32,7 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onRemoveDocument, onOpenPage }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onRemoveDocument, onOpenPage, onSelectSubject }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -40,8 +40,9 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
 
   const [learners, setLearners] = useState([]);
   const [learner, setLearner] = useState("");
-  const [range, setRange] = useState(30);
+  const [range, setRange] = useState(0);
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [custom, setCustom] = useState(false);
   const [planId, setPlanId] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
   const [views, setViews] = useState([]);
@@ -91,14 +92,6 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     if (filters.to && at > new Date(`${filters.to}T23:59:59`).getTime()) return false;
     if (isOwn ? false : learner && attempt.learner !== learner) return false;
     if (isOwn && attempt.learner && profileName && attempt.learner !== profileName) return false;
-    if (filters.folder && !(attempt.folderIds || []).includes(filters.folder)) return false;
-    if (filters.agent && attempt.agentName !== filters.agent) return false;
-    if (filters.template && attempt.templateName !== filters.template) return false;
-    if (filters.source && !(attempt.sourceNames || []).includes(filters.source)) return false;
-    if (filters.kind && !(attempt.kinds || []).includes(filters.kind)) return false;
-    if (filters.resource && attempt.resourceId !== filters.resource) return false;
-    if (filters.skill && !(attempt.results || []).some((result) => (result.skill || "unclassified") === filters.skill)) return false;
-    if (filters.difficulty && !(attempt.results || []).some((result) => (result.difficulty || "unrated") === filters.difficulty)) return false;
     return true;
   });
 
@@ -189,15 +182,6 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const stats = summarise(attempts);
   const planStats = activePlan ? planProgress(activePlan.plan, all) : null;
   const sessionsPerWeek = attempts.length ? (attempts.length / Math.max(7, range || 30)) * 7 : 0;
-
-  const filterOptions = useMemo(() => ({
-    agents: [...new Set(all.map((attempt) => attempt.agentName).filter(Boolean))],
-    templates: [...new Set(all.map((attempt) => attempt.templateName).filter(Boolean))],
-    sources: [...new Set(all.flatMap((attempt) => attempt.sourceNames || []))],
-    kinds: [...new Set(all.flatMap((attempt) => attempt.kinds || []))],
-    skills: [...new Set(all.flatMap((attempt) => (attempt.results || []).map((result) => result.skill || "unclassified")))],
-    difficulties: [...new Set(all.flatMap((attempt) => (attempt.results || []).map((result) => result.difficulty || "unrated")))]
-  }), [all]);
 
   async function saveGoal() {
     if (!onSaveGeneratedQuizDocument || !goalDraft.title.trim() || !goalDraft.date) return;
@@ -386,14 +370,14 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     reader.readAsText(file);
   }
 
-  if (!subject) return <section className="tw-scope"><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see performance.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see performance.</p></section>;
   if (!view) return null;
 
   const panels = visiblePanels(view).map((panel) => ({ panel, definition: panelById(panel.id) })).filter((entry) => entry.definition && entry.definition.roles.includes(role));
-  const activeFilters = Object.values(filters).filter(Boolean).length + (planId ? 1 : 0) + (learner ? 1 : 0);
 
   return (
     <section className="tw-scope grid gap-4">
+      <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
       {/* The views, as tabs: one dashboard per question you keep asking. */}
       <div className={`${card} grid gap-3 p-3`}>
         <div className="flex flex-wrap items-center gap-2">
@@ -411,64 +395,51 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
             <button type="button" className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" title="A new, empty view" onClick={() => { const next = blankView(role, window.prompt("Name this view", "Before the exam") || "New view"); setViews(upsertView(role, next)); setViewId(next.id); setCustomising(true); }}>＋ View</button>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            <label className="flex items-center gap-1 text-[11px] font-semibold text-soft-ink">
-              Track by
-              <select className={field} value={trackBy} onChange={(event) => changeView({ ...view, trackBy: event.target.value })} title={TRACK_BY.find((entry) => entry.id === trackBy)?.blurb}>
-                {TRACK_BY.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-              </select>
-            </label>
             <button type="button" className={ghostBtn} onClick={() => setCustomising((value) => !value)}>{customising ? "Done" : "⚙ Arrange"}</button>
           </div>
         </div>
-        <p className="m-0 text-[11px] text-soft-ink">
-          {TRACK_BY.find((entry) => entry.id === trackBy)?.blurb}
-          {trackBy === "plan" && attempts.length ? ` ${coverage.covered} of ${coverage.total} results in this period belong to a plan${coverage.share < 0.6 ? " — add the rest to a plan and they will be tracked too" : ""}.` : ""}
-        </p>
-
-        <PhoneCollapse label="Filters" activeCount={activeFilters}>
-          <div className="flex flex-col gap-2">
-            {/* Row 1: People & Time */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Who / When</span>
-              {!isOwn ? (
-                <>
-                  <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
-                    <option value="">{role === "teacher" ? "Whole class" : "All children"}</option>
-                    {learners.map((name) => <option key={name} value={name}>{name}</option>)}
-                  </select>
-                  <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
-                  {learner ? <button type="button" className={ghostBtn} onClick={() => { if (window.confirm(`Remove ${learner} from the list? Their results stay.`)) { setLearners(removeLearner(learner)); setLearner(""); } }}>Remove {learner}</button> : null}
-                </>
-              ) : null}
-              <select className={field} value={range} onChange={(event) => setRange(Number(event.target.value))}>
-                {[[7, "Last 7 days"], [30, "Last 30 days"], [90, "Last 3 months"], [0, "All time"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-              <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} title="From this date" />
-              <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} title="Up to this date" />
-            </div>
-            {/* Row 2: Content */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Content</span>
+        {/* Two filters only: which study plan, and which period. */}
+        <div className="flex flex-wrap items-center gap-2">
+          {plans.length ? (
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
+              Study plan
               <select className={field} value={planId} onChange={(event) => setPlanId(event.target.value)}>
                 <option value="">Every plan</option>
                 {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
               </select>
-              <select className={field} value={filters.folder} onChange={(event) => setFilters({ ...filters, folder: event.target.value })}><option value="">All folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
-              <select className={field} value={filters.resource} onChange={(event) => setFilters({ ...filters, resource: event.target.value })}><option value="">Any resource</option>{resources.map((row) => <option key={row.document.id} value={row.document.id}>{row.resource.name}</option>)}</select>
-              <select className={field} value={filters.source} onChange={(event) => setFilters({ ...filters, source: event.target.value })}><option value="">Any material</option>{filterOptions.sources.map((source) => <option key={source} value={source}>{source}</option>)}</select>
-            </div>
-            {/* Row 3: Activity */}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-[4.5rem] shrink-0 text-[10px] font-semibold uppercase tracking-widest text-soft-ink">Activity</span>
-              <select className={field} value={filters.kind} onChange={(event) => setFilters({ ...filters, kind: event.target.value })}><option value="">Any activity</option>{filterOptions.kinds.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
-              <select className={field} value={filters.skill} onChange={(event) => setFilters({ ...filters, skill: event.target.value })}><option value="">Any skill</option>{filterOptions.skills.map((skill) => <option key={skill} value={skill}>{skill}</option>)}</select>
-              <select className={field} value={filters.difficulty} onChange={(event) => setFilters({ ...filters, difficulty: event.target.value })}><option value="">Any difficulty</option>{filterOptions.difficulties.map((entry) => <option key={entry} value={entry}>{entry}</option>)}</select>
-              <select className={field} value={filters.agent} onChange={(event) => setFilters({ ...filters, agent: event.target.value })}><option value="">Any agent</option>{filterOptions.agents.map((agent) => <option key={agent} value={agent}>{agent}</option>)}</select>
-              <select className={field} value={filters.template} onChange={(event) => setFilters({ ...filters, template: event.target.value })}><option value="">Any template</option>{filterOptions.templates.map((template) => <option key={template} value={template}>{template}</option>)}</select>
-              {activeFilters ? <button type="button" className={ghostBtn} onClick={() => { setFilters(EMPTY_FILTERS); setPlanId(""); setLearner(""); }}>Clear filters</button> : null}
-            </div>
-          </div>
-        </PhoneCollapse>
+            </label>
+          ) : null}
+          <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
+            Period
+            <select className={field} value={custom ? "custom" : String(range)} onChange={(event) => {
+              const value = event.target.value;
+              if (value === "custom") { setCustom(true); setRange(0); return; }
+              setCustom(false);
+              setFilters({ ...filters, from: "", to: "" });
+              setRange(Number(value));
+            }}>
+              {[["0", "All time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 3 months"], ["custom", "Choose dates…"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          {custom ? (
+            <>
+              <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} aria-label="From" title="From this date" />
+              <span className="text-xs text-soft-ink">to</span>
+              <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} aria-label="Up to" title="Up to this date" />
+            </>
+          ) : null}
+          {!isOwn ? (
+            <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
+              {role === "teacher" ? "Student" : "Child"}
+              <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
+                <option value="">{role === "teacher" ? "Whole class" : "All children"}</option>
+                {learners.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
+            </label>
+          ) : null}
+          {planId || learner || custom || range ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { setPlanId(""); setLearner(""); setCustom(false); setRange(0); setFilters(EMPTY_FILTERS); }}>Reset</button> : null}
+        </div>
         <p className="m-0 text-[11px] text-soft-ink">{attempts.length} result{attempts.length === 1 ? "" : "s"} · {stats.questions} questions · average {percent(stats.score)} <span className={tone(stats.score)}>●</span></p>
         {notice ? <p className="m-0 text-xs text-[var(--accent-ink)]">{notice}</p> : null}
       </div>

@@ -4,23 +4,30 @@
  * "You got six questions wrong" tells a learner nothing they did not already know. What helps is
  * the shape of the mistakes: a concept that is misunderstood, a procedure slipping, arithmetic,
  * misreading the question, or simply not knowing a prerequisite — each one calls for different
- * work. The taxonomy below is the standard one; the classifier reads the evidence Luna already has
+ * work. The classifier reads the evidence Luna already has
  * (the answer given, the answer expected, how the same learner did on the same topic elsewhere)
  * and says which kind it looks like, and Luna's own reading can refine it.
  */
 
+/**
+ * Three kinds of gap, and no more. They do not overlap and between them they cover every wrong
+ * answer (mutually exclusive, collectively exhaustive), because each one is fixed by different work:
+ *
+ *  - Topic knowledge: the idea is not understood, or something it rests on is missing → go back to the explanation.
+ *  - Analytical: the idea is there, the reasoning or the working goes wrong (steps, arithmetic, applying it to a new case) → practise the method.
+ *  - Accuracy: attention to detail — a slip, a misread question, an answer left blank or unfinished → slow down and check.
+ *
+ * Finer causes still exist underneath (the mastery engine counts eight of them); each one belongs to exactly one of the three.
+ */
 export const ERROR_TYPES = [
-  { id: "conceptual", label: "Conceptual", blurb: "The idea itself is misunderstood.", advice: "Go back to the explanation before practising again.", colour: "#d7003a", ink: "#b30031" },
-  { id: "procedural", label: "Procedural", blurb: "Right idea, the steps go wrong.", advice: "Work through two examples slowly, writing every step.", colour: "#b25e00", ink: "#8a4a00" },
-  { id: "calculation", label: "Calculation", blurb: "The reasoning is right, the arithmetic is not.", advice: "Slow down on the arithmetic and check the last line.", colour: "#ff9f0a", ink: "#8a5a00" },
-  { id: "interpretation", label: "Misread the question", blurb: "Answered something the question did not ask.", advice: "Underline what is being asked before answering.", colour: "#8e44ad", ink: "#73348f" },
-  { id: "application", label: "Application", blurb: "Fine in familiar exercises, lost in a new context.", advice: "Practise the same idea in word problems.", colour: "#0aa2c0", ink: "#04708a" },
-  { id: "gap", label: "Knowledge gap", blurb: "A prerequisite is missing.", advice: "Cover the prerequisite first — practice will not fix this.", colour: "#5b5bd6", ink: "#4242b0" },
-  { id: "careless", label: "Careless", blurb: "Known elsewhere, missed here.", advice: "Re-read the answer before submitting.", colour: "#6e6e73", ink: "#5b5b60" },
-  { id: "incomplete", label: "Incomplete", blurb: "Started right, stopped early or left blank.", advice: "Finish the reasoning, even when unsure.", colour: "#8e98ab", ink: "#5f6878" }
+  { id: "knowledge", label: "Topic knowledge gap", blurb: "The concept is not understood, or something it builds on is missing.", advice: "Go back to the explanation and the prerequisite before practising again.", colour: "#d7003a", ink: "#b30031", covers: ["conceptual", "gap"] },
+  { id: "analytical", label: "Analytical gap", blurb: "The idea is there; the maths or the reasoning goes wrong.", advice: "Work through two examples slowly, writing every step, then try a new context.", colour: "#b25e00", ink: "#8a4a00", covers: ["procedural", "calculation", "application"] },
+  { id: "accuracy", label: "Accuracy", blurb: "Attention to detail: slips, misread questions, questions left blank.", advice: "Underline what is asked, answer every question, and re-read before submitting.", colour: "#6e6e73", ink: "#5b5b60", covers: ["careless", "interpretation", "incomplete"] }
 ];
 
-export const typeOf = (id) => ERROR_TYPES.find((type) => type.id === id) || ERROR_TYPES[0];
+/** The one of the three a finer cause (or an older stored label) belongs to. */
+export const groupOf = (id) => ERROR_TYPES.find((type) => type.id === id || type.covers.includes(id))?.id || "knowledge";
+export const typeOf = (id) => ERROR_TYPES.find((type) => type.id === groupOf(id)) || ERROR_TYPES[0];
 
 const normalise = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 const numbersIn = (value) => (String(value || "").match(/-?\d+(?:[.,]\d+)?/g) || []).map((entry) => Number(entry.replace(",", ".")));
@@ -88,15 +95,16 @@ export function analyseErrors(evidence = []) {
   const rows = wrong.map((row) => {
     const topicRows = byTopic.get(row.topic) || [];
     const topicAccuracy = topicRows.length ? topicRows.filter((entry) => entry.correct).length / topicRows.length : 0;
-    const type = row.errorType || classifyError(row, { topicAccuracy, repeats: repeatsOf(row), options: optionsOf(row) });
-    return { ...row, errorType: type };
+    const cause = row.errorType || classifyError(row, { topicAccuracy, repeats: repeatsOf(row), options: optionsOf(row) });
+    return { ...row, errorType: groupOf(cause), cause };
   });
 
-  const counts = new Map();
+  const counts = new Map(ERROR_TYPES.map((type) => [type.id, 0]));
   for (const row of rows) counts.set(row.errorType, (counts.get(row.errorType) || 0) + 1);
+  // All three are always listed, so the framework is visible even when one of them is empty.
   const types = [...counts.entries()]
     .map(([id, count]) => ({ ...typeOf(id), id, count, share: count / rows.length, examples: rows.filter((row) => row.errorType === id).slice(0, 3) }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.count - a.count || ERROR_TYPES.findIndex((type) => type.id === a.id) - ERROR_TYPES.findIndex((type) => type.id === b.id));
 
   const perTopic = new Map();
   for (const row of rows) {

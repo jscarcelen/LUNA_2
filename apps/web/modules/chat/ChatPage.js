@@ -9,6 +9,7 @@ import { ReaderView } from "../reader/ReaderView";
 import { chargeRun, readCredits } from "../credits/credits";
 import { planChoicesOf, saveResourceFlow } from "../resources/saveFlow";
 import { agentFromAction, documentFromAction, runProposedAgent } from "./actions";
+import { LOOSE_FOLDER } from "../plans/folders";
 
 const STORAGE_KEY = "luna.chat.v1";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -384,7 +385,7 @@ export function ChatPage({ toolContext = {} }) {
           defaultName={saving.resource.name}
           folders={allFolders}
           hideUnfiled
-          defaultFolderId={subjectNode(selectedSubjectId || "")}
+          defaultFolderId={allFolders.find((folder) => folder.subjectId === selectedSubjectId && folder.name === LOOSE_FOLDER)?.id || subjectNode(selectedSubjectId || "")}
           plans={planChoices.map((choice) => ({ id: choice.id, name: choice.name }))}
           canActivity={Boolean(saving.resource.activity?.questions?.length)}
           summary={`${saving.resource.activity?.questions?.length ? `${saving.resource.activity.questions.length} questions · ` : ""}Made by the assistant`}

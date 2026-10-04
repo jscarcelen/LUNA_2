@@ -24,6 +24,7 @@ import { AgentBrief } from "./AgentBrief";
 import { oneLiner } from "./briefParser";
 import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
 import { composeRefinementPrompt, describeResult } from "../../pipeline/iterateContext";
+import { LOOSE_FOLDER } from "../../../plans/folders";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -1049,7 +1050,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           hideUnfiled
           plans={planChoices.map((choice) => ({ id: choice.id, name: choice.name }))}
           canActivity={Boolean(activity && activity.questions.length)}
-          defaultFolderId={saveFolderId || subjectNode(subjectId)}
+          defaultFolderId={saveFolderId || filingFolders.find((folder) => folder.subjectId === subjectId && folder.name === LOOSE_FOLDER)?.id || subjectNode(subjectId)}
           onCreateFolder={toolContext?.onCreateFolder ? async (name, parentNode) => {
             const parent = parseNode(parentNode || subjectNode(subjectId));
             const target = parent.subjectId || subjectId;

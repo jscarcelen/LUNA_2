@@ -10,6 +10,7 @@ import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools
 import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
+import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -353,7 +354,9 @@ export function WorkspaceBrowser({
     }
     setStatus(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`);
     try {
-      const base = current?.kind === "folder" ? current.folderId : "";
+      // With no folder chosen, uploads go to the topic's "Uploaded material" folder.
+      const uploadedHome = subjectStructure((workspace?.subjects || []).find((entry) => entry.id === uploadSubjectId)?.folders || []).uploadedId;
+      const base = current?.kind === "folder" ? current.folderId : (uploadedHome || "");
       const created = new Map();
       const withFolders = [];
       for (const file of files) {
@@ -627,6 +630,8 @@ export function WorkspaceBrowser({
                 const children = childrenOf.get(folder.id) || [];
                 const total = countVisible(folder.id);
                 const paddingLeft = 8 + depth * 20;
+                const shortcut = isReferenceShortcut(folder, folders);
+                const uploadedTarget = shortcut ? folders.find((entry) => entry.subjectId === folder.subjectId && entry.name === UPLOADED_FOLDER && entry.parentFolderId === subjectNode(entry.subjectId)) : null;
 
                 return (
                   <div key={folder.id}
@@ -648,7 +653,7 @@ export function WorkspaceBrowser({
                       onDragEnd={() => { dragRef.current = null; }}
                       className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
                       <button type="button" className="w-4 shrink-0 text-center text-[10px] text-soft-ink" onClick={() => toggleNode(folder.id)}>{isOpen ? "▾" : "▸"}</button>
-                      <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : "📁"}</span>
+                      <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
                       <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
@@ -660,6 +665,17 @@ export function WorkspaceBrowser({
 
                     {isOpen && (
                       <div>
+                        {/* A plan's "Reference materials" is a link to the uploaded material, never a second copy of it. */}
+                        {shortcut ? (
+                          <div className="flex items-center gap-2 rounded-xl px-2 py-1.5 text-sm" style={{ paddingLeft: paddingLeft + 20 }}>
+                            <span aria-hidden>↪</span>
+                            {uploadedTarget ? (
+                              <button type="button" className="min-w-0 truncate text-left font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setNodeId(uploadedTarget.id); setOpenNodes((current) => new Set([...current, uploadedTarget.id])); }}>
+                                Linked to “{UPLOADED_FOLDER}” · {countVisible(uploadedTarget.id)} document{countVisible(uploadedTarget.id) === 1 ? "" : "s"} — open
+                              </button>
+                            ) : <span className="text-soft-ink">Linked to the uploaded material of this topic.</span>}
+                          </div>
+                        ) : null}
                         {docs.map((document) => (
                           <div key={document.id}
                             draggable

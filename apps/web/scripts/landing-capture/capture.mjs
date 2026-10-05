@@ -157,7 +157,6 @@ const SHOTS = [
   { name: "workspaces", run: async (p) => { await go(p, "Workspaces"); await p.click("text=Expand all"); await wait(800); } },
   { name: "reader", run: async (p) => { await go(p, "Workspaces"); await p.click("text=Expand all"); await wait(500); await clickRowButton(p, "Accounting.pdf", "Preview"); await wait(2200); } },
   { name: "plans", run: async (p) => { await go(p, "Study plans"); } },
-  { name: "plan", run: async (p) => { await go(p, "Study plans"); await p.locator("text=/Exam · 8 Nov/").first().click(); await wait(1800); } },
   { name: "calendar", run: async (p) => { await go(p, "Study plans"); await p.locator("button", { hasText: /^Calendar$/ }).first().click(); await wait(1500); await scrollToText(p, /Calendar · /i); await wait(500); } },
   { name: "activities", run: async (p) => { await go(p, "Activities"); } },
   { name: "results", run: async (p) => { await go(p, "Activities"); await p.locator("main button", { hasText: /^Done$/ }).first().click(); await wait(600); await p.click("text=Quiz on Income Statement and Balanc"); await wait(1200); } },
@@ -180,7 +179,6 @@ const SHOTS = [
     }
   },
   { name: "templates", run: async (p) => { await go(p, "Templates"); } },
-  { name: "template-matrix", run: async (p) => { await go(p, "Templates"); await p.getByText("Matrix", { exact: true }).first().click(); await wait(1200); } },
   {
     name: "template-preview",
     run: async (p) => {

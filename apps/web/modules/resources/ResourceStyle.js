@@ -28,7 +28,7 @@ function blocksToText(blocks = []) {
  * result previewed in every page size and view, and exported from the same place. The choice is
  * saved with the resource a moment after each change, so there is no Save button to forget.
  */
-export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
+export function ResourceStyle({ resource, documentId = "", onSaveStyles, onStatus }) {
   const blocks = useMemo(() => resourceBlocks(resource), [resource]);
   const isBlocks = Boolean(resource?.data?.isBlockOutput);
   const [styles, setStyles] = useState(() => (resource?.request?.outputStyles && typeof resource.request.outputStyles === "object" ? resource.request.outputStyles : {}));
@@ -111,7 +111,7 @@ export function ResourceStyle({ resource, onSaveStyles, onStatus }) {
           filename={resource.name || "resource"}
           onError={onStatus}
           emptyHint="Nothing to show yet."
-          interactive={<InteractiveView resource={resource} />}
+          interactive={<InteractiveView resource={resource} chat={{ documentId }} />}
         />
       </div>
     </div>

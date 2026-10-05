@@ -3,6 +3,8 @@ import { selectChunksWithinBudget } from "./retrieval.js";
 import { loadWorkspaceTreeForAi } from "./workspaceSource.js";
 import { validateOutput } from "../../agent-studio/engine/validate";
 import { buildJsonSchema as buildBlockJsonSchema, conformBlocks, BLOCKS } from "../blocks/blockRegistry.js";
+import { consolidationOptions, estimateConsolidationTokens, prepareSources, runConsolidation } from "./consolidator.js";
+import { isMasterDocument } from "./masterDocument.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o", label: "Luna 3 Pro (Recommended, high quality)", tier: "standard" },
@@ -44,7 +46,7 @@ export function isAgentLlmConfigured() {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
-function collectScopedDocuments(workspaces, scope = {}) {
+export function collectScopedDocuments(workspaces, scope = {}) {
   const workspaceFilter = String(scope.workspaceId || "").trim();
   const subjectFilter = String(scope.subjectId || "").trim();
   const documentIds = new Set((scope.documentIds || []).filter(Boolean));
@@ -55,7 +57,9 @@ function collectScopedDocuments(workspaces, scope = {}) {
     for (const subject of workspace.subjects || []) {
       if (subjectFilter && subject.id !== subjectFilter) continue;
       for (const document of subject.documents || []) {
-        if (document.sourceType === "generated") continue;
+        // A generated document is never material — except a master document (a consolidation of
+        // uploaded documents) that was picked explicitly: later quizzes cite it instead of the originals.
+        if (document.sourceType === "generated" && !(isMasterDocument(document) && documentIds.has(document.id))) continue;
         if (String(document.reviewStatus || "approved") !== "approved") continue;
         if (documentIds.size && !documentIds.has(document.id)) continue;
         matches.push({ ...document, workspaceId: workspace.id, subjectId: subject.id });
@@ -263,6 +267,7 @@ async function prepareMaterial(config, emit = () => {}) {
  * tokens out (from the schema and requested count) and USD at list price.
  */
 export async function estimateAgentRun(config) {
+  if (isConsolidation(config)) return estimateConsolidation(config);
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   const material = await prepareMaterial(config);
   const schema = injectSourceFieldIntoSchema(config.outputJsonSchema || buildJsonSchemaFromFields(fields));
@@ -719,6 +724,102 @@ function injectSourceFieldIntoSchema(schema) {
   }
 }
 
+
+/* ---------------------------------------------------------------- Summary Notes Consolidator */
+
+/** The consolidator is an agent spec flagged with `pipeline: "consolidate"`; it has its own multi-pass pipeline. */
+export const isConsolidation = (config) => config?.spec?.pipeline === "consolidate";
+
+/** The documents the consolidator reads: every picked document, from any subject, in the order picked. */
+async function loadConsolidationDocuments(config) {
+  const ids = [...new Set((config.scope?.documentIds || []).filter(Boolean))];
+  if (!ids.length) throw new Error("Choose the documents to consolidate.");
+  const workspaces = await loadWorkspaceTreeForAi();
+  const found = collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: ids });
+  const order = new Map(ids.map((id, index) => [id, index]));
+  return found.sort((a, b) => order.get(a.id) - order.get(b.id));
+}
+
+/** One structured-output call for the consolidator passes. A truncated or unreadable answer comes back as `parsed: null`. */
+async function callConsolidationModel(config, { system, user, schema, schemaName, maxTokens }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("Missing required environment variable: OPENAI_API_KEY");
+  const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({
+      model: resolveAgentModel(config.model),
+      temperature: creativityToTemperature(config.creativity || "low"),
+      max_tokens: maxTokens,
+      response_format: { type: "json_schema", json_schema: { name: schemaName, strict: true, schema } },
+      messages: [{ role: "system", content: system }, { role: "user", content: user }]
+    })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error?.message || "OpenAI consolidation request failed");
+  }
+  const payload = await response.json();
+  const finishReason = payload.choices?.[0]?.finish_reason || "";
+  const parsed = finishReason === "length" ? null : parseJsonFromContent(payload.choices?.[0]?.message?.content);
+  return { parsed, usage: payload.usage || null, finishReason };
+}
+
+async function estimateConsolidation(config) {
+  const documents = await loadConsolidationDocuments(config).catch(() => []);
+  const { chunks } = prepareSources(documents);
+  const model = resolveAgentModel(config.model);
+  const { inputTokens, outputTokens } = estimateConsolidationTokens(chunks);
+  const price = MODEL_PRICING[model] || MODEL_PRICING[MIN_AGENT_MODEL];
+  return {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: Number(((inputTokens * price.input + outputTokens * price.output) / 1e6).toFixed(5)),
+    documentCount: documents.length,
+    chunkCount: chunks.length,
+    // The consolidator reads everything: no ranking, no budget.
+    truncated: false,
+    llmConfigured: isAgentLlmConfigured()
+  };
+}
+
+async function runConsolidationAgent(config, emit) {
+  emit({ step: "scope", status: "start" });
+  const documents = await loadConsolidationDocuments(config);
+  if (!documents.length) throw new Error("None of the chosen documents could be read (they must be approved, uploaded documents).");
+  emit({ step: "scope", status: "end", documentCount: documents.length });
+  const llm = isAgentLlmConfigured();
+  const model = llm ? resolveAgentModel(config.model) : "local-heuristic-v1";
+  emit({ step: "retrieve", status: "end", chunkCount: 0, note: "Everything is read: nothing is ranked or left out" });
+  emit({ step: "generate", status: "start", model });
+  const result = await runConsolidation({
+    documents,
+    options: consolidationOptions(config),
+    deps: { emit, callModel: llm ? (request) => callConsolidationModel(config, request) : null }
+  });
+  emit({ step: "generate", status: "end", model, blockCount: result.blocks.length });
+  const payload = {
+    blocks: result.blocks,
+    items: result.blocks,
+    // `title` heads the document; `originals` and `coverage` are kept with the saved resource.
+    data: { title: result.title, originals: result.originals, coverage: result.coverage },
+    model,
+    usage: result.usage.total_tokens ? result.usage : null,
+    fallbackReason: llm ? "" : "No OpenAI key: the documents were merged by heading and de-duplicated without a model.",
+    checks: [],
+    referenceDocumentCount: documents.length,
+    referenceChunkCount: result.coverage.passages,
+    // Quizzes cite passages of the master document, not of this run, so there are none to list here.
+    sources: [],
+    isBlockOutput: true,
+    consolidation: { originals: result.originals, coverage: result.coverage, stats: result.stats }
+  };
+  emit({ step: "done", status: "end", ...payload });
+  return payload;
+}
+
 /**
  * Runs one agent generation. `onProgress` (optional) receives step events so callers can
  * stream a live "building" state to the UI:
@@ -729,6 +830,9 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   const emit = (event) => {
     if (typeof onProgress === "function") onProgress(event);
   };
+
+  // ── Summary Notes Consolidator: its own multi-pass pipeline (map → organise → merge → check) ──
+  if (isConsolidation(config)) return runConsolidationAgent(config, emit);
 
   // ── Block-based generation path ──────────────────────────────────────
   // When the agent spec uses the new block registry (output.selectedBlocks), we bypass

@@ -87,6 +87,11 @@ export interface AgentSpec {
     /** Optional natural-language instructions for what the output should look like. */
     outputInstructions?: string;
   };
+  /**
+   * Built-in agents whose run is not one model call. "consolidate" = the Summary Notes Consolidator's
+   * map, organise, merge and check pipeline (`ai-tools/pipeline/consolidator.js`).
+   */
+  pipeline?: "consolidate";
   createdAt: string;
   updatedAt: string;
 }

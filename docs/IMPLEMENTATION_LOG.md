@@ -1,5 +1,52 @@
 # Implementation Log
 
+## 2026-10-04 (master document)
+
+### Summary Notes Consolidator and the plan's master document
+
+- New built-in agent **Summary Notes Consolidator** (AI agents tab): pick documents from any subject or
+  folder (`WorkspaceDocumentPicker`), a language and an optional focus; get one exhaustive, de-duplicated
+  document organised by topic, with formulas, tables and figure descriptions, every statement ending in
+  a `[D1 p.3 · D2 §Osmosis]` tag and a source key at the top. Spec `createSummaryNotesConsolidatorSpec`
+  (`pipeline: "consolidate"`), tool `tools/summary-consolidator/`, output blocks = document structure.
+- **Long inputs**: `pipeline/consolidator.js` replaces the single (≈48k chars in / 6k tokens out) call with
+  four passes that keep every passage — map (12k-char parts, halve on failure, re-ask for skipped passages,
+  carry over verbatim as the last resort) → organise (outline from topic titles only) → merge (per section,
+  drafts from all documents) → check (missing LaTeX formulas appended). Streams `progress` events; the
+  stream route now allows 300 s and the pipeline degrades to local parsing/de-duplication past 60 % / 90 %
+  of a 270 s budget. Cost estimate in the run page covers all passes (`estimateConsolidationTokens`).
+- **Study plans**: with 2+ uploaded documents `executePlan` builds the master document FIRST (streamed),
+  files it once in the plan's folder (rewritten in place if the uploads change), stores
+  `plan.masterDocumentId` / `masterSourceIds`, and every later quiz, flashcard set or summary reads it
+  (`scope.documentIds = [master]`), so `attachSources`, `/source` and chat sources point at the
+  consolidated document. `materialIds` stay the uploads (concept maps, the "Reference materials"
+  shortcut); the master is generated material and is deleted with the plan. The dialog shows a "Merging
+  your documents into one master document" step between saving and writing (`planBuildSteps`).
+- `pipeline/masterDocument.js`: a master document is a `resource` tagged `master-document`; the workspace
+  loader reads it as Markdown (tags expanded to the original documents' names) and `collectScopedDocuments`
+  admits it only when picked explicitly. Manually saved consolidations get the tag too.
+- Dashboard: requests A9–A11 (read / outline / merge) and a "Master document" flow node
+  (`npm run dashboard:check` clean; not published). Tests: `tests/consolidation/*`, `tests/plans/master.test.ts`.
+## 2026-10-04 (accounts)
+
+### Email accounts, connections, sharing (first version)
+
+- Migration `202610040001_accounts_links_sharing.sql` (**not applied by the agent; apply it**): `accounts`,
+  `account_links`, `shared_items`, RLS on, service-role only. Every accounts route answers
+  `{ error, setupNeeded: true }` (503) until it exists, and the UI renders an explicit notice.
+- `lib/accountsCore.js` (pure: email/password rules, scrypt, signed session tokens, cookies, link state machine,
+  delivery authorisation, setup detection), `lib/session.js` (`ownerUserIdFor(request)`: session account id, else
+  the demo owner; the demo page `/app` never sees account data), `lib/accountsRepository.js`,
+  `lib/sharingRepository.js`, `lib/workspaceGuard.js`, `lib/resourceAccess.js`, routes in `app/api/accounts/*`.
+- `/platform` (AppShell with `account`: fixed role, account menu with Log out, Connections, My students /
+  My children), `/login`, `components/auth/AuthModal.js` (used by the landing page).
+- Workspace route and the routes that took a demo owner (attempts, replan, concepts, mastery, patterns,
+  recommendations, chat, the AI pipeline via `currentOwnerUserId`) now derive the owner from the session; for an
+  account every id in a workspace request is checked for ownership and shared copies are read-only.
+- Share / assign: read-only copies into `Shared documents / <sender>` with `shared-by:` / `assigned-by:` / `due:`
+  tags; plans travel with their activities. Tests: `tests/accounts/*` (117).
+- New env var `LUNA_SESSION_SECRET` (required in production). Details: `docs/ACCOUNTS.md`.
+
 ## 2026-09-24 (components)
 
 ### One design language for the components
@@ -906,3 +953,8 @@
 - Knowledge gaps are three, mutually exclusive and exhaustive (`performance/errors.js`): Topic knowledge gap, Analytical gap, Accuracy; the eight finer causes of the mastery engine each belong to exactly one. All three are always listed.
 - Folders (`plans/folders.js`): a new topic gets Uploaded material and Generated material (Study plans, Resources not in study plans). A plan gets Generated material / Study plans / <plan> / Reference materials, which is a shortcut to Uploaded material shown in the tree — documents are never filed twice. New uploads default to Uploaded material, new resources to Resources not in study plans.
 - Building a plan shows a step-by-step progress panel with what each step is doing and a counter for the quizzes and summaries being written (`plans/PlanProgress.js`).
+
+## 2026-10-04 (2) — Home page, and Ask Luna beside the material
+- **Home** (`dashboard/ui/DashboardPage.js`, `dashboard/home.js`): "Hi <first name>", one row of at most four study-plan cards (closest upcoming deadline first, across every subject of the workspace; sub-plans rolled into their parent), then "Next steps from Luna" — the performance coach (`CoachPanel`, `/api/performance/coach`) fed with the evidence of exactly those plans, reading by itself (`autoRead`, cached against the evidence), or the steps due soonest while there are no results. No plans → one line and "Plan it for me" / "Upload material". Same for student, teacher and parent. The sample-data dashboards and `dashboard/insights.js` are gone.
+- The plan card is now `plans/PlanCard.js` (with `Ring`), used by Study plans and Home. New page targets: `plans?open=<documentId>` (AppShell selects the plan's subject) and `plans?generate=1` (opens "Plan it for me").
+- **Ask Luna**: a floating button in the full-screen reader and the in-place interactive view opens the chatbot beside the material (side panel on a computer, bottom sheet on a phone; it and the notes panel never open together). It reads the study plan's documents (+ master document, + the reference documents the item was made from), else the subject's uploaded documents, and is told what the user is doing ("Doing the quiz X, 3 of 10 answered, not checked", "Reading Y, showing the part about Z"). It answers only from that material with [P#] references, gives hints instead of the answer of an unchecked question, and records no attempt. Server: `context` on `/api/chat`, `buildMaterialPrompt`, `scope.documentIds` / `scope.readableGeneratedIds`, tools limited to search/list. Charged in lunas as "Ask Luna". Dashboard catalogue A8 lists the new prompt. Callers pass what they know (`chat={{ documentId, planId, sourceDocumentIds }}`): Study plans, Workspaces, Activities, Resource detail, Run agent.

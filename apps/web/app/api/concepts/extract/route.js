@@ -13,6 +13,8 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
 import { extractAndSaveConcepts } from "../../../../lib/conceptsRepository.js";
+import { ownerUserIdFor } from "../../../../lib/session.js";
+import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,8 +25,8 @@ export async function POST(request) {
     const body = await request.json();
     const documentId  = String(body?.documentId  || "").trim();
     const workspaceId = String(body?.workspaceId || "").trim();
-    // ownerUserId optional — fall back to LUNA_DEMO_USER_ID for backward compat
-    const ownerUserId = String(body?.ownerUserId || process.env.LUNA_DEMO_USER_ID || "").trim();
+    // The owner is the logged-in account, else the demo owner; a body value is never trusted.
+    const ownerUserId = ownerUserIdFor(request);
 
     if (!documentId || !workspaceId) {
       return NextResponse.json(
@@ -32,6 +34,9 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const denied = await denyUnlessOwner(request, { workspaceId, documentId });
+    if (denied) return denied;
 
     const supabase = createSupabaseAdminClient();
 

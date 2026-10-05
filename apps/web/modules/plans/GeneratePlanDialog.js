@@ -5,6 +5,7 @@ import { PlanProgress } from "./PlanProgress";
 import { PLAN_COLOURS, buildPlan, newDeadline, newGoal, newItem } from "./plan";
 import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
 import { capConceptTree } from "./conceptTree";
+import { MASTER_STEP_ID, planBuildSteps } from "./master";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
 
@@ -161,12 +162,10 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   }
 
   const documentCount = picked.length;
-  const steps = [
-    { id: "concepts", title: "Reading your material", detail: `Luna is reading ${documentCount} document${documentCount === 1 ? "" : "s"} and listing the concepts in them, so the plan can cover every one.` },
-    { id: "schedule", title: "Planning the schedule", detail: "Spreading the concepts over the weeks until your deadline, fitted to your time per week and what you keep getting wrong — then checking that nothing is left untested." },
-    { id: "save", title: "Saving the plan and setting up its folders", detail: "Filing the plan under Generated material → Study plans, with a link to your uploaded material." },
-    ...(buildNow ? [{ id: "build", title: "Writing the quizzes, flashcards and summaries", detail: "Each study step gets its material, written by the agent you allowed from your documents. This is the longest part." }] : [])
-  ];
+  // With two or more uploaded documents, the first thing built is their master document.
+  const uploadedCount = picked.filter((id) => documents.find((doc) => doc.id === id)?.sourceType !== "generated").length;
+  const withMaster = uploadedCount >= 2;
+  const steps = planBuildSteps({ documentCount, uploadedCount, buildNow, withMaster });
 
   async function generate() {
     setBusy(true);
@@ -240,8 +239,16 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         : "";
       const planned = `Planned ${items.length} step${items.length === 1 ? "" : "s"} up to ${new Date(`${deadline}T00:00:00`).toLocaleDateString()}${performance ? ", fitted to how you have been scoring" : ""}.${coverageNote}`;
       if (buildNow && onBuild && items.some((item) => item.generate)) {
-        setCurrentId("build");
-        const result = await onBuild(plan, saved?.id || saved?.documentId || "", ({ index, total, title }) => setSub({ done: index, total, label: title }));
+        setCurrentId(withMaster ? MASTER_STEP_ID : "build");
+        const result = await onBuild(plan, saved?.id || saved?.documentId || "", (event) => {
+          if (event.phase === "master") {
+            setCurrentId(MASTER_STEP_ID);
+            setSub(event.of ? { done: event.done || 0, total: event.of, label: event.detail } : null);
+          } else {
+            setCurrentId("build");
+            setSub({ done: event.index, total: event.total, label: event.title });
+          }
+        });
         onDone?.(`${planned} ${result?.created || 0} resource${result?.created === 1 ? "" : "s"} generated and filed${result?.failures?.length ? `, ${result.failures.length} still to build` : ""}.`, { built: true });
         return;
       }

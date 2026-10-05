@@ -4,6 +4,8 @@
  *   <Topic> / Uploaded material
  *           / Generated material / Study plans / <a plan> / Reference materials   ← a shortcut to "Uploaded material"
  *                                                          (the plan's quizzes and summaries are filed here too)
+ *                                                          (and, for a plan built from 2+ uploaded documents, its
+ *                                                           master document — generated, filed once, see ./master.js)
  *                               / Resources not in study plans
  *
  * Nothing is ever copied: a document lives once, in "Uploaded material". A plan's "Reference

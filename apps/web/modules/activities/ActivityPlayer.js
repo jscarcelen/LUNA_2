@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
 import { FlashcardDeck } from "./FlashcardDeck";
 
@@ -50,8 +50,9 @@ function SourceNote({ source }) {
   );
 }
 
-function QuestionList({ activity, onSubmit, onClose, look = null }) {
+function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) {
   const [answers, setAnswers] = useState({});
+  const [lastId, setLastId] = useState("");
   const [confidence, setConfidence] = useState({});
   const [attempt, setAttempt] = useState(null);
   const [flipped, setFlipped] = useState({});
@@ -71,8 +72,15 @@ function QuestionList({ activity, onSubmit, onClose, look = null }) {
     if (state.current) { state.durations[state.current] = (state.durations[state.current] || 0) + (Date.now() - state.since); state.current = ""; }
     return state.durations;
   };
-  const set = (id, value) => { touch(id); setAnswers((prev) => ({ ...prev, [id]: value })); };
+  const set = (id, value) => { touch(id); setLastId(id); setAnswers((prev) => ({ ...prev, [id]: value })); };
   const answered = activity.questions.filter((q) => { const v = answers[q.id]; return q.kind === "match" ? v && Object.keys(v).length === (q.pairs || []).length : q.kind === "tiles" ? Array.isArray(v) && !v.includes(null) : v !== undefined && v !== ""; }).length;
+  // Lets whoever hosts the player (the "Ask Luna" chat) know where the learner is, without seeing any answer.
+  useEffect(() => {
+    if (typeof onProgress !== "function") return;
+    const index = activity.questions.findIndex((q) => q.id === lastId);
+    const question = activity.questions[index];
+    onProgress({ answered, total: activity.questions.length, checked: Boolean(attempt), score: attempt?.score ?? 0, current: question ? { number: index + 1, prompt: question.kind === "match" ? "Match each pair" : question.kind === "tiles" ? "Rebuild the grid" : String(question.prompt || "") } : null });
+  }, [answered, attempt, lastId]);
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
   function check() {

@@ -368,6 +368,42 @@ asking because sure-and-wrong is a misconception to correct while unsure-and-wro
 teach — the error taxonomy uses it, and the result screen says which questions the learner was sure
 about and got wrong.
 
+### 5.1o Ask Luna beside the material, and a very simple Home (founder spec, 2026-10-04)
+
+**Ask Luna.** In every interactive or HTML view of anything on Luna (a quiz, an exam, flashcards, a
+summary, an uploaded document) there is a chat button. It is the same chatbot, with the material
+already chosen: all of the study plan the item belongs to (its documents and master document) and the
+uploaded reference documents it was made from, plus what the user is doing right now (this exam, this
+document and the part shown). It answers only from that material with references, guides instead of
+revealing the answer to a question that has not been checked, and leaves no trace in the performance
+data: chatting is not an attempt. It costs lunas like the Assistant page. Original: "In the interactive
+views of generated material or html document (anything on Luna with html), add a chat so that if they
+have questions, to be answered based on the material".
+
+**Home.** Home is deliberately small: "Hi <name>", one row of at most four study-plan cards (the
+plans with the closest deadlines, the same cards as in Study plans, completion score and all), and
+below it the next steps Luna proposes from performance and plan urgency, as in the Performance tab.
+Nothing else. It looks across every topic of the workspace and is the same for student, teacher and
+parent.
+
+### 5.1p The master document of a study plan (founder spec, 2026-10-04)
+
+**When a plan is built from several uploaded documents, the first thing built is one master
+document.** It is not the documents one after the other: it is consolidated and comprehensive — all
+the information of all the documents, organised by topic, with information that overlaps between
+documents written once. It keeps the formulas (LaTeX), the tables and a description of every image or
+figure, and it says where each statement comes from (original document and page or section), so it
+traces back to every original. Every quiz, flashcard set or summary the plan makes afterwards reads
+this document, so its "source" links point at one consolidated document (which itself traces back to
+the originals). It is filed once, in the plan's folder; the plan's "Reference materials" shortcut still
+points at the uploaded material.
+
+**It is also an agent in the AI agents tab: "Summary Notes Consolidator".** The runner picks documents
+from any subject or folder of the workspace and the language, and gets the exhaustive structured
+document. Completeness is the point: nothing may be dropped, however long the documents are (the
+agent works in passes — read every part, outline by topic, merge each section, check formulas — rather
+than in one model call).
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -569,7 +605,14 @@ Si 7 profes te generan los mismos agentes, que no sean distintos agentes, sino q
 Set de guardrails
 ```
 
+### 2026-10-04 — Master document for study plans (verbatim)
+
+In study plan, when there are multiple uploaded reference materials, the first step is to create a master document with all the information of all documents. It would be nice to include how it traces back to each original document. Then, whenever making a reference from a generated material (e.g., quiz) to the source, it will refer to this consolidated document, which will make it easier. Hence, you need to make a pre-built agent in the agent tab that is called something like 'Summary notes consolidator', allows selecting the different documents from the workspaces, the language, and generates an exhaustive structured document with all the information. It is key to make sure that all the information is there, but many times the documents have overlapping information, that should only appear once — my point is that it is consolidated and comprehensive, not just a stack of all documents one after the other, because then it is useless. Include formulas, tables, image descriptions, etc.
+
 ## Appendix B — Change log of this document
+- 2026-10-04 — Added §5.1o: Ask Luna beside the material (plan documents + reference documents + what the user is doing, hint-not-answer, no attempts recorded) and the very simple Home (greeting, four most urgent plan cards, next steps).
+- 2026-10-04 — Added §5.1p: the master document of a study plan and the Summary Notes Consolidator agent.
+- 2026-10-04 — Accounts (see docs/ACCOUNTS.md): sign in with email next to the unchanged demo; teacher↔student and parent↔student connections that need both sides to accept (also requested at sign-up by email); teachers/parents assign activities and study plans and share read-only files that land under "Shared documents / <sender>"; a parent can follow several children's performance. Founder: "Same between parent and students and vice versa."
 - 2026-09-24 — Added §5.1n: templates assembled from components, one design language for the component library, and the confidence check on question cards.
 - 2026-09-24 — Added §5.1m: the interface critic, no text overspill, iPhone and iPad, study plans as the tracked targets, the error-reading coach, and the arrangeable performance tab sold as dashboards.
 - 2026-09-24 — Added §5.1l: the learning intelligence layer (mastery model, error taxonomy) and the student, parent and teacher dashboards built on it.

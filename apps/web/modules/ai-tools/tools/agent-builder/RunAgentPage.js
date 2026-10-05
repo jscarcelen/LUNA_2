@@ -25,6 +25,8 @@ import { oneLiner } from "./briefParser";
 import { folderNode, foldersOf, parseNode, subjectNode } from "../../../workspace/ui/folderModel";
 import { composeRefinementPrompt, describeResult } from "../../pipeline/iterateContext";
 import { LOOSE_FOLDER } from "../../../plans/folders";
+import { WorkspaceDocumentPicker } from "./WorkspaceDocumentPicker";
+import { MASTER_TAG } from "../../pipeline/masterDocument";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -384,6 +386,10 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     [documents]
   );
 
+  /** The Summary Notes Consolidator reads documents from anywhere in the workspace, not only the open subject. */
+  const consolidating = agentConfig?.spec?.pipeline === "consolidate";
+  const workspaceDocuments = useMemo(() => (selectedWorkspace?.subjects || []).flatMap((subject) => subject.documents || []), [selectedWorkspace]);
+
   const fields = useMemo(() => (Array.isArray(agentConfig?.template?.fields) ? agentConfig.template.fields : []), [agentConfig]);
   const questions = Array.isArray(agentConfig?.questions) ? agentConfig.questions : [];
   const requiredUnanswered = questions.filter((question) => {
@@ -489,12 +495,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         inputValues: answersByQuestionId,
         scope: {
           workspaceId,
-          subjectId,
+          // Picked documents may belong to any subject, so the consolidator is not limited to the open one.
+          subjectId: consolidating ? "" : subjectId,
           documentIds: [...(knowledgeMode === "workspace" ? referenceDocumentIds : []), ...((agentConfig.scope && agentConfig.scope.documentIds) || [])],
           styleDocumentIds
         }
     };
-  }, [agentConfig, questions, answersByQuestionId, knowledgeMode, contextPromptDraft, fields, workspaceId, subjectId, referenceDocumentIds, styleDocumentIds]);
+  }, [agentConfig, questions, answersByQuestionId, knowledgeMode, contextPromptDraft, fields, workspaceId, subjectId, referenceDocumentIds, styleDocumentIds, consolidating]);
   const { estimate: runEstimate, loading: estimating } = useRunEstimate(runConfig, Boolean(runConfig) && !generation.isGenerating);
 
   // Apply the saved request once the agent config is in place.
@@ -749,7 +756,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!onSaveGeneratedQuizDocument) return;
     setIsSavingDocument(true);
     try {
-      const sourceNames = referenceDocumentIds.map((id) => documents.find((document) => document.id === id)?.name).filter(Boolean);
+      const sourceNames = referenceDocumentIds.map((id) => (consolidating ? workspaceDocuments : documents).find((document) => document.id === id)?.name).filter(Boolean);
       const payload = buildResource({
         name,
         activity: activity && activity.questions.length ? { ...activity, title: name } : null,
@@ -769,7 +776,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       });
       const content = JSON.stringify(payload, null, 2);
       const isActivity = Boolean(activity && activity.questions.length && addActivity);
-      const allTags = ["resource", ...(isActivity ? ["activity"] : []), ...(isActivity && dueDate ? [`due:${dueDate}`] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
+      // A consolidation is a master document: tagged so later agents can read it instead of the originals.
+      const allTags = ["resource", ...(output?.consolidation ? [MASTER_TAG] : []), ...(isActivity ? ["activity"] : []), ...(isActivity && dueDate ? [`due:${dueDate}`] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
       const where = filingTarget(folderId);
       const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
       // Into a study plan: one more step, pointing at the resource just saved.
@@ -861,7 +869,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       onSelection={setSelection}
       filename={agentConfig.name || "output"}
       onError={setStatusMessage}
-      interactive={readerResource ? <InteractiveView resource={readerResource} /> : null}
+      interactive={readerResource ? <InteractiveView resource={readerResource} chat={{ sourceDocumentIds: referenceDocumentIds, subjectId }} /> : null}
       emptyHint="Generate in step 1 and your result appears here, laid out with Template Studio's components."
       overlay={generation.isGenerating || generation.error ? (
         <GenerationProgress
@@ -930,8 +938,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the agent read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
               {agentConfig.materialSlots?.[0]?.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{agentConfig.materialSlots[0].description}</p> : null}
               <div className="mt-3 grid gap-3">
-                <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} />
-                {knowledgeMode === "workspace" ? (
+                {consolidating ? (
+                  <WorkspaceDocumentPicker workspace={selectedWorkspace} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} />
+                ) : null}
+                {!consolidating ? <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} /> : null}
+                {!consolidating && knowledgeMode === "workspace" ? (
                   <>
                     <DocumentPicker documents={approvedDocuments} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} emptyText="No approved documents in this subject yet. Upload some in Workspaces." />
                     {!showStyleDocs ? (
@@ -972,7 +983,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <p className={kicker}>What happens next</p>
               <ul className="m-0 mt-2 grid list-none gap-2 p-0 text-sm text-ink">
                 <li className="flex gap-2"><span className="text-[var(--accent-ink)]">1.</span> The agent reads {knowledgeMode === "workspace" ? `${referenceDocumentIds.length} document${referenceDocumentIds.length === 1 ? "" : "s"}` : "your text"}{styleDocumentIds.length ? ` and ${styleDocumentIds.length} style example${styleDocumentIds.length === 1 ? "" : "s"}` : ""}.</li>
-                <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It writes {fields.filter((field) => field.repeatScope !== "once").length} field{fields.filter((field) => field.repeatScope !== "once").length === 1 ? "" : "s"} per item: {fields.filter((field) => field.repeatScope !== "once").slice(0, 4).map((field) => field.label || field.name).join(", ")}{fields.filter((field) => field.repeatScope !== "once").length > 4 ? "…" : ""}.</li>
+                {consolidating ? (
+                  <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It merges them into one set of notes organised by topic: nothing is left out, overlapping information is written once, and every statement ends with the document and page or section it came from. A long input takes a few minutes.</li>
+                ) : (
+                  <li className="flex gap-2"><span className="text-[var(--accent-ink)]">2.</span> It writes {fields.filter((field) => field.repeatScope !== "once").length} field{fields.filter((field) => field.repeatScope !== "once").length === 1 ? "" : "s"} per item: {fields.filter((field) => field.repeatScope !== "once").slice(0, 4).map((field) => field.label || field.name).join(", ")}{fields.filter((field) => field.repeatScope !== "once").length > 4 ? "…" : ""}.</li>
+                )}
                 <li className="flex gap-2"><span className="text-[var(--accent-ink)]">3.</span> You pick a layout and export — or save it to your workspace.</li>
               </ul>
               {hasOutput ? <button type="button" className={`${ghostBtn} mt-4`} onClick={() => setFlowStep(2)}>See last result →</button> : null}
@@ -1038,6 +1053,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       {readerOpen && readerResource ? (
         <ReaderView
           resource={readerResource}
+          chat={{ sourceDocumentIds: referenceDocumentIds, subjectId }}
           notice="Not saved yet — save it as a resource and your highlights are kept with it."
           onSubmit={handleAttempt}
           onClose={() => setReaderOpen(false)}

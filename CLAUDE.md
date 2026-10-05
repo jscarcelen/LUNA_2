@@ -103,9 +103,16 @@ A template is **a selection of block formats**. Nothing more.
 - Exists: workspaces/subjects/folders/tags/documents CRUD on Supabase, DOCX/PDF document-processing
   pipeline, RAG (chunking + pgvector retrieval), OpenAI-backed quiz generator, agent builder + run
   page with template output mappings, template builder / block editor, HTML/DOCX/PDF exporters.
-- Does NOT exist yet: real auth (ownership is a hardcoded demo uuid; the student/teacher/parent
-  switch is client state with sample dashboards), quiz attempts + real analytics, marketplace
-  purchases/payments (browsing + install works; listings are localStorage), RLS, TypeScript.
+- Accounts (first version, see `docs/ACCOUNTS.md`): email + password sign-up/log-in, signed session cookie,
+  the real platform at `/platform` (role fixed by the account, own workspaces), teacher↔student and
+  parent↔student connections that need both sides to accept, read-only sharing into "Shared documents /
+  <sender>", assigning activities and study plans with a due date, and a read-only student performance view
+  for parents/teachers. **Needs migration `202610040001_accounts_links_sharing.sql` applied** (until then the
+  UI shows an explicit "Accounts need one database step" notice). The public demo at `/app` is unchanged
+  (shared demo owner `LUNA_DEMO_USER_ID`, sample profile, role switcher).
+- Does NOT exist yet: a third-party auth provider / email verification / password reset (ownership of the
+  demo is still a hardcoded uuid), quiz attempts + real analytics, marketplace
+  purchases/payments (browsing + install works; listings are localStorage), RLS policies, TypeScript.
 - Roadmap agreed with the user: 1 design system ✔ → 2 accounts & roles (auth provider TBD later) →
   3 online quiz player + attempts + assignments → 4 insights/format-preference intelligence →
   5 marketplace v2 (templates + Supabase + payments) → 6 document formats (PDF/OCR/handwriting/Excel, PPTX export).
@@ -126,9 +133,14 @@ A template is **a selection of block formats**. Nothing more.
   `--line`, soft `--shadow`). Rules: solid white surfaces, no `backdrop-blur` / translucency, no
   gradients on controls, pill buttons, 12–18px radii, 180ms `--ease` motion. The user rejected a
   dark theme as "blurry" — do not reintroduce dark mode or glassmorphism.
-- Roles: `student` / `teacher` / `parent` are a client-side switch (`components/data.js`
-  `navByRole`, `roleProfiles`). Each has its own home (`modules/dashboard/ui/DashboardPage.js`).
-  `modules/dashboard/insights.js` is the data seam — sample data now, Supabase later.
+- Roles: in the demo (`/app`) `student` / `teacher` / `parent` are a client-side switch (`components/data.js`
+  `navByRole`, `roleProfiles`); in the real platform (`/platform`, `<AppShell account={…}/>`) the role comes
+  from the logged-in account, there is no switcher, and `platformNavExtras` adds Connections / My students.
+  **Server rule: whose data a request touches is decided only by `ownerUserIdFor(request)` (`lib/session.js`:
+  session account id, else the demo owner); never read an owner id from a request body or query.** For a
+  logged-in account `lib/workspaceGuard.js` also checks every workspace/topic/folder/document id and keeps
+  documents tagged `shared-by:…` read-only. Home (`modules/dashboard/ui/DashboardPage.js`) is the same simple page for every role: greeting, a
+  one-row gallery of the 4 most urgent study plans, and Luna's next steps (real data).
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
 
@@ -159,8 +171,11 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
   `agentBuilder.js`, `embeddings.js`), `render/` (templates + exporters).
 - `modules/document-processing/` — parsers, canonical model (CDM), math, normalization, renderers.
 - `modules/core/` — shared contracts (`validateAiToolManifest`), auth/users placeholders.
-- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 15 so far.
-- `docs/` — `ROADMAP.md`, `IMPLEMENTATION_LOG.md`, `SUPABASE_SETUP.md`, `VERCEL_DO_NOT_DO.md`.
+- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 21 so far.
+- `app/platform` (real platform), `app/login`, `app/api/accounts/*`, `modules/accounts/`,
+  `lib/accountsCore.js` (pure rules), `lib/session.js`, `lib/accountsRepository.js`, `lib/sharingRepository.js`,
+  `lib/workspaceGuard.js` — accounts, see `docs/ACCOUNTS.md`.
+- `docs/` — `ROADMAP.md`, `IMPLEMENTATION_LOG.md`, `SUPABASE_SETUP.md`, `ACCOUNTS.md`, `VERCEL_DO_NOT_DO.md`.
 
 ### Agents and templates (product rules — enforce these always)
 
@@ -206,7 +221,8 @@ See `apps/web/modules/README.md`.
 - Schema change = new file in `supabase/migrations/` following the naming pattern, applied with the
   Supabase MCP `apply_migration` (project ref `fekeupkjljbgimntxpnv`, name "Luna") or the SQL
   editor, then listed in `docs/SUPABASE_SETUP.md`. Run `get_advisors` (security + performance)
-  after DDL. Every table is keyed by `owner_user_id`; keep that until real auth lands.
+  after DDL. Every table is keyed by `owner_user_id` (an account's id, or the demo owner); the accounts
+  tables (`accounts`, `account_links`, `shared_items`) are service-role only.
 
 **LLM**
 - OpenAI via raw `fetch` (no SDK). Models are branded "Luna 3 Mini/Pro/Max" (`AGENT_MODEL_OPTIONS`
@@ -225,7 +241,8 @@ See `apps/web/modules/README.md`.
 `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `LUNA_DEMO_USER_ID`,
 `OPENAI_API_KEY`, `LUNA_QUIZ_MODEL`, `LUNA_AGENT_MODEL`, `LUNA_EMBEDDING_MODEL`,
 `MATH_OCR_ENDPOINT`, `MATH_OCR_APP_ID`, `MATH_OCR_APP_KEY`, `OCR_LANGUAGES`, `OCR_MIN_CONFIDENCE`,
-`EXTRACTION_MIN_CONFIDENCE`.
+`EXTRACTION_MIN_CONFIDENCE`, `LUNA_SESSION_SECRET` (32+ random chars signing the session cookie; required in
+production/preview on Vercel, a dev fallback is used locally).
 
 ## Conventions
 

@@ -11,6 +11,8 @@ import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
+import { SHARED_SUBJECT_NAME, dueDateOf, isAssignedDocument, isSharedDocument, senderNameOf } from "../../accounts/shared";
+import { SharedNotice } from "../../accounts/SharedNotice";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -121,6 +123,7 @@ export function WorkspaceBrowser({
   onRegenerateResource,
   onReviewDocument,
   onReprocessDocument,
+  onShareDocument,
   onOpenClassicTools,
   focusDocumentId = "",
   onSelectFolder
@@ -429,6 +432,7 @@ export function WorkspaceBrowser({
     return (
       <span className="flex flex-wrap items-center gap-1 text-[11px] text-soft-ink">
         <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? "generated" : "material"}</span>
+        {isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}` : ""}</span> : null}
         {isFavourite(document) ? <span className={`${chip} bg-[#fff3cd] text-[#8a5a00]`}>★</span> : null}
         {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{row.resource.meta.questionCount} questions</span> : null}
         {resourceDifficulty(document) ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{resourceDifficulty(document)}</span> : null}
@@ -446,6 +450,8 @@ export function WorkspaceBrowser({
    */
   const actions = (document) => {
     const row = rowsByDocumentId.get(document.id);
+    // A document someone sent you is read-only: no rename, delete, retag or regenerate (the server refuses them too).
+    const locked = isSharedDocument(document);
     return (
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
         {/* On a phone Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
@@ -469,10 +475,14 @@ export function WorkspaceBrowser({
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : null,
+            ...(locked ? [] : [
+            onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
             row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
             { label: "Tags", icon: "🏷", onSelect: () => editTags(document) },
             { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } },
             { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); } }
+            ]),
+            locked ? { label: "Read-only — sent to you", icon: "🔒", onSelect: () => setStatus("Documents sent to you are read-only. You can read, highlight, take notes and answer them.") } : null
           ]}
         />
       </span>
@@ -656,7 +666,7 @@ export function WorkspaceBrowser({
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
-                      <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                      <span className={`flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100${(workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name === SHARED_SUBJECT_NAME ? " hidden" : ""}`} onClick={(e) => e.stopPropagation()}>
                         {(onCreateFolder || onCreateSubject) ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
                         <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button>
                         <button type="button" title="Delete" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-[rgba(255,59,48,0.1)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); }}>🗑</button>
@@ -760,6 +770,7 @@ export function WorkspaceBrowser({
       {playing ? (
         <ReaderView
           resource={playing.resource}
+          chat={{ documentId: playing.document.id }}
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
@@ -775,9 +786,14 @@ export function WorkspaceBrowser({
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}
           onDownloadDocument={onDownloadDocument}
-          onUpdateDocumentContent={onUpdateDocumentContent}
+          onUpdateDocumentContent={isSharedDocument(preview) ? undefined : onUpdateDocumentContent}
         />
       ) : null}
+
+      {/* A document someone sent you: say whose it is while it is open (it is read-only; notes and highlights still save). */}
+      {[preview, openRow?.document, playing?.document].filter((entry) => entry && isSharedDocument(entry)).slice(0, 1).map((entry) => (
+        <SharedNotice key={entry.id} by={senderNameOf(entry, folders)} assigned={isAssignedDocument(entry)} due={dueDateOf(entry)} />
+      ))}
     </section>
   );
 }

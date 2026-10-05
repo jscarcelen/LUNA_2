@@ -1,6 +1,8 @@
 import { listWorkspaceTree } from "../../../lib/workspacesRepository.js";
 import { readWorkspaces } from "../../../lib/mockStore.js";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
+import { currentOwnerUserId } from "../../../lib/session.js";
+import { isMasterDocument, masterDocumentMarkdown, parseMasterResource } from "./masterDocument.js";
 
 function normalizeTopicTags(topicTags = []) {
   return topicTags.map((tag) => {
@@ -14,8 +16,21 @@ function normalizeTopicTags(topicTags = []) {
   }).filter((tag) => tag.name);
 }
 
+/**
+ * A master document is stored as a resource (typed blocks) but read as Markdown by retrieval, the
+ * source page and the chat: its name is the resource's title and each statement names the original
+ * documents it came from.
+ */
+function readableMaster(doc) {
+  if (!isMasterDocument(doc)) return doc;
+  const markdown = masterDocumentMarkdown(doc);
+  if (!markdown) return doc;
+  const resource = parseMasterResource(doc);
+  return { ...doc, name: String(resource?.name || doc.name || "Master document").trim(), content: markdown };
+}
+
 function normalizeDocuments(documents = []) {
-  return documents.map((doc) => ({
+  return documents.map(readableMaster).map((doc) => ({
     ...doc,
     folderIds: Array.isArray(doc.folderIds)
       ? doc.folderIds.filter(Boolean)
@@ -42,9 +57,10 @@ function normalizeSubjects(subjects = []) {
   }));
 }
 
-export async function loadWorkspaceTreeForAi() {
+/** The logged-in account's workspaces during a request, the demo owner's everywhere else. */
+export async function loadWorkspaceTreeForAi({ ownerUserId = "" } = {}) {
   if (isSupabaseConfigured()) {
-    const workspaces = await listWorkspaceTree(getDemoOwnerUserId());
+    const workspaces = await listWorkspaceTree(ownerUserId || await currentOwnerUserId());
     return workspaces.map((workspace) => ({
       ...workspace,
       subjects: normalizeSubjects(workspace.subjects || [])

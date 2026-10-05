@@ -3,6 +3,7 @@
  * Returns detected transversal skill patterns for a learner in a workspace.
  */
 import { NextResponse } from "next/server";
+import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 import { getConceptGraph } from "../../../../lib/conceptsRepository.js";
 import { detectTransversalPatterns } from "../../../../modules/performance/patternDetector.js";
@@ -22,6 +23,9 @@ export async function GET(request) {
         { status: 400 }
       );
     }
+
+    const denied = await denyUnlessOwner(request, { workspaceId });
+    if (denied) return denied;
 
     const [{ stateByConceptId }, { conceptById }] = await Promise.all([
       getSubjectStates(learnerId, workspaceId),

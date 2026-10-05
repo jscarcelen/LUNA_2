@@ -1,4 +1,5 @@
 'use client';
+import { LunaLogo } from '../brand/LunaLogo';
 import { useState } from 'react';
 import { accountsApi } from '../../modules/accounts/api';
 import { ACCOUNTS_MIGRATION } from '../../modules/accounts/SetupNotice';
@@ -102,12 +103,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
         )}
 
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: T.accent, margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <svg width="24" height="24" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="M8 2L13 5.5V10.5L8 14L3 10.5V5.5L8 2Z" fill="white" fillOpacity="0.9" />
-              <circle cx="8" cy="8" r="2" fill="white" />
-            </svg>
-          </div>
+          <div style={{ margin: '0 auto 12px', display: 'flex', justifyContent: 'center' }}><LunaLogo size={44} mark tile /></div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: T.ink, margin: 0 }}>
             {isSignUp ? (step === 1 ? 'Choose your profile' : 'Create your account') : 'Welcome back'}
           </h2>

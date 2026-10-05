@@ -1,5 +1,31 @@
 # Implementation Log
 
+## 2026-10-05 (landing page + Luna logo)
+
+### New public page, one logo everywhere
+
+- **Logo**: an original crescent-with-a-point mark and stroke-drawn "LUNA" wordmark, defined once as data in
+  `components/brand/lunaBrand.js`. `components/brand/LunaLogo.js` renders it (`mark`, `tile`, `variant`
+  color / mono / white, `size` = height) on the landing page, the demo, the sign-in dialogs' parent page
+  and the app's navigation rail (`SideNav.js`). `scripts/brand/build-brand.mjs` writes `public/brand/*`
+  (SVG + PNG: mark, lockup, wordmark, app tile, colour/mono/white), the PWA icons the manifest already
+  points at (`icon-192/512`, `icon-maskable-512`, `apple-touch-icon`), `app/icon.svg` and `app/favicon.ico`
+  (16/32/48). Re-run it after changing the geometry.
+- **Real screenshots, no mock UI**: `scripts/landing-capture/capture.mjs` (Playwright core + system/Playwright
+  Chromium, ffmpeg-static for the optional video) photographs the running app read-only into
+  `public/landing/*.webp` (1440x900 @2x desktop, 390x844 @3x phone, 1000/2000 px webp). The dev overlay is
+  hidden; the demo account's empty marketplace is shown with six sample listings put into the throwaway
+  browser profile only (captioned "sample listings"). Refresh with `cd apps/web/scripts/landing-capture &&
+  npm install && npm run capture`.
+- **Landing** (`components/LandingPage.js` + `components/landing/*`, styles in `landing.css`): hero with
+  gradient mesh, real screen in a CSS browser frame with two phones and gentle parallax; scroll-snap
+  slider of 11 real screens (touch, arrows, dots, arrow keys); Luna Study / Luna Create / Luna Marketplace
+  pillars; the upload > plan > practise and track > expand flow; PWA phones; profiles; final CTA.
+  **Demo** tab is a guided journey (upload, master notes, plan, performance, agents, build, templates,
+  marketplace). **Pricing** and **Training** are shaded, badged *Upcoming* with a *Soon* pill in the nav and
+  an honest "what to expect"; "Notify me" is local UI only. Log in / Sign up open the real
+  `components/auth/AuthModal.js`. Motion respects `prefers-reduced-motion`; no blur, no dark mode.
+
 ## 2026-10-04 (master document)
 
 ### Summary Notes Consolidator and the plan's master document

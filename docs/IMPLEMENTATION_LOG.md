@@ -995,3 +995,6 @@
 - Migration `supabase/migrations/202610050001_account_verification_phone_tokens.sql` (**not applied from here**). Everything is feature-detected (`supportsVerification()`), so sign-in and sign-up keep working on the old schema.
 - Tests: `tests/accounts/{phone,verification,reset,mailer,notifications}.test.js`; the fake DB learned unique indexes, column errors and `legacySchema()`.
 
+
+## 2026-10-05 — Setup checklist
+- `docs/SETUP_CHECKLIST.md`: the steps only the owner can do (migrations, email provider, hand tests, first live runs, before real users).

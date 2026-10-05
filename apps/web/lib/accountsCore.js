@@ -18,7 +18,10 @@ export const MAX_PASSWORD_LENGTH = 200;
 export const SESSION_COOKIE = "luna_session";
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const ACCOUNTS_MIGRATION = "supabase/migrations/202610040001_accounts_links_sharing.sql";
+export const VERIFICATION_MIGRATION = "supabase/migrations/202610050001_account_verification_phone_tokens.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+export const TOKEN_KINDS = ["verify_email", "reset_password"];
+export const TOKEN_TTL_MS = { verify_email: 48 * 60 * 60 * 1000, reset_password: 60 * 60 * 1000 };
 const DEV_SESSION_SECRET = "luna-dev-session-secret-not-for-production";
 
 /* ------------------------------------------------------------------ input rules */
@@ -48,6 +51,43 @@ export function validatePassword(password, email = "") {
   if (value.length > MAX_PASSWORD_LENGTH) return { ok: false, error: `Use at most ${MAX_PASSWORD_LENGTH} characters for the password.` };
   if (email && value.toLowerCase() === normalizeEmail(email)) return { ok: false, error: "The password cannot be your email." };
   return { ok: true };
+}
+
+/**
+ * Sign-up and reset forms ask for the password twice. Compared exactly (no trimming: a space is part of a
+ * password), after the usual length rules.
+ * @returns {{ ok: boolean, error?: string }}
+ */
+export function validatePasswordPair(password, confirm, email = "") {
+  const rules = validatePassword(password, email);
+  if (!rules.ok) return rules;
+  if (typeof confirm !== "string" || confirm !== String(password)) return { ok: false, error: "The two passwords do not match." };
+  return { ok: true };
+}
+
+/**
+ * Has this account proved it owns its email? Rows from a database that has not had the verification
+ * migration yet have no such column (`undefined`): there verification cannot exist, so they count as
+ * verified and nothing is blocked. `null` means "not verified yet".
+ */
+export function isEmailVerified(row) {
+  if (!row || typeof row !== "object") return false;
+  const value = row.email_verified_at !== undefined ? row.email_verified_at : row.emailVerifiedAt;
+  return value === undefined ? true : Boolean(value);
+}
+
+/** Link and share actions need a confirmed email. */
+export function assertEmailVerified(row, what = "do this") {
+  if (!isEmailVerified(row)) throw new LinkError("email_unverified", `Confirm your email first to ${what}. We sent you a link; you can ask for another one from the banner at the top.`, 403);
+}
+
+/** Did this database error come from a column of the verification migration not existing yet? */
+export function isMissingColumnError(error) {
+  if (!error) return false;
+  const code = String(error.code || "");
+  const message = String(error.message || error.details || "").toLowerCase();
+  if (code !== "42703" && code !== "PGRST204" && code !== "PGRST200" && !message.includes("does not exist") && !message.includes("could not find")) return false;
+  return /email_verified_at|phone|password_changed_at|notifications_seen_at|pending_invites|notified_at|accepted_notified_at/.test(message);
 }
 
 /* ------------------------------------------------------------------ password hashing */
@@ -214,7 +254,8 @@ export function createRateLimiter({ limit, windowMs, now = () => Date.now() }) {
       const list = recent(key);
       return list.length >= limit ? Math.max(0, list[0] + windowMs - now()) : 0;
     },
-    reset: (key) => { events.delete(key); }
+    reset: (key) => { events.delete(key); },
+    clear: () => { events.clear(); }
   };
 }
 
@@ -316,7 +357,7 @@ export function authorizeDelivery({ mode, sender, recipient, link }) {
 
 /* ------------------------------------------------------------------ setup detection */
 
-const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items)([^a-z_]|$)/;
+const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens)([^a-z_]|$)/;
 
 /** Did this database error come from the accounts migration not having been applied yet? */
 export function isSetupNeededError(error) {
@@ -326,11 +367,11 @@ export function isSetupNeededError(error) {
   return (code === "42P01" || code === "PGRST205" || code === "PGRST200") && OUR_TABLES.test(message);
 }
 
-export function setupNeededBody() {
+export function setupNeededBody(migration = ACCOUNTS_MIGRATION) {
   return {
-    error: `Accounts need one database step: apply ${ACCOUNTS_MIGRATION} (Supabase SQL editor or MCP apply_migration), then reload.`,
+    error: `Accounts need one database step: apply ${migration} (Supabase SQL editor or MCP apply_migration), then reload.`,
     setupNeeded: true,
-    migration: ACCOUNTS_MIGRATION
+    migration
   };
 }
 
@@ -345,5 +386,19 @@ export function publicAccount(row) {
     displayName: row.display_name ?? row.displayName,
     role: row.role,
     under13: Boolean(row.under_13 ?? row.under13)
+  };
+}
+
+/**
+ * The account as its OWNER may see it: the public shape plus the private bits (phone, whether the email and
+ * phone are confirmed). Never use this for someone else's account.
+ */
+export function ownAccount(row) {
+  if (!row) return null;
+  return {
+    ...publicAccount(row),
+    phone: row.phone || "",
+    phoneVerified: Boolean(row.phone_verified_at),
+    emailVerified: isEmailVerified(row)
   };
 }

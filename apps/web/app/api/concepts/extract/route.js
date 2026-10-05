@@ -13,7 +13,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
 import { extractAndSaveConcepts } from "../../../../lib/conceptsRepository.js";
-import { ownerUserIdFor } from "../../../../lib/session.js";
+import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 
 export const runtime = "nodejs";
@@ -26,7 +26,7 @@ export async function POST(request) {
     const documentId  = String(body?.documentId  || "").trim();
     const workspaceId = String(body?.workspaceId || "").trim();
     // The owner is the logged-in account, else the demo owner; a body value is never trusted.
-    const ownerUserId = ownerUserIdFor(request);
+    const ownerUserId = await ownerUserIdForFresh(request);
 
     if (!documentId || !workspaceId) {
       return NextResponse.json(

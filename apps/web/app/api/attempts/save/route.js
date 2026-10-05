@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server";
 import { saveAttempt } from "../../../../lib/attemptsRepository.js";
-import { ownerUserIdFor } from "../../../../lib/session.js";
+import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 
 export const runtime = "nodejs";
@@ -27,7 +27,7 @@ export async function POST(request) {
     }
 
     // The owner comes from the session (a real account) or is the demo owner; a body value is never trusted.
-    const resolvedOwner = ownerUserIdFor(request);
+    const resolvedOwner = await ownerUserIdForFresh(request);
     const denied = await denyUnlessOwner(request, { documentId: String(activityDocumentId) });
     if (denied) return denied;
 

@@ -8,7 +8,7 @@
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "./supabaseClient.js";
-import { accountIdFor } from "./session.js";
+import { accountIdForFresh } from "./session.js";
 
 export async function accountOwnsWorkspace(accountId, workspaceId) {
   if (!workspaceId) return true;
@@ -30,7 +30,7 @@ export async function accountOwnsDocument(accountId, documentId) {
 
 /** @returns {Promise<Response | null>} a 404 to send back, or null when the request may go on. */
 export async function denyUnlessOwner(request, { workspaceId = "", documentId = "" } = {}) {
-  const accountId = accountIdFor(request);
+  const accountId = await accountIdForFresh(request);
   if (!accountId) return null;
   if ((await accountOwnsWorkspace(accountId, workspaceId)) && (await accountOwnsDocument(accountId, documentId))) return null;
   return NextResponse.json({ error: "That item was not found in your workspace." }, { status: 404 });

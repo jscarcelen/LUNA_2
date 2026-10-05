@@ -45,6 +45,12 @@ Apply the SQL migrations in order (all of `supabase/migrations/`):
 - `202610040001_accounts_links_sharing.sql` (accounts, connections between accounts, sent/assigned items —
   **must be applied for `/platform` and sign-in to work**; until then the UI says "Accounts need one database
   step"; see `docs/ACCOUNTS.md`). Also set `LUNA_SESSION_SECRET` (32+ random characters) in the environment.
+- `202610050001_account_verification_phone_tokens.sql` (email confirmation, password reset, one phone per
+  account, sessions ended by a password change, the notification bell's "last seen", and the `account_tokens`
+  table that holds only SHA-256 hashes of one-time links). **Optional until you want those features:** sign-in and
+  sign-up keep working on the first accounts migration alone (the code detects the missing columns). Apply it, set
+  the mail variables (`LUNA_SMTP_URL` or `RESEND_API_KEY`, plus `LUNA_MAIL_FROM`, `LUNA_PUBLIC_URL`) and read
+  `docs/ACCOUNTS.md` ("Email, phone and password"). Existing accounts are not marked as confirmed.
 
 From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
 (ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be

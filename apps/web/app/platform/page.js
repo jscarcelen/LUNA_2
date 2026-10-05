@@ -2,9 +2,9 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { SetupNotice } from "../../modules/accounts/SetupNotice";
-import { isSetupNeededError, publicAccount } from "../../lib/accountsCore.js";
+import { isSetupNeededError, ownAccount } from "../../lib/accountsCore.js";
 import { findAccountById } from "../../lib/accountsRepository.js";
-import { sessionFromRequest } from "../../lib/session.js";
+import { freshSessionFromRequest } from "../../lib/session.js";
 import { isSupabaseConfigured } from "../../lib/supabaseClient.js";
 
 export const dynamic = "force-dynamic";
@@ -17,12 +17,16 @@ const Centered = ({ children }) => <div className="tw-scope" style={{ maxWidth: 
  * come from the account, its workspaces are its own, and there is no role switcher. Nobody logged in
  * is sent to the log in page.
  */
-export default async function PlatformPage() {
+export default async function PlatformPage({ searchParams }) {
   if (!isSupabaseConfigured()) {
     return <Centered><p>Accounts are stored in Supabase, which is not configured here (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY). The demo at <a href="/app">/app</a> does not need it.</p></Centered>;
   }
-  const session = sessionFromRequest({ headers: await headers() });
-  if (!session) redirect("/login");
+  const params = (await searchParams) || {};
+  const requested = Array.isArray(params.page) ? params.page[0] : params.page;
+  // Links in emails open a section directly (/platform?page=connections); anything unexpected is ignored.
+  const initialPage = typeof requested === "string" && /^[a-z][a-z-]{0,30}$/.test(requested) ? requested : "";
+  const session = await freshSessionFromRequest({ headers: await headers() });
+  if (!session) redirect(initialPage ? `/login?next=${encodeURIComponent(`/platform?page=${initialPage}`)}` : "/login");
   let account;
   try {
     account = await findAccountById(session.accountId);
@@ -31,5 +35,5 @@ export default async function PlatformPage() {
     throw error;
   }
   if (!account) redirect("/login");
-  return <AppShell account={publicAccount(account)} />;
+  return <AppShell account={ownAccount(account)} initialPage={initialPage} />;
 }

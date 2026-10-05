@@ -11,7 +11,11 @@ flows and the setup step.
 - `ConnectionsPage.js` — add by email, requests (accept/decline), sent (cancel), connected (remove), sent/received items.
 - `LinkedStudentsPage.js` — "My students" / "My children": chips, `PerformancePage` read-only, plans overview.
 - `ShareDialog.js` — "Share with…" / "Assign" from a workspace document or a study plan.
-- `PlatformNotice.js`, `SharedNotice.js` — banner for under-13 students; "Shared by …" pill in the reader.
+- `PlatformNotice.js`, `SharedNotice.js` — banners ("Verify your email" with Resend, under-13 students); "Shared by …" pill in the reader.
+- `NotificationsBell.js` (+ pure `bellText.js`) — the bell in the top bar: pending requests with Accept/Decline, answers, shared/assigned work.
+- `AccountSettings.js` — email state + resend, phone (E.164, one per account, not SMS-verified), change password.
 
 Server side lives in `apps/web/lib/` (`accountsCore.js`, `accountsRepository.js`, `sharingRepository.js`,
-`workspaceGuard.js`, `session.js`, `resourceAccess.js`) and `apps/web/app/api/accounts/`.
+`workspaceGuard.js`, `session.js`, `sessionRevocation.js`, `resourceAccess.js`, plus `accountTokens.js` (one-time hashed tokens),
+`accountFlows.js` (confirm email / reset password / request emails), `accountLimits.js` (rate limiters), `mailer.js` +
+`mailTemplates.js` (SMTP / Resend / none), `phone.js` (E.164)) and `apps/web/app/api/accounts/`.

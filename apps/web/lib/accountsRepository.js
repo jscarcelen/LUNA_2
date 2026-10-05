@@ -7,7 +7,10 @@
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 import {
   LinkError,
+  assertEmailVerified,
   decideLinkRequest,
+  isEmailVerified,
+  isMissingColumnError,
   isValidEmail,
   kindForRoles,
   linkFitsAccounts,
@@ -19,19 +22,61 @@ import {
 } from "./accountsCore.js";
 import { createWorkspace, listWorkspaceTree } from "./workspacesRepository.js";
 import { redactTreeForGuardian } from "../modules/accounts/shared.js";
+import { rememberPasswordChange } from "./sessionRevocation.js";
 
-const ACCOUNT_COLUMNS = "id, email, display_name, role, under_13, created_at";
+const BASE_COLUMNS = "id, email, display_name, role, under_13, created_at";
+/** Added by supabase/migrations/202610050001_account_verification_phone_tokens.sql. */
+const V2_COLUMNS = "email_verified_at, phone, phone_verified_at, password_changed_at, notifications_seen_at, pending_invites";
 export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
 
 export class EmailTakenError extends Error {}
+export class PhoneTakenError extends Error {}
+
+/* ------------------------------------------------------------------ which schema are we on? */
+
+const RECHECK_MISSING_MS = 15000;
+let capability = { v2: null, checkedAt: 0 };
+
+export function resetSchemaCache() {
+  capability = { v2: null, checkedAt: 0 };
+}
+
+/** Called when a query proves the new columns are not there (the migration has not been applied yet). */
+function markLegacy() {
+  capability = { v2: false, checkedAt: Date.now() };
+}
+
+/**
+ * Has the verification migration been applied? Probed with one tiny query and remembered (a "yes" for good,
+ * a "no" for 15 s, so applying the migration takes effect without a redeploy). While the answer is "no",
+ * everything keeps working the way it did before: no verification, no phone, no reset, no notification email.
+ */
+export async function supportsVerification() {
+  if (capability.v2 === true) return true;
+  if (capability.v2 === false && Date.now() - capability.checkedAt < RECHECK_MISSING_MS) return false;
+  const { error } = await createSupabaseAdminClient().from("accounts").select("email_verified_at").limit(1);
+  if (!error) {
+    capability = { v2: true, checkedAt: Date.now() };
+    return true;
+  }
+  if (isMissingColumnError(error)) {
+    markLegacy();
+    return false;
+  }
+  throw error;
+}
+
+async function accountColumns() {
+  return (await supportsVerification()) ? `${BASE_COLUMNS}, ${V2_COLUMNS}` : BASE_COLUMNS;
+}
 
 /* ------------------------------------------------------------------ accounts */
 
 export async function findAccountByEmail(email) {
   const { data, error } = await createSupabaseAdminClient()
     .from("accounts")
-    .select(`${ACCOUNT_COLUMNS}, password_hash, failed_logins, locked_until`)
+    .select(`${await accountColumns()}, password_hash, failed_logins, locked_until`)
     .eq("email", normalizeEmail(email))
     .maybeSingle();
   if (error) throw error;
@@ -40,30 +85,86 @@ export async function findAccountByEmail(email) {
 
 export async function findAccountById(id) {
   if (!id) return null;
-  const { data, error } = await createSupabaseAdminClient().from("accounts").select(ACCOUNT_COLUMNS).eq("id", id).maybeSingle();
+  const { data, error } = await createSupabaseAdminClient().from("accounts").select(await accountColumns()).eq("id", id).maybeSingle();
   if (error) throw error;
   return data || null;
 }
 
+/** Other people's accounts: only the public columns, never a phone number. */
 export async function findAccountsByIds(ids) {
   const list = [...new Set((ids || []).filter(Boolean))];
   if (!list.length) return [];
-  const { data, error } = await createSupabaseAdminClient().from("accounts").select(ACCOUNT_COLUMNS).in("id", list);
+  const { data, error } = await createSupabaseAdminClient().from("accounts").select(BASE_COLUMNS).in("id", list);
   if (error) throw error;
   return data || [];
 }
 
-export async function insertAccount({ email, passwordHash, displayName, role, under13 = false }) {
-  const { data, error } = await createSupabaseAdminClient()
-    .from("accounts")
-    .insert({ email: normalizeEmail(email), password_hash: passwordHash, display_name: displayName, role, under_13: Boolean(under13) })
-    .select(ACCOUNT_COLUMNS)
-    .single();
+export async function findAccountIdByPhone(phone) {
+  if (!phone || !(await supportsVerification())) return "";
+  const { data, error } = await createSupabaseAdminClient().from("accounts").select("id").eq("phone", phone).maybeSingle();
+  if (error) throw error;
+  return data?.id || "";
+}
+
+/**
+ * @param {object} fields
+ * @param {string} [fields.phone] normalised E.164; stored only once the migration is applied (kept `null` otherwise)
+ * @param {Array} [fields.pendingInvites] link requests typed at sign-up, sent only after the email is confirmed
+ */
+export async function insertAccount({ email, passwordHash, displayName, role, under13 = false, phone = "", pendingInvites = [] }) {
+  const client = createSupabaseAdminClient();
+  const base = { email: normalizeEmail(email), password_hash: passwordHash, display_name: displayName, role, under_13: Boolean(under13) };
+  const v2 = await supportsVerification();
+  const row = v2 ? { ...base, phone: phone || null, pending_invites: pendingInvites.length ? pendingInvites : null } : base;
+  const { data, error } = await client.from("accounts").insert(row).select(v2 ? `${BASE_COLUMNS}, ${V2_COLUMNS}` : BASE_COLUMNS).single();
   if (error) {
-    if (error.code === "23505") throw new EmailTakenError("An account with this email already exists.");
+    if (error.code === "23505") {
+      if (/phone/i.test(`${error.message} ${error.details}`)) throw new PhoneTakenError("That phone number is already linked to another account.");
+      throw new EmailTakenError("An account with this email already exists.");
+    }
     throw error;
   }
   return data;
+}
+
+/** Sets or clears the phone (E.164). Verification stays null: nothing proves the number yet. */
+export async function updateAccountPhone(accountId, phone) {
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ phone: phone || null, phone_verified_at: null }).eq("id", accountId);
+  if (error) {
+    if (error.code === "23505") throw new PhoneTakenError("That phone number is already linked to another account.");
+    throw error;
+  }
+}
+
+/** New password: also records when, which is what ends every older session (see sessionRevocation.js). */
+export async function setAccountPassword(accountId, passwordHash, { now = new Date() } = {}) {
+  const changedAt = now.toISOString();
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ password_hash: passwordHash, password_changed_at: changedAt, failed_logins: 0, locked_until: null }).eq("id", accountId);
+  if (error) throw error;
+  rememberPasswordChange(accountId, changedAt);
+  return changedAt;
+}
+
+/** Marks the email as confirmed (once; the first time stays). Returns the fresh account row. */
+export async function markEmailVerified(accountId) {
+  const account = await findAccountById(accountId);
+  if (!account) return null;
+  if (account.email_verified_at) return account;
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ email_verified_at: new Date().toISOString() }).eq("id", accountId);
+  if (error) throw error;
+  return findAccountById(accountId);
+}
+
+export async function clearPendingInvites(accountId) {
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ pending_invites: null }).eq("id", accountId);
+  if (error) throw error;
+}
+
+export async function markNotificationsSeen(accountId, now = new Date()) {
+  if (!(await supportsVerification())) return false;
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ notifications_seen_at: now.toISOString() }).eq("id", accountId);
+  if (error) throw error;
+  return true;
 }
 
 /** Counts a failed log-in and locks the account after too many in a row. */
@@ -174,12 +275,28 @@ export async function getAcceptedLink(accountA, accountB) {
 }
 
 /**
+ * Attaches the "what changed" event to a result WITHOUT making it enumerable: serialising or comparing the
+ * result shows the same thing for an unknown email, a wrong-role email and a real one.
+ */
+function withEvent(result, event) {
+  Object.defineProperty(result, "event", { value: event, enumerable: false });
+  return result;
+}
+
+/**
  * Ask another account to link. `relation` is the role you expect them to have. Whatever the outcome,
  * the answer to the person asking is the same for "no such account" and "that account has another
  * role", so the form cannot be used to find out who has an account.
+ *
+ * Needs a confirmed email on the requester's side (otherwise anyone could sign up as someone else and
+ * ask in their name). The person asked only gets the request attached to their account once THEIR email
+ * is confirmed too, so an unconfirmed sign-up with a stranger's address never sees requests meant for them.
  * @returns {Promise<{ status: "pending" | "accepted", message: string }>}
+ *   The result also carries a hidden (non-enumerable) `event` = { type: "created" | "reopened" | "accepted", linkId,
+ *   targetEmail, targetKnown } for the caller that sends the notification email (nothing changed -> no event).
  */
 export async function requestLink(requester, { email, relation }) {
+  assertEmailVerified(requester, "connect with other people");
   const targetEmail = normalizeEmail(email);
   if (!isValidEmail(targetEmail)) throw new LinkError("bad_email", "Enter a valid email address.");
   if (targetEmail === requester.email) throw new LinkError("self", "That is your own email.");
@@ -187,16 +304,19 @@ export async function requestLink(requester, { email, relation }) {
   const kind = kindForRoles(requester.role, relation);
   const sent = { status: "pending", message: "Request sent. The connection becomes active once they accept it." };
 
-  const target = await findAccountByEmail(targetEmail);
+  const found = await findAccountByEmail(targetEmail);
+  // An account that has not confirmed its email is treated as "nobody yet": the request waits for the confirmation.
+  const target = found && isEmailVerified(found) ? found : null;
   if (target && !linkFitsAccounts(kind, requester.role, target.role)) return sent;
 
   const key = pairKey(kind, requester.email, targetEmail);
   const [existing] = await selectLinks((query) => query.eq("pair_key", key));
   const decision = decideLinkRequest(existing, requester.id);
   const client = createSupabaseAdminClient();
+  const event = (type, linkId) => ({ type, linkId, targetEmail, targetKnown: Boolean(target) });
 
   if (decision.type === "create") {
-    const { error } = await client.from("account_links").insert({
+    const { data, error } = await client.from("account_links").insert({
       kind,
       requester_id: requester.id,
       requester_email: requester.email,
@@ -204,9 +324,10 @@ export async function requestLink(requester, { email, relation }) {
       target_email: targetEmail,
       status: "pending",
       pair_key: key
-    });
+    }).select("id");
     if (error && error.code !== "23505") throw error;
-    return sent;
+    const created = Array.isArray(data) ? data[0] : data;
+    return error || !created?.id ? sent : withEvent({ ...sent }, event("created", created.id));
   }
   if (decision.type === "reopen") {
     const { error } = await client.from("account_links").update({
@@ -218,13 +339,13 @@ export async function requestLink(requester, { email, relation }) {
       responded_at: null
     }).eq("id", existing.id);
     if (error) throw error;
-    return sent;
+    return withEvent({ ...sent }, event("reopened", existing.id));
   }
   if (decision.type === "accept_existing") {
     // They had already asked you: your asking back is the second "yes".
     const { error } = await client.from("account_links").update({ status: "accepted", target_id: requester.id, responded_at: new Date().toISOString() }).eq("id", existing.id);
     if (error) throw error;
-    return { status: "accepted", message: "You are now connected." };
+    return withEvent({ status: "accepted", message: "You are now connected." }, event("accepted", existing.id));
   }
   if (decision.type === "already_linked") return { status: "accepted", message: "You are already connected." };
   return sent; // already pending, or a recent decline: nothing new to say
@@ -234,8 +355,11 @@ export async function requestLink(requester, { email, relation }) {
 export async function changeLink(account, linkId, action) {
   const [link] = await selectLinks((query) => query.eq("id", linkId));
   if (!link) throw new LinkError("not_found", "That connection was not found.", 404);
-  // A by-email request that has not attached yet can be answered by the account whose email it names.
-  const claimable = !link.targetId && link.targetEmail === account.email;
+  // Saying yes needs a confirmed email (declining, cancelling and removing never do).
+  if (action === "accept") assertEmailVerified(account, "accept connections");
+  // A by-email request that has not attached yet can be answered by the account whose email it names
+  // (only once that email is confirmed: an unconfirmed address proves nothing).
+  const claimable = !link.targetId && link.targetEmail === account.email && isEmailVerified(account);
   const next = transitionLink(claimable ? { ...link, targetId: account.id } : link, account.id, action);
   const patch = { status: next, responded_at: new Date().toISOString() };
   if (claimable) patch.target_id = account.id;
@@ -249,6 +373,8 @@ export async function changeLink(account, linkId, action) {
  * roles do not fit (a teacher asked for a "student" that signed up as a parent) is revoked, not shown.
  */
 export async function attachPendingLinks(account) {
+  // Only an account that proved it owns this email may pick up what was sent to it.
+  if (!isEmailVerified(account)) return 0;
   const client = createSupabaseAdminClient();
   const rows = await selectLinks((query) => query.eq("target_email", account.email).is("target_id", null));
   const requesters = await findAccountsByIds(rows.map((row) => row.requesterId));
@@ -303,5 +429,66 @@ export async function listSharedItems(accountId, limit = 100) {
   return {
     sent: rows.filter((row) => row.sender.id === accountId).map(({ copyDocumentId, ...rest }) => rest),
     received: rows.filter((row) => row.recipient.id === accountId)
+  };
+}
+
+/* ------------------------------------------------------------------ notifications (derived, nothing extra is stored) */
+
+export const NOTIFICATION_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_NOTIFICATIONS = 20;
+
+/**
+ * What the bell shows: requests waiting for this account, answers to the requests it made, and work that
+ * was shared or assigned to it. All of it is read from `account_links` and `shared_items`; the only thing
+ * stored is `accounts.notifications_seen_at` ("last time the list was opened") to know what is new.
+ * The badge counts requests still waiting plus anything else newer than that timestamp.
+ */
+export async function listNotifications(account, { now = Date.now() } = {}) {
+  const since = now - NOTIFICATION_WINDOW_MS;
+  const seenSupported = await supportsVerification();
+  const seenAt = account.notifications_seen_at ? new Date(account.notifications_seen_at).getTime() : 0;
+  const client = createSupabaseAdminClient();
+
+  const links = await selectLinks((query) => query.or(`requester_id.eq.${account.id},target_id.eq.${account.id}`).order("created_at", { ascending: false }).limit(100));
+  const { data: items, error } = await client
+    .from("shared_items")
+    .select("id, mode, item_type, title, sender_id, due_date, created_at, updated_at")
+    .eq("recipient_id", account.id)
+    .order("updated_at", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+
+  const people = await findAccountsByIds([
+    ...links.map((row) => (row.requesterId === account.id ? row.targetId : row.requesterId)),
+    ...(items || []).map((row) => row.sender_id)
+  ]);
+  const byId = new Map(people.map((row) => [row.id, row]));
+  const person = (id, fallbackEmail = "") => ({ id: id || "", displayName: byId.get(id)?.display_name || "", role: byId.get(id)?.role || "", email: byId.get(id)?.email || fallbackEmail });
+  const time = (value) => (value ? new Date(value).getTime() : 0);
+
+  const pendingRequests = links
+    .filter((row) => row.status === "pending" && row.targetId === account.id)
+    .map((row) => ({ id: `req:${row.id}`, type: "link_request", linkId: row.id, at: row.createdAt, person: person(row.requesterId, row.requesterEmail), actionable: true }));
+
+  const answers = links
+    .filter((row) => row.requesterId === account.id && (row.status === "accepted" || row.status === "declined") && time(row.respondedAt) >= since)
+    .map((row) => ({ id: `${row.status}:${row.id}`, type: row.status === "accepted" ? "link_accepted" : "link_declined", linkId: row.id, at: row.respondedAt, person: person(row.targetId, row.targetEmail) }));
+
+  const received = (items || [])
+    .filter((row) => time(row.updated_at || row.created_at) >= since)
+    .map((row) => ({ id: `item:${row.id}:${row.updated_at}`, type: row.mode === "assign" ? "assigned" : "shared", at: row.updated_at || row.created_at, person: person(row.sender_id), title: row.title, itemType: row.item_type, dueDate: row.due_date || "" }));
+
+  const events = [...answers, ...received]
+    .sort((a, b) => time(b.at) - time(a.at))
+    .slice(0, MAX_NOTIFICATIONS)
+    .map((event) => ({ ...event, unread: seenSupported && time(event.at) > seenAt }));
+
+  const requests = pendingRequests.sort((a, b) => time(b.at) - time(a.at)).slice(0, MAX_NOTIFICATIONS);
+  return {
+    pendingRequests: requests,
+    pendingCount: pendingRequests.length,
+    events,
+    unreadCount: pendingRequests.length + events.filter((event) => event.unread).length,
+    seenSupported
   };
 }

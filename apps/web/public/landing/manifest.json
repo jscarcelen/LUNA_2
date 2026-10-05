@@ -1,0 +1,98 @@
+{
+  "home": {
+    "width": 2880,
+    "height": 1800
+  },
+  "workspaces": {
+    "width": 2880,
+    "height": 1800
+  },
+  "reader": {
+    "width": 2880,
+    "height": 1800
+  },
+  "plans": {
+    "width": 2880,
+    "height": 1800
+  },
+  "plan": {
+    "width": 2880,
+    "height": 1800
+  },
+  "calendar": {
+    "width": 2880,
+    "height": 1800
+  },
+  "activities": {
+    "width": 2880,
+    "height": 1800
+  },
+  "results": {
+    "width": 2880,
+    "height": 1800
+  },
+  "quiz": {
+    "width": 2880,
+    "height": 1800
+  },
+  "performance": {
+    "width": 2880,
+    "height": 2580
+  },
+  "agents": {
+    "width": 2880,
+    "height": 1800
+  },
+  "agent-run": {
+    "width": 2880,
+    "height": 1800
+  },
+  "studio": {
+    "width": 2880,
+    "height": 1800
+  },
+  "templates": {
+    "width": 2880,
+    "height": 1800
+  },
+  "template-preview": {
+    "width": 2880,
+    "height": 1800
+  },
+  "marketplace": {
+    "width": 2880,
+    "height": 1800
+  },
+  "chat": {
+    "width": 2880,
+    "height": 1800
+  },
+  "m-home": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-plans": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-performance": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-agents": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-marketplace": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-workspaces": {
+    "width": 1170,
+    "height": 2532
+  },
+  "m-chat": {
+    "width": 1170,
+    "height": 2532
+  }
+}

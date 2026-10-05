@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { appName } from "./data";
+import { LunaLogo } from "./brand/LunaLogo.js";
 
 /**
  * The navigation rail: the Luna mark and the sections of the app, collapsible to icons.
@@ -28,8 +29,10 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
     <aside className={`side-nav nav-rail${collapsed ? " nav-rail-collapsed" : ""}`}>
      <div className="nav-rail-inner">
       <div className="nav-rail-brand">
-        <span className="brand-dot" />
-        {collapsed ? null : <span className="nav-rail-word">{appName}</span>}
+        {/* The Luna logo: the mark alone when the rail is collapsed, the mark + wordmark otherwise. */}
+        {collapsed
+          ? <LunaLogo mark size={28} label={appName} />
+          : <LunaLogo size={26} label={appName} />}
         <button className="nav-rail-toggle" type="button" onClick={toggle} title={collapsed ? "Expand menu" : "Collapse menu"} aria-label={collapsed ? "Expand menu" : "Collapse menu"}>{collapsed ? "›" : "‹"}</button>
         <button className="mobile-close-btn" type="button" onClick={onClose} aria-label="Close menu">✕</button>
       </div>

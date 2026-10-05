@@ -3,7 +3,7 @@
  * One generic answer for "no such account" and "wrong password"; repeated failures are slowed down
  * per email and per address (in memory) and lock the account for a while (in the database).
  */
-import { burnPasswordCheck, createRateLimiter, normalizeEmail, publicAccount, verifyPassword } from "../../../../lib/accountsCore.js";
+import { burnPasswordCheck, createRateLimiter, normalizeEmail, ownAccount, verifyPassword } from "../../../../lib/accountsCore.js";
 import { ensureFirstWorkspace, findAccountByEmail, isLocked, recordLoginFailure, recordLoginSuccess } from "../../../../lib/accountsRepository.js";
 import { clientIp, errorResponse, json, rejectCrossSite, rejectUnconfigured } from "../../../../lib/accountsApi.js";
 import { sessionCookieFor } from "../../../../lib/session.js";
@@ -52,7 +52,7 @@ export async function POST(request) {
     byEmail.reset(email);
     await recordLoginSuccess(account);
     await ensureFirstWorkspace(account.id);
-    const response = json({ account: publicAccount(account) });
+    const response = json({ account: ownAccount(account) });
     response.headers.append("Set-Cookie", sessionCookieFor(account.id, request));
     return response;
   } catch (error) {

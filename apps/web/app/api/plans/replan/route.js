@@ -7,7 +7,7 @@
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
-import { ownerUserIdFor } from "../../../../lib/session.js";
+import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 import { shouldReplan, planProgress } from "../../../../modules/plans/replanDetector.js";
@@ -22,7 +22,7 @@ export async function POST(request) {
     const body = await request.json();
     const planDocumentId = String(body?.planDocumentId || "").trim();
     const learnerId      = String(body?.learnerId      || "").trim();
-    const ownerUserId    = ownerUserIdFor(request); // session account or the demo owner, never the body
+    const ownerUserId    = await ownerUserIdForFresh(request); // session account or the demo owner, never the body
     const workspaceId    = String(body?.workspaceId    || "").trim();
 
     if (!planDocumentId || !learnerId || !workspaceId) {

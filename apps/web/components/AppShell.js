@@ -29,9 +29,15 @@ const WORKSPACES_API = "/api/workspaces-supabase";
  * connections) and the logged-in account for the real platform (/platform: the role and name come from
  * the account, there is no role switcher, and Connections / My students are in the menu).
  */
-export function AppShell({ account = null }) {
+export function AppShell({ account = null, initialPage = "" }) {
   const [role, setRole] = useState(account?.role || "student");
-  const [page, setPageState] = useState(defaultPage[account?.role || "student"]);
+  // `initialPage` comes from a link such as /platform?page=connections (the notification emails); only a section
+  // that exists for this account's role is honoured.
+  const [page, setPageState] = useState(() => {
+    const start = defaultPage[account?.role || "student"];
+    const known = account ? [...(navByRole[account.role] || []), ...(platformNavExtras[account.role] || [])].some((item) => item.key === initialPage) : false;
+    return known ? initialPage : start;
+  });
   const [shareTarget, setShareTarget] = useState(null);
   const [shareNotice, setShareNotice] = useState("");
   const profileName = account ? account.displayName : (roleProfiles[role]?.name || "");
@@ -816,7 +822,7 @@ export function AppShell({ account = null }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} />
+        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onOpenPage={setPage} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (

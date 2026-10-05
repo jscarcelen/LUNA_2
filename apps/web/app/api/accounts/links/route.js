@@ -7,7 +7,9 @@
  */
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { changeLink, listConnections, requestLink } from "../../../../lib/accountsRepository.js";
+import { notifyLinkAccepted, notifyLinkRequest } from "../../../../lib/accountFlows.js";
 import { errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
+import { publicBaseUrl } from "../../../../lib/mailer.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,9 +42,14 @@ export async function POST(request) {
     const action = String(body?.action || "");
     let message = "";
     if (action === "request") {
-      message = (await requestLink(account, { email: body?.email, relation: String(body?.relation || "") })).message;
+      const result = await requestLink(account, { email: body?.email, relation: String(body?.relation || "") });
+      message = result.message;
+      // Best effort and identical for the person asking whatever happens: the email never changes the answer.
+      await notifyLinkRequest(account, result.event, publicBaseUrl(request));
     } else if (["accept", "decline", "cancel", "remove"].includes(action)) {
-      await changeLink(account, String(body?.linkId || ""), action);
+      const linkId = String(body?.linkId || "");
+      await changeLink(account, linkId, action);
+      if (action === "accept") await notifyLinkAccepted(account, linkId, publicBaseUrl(request));
       message = { accept: "Connected.", decline: "Request declined.", cancel: "Request cancelled.", remove: "Connection removed." }[action];
     } else {
       throw new LinkError("bad_action", "Unknown action.");

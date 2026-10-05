@@ -3,9 +3,9 @@
  * checks, and one place that turns errors into responses (a missing table becomes `setupNeeded`).
  */
 import { NextResponse } from "next/server";
-import { LinkError, SessionConfigError, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
-import { findAccountById } from "./accountsRepository.js";
-import { loggedOutCookie, sessionFromRequest } from "./session.js";
+import { LinkError, SessionConfigError, VERIFICATION_MIGRATION, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
+import { findAccountById, supportsVerification } from "./accountsRepository.js";
+import { freshSessionFromRequest, loggedOutCookie } from "./session.js";
 import { isSupabaseConfigured } from "./supabaseClient.js";
 
 export const json = (body, status = 200) => NextResponse.json(body, { status });
@@ -23,11 +23,22 @@ export function rejectUnconfigured() {
   return isSupabaseConfigured() ? null : json({ error: "Supabase is not configured (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY).", hint: "Accounts are stored in Supabase." }, 500);
 }
 
-/** @returns {Promise<{ account: object } | { response: Response }>} the logged-in account row, or the 401 to send. */
+/**
+ * For routes that only exist with the verification migration (confirm email, reset password, settings,
+ * notifications): answers `503 setupNeeded` naming that migration while it is not applied.
+ * @returns {Promise<Response | null>}
+ */
+export async function rejectUnlessVerificationReady() {
+  return (await supportsVerification()) ? null : json(setupNeededBody(VERIFICATION_MIGRATION), 503);
+}
+
+/**
+ * @returns {Promise<{ account: object } | { response: Response }>} the logged-in account row, or the 401 to send.
+ * A session issued before the account's last password change is refused (and its cookie cleared).
+ */
 export async function requireAccount(request) {
-  const session = sessionFromRequest(request);
-  if (!session) return { response: json({ error: "Please log in.", account: null }, 401) };
-  const account = await findAccountById(session.accountId);
+  const session = await freshSessionFromRequest(request);
+  const account = session ? await findAccountById(session.accountId) : null;
   if (!account) {
     const response = json({ error: "Please log in.", account: null }, 401);
     response.headers.append("Set-Cookie", loggedOutCookie(request));
@@ -37,7 +48,7 @@ export async function requireAccount(request) {
 }
 
 export function errorResponse(error) {
-  if (isSetupNeededError(error)) return json(setupNeededBody(), 503);
+  if (isSetupNeededError(error)) return json(setupNeededBody(/account_tokens/.test(String(error?.message || "")) ? VERIFICATION_MIGRATION : undefined), 503);
   if (error instanceof LinkError) return json({ error: error.message, code: error.code }, error.status);
   if (error instanceof SessionConfigError) return json({ error: error.message }, 500);
   console.error("[api/accounts]", error);

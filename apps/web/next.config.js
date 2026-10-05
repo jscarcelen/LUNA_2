@@ -7,7 +7,7 @@ const nextConfig = {
   },
   // Prevent webpack from bundling pdfjs-dist and other Node-native modules
   // that must run in their original ESM/CJS form in the Node.js runtime.
-  serverExternalPackages: ["pdfjs-dist", "canvas", "@napi-rs/canvas"],
+  serverExternalPackages: ["pdfjs-dist", "canvas", "@napi-rs/canvas", "nodemailer"],
 };
 
 module.exports = nextConfig;

@@ -1,6 +1,6 @@
 import { runChat } from "../../../modules/chat/engine.js";
 import { createSupabaseAdminClient } from "../../../lib/supabaseClient.js";
-import { ownerUserIdFor, runAsOwner } from "../../../lib/session.js";
+import { ownerUserIdForFresh, runAsOwner } from "../../../lib/session.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ async function recordRequest(summary, ownerUserId) {
 
 export async function POST(request) {
   const body = await request.json().catch(() => ({}));
-  const ownerUserId = ownerUserIdFor(request);
+  const ownerUserId = await ownerUserIdForFresh(request);
   const encoder = new TextEncoder();
   const stream = runAsOwner(ownerUserId, () => new ReadableStream({
     async start(controller) {

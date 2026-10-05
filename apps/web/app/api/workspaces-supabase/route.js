@@ -32,7 +32,7 @@ import {
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
 import { createSupabaseAdminClient, isSupabaseConfigured } from "../../../lib/supabaseClient";
-import { accountIdFor, ownerUserIdFor } from "../../../lib/session.js";
+import { accountIdForFresh, hasRevokedSession, ownerUserIdForFresh } from "../../../lib/session.js";
 import { guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
 import { extractAndSaveConcepts } from "../../../lib/conceptsRepository.js";
 import { NextResponse } from "next/server";
@@ -56,9 +56,10 @@ export async function GET(request) {
   if (!isSupabaseConfigured()) return cfgError();
 
   try {
+    if (await hasRevokedSession(request)) return NextResponse.json({ error: "Your session ended (the password was changed). Please log in again." }, { status: 401 });
     // A logged-in account sees its own workspaces (and always has at least one); anyone else gets the demo owner.
-    const ownerUserId = ownerUserIdFor(request);
-    if (accountIdFor(request)) {
+    const ownerUserId = await ownerUserIdForFresh(request);
+    if (await accountIdForFresh(request)) {
       const existing = await listWorkspaceTree(ownerUserId);
       if (!existing.length) await createWorkspace("My workspace", ownerUserId);
     }
@@ -72,14 +73,15 @@ export async function POST(request) {
   if (!isSupabaseConfigured()) return cfgError();
 
   try {
-    const ownerUserId = ownerUserIdFor(request);
+    if (await hasRevokedSession(request)) return NextResponse.json({ error: "Your session ended (the password was changed). Please log in again." }, { status: 401 });
+    const ownerUserId = await ownerUserIdForFresh(request);
     const body = await request.json();
     const action = body?.action;
     let payload = body?.payload || {};
 
     // Real accounts: every id in the request must be theirs, and documents shared with them stay read-only.
     // (The public demo has one shared owner and no accounts, so it is not checked.)
-    if (accountIdFor(request)) {
+    if (await accountIdForFresh(request)) {
       const verdict = await guardWorkspaceAction({ client: createSupabaseAdminClient(), action, payload, ownerUserId });
       if (!verdict.ok) return NextResponse.json({ error: verdict.error }, { status: verdict.status });
       payload = verdict.payload;

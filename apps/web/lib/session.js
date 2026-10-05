@@ -23,6 +23,7 @@ import {
   verifySession
 } from "./accountsCore.js";
 import { getDemoOwnerUserId } from "./supabaseClient.js";
+import { sessionIsCurrent } from "./sessionRevocation.js";
 
 const headerOf = (request, name) => (typeof request?.headers?.get === "function" ? request.headers.get(name) : request?.headers?.[name]) || "";
 
@@ -102,4 +103,37 @@ export function sessionCookieFor(accountId, request) {
 
 export function loggedOutCookie(request) {
   return clearSessionCookie({ secure: isSecure(request) });
+}
+
+/* ------------------------------------------------------------------ sessions that outlive a password change */
+
+/**
+ * `sessionFromRequest`, plus the check that the password was not changed after the session was issued
+ * (see sessionRevocation.js). Use this wherever you are already async and about to touch an account's data.
+ */
+export async function freshSessionFromRequest(request) {
+  const session = sessionFromRequest(request);
+  if (!session) return null;
+  return (await sessionIsCurrent(session)) ? session : null;
+}
+
+/**
+ * A valid-looking session cookie that the account has since revoked (password changed). Routes that serve
+ * an account's workspace answer 401 for it instead of quietly serving the demo owner's data to that browser.
+ */
+export async function hasRevokedSession(request) {
+  if (isDemoSurface(request)) return false;
+  const session = sessionFromRequest(request);
+  return Boolean(session) && !(await sessionIsCurrent(session));
+}
+
+/** Like `accountIdFor`, but a session from before a password change counts as nobody. */
+export async function accountIdForFresh(request) {
+  if (isDemoSurface(request)) return "";
+  return (await freshSessionFromRequest(request))?.accountId || "";
+}
+
+/** Like `ownerUserIdFor`, but a session from before a password change falls back to the demo owner. */
+export async function ownerUserIdForFresh(request) {
+  return (await accountIdForFresh(request)) || getDemoOwnerUserId();
 }

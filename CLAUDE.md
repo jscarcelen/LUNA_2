@@ -110,7 +110,10 @@ A template is **a selection of block formats**. Nothing more.
   for parents/teachers. **Needs migration `202610040001_accounts_links_sharing.sql` applied** (until then the
   UI shows an explicit "Accounts need one database step" notice). The public demo at `/app` is unchanged
   (shared demo owner `LUNA_DEMO_USER_ID`, sample profile, role switcher).
-- Does NOT exist yet: a third-party auth provider / email verification / password reset (ownership of the
+- Email confirmation, password reset, one phone per account (not SMS-verified), the notification bell and request emails exist
+  behind migration `202610050001_account_verification_phone_tokens.sql` (feature-detected: sign-in works without it); see
+  `docs/ACCOUNTS.md` and `lib/mailer.js`.
+- Does NOT exist yet: a third-party auth provider / SMS verification (ownership of the
   demo is still a hardcoded uuid), quiz attempts + real analytics, marketplace
   purchases/payments (browsing + install works; listings are localStorage), RLS policies, TypeScript.
 - Roadmap agreed with the user: 1 design system ✔ → 2 accounts & roles (auth provider TBD later) →
@@ -171,7 +174,7 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
   `agentBuilder.js`, `embeddings.js`), `render/` (templates + exporters).
 - `modules/document-processing/` — parsers, canonical model (CDM), math, normalization, renderers.
 - `modules/core/` — shared contracts (`validateAiToolManifest`), auth/users placeholders.
-- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 21 so far.
+- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 22 so far.
 - `app/platform` (real platform), `app/login`, `app/api/accounts/*`, `modules/accounts/`,
   `lib/accountsCore.js` (pure rules), `lib/session.js`, `lib/accountsRepository.js`, `lib/sharingRepository.js`,
   `lib/workspaceGuard.js` — accounts, see `docs/ACCOUNTS.md`.
@@ -242,7 +245,8 @@ See `apps/web/modules/README.md`.
 `OPENAI_API_KEY`, `LUNA_QUIZ_MODEL`, `LUNA_AGENT_MODEL`, `LUNA_EMBEDDING_MODEL`,
 `MATH_OCR_ENDPOINT`, `MATH_OCR_APP_ID`, `MATH_OCR_APP_KEY`, `OCR_LANGUAGES`, `OCR_MIN_CONFIDENCE`,
 `EXTRACTION_MIN_CONFIDENCE`, `LUNA_SESSION_SECRET` (32+ random chars signing the session cookie; required in
-production/preview on Vercel, a dev fallback is used locally).
+production/preview on Vercel, a dev fallback is used locally), `LUNA_MAIL_FROM`, `LUNA_SMTP_URL` (SMTP provider, wins over Resend),
+`RESEND_API_KEY`, `LUNA_PUBLIC_URL` (outgoing email; none configured = dev console preview / production "Email is not set up yet").
 
 ## Conventions
 

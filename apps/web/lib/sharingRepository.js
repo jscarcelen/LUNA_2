@@ -10,7 +10,7 @@
  * highlights and ticked plan steps) instead of piling up duplicates.
  */
 import { createSupabaseAdminClient } from "./supabaseClient.js";
-import { LinkError, authorizeDelivery, classifyDeliverable } from "./accountsCore.js";
+import { LinkError, assertEmailVerified, authorizeDelivery, classifyDeliverable } from "./accountsCore.js";
 import { findAccountById, getAcceptedLink } from "./accountsRepository.js";
 import { createFolder, createSubject, createWorkspace, updateDocumentMeta } from "./workspacesRepository.js";
 import { ASSIGNED_BY_PREFIX, SHARED_BY_PREFIX, SHARED_SUBJECT_NAME, isIsoDate, isProtectedTag } from "../modules/accounts/shared.js";
@@ -196,6 +196,7 @@ async function placeCopy(client, { sender, recipient, place, source, mode, itemT
  * @param {string} [args.note]
  */
 export async function deliverDocument({ sender, recipientId, documentId, mode, dueDate = "", note = "" }) {
+  assertEmailVerified(sender, "share or assign work");
   const recipient = await findAccountById(recipientId);
   const link = recipient ? await getAcceptedLink(sender.id, recipient.id) : null;
   const allowed = authorizeDelivery({

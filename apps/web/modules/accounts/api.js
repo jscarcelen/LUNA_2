@@ -5,9 +5,9 @@ async function call(path, options) {
   try {
     const response = await fetch(path, { cache: "no-store", credentials: "same-origin", ...options });
     const data = await response.json().catch(() => ({}));
-    return { ok: response.ok, status: response.status, data, error: response.ok ? "" : String(data?.error || "Something went wrong."), setupNeeded: Boolean(data?.setupNeeded) };
+    return { ok: response.ok, status: response.status, data, error: response.ok ? "" : String(data?.error || "Something went wrong."), setupNeeded: Boolean(data?.setupNeeded), migration: String(data?.migration || "") };
   } catch (error) {
-    return { ok: false, status: 0, data: {}, error: `Could not reach the server: ${String(error?.message || error)}`, setupNeeded: false };
+    return { ok: false, status: 0, data: {}, error: `Could not reach the server: ${String(error?.message || error)}`, setupNeeded: false, migration: "" };
   }
 }
 
@@ -23,6 +23,14 @@ export const accountsApi = {
   changeLink: (action, linkId) => post("/api/accounts/links", { action, linkId }),
   shared: () => call("/api/accounts/share"),
   send: (payload) => post("/api/accounts/share", payload),
+  resendVerification: () => post("/api/accounts/resend-verification", {}),
+  verifyEmail: (token) => post("/api/accounts/verify-email", { token }),
+  requestPasswordReset: (email) => post("/api/accounts/password-reset/request", { email }),
+  confirmPasswordReset: (form) => post("/api/accounts/password-reset/confirm", form),
+  updatePhone: (phone, currentPassword) => post("/api/accounts/settings", { action: "phone", phone, currentPassword }),
+  changePassword: (form) => post("/api/accounts/settings", { action: "password", ...form }),
+  notifications: () => call("/api/accounts/notifications"),
+  markNotificationsSeen: () => post("/api/accounts/notifications", { action: "seen" }),
   studentWorkspaces: (accountId) => call(`/api/accounts/linked/workspaces?accountId=${encodeURIComponent(accountId)}`)
 };
 

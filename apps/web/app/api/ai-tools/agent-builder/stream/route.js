@@ -1,6 +1,6 @@
 import { runAgentGeneration } from "../../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { normalizeConfig } from "../../../../../modules/ai-tools/pipeline/agentConfig.js";
-import { ownerUserIdFor, runAsOwner } from "../../../../../lib/session.js";
+import { ownerUserIdForFresh, runAsOwner } from "../../../../../lib/session.js";
 
 // Streams generation progress as newline-delimited JSON. Node runtime is required (Supabase +
 // chunking); streaming keeps the connection alive on Vercel so long generations don't hit the
@@ -17,7 +17,7 @@ export async function POST(request) {
   const startedAt = Date.now();
 
   // Pinned for the whole stream: it keeps running (and loading the right workspace) after this handler returns.
-  const stream = runAsOwner(ownerUserIdFor(request), () => new ReadableStream({
+  const stream = runAsOwner(await ownerUserIdForFresh(request), () => new ReadableStream({
     async start(controller) {
       const send = (event) => {
         controller.enqueue(encoder.encode(`${JSON.stringify({ ...event, t: Date.now() - startedAt })}\n`));

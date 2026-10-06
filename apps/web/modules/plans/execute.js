@@ -20,7 +20,7 @@ import { findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, 
 const FLASHCARDS_AGENT = runConfigFromSpec(createVocabularyFlashcardsSpec());
 
 /** Legacy run-config fields → the field tree the activity engine reads (items[] + once fields). */
-function fieldDefs(fields = []) {
+export function fieldDefs(fields = []) {
   const perItem = fields.filter((field) => field.repeatScope !== "once").map((field) => ({
     id: `lf_${field.name}`,
     name: field.name,
@@ -156,12 +156,14 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
   const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
 
   let tokens = 0;
+  let lastAnswers = [];
   /** One call to the agent; `focus` limits it to some concepts (the first pass uses all of them). */
   async function callAgent(focus) {
     const perConcept = step.generate === "exam" || step.kind === "exam" ? 2 : 1;
     const preset = { ...recipe.answers, ...answersFromOptions(agent, options) };
     if (focus.length && !recipe.custom && "q-count" in preset) preset["q-count"] = Math.min(40, Math.max(Number(preset["q-count"]) || 0, focus.length * perConcept));
     const answers = answersFor(agent, preset);
+    if (!lastAnswers.length) lastAnswers = answers; // the first call's choices; a narrower follow-up call must not replace them
     const config = {
       name: agent.name,
       instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
@@ -238,8 +240,9 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
     data: blocks
       ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources), ...(data.data?.title ? { title: data.data.title } : {}), ...(data.consolidation ? { originals: data.consolidation.originals, coverage: data.consolidation.coverage } : {}) }
       : { items, sources: trimSources(data.sources) },
-    request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds },
-    meta: { agentName: agent.name, subjectName, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
+    // What it takes to run the same agent again with a change (Update…): the agent and the choices it was run with.
+    request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds, answersByQuestion: lastAnswers },
+    meta: { agentId: recipe.documentId || "", agentName: agent.name, subjectName, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }
   });
   if (step.concepts?.length) resource.concepts = step.concepts.map((name, index) => ({ id: `c_plan_${index}`, name, detail: "", level: "understand" }));
   if (learnerNote) resource.context = learnerNote;

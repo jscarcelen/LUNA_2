@@ -58,6 +58,7 @@ const SRC = {
   tchat: "apps/web/app/api/templates/template-chat/route.js",
   generate: "apps/web/app/api/plans/generate/route.js",
   revise: "apps/web/app/api/plans/revise/route.js",
+  planUpdate: "apps/web/app/api/plans/update/route.js",
   resConcepts: "apps/web/app/api/resources/concepts/route.js",
   refine: "apps/web/app/api/ai-tools/agent-builder/refine/route.js",
   iterate: "apps/web/app/api/ai-tools/agent-builder/iterate/route.js",
@@ -247,6 +248,25 @@ export const REQUESTS = [
     ]
   },
   {
+    id: "P4", stage: "plan", name: "Update the plan with a request", status: "live",
+    purpose: "Changes an existing study plan the way the learner asks in their own words ('lighter workload in the last two weeks', 'add a mock exam two days before the deadline', 'I can only study 1 hour a week now'). Only the steps still to do can change; the app shows the added, removed and moved steps before saving.",
+    why: "A plan has to survive real life. Asking in plain words is faster than moving steps one by one, and nothing the learner already did is ever touched.",
+    position: "When the learner presses 'Update this plan…' on the plan page or on a plan card, writes what to change and presses 'Update the plan'.",
+    trigger: "Study plan → Update this plan… → Update the plan",
+    file: SRC.planUpdate, anchor: /export async function POST/,
+    model: "gpt-4o", modelEnv: "LUNA_PLAN_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
+    input: "The learner's request (plus the new time per week or deadline if they changed those fields), today and the last deadline, every deadline with a 'locked' flag (set by someone else), the plan's agent scope, the finished steps (fixed, for context), the pending steps with ids, built flags, dates and concepts, the goals, the concept map and the learner's performance.",
+    output: "A two-sentence summary, every step still to do marked kept / moved / edited / added / removed (dates, minutes, what Luna should generate, concepts), optional deadline moves and goals. The app then enforces the rules in code: finished steps, built resources and locked deadlines are put back as they were, new steps can only use the agents in scope, dates stay inside the plan, a step the model forgets is kept.",
+    fallbacks: "Error shown; the plan is not changed. Nothing is saved until the learner presses Apply changes. The last five versions are kept with Restore.",
+    tokens: { basis: "estimated", typical: { in: 2600, out: 1400 }, scale: null },
+    seconds: { typical: 8, note: "estimate" },
+    prompts: [
+      { label: "System prompt", file: SRC.planUpdate, re: /content: `(You are a study planner updating[\s\S]*?)`\n          \},/ },
+      { label: "User message", file: SRC.planUpdate, re: /content: (`Today: \$\{today\}[^`]*`)/ }
+    ]
+  },
+  {
     id: "P3", stage: "plan", name: "What does this resource teach?", status: "on-demand",
     purpose: "Lists 3–12 small learning goals a generated resource (quiz, summary) teaches, so several resources can be tied to the same concept.",
     why: "Plans and mastery link resources through shared concepts.",
@@ -367,8 +387,8 @@ export const REQUESTS = [
     id: "A7", stage: "agents", name: "Improve an 'Iterate' request", status: "live",
     purpose: "Turns the few words a user types after reading a result ('give more examples') into a precise revision brief with a verifiable checklist, and names the original limits the request overrides (for example 'one page').",
     why: "Left as typed, the model changes little and the agent's original limits win. With the brief the change is visible.",
-    position: "When the user presses 'Apply to the result' in Iterate, right before the rewrite (A1/A2).",
-    trigger: "Run page → Iterate → Apply",
+    position: "When the user presses 'Apply to the result' in Iterate, or 'Update' on a saved result (workspace, reader, Activities, plan step, chat card), right before the rewrite (A1/A2) — which then runs the SAME agent again with the previous output.",
+    trigger: "Run page → Iterate → Apply · Any generated item → Update…",
     file: SRC.iterate, anchor: /export async function POST/,
     model: "gpt-4o", modelEnv: "LUNA_REFINER_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
     params: { temperature: 0.2, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
@@ -693,7 +713,7 @@ export const NODES = [
   { id: "cmap", col: 3, lane: 2, label: "Concept tree", sub: "GPT-4o · ≤ 20 concepts", reqs: ["U7"], phase: "upload" },
   { id: "plan", col: 4, lane: 0, label: "Plan it for me", sub: "material + deadline", phase: "plan" },
   { id: "planapi", col: 5, lane: 1, label: "Plan builder", sub: "/api/plans/generate · revise", phase: "plan" },
-  { id: "plangpt", col: 5, lane: 2, label: "GPT-4o schedules", sub: "dated steps, goals", reqs: ["P1", "P2"], phase: "plan" },
+  { id: "plangpt", col: 5, lane: 2, label: "GPT-4o schedules", sub: "dated steps, goals", reqs: ["P1", "P2", "P4"], phase: "plan" },
   { id: "plandb", col: 6, lane: 3, label: "Plan · goals · steps", sub: "saved as a document", phase: "plan" },
   { id: "run", col: 6, lane: 0, label: "Run an agent", sub: "choices + material", phase: "agents" },
   { id: "retr", col: 7, lane: 1, label: "Retrieve passages", sub: "≤ 48k characters", phase: "agents" },

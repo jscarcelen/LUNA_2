@@ -746,6 +746,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   function currentRequest() {
     return {
       answersByQuestionId,
+      // By the words of each question too: built-in agents get new ids on every load, and "Update…" must find the choices again.
+      answersByQuestion: questions.map((question) => ({ question: question.text, answer: answersByQuestionId[question.id] })),
       knowledgeMode,
       contextPromptDraft,
       referenceDocumentIds,

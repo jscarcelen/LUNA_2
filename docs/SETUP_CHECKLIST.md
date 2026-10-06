@@ -55,3 +55,14 @@ Until the email provider exists, accounts still work but nothing is mailed; the 
 2. [ ] Hand test with the three test accounts (password `LunaTest#2026`): parent requests the teacher (a peer connection) → teacher accepts; teacher shares a folder with the student as "Can edit" → student edits a document under Shared with me → the original changes; switch to "Can view" → read-only at once; remove → gone. Share an agent, a template and a "My blocks" component (they arrive as the receiver's own copies).
 3. [ ] Written answers: in a quiz with short answers press Check — Luna marks them by meaning ("Almost" gets half marks). Needs the OpenAI key (already set).
 4. [ ] Move: drag a document from Accounting to Statistics, or use ⋯ → Move to…; try Undo.
+
+## H. Added 2026-10-07 — Update anything Luna generated (no migration, no new env var)
+1. [ ] **A quiz**: Workspaces → a quiz nobody has answered → ⋯ → **Update…** → "make the questions harder" → Update. Watch the progress steps, then the result: new / changed / removed questions. **Replace this** (default). Open the quiz → **Versions** tab shows the old one → **Restore this version**.
+2. [ ] **A quiz with attempts** (answer one first): Update… again. The default is now **Save as a new version** ("Quiz (v2)") and the original is untouched; the plan step / Activities row still points at the original.
+3. [ ] **Different material**: Update… → tick **Use different material** → pick another document → the new version reads that one. Untick **Keep the format and colours** to drop the look.
+4. [ ] **A deleted agent**: save an agent, make a resource with it, delete the agent, Update… the resource → it says the agent is gone and offers **Run it as a copy with the built-in agent**.
+5. [ ] **Everywhere**: the same **Update…** button is in the reader header (✦), Activities rows, a study-plan step, and the chat's result cards (an unsaved card is replaced in the card).
+6. [ ] **A master document** (plan from 2+ uploaded documents): Update… → "add a section on …" (the consolidator runs again, takes minutes). Then open a quiz made from it: it says "Based on an older version of …".
+7. [ ] **A plan**: Study plans → a plan card → **Update…** (or the plan page → ✎ Update this plan…) → "lighter workload in the last two weeks" / "add a mock exam two days before the deadline" → read the preview (added / removed / moved steps with dates) → **Apply changes** → when asked, **Build now** for the new steps. A step you already finished must be unchanged. Change "Time per week" or the new deadline date too.
+8. [ ] **A deadline set by someone else** (a teacher's assignment): the date field is disabled and the dialog says it cannot be changed; asking "move the deadline" never moves it.
+9. [ ] **Restore a plan**: Update this plan… → Show earlier versions → **Restore**. Finished steps and built material are kept.

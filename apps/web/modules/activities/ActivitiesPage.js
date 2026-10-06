@@ -5,6 +5,8 @@ import { SubjectTabs } from "../ui/SubjectTabs";
 import { defaultLearner } from "../performance/learners";
 import { daysUntil, parsePlan } from "../plans/plan";
 import { ReaderView } from "../reader/ReaderView";
+import { UpdateDialog } from "../resources/UpdateDialog";
+import { canUpdateResource } from "../resources/update";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -34,6 +36,8 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
   const attempts = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity-attempt")).map((d) => parse(d)).filter((p) => p?.attempt).map((p) => p), [docs]);
   const [playing, setPlaying] = useState(null);
+  const [updating, setUpdating] = useState(null); // an activity row whose "Update…" dialog is open
+  const [updateStatus, setUpdateStatus] = useState("");
   const [view, setView] = useState("todo");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState("");
@@ -196,6 +200,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                     </button>
                     <label className="flex items-center gap-1 text-[11px] text-soft-ink">Due<input type="date" className="rounded-lg border border-ink/15 px-2 py-1 text-xs" value={r.due} onChange={(event) => setDue(r, event.target.value)} /></label>
                     <button type="button" className={primaryBtn} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
+                    {canUpdateResource(r.parsed) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdating(r)}>✦ Update…</button> : null}
                     {onRemoveDocument ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${r.parsed.activity.title}"?`)) onRemoveDocument(r.document.id); }}>Delete</button> : null}
                   </div>
                 );
@@ -224,6 +229,19 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         </div>
       )}
 
+      {updateStatus ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{updateStatus}</p> : null}
+      {updating ? (
+        <UpdateDialog
+          document={updating.document}
+          resource={updating.parsed}
+          workspace={workspaces.find((w) => w.id === selectedWorkspaceId) || null}
+          fallbackSubjectId={selectedSubjectId}
+          onClose={() => setUpdating(null)}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+          onDone={(message) => { setUpdateStatus(message); setPlaying(null); }}
+        />
+      ) : null}
       {playing ? (
         <ReaderView
           resource={playing.parsed}
@@ -232,6 +250,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
           highlights={playing.parsed.highlights || []}
           onSaveHighlights={onUpdateGeneratedDocument ? (list) => { const content = JSON.stringify({ ...playing.parsed, highlights: list }, null, 2); return onUpdateGeneratedDocument(playing.document.id, { file: { name: playing.document.name, content, sizeBytes: content.length } }); } : undefined}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
+          onUpdate={canUpdateResource(playing.parsed) ? () => setUpdating(playing) : undefined}
           onClose={() => setPlaying(null)}
         />
       ) : null}

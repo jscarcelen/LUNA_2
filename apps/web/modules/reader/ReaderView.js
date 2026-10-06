@@ -27,7 +27,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -246,6 +246,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         {noting ? <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ Notes{list.length ? ` (${noted}/${list.length})` : ""}</button> : view === "notes" && !editing ? <span className="text-xs text-soft-ink">Highlighting needs a newer browser.</span> : null}
         {saveState ? <span className="text-[11px] text-soft-ink" aria-live="polite">{saveState}</span> : null}
         {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ Edit content</button> : null}
+        {onUpdate && !editing ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={onUpdate}>✦<span className="ml-1">Update…</span></button> : null}
         <button type="button" className={ghostBtn} aria-label="Download" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">Download</span></button>
         <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
         {downloadOpen ? (

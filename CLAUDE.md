@@ -113,6 +113,14 @@ A template is **a selection of block formats**. Nothing more.
 - Email confirmation, password reset, one phone per account (not SMS-verified), the notification bell and request emails exist
   behind migration `202610050001_account_verification_phone_tokens.sql` (feature-detected: sign-in works without it); see
   `docs/ACCOUNTS.md` and `lib/mailer.js`.
+- **Open network + sharing v2** (migration `202610060001_network_sharing_grants.sql`, feature-detected: nothing breaks and
+  sharing v2 routes answer `503 setupNeeded` until it is applied): any account connects with any other (`peer` kind;
+  teacher/parent↔student keep assign + performance, a peer never exposes performance); files, folders (subtree, also what is
+  added later), topics and study plans are shared **live** with `view`/`edit` through `share_grants` and appear under
+  "Shared with me / <owner>" in the tree; agents/templates/components are shared as copies. **Authorisation rule: decide
+  access only with `lib/grants.js` `resolveAccess` (via `workspaceGuard` / `resourceAccess`), never from client flags; edit
+  changes the owner's original, only the owner deletes/moves/re-tags/shares onward; actions not listed in
+  `SHARED_ACTION_NEEDS` are owner-only.** See `docs/ACCOUNTS.md`.
 - Does NOT exist yet: a third-party auth provider / SMS verification (ownership of the
   demo is still a hardcoded uuid), quiz attempts + real analytics, marketplace
   purchases/payments (browsing + install works; listings are localStorage), RLS policies, TypeScript.
@@ -141,8 +149,8 @@ A template is **a selection of block formats**. Nothing more.
   from the logged-in account, there is no switcher, and `platformNavExtras` adds Connections / My students.
   **Server rule: whose data a request touches is decided only by `ownerUserIdFor(request)` (`lib/session.js`:
   session account id, else the demo owner); never read an owner id from a request body or query.** For a
-  logged-in account `lib/workspaceGuard.js` also checks every workspace/topic/folder/document id and keeps
-  documents tagged `shared-by:…` read-only. Home (`modules/dashboard/ui/DashboardPage.js`) is the same simple page for every role: greeting, a
+  logged-in account `lib/workspaceGuard.js` also checks every workspace/topic/folder/document id (own, or shared with the account by a live
+  grant, see `lib/grants.js`) and keeps documents tagged `shared-by:…` read-only. Home (`modules/dashboard/ui/DashboardPage.js`) is the same simple page for every role: greeting, a
   one-row gallery of the 4 most urgent study plans, and Luna's next steps (real data).
 - Node 24 (`.nvmrc`). `apps/web/CLAUDE.md` → `AGENTS.md` points at the bundled Next canary docs in
   `node_modules/next/dist/docs/` — read those before writing Next-specific code.
@@ -174,7 +182,7 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
   `agentBuilder.js`, `embeddings.js`), `render/` (templates + exporters).
 - `modules/document-processing/` — parsers, canonical model (CDM), math, normalization, renderers.
 - `modules/core/` — shared contracts (`validateAiToolManifest`), auth/users placeholders.
-- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 22 so far.
+- `supabase/migrations/` (repo root) — `YYYYMMDDNNNN_description.sql`, 23 so far.
 - `app/platform` (real platform), `app/login`, `app/api/accounts/*`, `modules/accounts/`,
   `lib/accountsCore.js` (pure rules), `lib/session.js`, `lib/accountsRepository.js`, `lib/sharingRepository.js`,
   `lib/workspaceGuard.js` — accounts, see `docs/ACCOUNTS.md`.

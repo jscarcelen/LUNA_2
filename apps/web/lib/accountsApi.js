@@ -3,7 +3,7 @@
  * checks, and one place that turns errors into responses (a missing table becomes `setupNeeded`).
  */
 import { NextResponse } from "next/server";
-import { LinkError, SessionConfigError, VERIFICATION_MIGRATION, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
+import { LinkError, SHARING_MIGRATION, SessionConfigError, VERIFICATION_MIGRATION, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
 import { findAccountById, supportsVerification } from "./accountsRepository.js";
 import { freshSessionFromRequest, loggedOutCookie } from "./session.js";
 import { isSupabaseConfigured } from "./supabaseClient.js";
@@ -48,7 +48,12 @@ export async function requireAccount(request) {
 }
 
 export function errorResponse(error) {
-  if (isSetupNeededError(error)) return json(setupNeededBody(/account_tokens/.test(String(error?.message || "")) ? VERIFICATION_MIGRATION : undefined), 503);
+  if (isSetupNeededError(error)) {
+    const message = String(error?.message || "");
+    return json(setupNeededBody(/account_tokens/.test(message) ? VERIFICATION_MIGRATION : /share_grants/.test(message) ? SHARING_MIGRATION : undefined), 503);
+  }
+  // The sharing migration is not applied yet: a clear 503 that names it.
+  if (error instanceof LinkError && error.setup) return json({ ...error.setup, error: error.message, code: error.code }, 503);
   if (error instanceof LinkError) return json({ error: error.message, code: error.code }, error.status);
   if (error instanceof SessionConfigError) return json({ error: error.message }, 500);
   console.error("[api/accounts]", error);

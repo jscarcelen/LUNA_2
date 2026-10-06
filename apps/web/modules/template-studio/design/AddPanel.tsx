@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ACCENT_PRESETS, blockFamilies, builtInBlocks, readBlockLibrary, type AccentPreset, type BlockDef } from "../engine/blocks";
 import { card, fieldBase, kicker } from "../ui";
 import { ComponentChat } from "./ComponentChat";
+import { requestShare, useSharingAvailable } from "../../accounts/shareEvents";
 
 export interface AddPanelProps {
   onAdd: (type: string) => void;
@@ -236,6 +237,7 @@ export function AddPanel({
 }: AddPanelProps) {
   const [library, setLibrary] = useState<BlockDef[]>([]);
   const [customData, setCustomData] = useState("");
+  const canShare = useSharingAvailable();
   useEffect(() => { setLibrary(readBlockLibrary()); }, [libraryVersion]);
 
   const selectedIds = useMemo(() => new Set(selectedBlockIdsProp), [selectedBlockIdsProp]);
@@ -315,18 +317,22 @@ export function AddPanel({
           <p className="m-0 mb-1.5 flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">My blocks</p>
           <div className="grid gap-1">
             {library.map((block) => (
-              <VariantCard
-                key={block.id}
-                block={block}
-                active={selectedIds.has(block.id)}
-                catInk="#6b7280"
-                catBg="var(--surface-soft)"
-                catBorder="rgba(0,0,0,0.08)"
-                onToggle={(active) => {
-                  if (active) onAddBlock(block, defaultOptions(block));
-                  else if (onRemoveBlock) onRemoveBlock(block);
-                }}
-              />
+              <div key={block.id} className="flex items-start gap-1">
+                <div className="min-w-0 flex-1">
+                  <VariantCard
+                    block={block}
+                    active={selectedIds.has(block.id)}
+                    catInk="#6b7280"
+                    catBg="var(--surface-soft)"
+                    catBorder="rgba(0,0,0,0.08)"
+                    onToggle={(active) => {
+                      if (active) onAddBlock(block, defaultOptions(block));
+                      else if (onRemoveBlock) onRemoveBlock(block);
+                    }}
+                  />
+                </div>
+                {canShare ? <button type="button" title="Share a copy of this component with people you are connected to" className="shrink-0 rounded-lg border border-ink/10 px-1.5 py-1 text-[10px] font-semibold text-soft-ink hover:text-ink" onClick={() => requestShare({ kind: "component", name: block.name, component: block })}>Share…</button> : null}
+              </div>
             ))}
           </div>
         </div>

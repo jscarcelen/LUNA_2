@@ -36,13 +36,16 @@ const PROFILES = [
   { id: 'teacher', emoji: '🏫', title: 'Teacher', desc: 'Manage a class, build curriculum, assign work to students' },
 ];
 
-// Who each profile can ask to connect with at sign-up. `relation` is the role of the person asked.
+// Who each profile can ask to connect with at sign-up. `relation` is the role of the person asked ('' = anyone:
+// the network is open, any account can connect with any other; the kind of connection is settled from the roles).
+const OTHERS_FIELD = { key: 'others', relation: '', label: 'Anyone else you want to connect with', hint: 'Optional. Classmates, colleagues, other parents… you can build your network later too.' };
 const INVITE_FIELDS = {
-  teacher: [{ key: 'students', relation: 'student', label: 'Your students’ emails', hint: 'Optional. One per line or separated by commas.' }],
-  parent: [{ key: 'children', relation: 'student', label: 'Your children’s emails', hint: 'Optional. One per line or separated by commas.' }],
+  teacher: [{ key: 'students', relation: 'student', label: 'Your students’ emails', hint: 'Optional. One per line or separated by commas.' }, OTHERS_FIELD],
+  parent: [{ key: 'children', relation: 'student', label: 'Your children’s emails', hint: 'Optional. One per line or separated by commas.' }, OTHERS_FIELD],
   student: [
     { key: 'parents', relation: 'parent', label: 'Parent emails', hint: 'Optional.' },
     { key: 'teachers', relation: 'teacher', label: 'Teacher emails', hint: 'Optional.' },
+    OTHERS_FIELD,
   ],
 };
 

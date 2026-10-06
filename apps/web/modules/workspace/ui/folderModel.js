@@ -35,7 +35,9 @@ export function foldersOf(workspace) {
         name: folder.name,
         parentFolderId: folder.parentFolderId ? folderNode(subject.id, folder.parentFolderId) : subjectNode(subject.id),
         subjectId: subject.id,
-        folderId: folder.id
+        folderId: folder.id,
+        // Set on what another account shared with you (see lib/sharedTree.js): who, and with which permission.
+        ...(folder.shared ? { shared: folder.shared } : {})
       });
     }
   }

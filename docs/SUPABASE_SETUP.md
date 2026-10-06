@@ -51,6 +51,14 @@ Apply the SQL migrations in order (all of `supabase/migrations/`):
   sign-up keep working on the first accounts migration alone (the code detects the missing columns). Apply it, set
   the mail variables (`LUNA_SMTP_URL` or `RESEND_API_KEY`, plus `LUNA_MAIL_FROM`, `LUNA_PUBLIC_URL`) and read
   `docs/ACCOUNTS.md` ("Email, phone and password"). Existing accounts are not marked as confirmed.
+- `202610060001_network_sharing_grants.sql` (the open network and sharing v2: the `peer` connection kind — the CHECK on
+  `account_links.kind` is relaxed, `pair_key` stays unique per pair; the `share_grants` table of live view/edit shares of
+  documents, folders and topics, with a trigger that removes the grants when the original is deleted; and `payload` /
+  `imported_at` + wider `item_type` on `shared_items` for shared agents, templates and components). **Optional until you
+  want those features, and safe to run twice:** without it everything that exists keeps working, connecting with anyone but
+  teachers/parents/students and every sharing v2 action answer `503 setupNeeded` naming this file, and "Shared with me"
+  does not appear. Run `get_advisors` (security + performance) afterwards; the new table has RLS enabled and, like the other
+  accounts tables, no policies (service role only).
 
 From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
 (ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be

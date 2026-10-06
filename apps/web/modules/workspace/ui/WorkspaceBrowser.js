@@ -13,8 +13,9 @@ import { MoveDialog } from "./MoveDialog";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
-import { SHARED_SUBJECT_NAME, dueDateOf, isAssignedDocument, isSharedDocument, senderNameOf } from "../../accounts/shared";
+import { dueDateOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
+import { requestLeaveShare } from "../../accounts/shareEvents";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -488,7 +489,7 @@ export function WorkspaceBrowser({
     return (
       <span className="flex flex-wrap items-center gap-1 text-[11px] text-soft-ink">
         <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? "generated" : "material"}</span>
-        {isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}` : ""}</span> : null}
+        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>Shared by {sharedInfoOf(document).ownerName || "another account"} · {sharedInfoOf(document).permission === "edit" ? "can edit" : "can view"}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}` : ""}</span> : null}
         {isFavourite(document) ? <span className={`${chip} bg-[#fff3cd] text-[#8a5a00]`}>★</span> : null}
         {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{row.resource.meta.questionCount} questions</span> : null}
         {resourceDifficulty(document) ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{resourceDifficulty(document)}</span> : null}
@@ -507,7 +508,8 @@ export function WorkspaceBrowser({
   const actions = (document) => {
     const row = rowsByDocumentId.get(document.id);
     // A document someone sent you is read-only: no rename, delete, retag or regenerate (the server refuses them too).
-    const locked = isSharedDocument(document);
+    const sharedWithMe = sharedInfoOf(document);
+    const locked = isSharedDocument(document) || Boolean(sharedWithMe);
     return (
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
         {/* On a phone Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
@@ -539,7 +541,9 @@ export function WorkspaceBrowser({
             { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } },
             { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); } }
             ]),
-            locked ? { label: "Read-only — sent to you", icon: "🔒", onSelect: () => setStatus("Documents sent to you are read-only. You can read, highlight, take notes and answer them.") } : null
+            sharedWithMe?.permission === "edit" ? { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } } : null,
+            sharedWithMe?.root ? { label: "Leave this share", icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
+            locked && sharedWithMe ? { label: sharedWithMe.permission === "edit" ? "Shared with you · you can edit" : "Shared with you · view only", icon: "🔒", onSelect: () => setStatus(sharedWithMe.permission === "edit" ? `Shared by ${sharedWithMe.ownerName}. Your edits change the original: everyone who has it sees them. Only the owner can delete, move or share it.` : `Shared by ${sharedWithMe.ownerName} as view only. You can read, highlight, take notes and answer it.`) } : locked ? { label: "Read-only — sent to you", icon: "🔒", onSelect: () => setStatus("Documents sent to you are read-only. You can read, highlight, take notes and answer them.") } : null
           ]}
         />
       </span>
@@ -737,8 +741,16 @@ export function WorkspaceBrowser({
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
+                      {folder.shared ? <span className={`${chip} shrink-0 bg-[#e8f2ff] text-[#0058b0]`} title={folder.shared.permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>{folder.shared.permission === "edit" ? "can edit" : "can view"}</span> : null}
+                      {folder.shared ? (
+                        <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
+                          {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
+                          {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button> : null}
+                          {folder.shared.root ? <button type="button" title="Leave this share" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => requestLeaveShare(folder.shared.grantId)}>↩</button> : null}
+                        </span>
+                      ) : null}
                       {/* On a phone there is no hover: the same actions, and "Move to…", live in the ⋯ menu. */}
-                      {!sharedTopic(folder.subjectId) ? (
+                      {!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
                         <span className={folder.isSubject || !onMoveFolder ? "sm:hidden" : ""} onClick={(e) => e.stopPropagation()}>
                         <RowMenu
                           label={`Actions for ${folder.name}`}
@@ -751,7 +763,8 @@ export function WorkspaceBrowser({
                         />
                         </span>
                       ) : null}
-                      <span className={`shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 ${sharedTopic(folder.subjectId) ? "hidden" : "hidden sm:flex"}`} onClick={(e) => e.stopPropagation()}>
+                      <span className={`shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 ${folder.shared || isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? "hidden" : "hidden sm:flex"}`} onClick={(e) => e.stopPropagation()}>
+                        {onShareDocument ? <button type="button" title="Share…" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name })}>↗</button> : null}
                         {(onCreateFolder || onCreateSubject) ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
                         <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button>
                         <button type="button" title="Delete" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-[rgba(255,59,48,0.1)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); }}>🗑</button>
@@ -900,8 +913,8 @@ export function WorkspaceBrowser({
       ) : null}
 
       {/* A document someone sent you: say whose it is while it is open (it is read-only; notes and highlights still save). */}
-      {[preview, openRow?.document, playing?.document].filter((entry) => entry && isSharedDocument(entry)).slice(0, 1).map((entry) => (
-        <SharedNotice key={entry.id} by={senderNameOf(entry, folders)} assigned={isAssignedDocument(entry)} due={dueDateOf(entry)} />
+      {[preview, openRow?.document, playing?.document].filter((entry) => entry && (isSharedDocument(entry) || sharedInfoOf(entry))).slice(0, 1).map((entry) => (
+        <SharedNotice key={entry.id} by={sharedInfoOf(entry)?.ownerName || senderNameOf(entry, folders)} assigned={isAssignedDocument(entry)} due={dueDateOf(entry)} canEdit={sharedInfoOf(entry)?.permission === "edit"} live={Boolean(sharedInfoOf(entry))} />
       ))}
     </section>
   );

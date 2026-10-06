@@ -17,6 +17,14 @@ keeps working exactly as before (no confirmation, no phone stored, no reset, nob
 answer `503 { setupNeeded: true, migration: "…202610050001…" }`. It takes effect within ~15 s of applying it,
 no redeploy.
 
+A third migration, `supabase/migrations/202610060001_network_sharing_grants.sql`, opens the network and adds live sharing
+(see "Your network" and "Sharing v2" below): the `peer` connection kind, the `share_grants` table, and the
+`payload` / `imported_at` columns of `shared_items`. **It is optional for everything that already works:** until it is
+applied, teacher/parent <-> student connections, copies and assigning behave exactly as before; connecting with anyone
+else and every sharing v2 action answer `503 { setupNeeded: true, migration: "…202610060001…" }` with a plain notice, the
+reading routes (the Connections overview, the share list, the bell) quietly report "nothing shared", and the workspace
+tree has no "Shared with me". It takes effect within ~15 s of applying it, no redeploy.
+
 Set `LUNA_SESSION_SECRET` (32+ random characters, e.g. `openssl rand -base64 48`) on Vercel for
 **Production and Preview**. In production without it, nobody can log in or sign up (the routes answer 500
 with the reason) and every request is treated as the demo. Locally a fixed development value is used.
@@ -27,8 +35,9 @@ with the reason) and every request is treated as the demo. Locally a fixed devel
 |---|---|
 | `accounts` | id, unique lowercase `email`, `password_hash` (scrypt), `display_name`, `role` student/teacher/parent, `under_13`, failed-log-in counter and lock, `email_verified_at`, `phone` (E.164, unique) + `phone_verified_at`, `password_changed_at`, `notifications_seen_at`, `pending_invites` |
 | `account_tokens` | one-time links: `kind` verify_email (48 h) / reset_password (1 h), `token_hash` (SHA-256; the token itself exists only in the email), `expires_at`, `used_at` |
-| `account_links` | one row per pair and kind (`teacher_student`, `parent_student`): requester, target (null until that email has an account), `status` pending / accepted / declined / revoked, `pair_key` (unique, direction-independent) |
-| `shared_items` | what was sent: share or assign, item type, sender, recipient, source document, the recipient's copy, due date, note |
+| `account_links` | one row per pair and kind (`teacher_student`, `parent_student`, `peer`): requester, target (null until that email has an account), `status` pending / accepted / declined / revoked, `pair_key` (unique, direction-independent) |
+| `shared_items` | what was sent as a COPY: share or assign, item type (document, resource, activity, plan, agent, template, component), sender, recipient, source document, the recipient's copy, due date, note; `payload` + `imported_at` for components |
+| `share_grants` | LIVE shares: `owner_id`, `grantee_id`, `item_kind` document / folder / subject, `item_id`, `permission` view / edit, `item_name`, `notified_at`, `revoked_at` (history is kept; one live grant per person and item). A trigger deletes the grants when the original is deleted |
 
 An account's id is also its `owner_user_id` everywhere else, so the existing tables (workspaces, concepts,
 attempts…) work unchanged. RLS is enabled with no policies: access is service-role only, from the server.
@@ -111,41 +120,108 @@ unknown emails, 5 failures per email/15 min and 30 per address (in memory) plus 
 row, sign-up throttle, same-origin check on every state-changing account route, min 8 / max 200 character
 passwords.
 
-## Linking
+## Your network (linking)
 
-Valid pairs: teacher↔student and parent↔student. Either side can ask; **a link is active only when the other
-side accepts**. A student's own request to a teacher/parent and the reverse are the same pair (asking someone
-who already asked you is the second yes). Sign-up can include emails to connect with (teacher: students;
-parent: children; student: parents and teachers). Requests for emails with no account wait and attach when
-that email is confirmed; if the new account's role does not fit, the request is silently revoked. Asking
-about an email never reveals whether it has an account (same answer for unknown or wrong-role emails).
-Remove ends a link (files already sent stay). A declined request cannot be re-sent by the same person for 24 h.
+**The network is open.** Any account can connect with any other: student↔student, teacher↔teacher, parent↔teacher,
+parent↔parent… and there is no limit on how many connections an account has. Either side can ask; **a link is active
+only when the other side accepts**. A request to someone who already asked you is the second yes. Sign-up can include
+emails to connect with (the fields depend on the profile, plus "anyone else"); they are sent once the email is confirmed.
+Requests for emails with no account wait and attach when that email is confirmed. Asking about an email never reveals
+whether it has an account (same answer for unknown, known and wrong-role emails). Remove ends a connection (copies already
+sent stay; live shares between the two stop at once). A declined request cannot be re-sent by the same person for 24 h.
 
-## Sharing and assigning
+**The kind of connection comes from the two roles** (`kindForRoles` in `lib/accountsCore.js`), never from what the
+requester claims: teacher+student → `teacher_student`, parent+student → `parent_student`, every other pair → `peer`.
+For an address with no account yet the optional "They are a…" hint decides the stored kind; it is settled from the real
+roles when the person signs up (a teacher who hinted "student" for an address that turned out to be a parent simply
+becomes a peer connection). Role-specific powers stay explicit and role-based (`hasGuardianPowers`):
+
+| | `teacher_student` / `parent_student` | `peer` |
+|---|---|---|
+| Share files, folders, plans, agents, templates, components | yes | yes |
+| **Assign** activities and plans with a due date (teacher/parent → student) | yes | **never** |
+| See the student's performance (**My students / My children**) | yes | **never** |
+| Anything private (notes, attempts, goals, agents, uploaded material of the other) | no | no, only what is explicitly shared |
+
+Connections shows "Your network" with a label per person ("Your student", "Your parent", "Teacher in your network"…).
+
+## Sharing v2: live shares with permissions
+
+Open the **Share…** dialog from a file row, a **folder** row (any folder, study-plan folders and a whole topic included),
+a study plan, an agent card, a template card or a custom component. The dialog is a people picker over **accepted
+connections only** (a share to anyone else is refused by the server: `authorizeDelivery` on the accepted link, then a
+403 for that person and nothing is written), with a **Can view / Can edit** choice and, for the owner, the **People with
+access** list (change permission, remove).
+
+`POST /api/accounts/grants { action: "share", kind: "document" | "folder" | "subject", itemId, recipientIds[], permission }`
+(also `permission`, `revoke`, `leave`; `GET ?kind=&id=` = who has access, `GET` = overview). Sender = session; the item
+must be the sender's own (a grantee, even with edit, can never share onward: the answer is the same 404 as for an item that
+does not exist).
+
+* **Files and folders are shared live, not copied.** A grant row says "this owner gave this person view/edit on this
+  document, folder (with its whole subtree, including what is added later) or topic". The owner keeps ownership. A study
+  plan is a document: it travels with the documents it uses and its own plan folder (same permission), so every step opens.
+* **Where the grantee sees it:** the workspace tree API (`GET /api/workspaces-supabase`, `lib/sharedTree.js`) lays
+  everything shared with an account into its first workspace as **Shared with me / <owner's name> / …**: the nodes
+  carry the owner's real ids and a `shared: { grantId, ownerId, ownerName, permission, root }` marker (a shared topic shows
+  as a stand-in folder `subj~<topic id>`). A *view* document also carries a synthetic `shared-by:` tag so the existing
+  read-only interface applies. The grantee's own notes, highlights and attempts are their own documents in their own topic
+  ("Shared with me" is real for them): nothing of theirs is written to the owner's account.
+* **Authorisation is one pure module: `lib/grants.js` `resolveAccess({ accountId, item, facts, grants, connections })` →
+  `"owner" | "edit" | "view" | null`**, used by `lib/workspaceGuard.js` (every workspace action) and `lib/resourceAccess.js`
+  (answering a shared quiz saves the attempt under the answerer). Rules: the owner of a workspace owns its items; a
+  grant covers its item and everything under it (folder subtree, topic); the grant must be live (not revoked), made by the
+  item's real owner to this account, and the two must still be connected; the strongest covering grant wins; private
+  documents (`doc-notes`, `activity-attempt`, `study-goal`, `ai-agent`) never resolve for anyone but their owner.
+* **What each permission allows** (`SHARED_ACTION_NEEDS`; any action not listed needs the owner, so new actions are closed
+  by default): *view* reads, downloads, highlights (own notes) and answers; *edit* also changes the original's content,
+  renames, ticks plan steps, and adds files/folders **inside a shared folder** (they land in the owner's workspace, so every
+  version sees the update); **only the owner** deletes, moves, re-tags, restructures, shares again, or changes access. A
+  request that names a shared item together with the account's own files, or items of two shares, is refused (nothing moves
+  in or out of a share). The guard points the write at the owner's real workspace/topic; ids from the browser are never trusted.
+* **Revoking is immediate** (owner: remove/change in the dialog or Connections; grantee: **Leave**, in the row menu,
+  the folder row or Connections). Removing the connection revokes both directions. Deleting the original removes its grants
+  (database trigger + the route).
+* **Notifications:** the bell shows "X shared 'Folder' with you (can edit)"; an email goes out best effort (the sharer's name,
+  role, email and the item's name, never its content), one per sharer and person per hour (`share_grants.notified_at`) and
+  20 an hour per sender; a failed or unconfigured mailer never changes what the sharer sees.
+
+**Agents, templates and components are shared as COPIES** (`POST /api/accounts/share-copy`, connections only; no live sync,
+the dialog says "they get their own copy"). Agent: a document tagged `ai-agent` + `shared-from:<id>` in the recipient's first
+ordinary topic, labelled "Shared by <name>", without the sender's saved last output; **agents bought in the Marketplace
+cannot be shared**. Template: through the recipient's own template library ("<name> (shared by <sender>)"). Component: a
+`shared_items` row (`item_type = 'component'`, `payload` = the validated block, 200 KB cap); on its next load the app imports
+it into `localStorage` `luna.templateBlocks.v1` ("My blocks") and says so. The recipient may use and modify their copy.
+
+## Sharing and assigning (copies)
 
 `POST /api/accounts/share { mode: "share" | "assign", documentId, recipientIds[], dueDate?, note? }`, sender =
-session. Needs an accepted link of the right kind with each recipient and a document the sender owns.
+session. Needs an accepted link with each recipient and a document the sender owns. This is the older **copy**
+mechanism; the dialog's plain **Share** now creates live grants, and this route still serves **Assign**.
 
-* **Share** (anyone linked, both directions): a read-only copy lands in the recipient's first workspace under
-  **Shared documents / <sender's name>**, tagged `shared-by:<sender id>`.
-* **Assign** (teacher/parent → student; activities and study plans only): the same copy plus `assigned-by:<id>`
-  and `due:YYYY-MM-DD`; activities then show in the student's Activities with the due date. A plan travels with
-  the activities it uses (ids rewritten to the copies; sub-plan and agent links dropped; the due date becomes
-  an extra deadline). Sending again refreshes the copy and keeps the receiver's highlights and ticked steps.
+* **Assign** (teacher/parent → student over a `teacher_student` / `parent_student` link; activities and study plans only):
+  a read-only copy lands in the recipient's first workspace under **Shared documents / <sender's name>**, tagged
+  `shared-by:<sender id>`, plus `assigned-by:<id>` and `due:YYYY-MM-DD`; activities then show in the student's Activities
+  with the due date. A plan travels with the activities it uses (ids rewritten to the copies; sub-plan and agent links
+  dropped; the due date becomes an extra deadline). Sending again refreshes the copy and keeps the receiver's highlights and
+  ticked steps.
+* **Share (copy)** is kept for old clients and still works with the same rules; existing shared copies stay readable
+  (nothing was migrated).
 * Never sent: received copies (no forwarding), notes, attempts, agents, goals.
 
-Read-only is enforced on the server (`lib/workspaceGuard.js`): a shared copy cannot be renamed, deleted,
-retagged, moved or have its content rewritten; the Shared documents topic and its folders cannot be
-restructured. Allowed on a copy: highlights, ticking plan steps, favourites, the receiver's own notes and
-attempts (separate documents in the receiver's account). The same guard checks that every workspace,
-topic, folder and document id in a workspace request belongs to the logged-in account.
+Read-only copies are enforced on the server (`lib/workspaceGuard.js`): a shared copy cannot be renamed, deleted,
+retagged, moved or have its content rewritten; the **Shared documents** and **Shared with me** topics and their folders
+cannot be restructured. Allowed on a copy: highlights, ticking plan steps, favourites, the receiver's own notes and
+attempts (separate documents in the receiver's account). The same guard checks that every workspace, topic, folder and
+document id in a workspace request belongs to the logged-in account or is shared with it by a live grant.
 
 ## My students / My children
 
 `GET /api/accounts/linked/workspaces?accountId=` returns a connected student's workspace tree to their
 teacher/parent (accepted link required; same 404 for "no such student" and "not yours"). Uploaded material
 and private notes are reduced to their names. The page renders the existing `PerformancePage` with that data
-(read-only) plus a read-only study-plans overview; a parent can have several children (chips).
+(read-only) plus a read-only study-plans overview; a parent can have several children (chips). Only
+`teacher_student` / `parent_student` links open it: a peer connection (a classmate, a colleague, another parent) never does.
 
 ## Not done yet
 
@@ -153,6 +229,11 @@ and private notes are reduced to their names. The page renders the existing `Per
   on your sending domain; Gmail SMTP is for testing), a "log out everywhere" button (a password change already does it),
   phone-number login.
 * Per-student class grouping, bulk assigning to a class, push notifications (the bell polls).
+* Sharing v2: no "share with a group/class", no link sharing for people outside the network, no comments on a shared item,
+  no live co-editing cursor (two people editing the same document at the same moment: the last save wins), shared items do
+  not count in the grantee's storage view, the grantee cannot reorganise a share into their own folders (move is owner-only on purpose).
+* Agents, templates and components have no live sync after the copy; a re-share of an agent replaces the recipient's copy.
+* Marketplace purchases are never shareable (licensed to the buyer).
 * A student's *own* Home dashboard in `/platform` still shows the sample data (Home is being rebuilt separately).
 * Shared copies do not carry document chunks (RAG over a shared reference file re-chunks from its text).
 * Edits to a shared resource's classification/concepts are refused (read-only), the UI shows a failed-action message.

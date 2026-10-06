@@ -2,11 +2,15 @@
  * GET  /api/accounts/links  -> { incoming, outgoing, accepted }  (the Connections page)
  * POST /api/accounts/links  Body: { action: "request", email, relation }
  *                                 | { action: "accept" | "decline" | "cancel" | "remove", linkId }
- * Valid pairs only (teacher <-> student, parent <-> student); a link is active once the person who was
- * asked accepts. The state machine is in lib/accountsCore.js (transitionLink).
+ * The network is open: any account can connect with any other (`relation`, the role of the person asked, is an
+ * optional hint for an address with no account yet). The kind of connection comes from the two roles:
+ * teacher_student and parent_student keep their role powers, every other pair is a peer. A link is active once
+ * the person who was asked accepts. The state machine is in lib/accountsCore.js (transitionLink). Removing a
+ * connection also revokes the live shares between the two.
  */
 import { LinkError } from "../../../../lib/accountsCore.js";
-import { changeLink, listConnections, requestLink } from "../../../../lib/accountsRepository.js";
+import { changeLink, getLinkById, listConnections, requestLink } from "../../../../lib/accountsRepository.js";
+import { revokeGrantsBetween } from "../../../../lib/grantsRepository.js";
 import { notifyLinkAccepted, notifyLinkRequest } from "../../../../lib/accountFlows.js";
 import { errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
@@ -48,7 +52,10 @@ export async function POST(request) {
       await notifyLinkRequest(account, result.event, publicBaseUrl(request));
     } else if (["accept", "decline", "cancel", "remove"].includes(action)) {
       const linkId = String(body?.linkId || "");
+      const before = action === "remove" ? await getLinkById(linkId) : null;
       await changeLink(account, linkId, action);
+      // Ending a connection ends the live access in both directions at once.
+      if (before) await revokeGrantsBetween(before.requesterId, before.targetId).catch((error) => console.warn("[api/accounts/links] could not revoke shares:", error?.message || error));
       if (action === "accept") await notifyLinkAccepted(account, linkId, publicBaseUrl(request));
       message = { accept: "Connected.", decline: "Request declined.", cancel: "Request cancelled.", remove: "Connection removed." }[action];
     } else {

@@ -7,17 +7,21 @@
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 import {
   LinkError,
+  SHARING_MIGRATION,
   assertEmailVerified,
   decideLinkRequest,
+  hasGuardianPowers,
   isEmailVerified,
   isMissingColumnError,
+  isSetupNeededError,
   isValidEmail,
+  kindForRequest,
   kindForRoles,
-  linkFitsAccounts,
   normalizeEmail,
   pairKey,
   publicAccount,
   relationsFor,
+  setupNeededBody,
   transitionLink
 } from "./accountsCore.js";
 import { createWorkspace, listWorkspaceTree } from "./workspacesRepository.js";
@@ -65,6 +69,47 @@ export async function supportsVerification() {
     return false;
   }
   throw error;
+}
+
+/* ------------------------------------------------------------------ is the sharing v2 migration applied? */
+
+let sharingCapability = { ok: null, checkedAt: 0 };
+
+export function resetSharingCache() {
+  sharingCapability = { ok: null, checkedAt: 0 };
+}
+
+/**
+ * Has supabase/migrations/202610060001_network_sharing_grants.sql been applied (the `share_grants` table, the
+ * `peer` connection kind, shared components)? Probed with one tiny query: a "yes" is remembered, a "no" for 15 s.
+ * Until it is, connections stay teacher/parent <-> student only and every sharing v2 route answers a clear
+ * `setupNeeded` 503 naming the migration.
+ */
+export async function supportsSharing() {
+  if (sharingCapability.ok === true) return true;
+  if (sharingCapability.ok === false && Date.now() - sharingCapability.checkedAt < RECHECK_MISSING_MS) return false;
+  const { error } = await createSupabaseAdminClient().from("share_grants").select("id").limit(1);
+  if (!error) {
+    sharingCapability = { ok: true, checkedAt: Date.now() };
+    return true;
+  }
+  if (isSetupNeededError(error)) {
+    sharingCapability = { ok: false, checkedAt: Date.now() };
+    return false;
+  }
+  throw error;
+}
+
+/** A 503 `setupNeeded` for the sharing migration, as an error a route turns into a response. */
+export class SharingSetupError extends LinkError {
+  constructor(what = "Sharing with permissions") {
+    super("setup_needed", `${what} needs one database step: apply ${SHARING_MIGRATION} (Supabase SQL editor or MCP apply_migration), then reload.`, 503);
+    this.setup = setupNeededBody(SHARING_MIGRATION);
+  }
+}
+
+export async function assertSharingReady(what) {
+  if (!(await supportsSharing())) throw new SharingSetupError(what);
 }
 
 async function accountColumns() {
@@ -265,6 +310,20 @@ export async function listLinkedAccounts(accountId, { role = "" } = {}) {
   return others.filter((other) => !role || other.role === role).map((other) => ({ ...publicAccount(other), linkId: rows.find((row) => row.requesterId === other.id || row.targetId === other.id)?.id }));
 }
 
+/** The ids of every account this account has an accepted connection with. */
+export async function listConnectedIds(accountId) {
+  if (!accountId) return new Set();
+  const rows = await selectLinks((query) => query.or(`requester_id.eq.${accountId},target_id.eq.${accountId}`).eq("status", "accepted"));
+  return new Set(rows.map((row) => (row.requesterId === accountId ? row.targetId : row.requesterId)).filter(Boolean));
+}
+
+/** One link by id (any status), or null. */
+export async function getLinkById(linkId) {
+  if (!linkId) return null;
+  const [link] = await selectLinks((query) => query.eq("id", linkId));
+  return link || null;
+}
+
 /** The accepted link between two accounts, or null. */
 export async function getAcceptedLink(accountA, accountB) {
   if (!accountA || !accountB) return null;
@@ -295,19 +354,23 @@ function withEvent(result, event) {
  *   The result also carries a hidden (non-enumerable) `event` = { type: "created" | "reopened" | "accepted", linkId,
  *   targetEmail, targetKnown } for the caller that sends the notification email (nothing changed -> no event).
  */
-export async function requestLink(requester, { email, relation }) {
+export async function requestLink(requester, { email, relation = "" }) {
   assertEmailVerified(requester, "connect with other people");
   const targetEmail = normalizeEmail(email);
   if (!isValidEmail(targetEmail)) throw new LinkError("bad_email", "Enter a valid email address.");
   if (targetEmail === requester.email) throw new LinkError("self", "That is your own email.");
-  if (!relationsFor(requester.role).includes(relation)) throw new LinkError("bad_relation", `As a ${requester.role} you can connect with ${relationsFor(requester.role).join(" or ")} accounts.`);
-  const kind = kindForRoles(requester.role, relation);
+  const hinted = String(relation || "").trim();
+  if (hinted && !relationsFor(requester.role).includes(hinted)) throw new LinkError("bad_relation", "Choose whether they are a student, a teacher or a parent (or leave it empty).");
   const sent = { status: "pending", message: "Request sent. The connection becomes active once they accept it." };
 
   const found = await findAccountByEmail(targetEmail);
   // An account that has not confirmed its email is treated as "nobody yet": the request waits for the confirmation.
   const target = found && isEmailVerified(found) ? found : null;
-  if (target && !linkFitsAccounts(kind, requester.role, target.role)) return sent;
+  // The open network: anyone can connect with anyone. The kind comes from the two roles (teacher+student and
+  // parent+student keep their role powers; every other pair is a peer); for an address with no account yet it
+  // follows the role the requester hinted at and is settled from the real roles when the person signs up.
+  const kind = target ? kindForRoles(requester.role, target.role) : kindForRequest(requester.role, hinted);
+  if (kind === "peer") await assertSharingReady("Connecting with people outside teacher, parent and student pairs");
 
   const key = pairKey(kind, requester.email, targetEmail);
   const [existing] = await selectLinks((query) => query.eq("pair_key", key));
@@ -369,8 +432,10 @@ export async function changeLink(account, linkId, action) {
 }
 
 /**
- * A new account picks up the requests other people made to its email before it existed. A request whose
- * roles do not fit (a teacher asked for a "student" that signed up as a parent) is revoked, not shown.
+ * A new account picks up the requests other people made to its email before it existed. The kind of each
+ * request is settled from the two real roles (a teacher who hinted "student" for an address that turned out to
+ * be a parent becomes a peer connection, with no student powers). If the pair already has a link of that kind,
+ * the duplicate is revoked instead of shown.
  */
 export async function attachPendingLinks(account) {
   // Only an account that proved it owns this email may pick up what was sent to it.
@@ -379,10 +444,29 @@ export async function attachPendingLinks(account) {
   const rows = await selectLinks((query) => query.eq("target_email", account.email).is("target_id", null));
   const requesters = await findAccountsByIds(rows.map((row) => row.requesterId));
   const byId = new Map(requesters.map((row) => [row.id, row]));
+  const sharing = rows.length ? await supportsSharing() : true;
   for (const row of rows) {
-    const fits = linkFitsAccounts(row.kind, byId.get(row.requesterId)?.role, account.role);
-    const { error } = await client.from("account_links").update(fits ? { target_id: account.id } : { status: "revoked", responded_at: new Date().toISOString() }).eq("id", row.id);
-    if (error) throw error;
+    const requester = byId.get(row.requesterId);
+    const kind = requester ? kindForRoles(requester.role, account.role) : null;
+    // Without the sharing migration a peer connection cannot be stored: such a request is dropped, as before.
+    const usable = Boolean(kind) && (kind !== "peer" || sharing);
+    if (!usable) {
+      const { error } = await client.from("account_links").update({ status: "revoked", responded_at: new Date().toISOString() }).eq("id", row.id);
+      if (error) throw error;
+      continue;
+    }
+    const patch = { target_id: account.id };
+    if (kind !== row.kind) {
+      patch.kind = kind;
+      patch.pair_key = pairKey(kind, row.requesterEmail, row.targetEmail);
+    }
+    const { error } = await client.from("account_links").update(patch).eq("id", row.id);
+    if (error) {
+      if (error.code !== "23505") throw error;
+      // The pair already has a link of that kind: this duplicate is not needed.
+      const revoke = await client.from("account_links").update({ status: "revoked", responded_at: new Date().toISOString() }).eq("id", row.id);
+      if (revoke.error) throw revoke.error;
+    }
   }
   return rows.length;
 }
@@ -395,7 +479,8 @@ export async function linkedStudentWorkspaces(viewer, studentId) {
   const student = await findAccountById(studentId);
   if (!student || student.role !== "student") return null;
   const link = await getAcceptedLink(viewer.id, student.id);
-  if (!link || kindForRoles(viewer.role, student.role) !== link.kind) return null;
+  // Only a teacher_student / parent_student link opens a student's performance: a peer connection never does.
+  if (!hasGuardianPowers(link, viewer.role, student.role)) return null;
   const tree = await listWorkspaceTree(student.id);
   return { student: publicAccount(student), workspaces: redactTreeForGuardian(tree) };
 }
@@ -458,9 +543,24 @@ export async function listNotifications(account, { now = Date.now() } = {}) {
     .limit(30);
   if (error) throw error;
 
+  // Live shares made to this account (the sharing migration may not be applied yet: then there are none).
+  let grants = [];
+  if (await supportsSharing()) {
+    const { data: grantRows, error: grantError } = await client
+      .from("share_grants")
+      .select("id, owner_id, item_kind, item_name, permission, created_at, updated_at")
+      .eq("grantee_id", account.id)
+      .is("revoked_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(30);
+    if (grantError) throw grantError;
+    grants = grantRows || [];
+  }
+
   const people = await findAccountsByIds([
     ...links.map((row) => (row.requesterId === account.id ? row.targetId : row.requesterId)),
-    ...(items || []).map((row) => row.sender_id)
+    ...(items || []).map((row) => row.sender_id),
+    ...grants.map((row) => row.owner_id)
   ]);
   const byId = new Map(people.map((row) => [row.id, row]));
   const person = (id, fallbackEmail = "") => ({ id: id || "", displayName: byId.get(id)?.display_name || "", role: byId.get(id)?.role || "", email: byId.get(id)?.email || fallbackEmail });
@@ -478,7 +578,11 @@ export async function listNotifications(account, { now = Date.now() } = {}) {
     .filter((row) => time(row.updated_at || row.created_at) >= since)
     .map((row) => ({ id: `item:${row.id}:${row.updated_at}`, type: row.mode === "assign" ? "assigned" : "shared", at: row.updated_at || row.created_at, person: person(row.sender_id), title: row.title, itemType: row.item_type, dueDate: row.due_date || "" }));
 
-  const events = [...answers, ...received]
+  const granted = grants
+    .filter((row) => time(row.updated_at || row.created_at) >= since)
+    .map((row) => ({ id: `grant:${row.id}:${row.updated_at}`, type: "grant", at: row.updated_at || row.created_at, person: person(row.owner_id), title: row.item_name || "an item", itemKind: row.item_kind, permission: row.permission }));
+
+  const events = [...answers, ...received, ...granted]
     .sort((a, b) => time(b.at) - time(a.at))
     .slice(0, MAX_NOTIFICATIONS)
     .map((event) => ({ ...event, unread: seenSupported && time(event.at) > seenAt }));

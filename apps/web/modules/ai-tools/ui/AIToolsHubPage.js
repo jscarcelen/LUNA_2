@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { aiToolsRegistry } from "../registry";
+import { requestShare, useSharingAvailable } from "../../accounts/shareEvents";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -20,6 +21,7 @@ function parseAgent(document) {
 
 /** Origin tag: self-created, bought (marketplace) with availability, or built-in. */
 export function originTag(meta = {}) {
+  if (meta.sharedFrom?.name && !meta.installedFrom?.listingId) return { label: `Shared by ${meta.sharedFrom.name}`, className: `${chip} bg-[#e8f2ff] text-[#0058b0]` };
   if (meta.installedFrom?.listingId) {
     const until = meta.installedFrom.availableUntil ? ` · until ${new Date(meta.installedFrom.availableUntil).toLocaleDateString()}` : "";
     return { label: `Bought${until}`, className: `${chip} bg-[rgba(255,149,0,0.15)] text-[#b25e00]` };
@@ -34,6 +36,7 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
   const fields = parsed.template?.fields || [];
   const inputs = parsed.questions || [];
   const own = !parsed.installedFrom?.listingId;
+  const canShare = useSharingAvailable() && own;
   return (
     <article className={`${card} flex flex-col gap-2 p-4`}>
       <div className="flex items-start justify-between gap-2">
@@ -48,6 +51,7 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
       <div className="mt-auto flex items-center gap-2 pt-1">
         <button type="button" className={`${primaryBtn} flex-1 py-1.5 text-xs`} onClick={() => onOpen(document.id)}>Run</button>
         {own && typeof onEdit === "function" ? <button type="button" className={ghostBtn} onClick={() => onEdit(document.id)}>Edit</button> : null}
+        {canShare ? <button type="button" className={ghostBtn} title="Share a copy with people you are connected to" onClick={() => requestShare({ kind: "agent", id: document.id, name: parsed.name || document.name.replace(/\.agent\.json$/, "") })}>Share…</button> : null}
         {typeof onDelete === "function" ? (
           <button
             type="button"

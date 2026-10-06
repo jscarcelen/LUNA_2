@@ -26,6 +26,28 @@
 - **Not done / limits**: no migration needed. The plans page only resolves documents of its own topic, so a plan left
   behind shows a moved document as missing (the move warns about it). Undo of a folder move restores the folder and
   its name; extra links a document had to folders outside the moved tree are not restored.
+## 2026-10-05 (open network + sharing v2)
+
+### Anyone can connect, anything can be shared with a permission
+
+- **Open network.** `kindForRoles` now always answers: teacher+student → `teacher_student`, parent+student →
+  `parent_student`, everything else → `peer`. Any account asks any other (both sides accept, no limit);
+  `requestLink`'s `relation` is an optional hint for an address with no account yet and the kind is settled from the real
+  roles on sign-up (`attachPendingLinks`). Role powers are explicit (`hasGuardianPowers`): assigning work and a student's
+  performance need a teacher/parent↔student link; a peer never exposes performance or private data. Connections page: "Build
+  your network", "Your network", relation labels (`relationLabel`). Migration `202610060001` relaxes the CHECK on `kind`.
+- **Live shares.** `share_grants` + `lib/grants.js` (pure `resolveAccess` → owner | edit | view | null, with folder-subtree
+  and topic inheritance, revocation, connection check, private documents excluded) used by `lib/workspaceGuard.js` for every
+  workspace action. Edit writes to the owner's original (the guard rewrites workspace/topic from the facts it loaded);
+  only the owner deletes, moves, re-tags, shares again. `lib/sharedTree.js` lays shared items into
+  "Shared with me / <owner>" in the tree API; `lib/grantsRepository.js` shares (connections only, plan + its documents and
+  folder), lists who has access, changes, revokes, leaves; ending a connection revokes both directions.
+- **Share… dialog** (`modules/accounts/ShareDialog.js`, opened from file rows, folder/topic rows, plans, agent cards,
+  template cards, "My blocks") with Can view / Can edit and the People with access list. Agents, templates and
+  components are shared as copies (`lib/copyShareRepository.js`, `/api/accounts/share-copy`; components are imported into
+  the browser library on next load).
+- Bell + email "X shared 'Folder' with you (can edit)"; tests in `tests/accounts/{grants,guardGrants,sharedTree,network}.test.js`.
+- Not applied: the migration (`202610060001_network_sharing_grants.sql`) is feature-detected, nothing breaks until it is.
 
 ## 2026-10-05 (landing page + Luna logo)
 

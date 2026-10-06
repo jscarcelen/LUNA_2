@@ -10,6 +10,9 @@ import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
 import { PlatformNotice } from "../modules/accounts/PlatformNotice";
 import { ShareDialog } from "../modules/accounts/ShareDialog";
+import { accountsApi } from "../modules/accounts/api";
+import { onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
+import { saveBlockToLibrary } from "../modules/template-studio/engine/blocks";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
 import { MarketplacePage } from "../modules/marketplace/MarketplacePage";
@@ -40,6 +43,39 @@ export function AppShell({ account = null, initialPage = "" }) {
   });
   const [shareTarget, setShareTarget] = useState(null);
   const [shareNotice, setShareNotice] = useState("");
+  // "Share…" opens one dialog for everything: a file/folder/topic/plan (live share with a permission) or an
+  // agent/template/component (a copy). Older callers pass a bare document, which still works.
+  const openShare = (target) => { if (target) setShareTarget(target.kind ? target : { kind: "document", id: target.id, name: target.name, document: target }); };
+  useEffect(() => {
+    if (!account) return undefined;
+    setSharingAvailable(true);
+    const stop = onShareRequested(openShare);
+    const stopLeave = onLeaveRequested(async (grantId) => {
+      if (!window.confirm("Leave this share? It disappears from your workspace. Your own notes and answers stay yours. The owner can share it with you again.")) return;
+      const result = await accountsApi.leaveGrant(grantId);
+      setShareNotice(result.ok ? "You left the share." : result.error);
+      if (result.ok) loadWorkspaces();
+    });
+    return () => { stop(); stopLeave(); setSharingAvailable(false); };
+  }, [account?.id]);
+  // Components other people shared with you are delivered as copies: import them into the local library once.
+  useEffect(() => {
+    if (!account) return undefined;
+    let alive = true;
+    (async () => {
+      const pending = await accountsApi.pendingComponents();
+      const list = pending.ok ? pending.data.components || [] : [];
+      if (!alive || !list.length) return;
+      let imported = 0;
+      for (const entry of list) {
+        try { saveBlockToLibrary(entry.block); imported += 1; } catch { /* a block that cannot be stored is skipped */ }
+      }
+      await accountsApi.markComponentsImported(list.map((entry) => entry.id));
+      const names = [...new Set(list.map((entry) => entry.sender?.displayName).filter(Boolean))];
+      if (alive && imported) setShareNotice(`${imported} shared component${imported === 1 ? "" : "s"} from ${names.join(", ") || "your network"} ${imported === 1 ? "was" : "were"} added to your blocks (My blocks in Template Studio). They are your own copies.`);
+    })();
+    return () => { alive = false; };
+  }, [account?.id]);
   const profileName = account ? account.displayName : (roleProfiles[role]?.name || "");
   // Every move to another page is a history entry, so the browser's Back button (and an iPhone swipe)
   // returns to the page you were on instead of leaving the app.
@@ -261,14 +297,14 @@ export function AppShell({ account = null, initialPage = "" }) {
           onDeleteDocumentBlockTemplate={handleDeleteDocumentBlockTemplate}
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
-          onShareDocument={account ? setShareTarget : undefined}
+          onShareDocument={account ? openShare : undefined}
         />
       );
     }
     if (page === "plans" || page.startsWith("plans?")) {
       return (
         <PlansPage
-          onShareDocument={account ? setShareTarget : undefined}
+          onShareDocument={account ? openShare : undefined}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onCreateFolder={handleCreateFolder}
           onRemoveFolder={handleRemoveFolder}
@@ -861,7 +897,7 @@ export function AppShell({ account = null, initialPage = "" }) {
       </main>
       <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />
       {account && shareTarget ? (
-        <ShareDialog account={account} document={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
+        <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
       <UiCritic enabled={criticOn} />
     </div>

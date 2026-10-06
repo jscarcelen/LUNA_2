@@ -1,6 +1,9 @@
 /**
  * What "shared" means, in one place that both the browser and the server import (it is pure).
  *
+ * Two mechanisms exist. LIVE shares (view/edit on the owner's original, `share_grants`, see lib/grants.js) are
+ * marked on tree nodes with `shared: { … }` (`sharedInfoOf`). COPIES (Assign, and older shares) are described below.
+ *
  * A document that arrives from another account is a read-only COPY in the receiver's own workspace:
  *
  *   <first workspace> / Shared documents / <sender's name> / <the copy>
@@ -133,3 +136,33 @@ export function redactTreeForGuardian(workspaces = []) {
     }))
   }));
 }
+
+/* ------------------------------------------------------------------ live shares (share_grants), see lib/grants.js */
+
+/** The topic where everything shared with you lives: "Shared with me / <owner's name> / …". */
+export const SHARED_WITH_ME_SUBJECT = "Shared with me";
+/** Marks an agent or template copy that came from another account (not protected: the copy is the recipient's own). */
+export const SHARED_FROM_PREFIX = "shared-from:";
+
+const sameName = (a, b) => String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
+
+/** The two topics Luna fills by itself; the account cannot restructure them (their contents come from other people). */
+export const isReservedSubjectName = (name) => sameName(name, SHARED_SUBJECT_NAME) || sameName(name, SHARED_WITH_ME_SUBJECT);
+
+/**
+ * What a document or folder in the tree says about being shared WITH you: `{ grantId, ownerId, ownerName,
+ * permission, root }` or null for your own items. `root` is true on the item that was actually shared (you can
+ * leave that one); everything inside a shared folder inherits the permission.
+ */
+export const sharedInfoOf = (entry) => (entry?.shared && typeof entry.shared === "object" ? entry.shared : null);
+export const canEditShared = (entry) => sharedInfoOf(entry)?.permission === "edit";
+
+/** "Your student", "Your teacher", "Your child", "Your parent" - or a plain description for a peer connection. */
+export function relationLabel(kind, myRole, otherRole) {
+  if (kind === "teacher_student") return myRole === "teacher" ? "Your student" : "Your teacher";
+  if (kind === "parent_student") return myRole === "parent" ? "Your child" : "Your parent";
+  return otherRole === "teacher" ? "Teacher in your network" : otherRole === "parent" ? "Parent in your network" : otherRole === "student" ? "Student in your network" : "In your network";
+}
+
+/** Can this kind of connection see performance? Only teacher/parent <-> student; a peer never. */
+export const kindExposesPerformance = (kind) => kind === "teacher_student" || kind === "parent_student";

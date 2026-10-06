@@ -71,7 +71,8 @@ export function LinkedStudentsPage({ account, onOpenPage }) {
       if (!live) return;
       if (result.setupNeeded) { setSetupNeeded(true); return; }
       if (!result.ok) { setError(result.error); return; }
-      const list = (result.data.connections.accepted || []).map((row) => row.other).filter((other) => other.role === "student" && other.id);
+      // Only teacher/parent <-> student connections open a student's performance; a peer connection never does.
+      const list = (result.data.connections.accepted || []).filter((row) => row.kind === "teacher_student" || row.kind === "parent_student").map((row) => row.other).filter((other) => other.role === "student" && other.id);
       setStudents(list);
       setSelectedId((current) => current || list[0]?.id || "");
     });

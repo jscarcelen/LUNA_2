@@ -9,6 +9,9 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 import { accountIdForFresh } from "./session.js";
+import { resolveAccess } from "./grants.js";
+import { loadGrantContext } from "./grantsRepository.js";
+import { loadWorkspaceFacts } from "./workspaceGuard.js";
 
 export async function accountOwnsWorkspace(accountId, workspaceId) {
   if (!workspaceId) return true;
@@ -28,10 +31,28 @@ export async function accountOwnsDocument(accountId, documentId) {
   return subject ? accountOwnsWorkspace(accountId, subject.workspace_id) : false;
 }
 
-/** @returns {Promise<Response | null>} a 404 to send back, or null when the request may go on. */
-export async function denyUnlessOwner(request, { workspaceId = "", documentId = "" } = {}) {
+/**
+ * May this account at least VIEW the document: its own, or one a connection shared with it (live grant)?
+ * Used where someone works on a shared document without changing it (answering a shared quiz).
+ */
+export async function accountMayViewDocument(accountId, documentId) {
+  if (!documentId) return true;
+  if (await accountOwnsDocument(accountId, documentId)) return true;
+  const client = createSupabaseAdminClient();
+  const facts = await loadWorkspaceFacts(client, { workspaceIds: [], subjectIds: [], folderIds: [], documentIds: [String(documentId)] }, { actorId: accountId });
+  const { grants, connections } = await loadGrantContext(accountId);
+  return Boolean(resolveAccess({ accountId, item: { kind: "document", id: String(documentId) }, facts, grants, connections }));
+}
+
+/**
+ * @param {{ workspaceId?: string, documentId?: string, allowShared?: boolean }} [what]
+ *   `allowShared`: the document may also be one shared with the account (view is enough).
+ * @returns {Promise<Response | null>} a 404 to send back, or null when the request may go on.
+ */
+export async function denyUnlessOwner(request, { workspaceId = "", documentId = "", allowShared = false } = {}) {
   const accountId = await accountIdForFresh(request);
   if (!accountId) return null;
-  if ((await accountOwnsWorkspace(accountId, workspaceId)) && (await accountOwnsDocument(accountId, documentId))) return null;
+  const documentOk = allowShared ? await accountMayViewDocument(accountId, documentId) : await accountOwnsDocument(accountId, documentId);
+  if ((await accountOwnsWorkspace(accountId, workspaceId)) && documentOk) return null;
   return NextResponse.json({ error: "That item was not found in your workspace." }, { status: 404 });
 }

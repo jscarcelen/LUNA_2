@@ -72,7 +72,7 @@ export async function POST(request) {
       const inviteEmail = normalizeEmail(invite?.email);
       if (inviteEmail) wanted.push({ email: inviteEmail, relation: String(invite?.relation || "") });
     }
-    const queueable = wanted.filter((invite) => isValidEmail(invite.email) && invite.email !== email && relationsFor(role).includes(invite.relation));
+    const queueable = wanted.filter((invite) => isValidEmail(invite.email) && invite.email !== email && (!invite.relation || relationsFor(role).includes(invite.relation)));
 
     const account = await insertAccount({
       email,

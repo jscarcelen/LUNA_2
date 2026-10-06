@@ -32,9 +32,11 @@ import {
   updateGeneratedDocumentContent,
   uploadTxtDocuments
 } from "../../../lib/workspacesRepository";
-import { createSupabaseAdminClient, isSupabaseConfigured } from "../../../lib/supabaseClient";
+import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
 import { accountIdForFresh, hasRevokedSession, ownerUserIdForFresh } from "../../../lib/session.js";
 import { guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
+import { loadGrantContext, purgeGrantsFor } from "../../../lib/grantsRepository.js";
+import { listTreeWithShared } from "../../../lib/sharedTree.js";
 import { extractAndSaveConcepts } from "../../../lib/conceptsRepository.js";
 import { NextResponse } from "next/server";
 
@@ -49,7 +51,8 @@ function cfgError() {
 }
 
 async function ok(ownerUserId, extra = {}) {
-  const workspaces = await listWorkspaceTree(ownerUserId);
+  // A real account also sees what was shared with it ("Shared with me / <owner>"); the demo owner never does.
+  const workspaces = ownerUserId !== getDemoOwnerUserId() ? await listTreeWithShared(ownerUserId) : await listWorkspaceTree(ownerUserId);
   return NextResponse.json({ workspaces, ...extra });
 }
 
@@ -79,13 +82,17 @@ export async function POST(request) {
     const body = await request.json();
     const action = body?.action;
     let payload = body?.payload || {};
+    // The owner whose data an action writes to: the account itself, or (for edits through a live share) the owner of the original.
+    let dataOwnerId = ownerUserId;
 
-    // Real accounts: every id in the request must be theirs, and documents shared with them stay read-only.
-    // (The public demo has one shared owner and no accounts, so it is not checked.)
+    // Real accounts: every id in the request must be theirs or shared with them, and what they only
+    // view (or received as a copy) stays read-only. (The public demo has one shared owner and no accounts,
+    // so it is not checked.)
     if (await accountIdForFresh(request)) {
-      const verdict = await guardWorkspaceAction({ client: createSupabaseAdminClient(), action, payload, ownerUserId });
+      const verdict = await guardWorkspaceAction({ client: createSupabaseAdminClient(), action, payload, ownerUserId, loadGrantContext });
       if (!verdict.ok) return NextResponse.json({ error: verdict.error }, { status: verdict.status });
       payload = verdict.payload;
+      if (verdict.shared?.ownerId) dataOwnerId = verdict.shared.ownerId;
     }
 
     if (action === "createWorkspace") {
@@ -139,6 +146,7 @@ export async function POST(request) {
           cascade: removed.cascade
         }, { status: 409 });
       }
+      await purgeGrantsFor("subject", [payload.subjectId]).catch(() => {});
       return await ok(ownerUserId);
     }
 
@@ -174,6 +182,7 @@ export async function POST(request) {
 
     if (action === "removeFolder") {
       await removeFolder(payload.folderId);
+      await purgeGrantsFor("folder", [payload.folderId]).catch(() => {});
       return await ok(ownerUserId);
     }
 
@@ -214,7 +223,7 @@ export async function POST(request) {
             if (!doc?.id) return Promise.resolve();
             const text = doc.extractedText || doc.content || "";
             if (!text || String(text).length < 100) return Promise.resolve();
-            return extractAndSaveConcepts(doc.id, workspaceId, ownerUserId, String(text));
+            return extractAndSaveConcepts(doc.id, workspaceId, dataOwnerId, String(text));
           })
         ).catch(() => {}); // swallow — never let this break the upload response
       }
@@ -274,6 +283,7 @@ export async function POST(request) {
 
     if (action === "removeDocument") {
       await removeDocument(payload.documentId);
+      await purgeGrantsFor("document", [payload.documentId]).catch(() => {}); // the original is gone: so are the shares of it
       return await ok(ownerUserId);
     }
 

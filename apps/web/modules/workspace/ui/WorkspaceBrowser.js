@@ -234,7 +234,7 @@ export function WorkspaceBrowser({
    * the workspace; the server keeps ids stable, carries notes, attempts and chunks along and refuses what is not allowed.
    */
   const subjectsList = workspace?.subjects || [];
-  const sharedTopic = (subjectId) => subjectsList.find((entry) => entry.id === subjectId)?.name === SHARED_SUBJECT_NAME;
+  const sharedTopic = (subjectId) => isReservedSubjectName(subjectsList.find((entry) => entry.id === subjectId)?.name);
   const dragFile = (document) => ({ type: "file", id: document.id, ids: selectedIds.includes(document.id) ? selectedIds : [document.id] });
   const toggleSelected = (id) => setSelectedIds((list) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]));
   const openAt = (...nodeIds) => setOpenNodes((prev) => new Set([...prev, ...nodeIds.filter(Boolean)]));
@@ -248,7 +248,7 @@ export function WorkspaceBrowser({
   async function move(ids, targetNodeId) {
     const target = parseNode(targetNodeId);
     if (!onMoveDocuments || !target.subjectId) return;
-    if (sharedTopic(target.subjectId)) { setStatus(`“${SHARED_SUBJECT_NAME}” is filled by the people you are connected to, so nothing can be moved into it.`); return; }
+    if (sharedTopic(target.subjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be moved into them."); return; }
     const documents = [...new Set(ids)].map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean);
     const movable = documents.filter((document) => !isSharedDocument(document));
     const readOnly = documents.length - movable.length;
@@ -299,7 +299,7 @@ export function WorkspaceBrowser({
     if (draggedNodeId === targetNodeId) return; // same folder
     // Prevent dropping into a descendant (would create a cycle).
     if (branchOf(folders, draggedNodeId).has(targetNodeId)) { setStatus("A folder cannot be moved inside one of its own subfolders."); return; }
-    if (sharedTopic(target.subjectId)) { setStatus(`“${SHARED_SUBJECT_NAME}” is filled by the people you are connected to, so nothing can be moved into it.`); return; }
+    if (sharedTopic(target.subjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be moved into them."); return; }
     const result = await onMoveFolder(dragged.folderId, target.kind === "folder" ? target.folderId : "", { targetSubjectId: target.subjectId });
     if (!result || result.error) { setStatus(result?.error || "The folder could not be moved."); return; }
     // A study plan's folder keeps its place under "Study plans", wherever it was dropped.
@@ -857,7 +857,7 @@ export function WorkspaceBrowser({
       {movePicker ? (() => {
         const moving = movePicker.folderNodeId ? folders.find((entry) => entry.id === movePicker.folderNodeId) : null;
         const count = (movePicker.documentIds || []).length;
-        const hidden = new Set(subjectsList.filter((entry) => entry.name === SHARED_SUBJECT_NAME).map((entry) => entry.id));
+        const hidden = new Set(subjectsList.filter((entry) => isReservedSubjectName(entry.name)).map((entry) => entry.id));
         return (
           <MoveDialog
             title={moving ? `Move “${moving.name}”` : count === 1 ? `Move “${allDocuments.find((entry) => entry.id === movePicker.documentIds[0])?.name || "this item"}”` : `Move ${count} items`}

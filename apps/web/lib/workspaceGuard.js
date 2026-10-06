@@ -145,10 +145,12 @@ export function authorizeWorkspaceAction({ action, payload = {}, ownerUserId, fa
       ...foreign.subjects.filter((id) => via.has(id)).map((id) => ({ kind: "subject", id }))
     ];
     const ownFileRefs = [...refs.folderIds, ...refs.documentIds].filter((id) => !foreign.folders.includes(id) && !foreign.documents.includes(id));
-    if (ownFileRefs.length) return deny(MIXED_MESSAGE);
     // A subject named directly (not through a stand-in folder) is only acceptable when a shared file lives in it.
     const fileSubjects = new Set([...foreign.documents, ...foreign.folders].map((id) => subjectOfItem({ kind: foreign.documents.includes(id) ? "document" : "folder", id }, facts)));
     for (const id of foreign.subjects) if (!via.has(id) && !fileSubjects.has(id)) return NOT_YOURS;
+    // Something that is not shared with this account answers like something that does not exist, whatever else the request holds.
+    for (const item of items) if (!resolveAccess({ accountId: ownerUserId, item, facts, grants: facts.grants || [], connections: facts.connections || [] })) return NOT_YOURS;
+    if (ownFileRefs.length) return deny(MIXED_MESSAGE);
     const owners = new Set(items.map((item) => ownerOf(item.kind, item.id)));
     const subjects = new Set(items.map((item) => subjectOfItem(item, facts)));
     if (owners.size !== 1 || subjects.size !== 1) return deny(MIXED_MESSAGE);

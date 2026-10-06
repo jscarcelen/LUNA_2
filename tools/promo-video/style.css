@@ -1,0 +1,53 @@
+/* Luna promo video — 1920x1080 stage, scaled to the render size by timeline.js. Light, crisp, no blur. */
+:root {
+  --blue: #0a6cf0; --accent: #0071e3; --sky: #37a8ff; --teal: #2fcbb6; --green: #34c759;
+  --ink: #1d1d1f; --sub: #4a4d52; --line: #e6e8ec;
+  --grad: linear-gradient(100deg, #0a6cf0 5%, #37a8ff 50%, #2fcbb6 100%);
+}
+html, body { margin: 0; padding: 0; background: #fff; overflow: hidden; }
+body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Inter", Arial, sans-serif; -webkit-font-smoothing: antialiased; color: var(--ink); }
+#stage { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; overflow: hidden; background: #fff; }
+#stage * { box-sizing: border-box; }
+#stage img { display: block; user-select: none; }
+
+.scene { position: absolute; inset: 0; overflow: hidden; }
+.bgblob { position: absolute; border-radius: 50%; }
+.abs { position: absolute; }
+
+/* kinetic text */
+.kbox { position: absolute; font-weight: 800; letter-spacing: -0.045em; color: var(--ink); white-space: nowrap; }
+.kline { display: block; }
+.kw { display: inline-block; overflow: hidden; vertical-align: top; padding: .1em .05em .2em; margin: -.1em -.05em -.2em; }
+.kwi { display: inline-block; will-change: transform; }
+.kwi.g { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.ksp { display: inline-block; width: .26em; }
+
+/* browser frame */
+.bw { position: absolute; background: #fff; border-radius: 22px; overflow: hidden; box-shadow: 0 60px 110px -30px rgba(10, 60, 160, .35), 0 24px 48px rgba(0, 0, 0, .09), 0 0 0 1.5px rgba(0, 0, 0, .07); }
+.bbar { position: absolute; left: 0; right: 0; top: 0; background: #f4f5f7; border-bottom: 1.5px solid #e4e6ea; display: flex; align-items: center; }
+.bbar i { display: block; border-radius: 50%; }
+.burl { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #fff; border: 1.5px solid #e4e6ea; border-radius: 999px; display: flex; align-items: center; gap: 8px; color: #666b73; font-weight: 550; white-space: nowrap; }
+.bvp { position: absolute; left: 0; right: 0; overflow: hidden; background: #fff; }
+.pan { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.pan img { width: 100%; height: 100%; }
+
+/* phone */
+.ph { position: absolute; background: #17181b; box-shadow: 0 50px 90px -20px rgba(10, 60, 160, .4), 0 20px 40px rgba(0, 0, 0, .14), inset 0 0 0 2px #3a3c42; }
+.phs { position: absolute; overflow: hidden; background: #fff; }
+.phs img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.phi { position: absolute; left: 50%; transform: translateX(-50%); background: #0b0b0d; border-radius: 999px; }
+
+/* chips, pills, cards */
+.chip { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 18px; background: #fff; border-radius: 999px; font-weight: 720; letter-spacing: -0.02em; color: var(--ink); white-space: nowrap; box-shadow: 0 20px 44px -12px rgba(10, 60, 160, .3), 0 4px 12px rgba(0, 0, 0, .08), 0 0 0 1.5px rgba(0, 0, 0, .05); }
+.chip .ico { display: flex; align-items: center; justify-content: center; border-radius: 50%; flex: none; }
+.chip .dot { border-radius: 50%; flex: none; }
+.card { position: absolute; background: #fff; border-radius: 40px; box-shadow: 0 40px 80px -24px rgba(10, 60, 160, .3), 0 10px 24px rgba(0, 0, 0, .07), 0 0 0 1.5px rgba(0, 0, 0, .05); }
+.paper { position: absolute; background: #fff; border-radius: 22px; overflow: hidden; box-shadow: 0 30px 60px -20px rgba(10, 60, 160, .3), 0 6px 16px rgba(0, 0, 0, .07), 0 0 0 1.5px rgba(0, 0, 0, .05); }
+.paper b { display: block; font-weight: 800; letter-spacing: -0.02em; }
+.paper u { display: block; height: 14px; border-radius: 7px; background: #e9ecf1; text-decoration: none; margin: 0 22px 14px; }
+.meter-track { position: absolute; background: #eceef2; border-radius: 999px; overflow: hidden; }
+.meter-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+
+/* fx overlays */
+.fx { position: absolute; pointer-events: none; display: none; }
+#chrome { position: absolute; inset: 0; pointer-events: none; z-index: 30; }

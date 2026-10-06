@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Luna promo — timeline</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<!--
+  Everything on screen is a pure function of time: window.renderAt(t) (seconds) sets every transform,
+  opacity and text. No CSS animation, no timers. render.mjs calls it once per frame and screenshots.
+  Preview in a browser:  node render.mjs --serve   then open  http://localhost:4173/tools/promo-video/index.html?t=12.5
+-->
+<div id="stage"></div>
+<script src="timeline.js"></script>
+</body>
+</html>

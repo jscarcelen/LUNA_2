@@ -302,3 +302,21 @@
   .lp-phone.lp-hero-phone { display: block; position: relative; width: min(44vw, 200px); bottom: auto; left: auto; right: auto; transform: none; }
   .lp-phone.lp-hero-phone-r { margin-top: 28px; }
 }
+
+/* ---------------------------------------------------------------- promo video */
+.lp-video-section { padding-top: clamp(40px, 6vw, 72px); }
+.lp-video { position: relative; width: 100%; max-width: 960px; margin: 0 auto; border-radius: 22px; overflow: hidden; background: #0b1b3a; border: 1px solid rgba(20, 30, 60, .12); box-shadow: 0 50px 90px -30px rgba(10, 70, 180, .35), 0 14px 34px rgba(20, 30, 60, .10); aspect-ratio: 16 / 9; line-height: 0; }
+.lp-video-el { display: block; width: 100%; height: 100%; object-fit: cover; background: #0b1b3a; }
+.lp-video-play { position: absolute; left: clamp(14px, 3vw, 28px); bottom: clamp(14px, 3vw, 28px); display: inline-flex; align-items: center; gap: 10px; padding: 12px 20px 12px 16px; border-radius: 999px; border: 0; background: #fff; color: var(--lp-blue); font: inherit; font-size: 15px; font-weight: 650; line-height: 1; cursor: pointer; box-shadow: 0 10px 30px rgba(10, 40, 120, .28); transition: transform .18s var(--lp-ease); }
+.lp-video-play span { color: var(--lp-ink); }
+.lp-video-play:hover { transform: scale(1.05); }
+.lp-video-play:active { transform: scale(.97); }
+.lp-video-play:focus-visible { outline: 3px solid var(--lp-blue); outline-offset: 3px; }
+.lp-video-caption { text-align: center; }
+@media (max-width: 560px) {
+  .lp-video { border-radius: 16px; }
+  .lp-video-play { padding: 10px 16px 10px 12px; font-size: 14px; }
+}
+
+/* Shots that are not 16:10 (a cropped panel): show the whole picture on a quiet canvas instead of cropping it. */
+.lp-slide .lp-shot.lp-shot-natural, .lp-tour-stage .lp-shot.lp-shot-natural { object-fit: contain; object-position: center; background: #f5f5f7; padding: 3% 0; }

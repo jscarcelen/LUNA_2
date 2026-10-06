@@ -94,5 +94,29 @@
   "m-chat": {
     "width": 1170,
     "height": 2532
+  },
+  "builder-prompt": {
+    "width": 2880,
+    "height": 1800
+  },
+  "builder-inputs": {
+    "width": 2880,
+    "height": 2580
+  },
+  "quiz-answered": {
+    "width": 2880,
+    "height": 1624
+  },
+  "reader-notes": {
+    "width": 2880,
+    "height": 1800
+  },
+  "agent-answers": {
+    "width": 1312,
+    "height": 1610
+  },
+  "coach-read": {
+    "width": 1660,
+    "height": 650
   }
 }

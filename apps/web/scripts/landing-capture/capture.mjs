@@ -72,7 +72,7 @@ const MARKET_SEED = (() => {
 
 /* ----------------------------------------------------------------------- browser plumbing */
 const HIDE_DEV_OVERLAY = `
-  const css = "nextjs-portal,next-route-announcer,.ui-critic{display:none!important}";
+  const css = "nextjs-portal,next-route-announcer,.ui-critic,[aria-label='Send feedback']{display:none!important}";
   const add = () => {
     if (!document.getElementById("__cap") && document.documentElement) { const s = document.createElement("style"); s.id = "__cap"; s.textContent = css; document.documentElement.appendChild(s); }
     document.querySelectorAll("nextjs-portal").forEach((e) => e.remove());
@@ -95,7 +95,33 @@ const CURSOR = `
   })();
 `;
 
-async function newContext(browser, { width, height, scale, mobile, video, cursor, market }) {
+/**
+ * Read-only guard for the shots that interact (answering a quiz, painting a highlight, deleting a note):
+ * the page may do anything locally, but no write ever reaches the shared demo account. Only the calls that
+ * read or analyse (Luna's read of the performance, template previews, AI generation) are let through.
+ */
+const GUARD_ALLOW = /\/api\/(performance\/coach|chat|ai-tools|agents|templates\/render-preview)/;
+async function guardWrites(ctx) {
+  await ctx.route("**/api/**", (route) => {
+    const request = route.request();
+    if (request.method() !== "GET" && !GUARD_ALLOW.test(request.url())) return route.abort();
+    return route.continue();
+  });
+}
+/** Serve an AI answer from .raw/<file> when it exists; otherwise make the one real call and keep it, so retakes cost nothing. */
+async function cachedAnswer(page, pattern, file) {
+  const cachePath = path.join(RAW, file);
+  await page.route(pattern, async (route) => {
+    if (route.request().method() === "GET") return route.continue();
+    if (fs.existsSync(cachePath)) return route.fulfill({ status: 200, contentType: "application/json", body: fs.readFileSync(cachePath, "utf8") });
+    const response = await route.fetch({ timeout: 110000 });
+    const body = await response.text();
+    if (response.ok()) fs.writeFileSync(cachePath, body);
+    return route.fulfill({ response, body });
+  });
+}
+
+async function newContext(browser, { width, height, scale, mobile, video, cursor, market, guard }) {
   const ctx = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: scale,
@@ -106,6 +132,7 @@ async function newContext(browser, { width, height, scale, mobile, video, cursor
     ...(video ? { recordVideo: { dir: path.join(RAW, "video"), size: { width, height } } } : {})
   });
   await ctx.addInitScript(HIDE_DEV_OVERLAY);
+  if (guard) await guardWrites(ctx);
   if (cursor) await ctx.addInitScript(CURSOR);
   if (market) {
     await ctx.addInitScript(`try {
@@ -190,6 +217,134 @@ const SHOTS = [
   },
   { name: "marketplace", market: true, run: async (p) => { await go(p, "Marketplace"); await wait(800); } },
   { name: "chat", run: async (p) => { await go(p, "AI agents"); await p.click("text=Open chatbot"); await wait(1500); } },
+  // --- Interactive shots (read-only guard: nothing typed, answered or painted is ever saved).
+  {
+    name: "builder-prompt",
+    guard: true,
+    run: async (p) => {
+      await go(p, "AI agents");
+      await p.click("text=Create agent"); await wait(500);
+      await p.click("text=Start from scratch"); await wait(500);
+      await p.locator("input").first().fill("Exam from my notes");
+      await p.locator("textarea").first().fill("Create a mixed exam with multiple-choice and open questions from my notes, with an answer key.");
+      await p.locator("textarea").first().blur(); await wait(500);
+    }
+  },
+  {
+    name: "builder-inputs",
+    guard: true,
+    height: 1290,
+    run: async (p) => {
+      await go(p, "AI agents");
+      await p.click("text=Create agent"); await wait(500);
+      await p.click("text=Start from scratch"); await wait(500);
+      await p.locator("input").first().fill("Exam from my notes");
+      await p.locator("textarea").first().fill("Create a mixed exam with multiple-choice and open questions from my notes, with an answer key.");
+      await p.locator('button:has-text("Next:")').first().click(); await wait(600);
+      for (const label of ["Number of items", "Difficulty", "Language", "Include explanations"]) { await p.locator("button", { hasText: label }).first().click(); await wait(450); }
+      await wait(600);
+    }
+  },
+  {
+    name: "quiz-answered",
+    guard: true,
+    // The top of the result (score + the first wrong answer with its source); the page is cut under the second question's options.
+    clip: async () => ({ x: 0, y: 0, width: 1440, height: 812 }),
+    run: async (p) => {
+      await go(p, "Workspaces"); await p.click("text=Expand all"); await wait(500);
+      await clickRowButton(p, "Quiz on Accounting Principles", "Open"); await wait(800);
+      await p.locator("button", { hasText: /^(Start|Do it again)$/ }).first().click(); await wait(1500);
+      // A believable attempt: most right, a couple wrong (so the marks and the source of the right answer show).
+      for (const answer of ["Assets = Liabilities + Shareholder's Equity", "The allocation of the cost of a tangible asset over its useful life", "Total Assets / Total Liabilities", "It records only cash transactions", "To allocate the cost of an intangible asset over its useful life", "It shows better ability to pay short-term obligations"]) {
+        await p.locator("button", { hasText: answer }).first().click(); await wait(200);
+      }
+      await p.locator("button:has-text('Check my answers')").first().click(); await wait(3000);
+      await p.evaluate(() => { const box = document.querySelector("div.overflow-y-auto.flex-1"); if (box) box.scrollTop = 0; });
+      await wait(600);
+    }
+  },
+  {
+    name: "reader-notes",
+    guard: true,
+    run: async (p) => {
+      await go(p, "Workspaces"); await p.click("text=Expand all"); await wait(500);
+      await clickRowButton(p, "Accounting.pdf", "Preview"); await wait(2500);
+      p.setDefaultTimeout(10000);
+      const select = async (re, block = "center") => {
+        const find = (scroll) => p.evaluate(([src, scroll, block]) => {
+          const rx = new RegExp(src);
+          const walker = document.createTreeWalker(document.querySelector("article"), NodeFilter.SHOW_TEXT);
+          let n;
+          while ((n = walker.nextNode())) {
+            const m = rx.exec(n.textContent);
+            if (m) {
+              if (scroll) { if (block === "top") { let box = n.parentElement; while (box && !(box.scrollHeight > box.clientHeight + 40 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement; if (box) box.scrollTop = 0; } else n.parentElement.scrollIntoView({ block }); }
+              const r = document.createRange(); r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length);
+              const rects = r.getClientRects(); const a = rects[0], b = rects[rects.length - 1];
+              return { x1: a.left + 1, y1: a.top + a.height / 2, x2: b.right - 1, y2: b.top + b.height / 2 };
+            }
+          }
+          return null;
+        }, [re.source, scroll, block]);
+        await find(true); await wait(300);
+        const b = await find(false);
+        if (!b) throw new Error("sentence not found: " + re);
+        await p.mouse.move(b.x1, b.y1); await p.mouse.down(); await p.mouse.move(b.x2, b.y2, { steps: 12 }); await p.mouse.up(); await wait(450);
+      };
+      // Start from a clean page of notes (local to this throwaway browser: the guard keeps it off the account).
+      const notesButton = p.locator("button", { hasText: /^✎\s*Notes/ }).first();
+      await notesButton.click(); await wait(500);
+      for (let i = 0; i < 12 && await p.locator("aside button:has-text('Delete')").count(); i += 1) { await p.locator("aside button:has-text('Delete')").first().click(); await wait(200); }
+      const palette = p.locator("div.fixed.rounded-full").filter({ has: p.locator("button[aria-label='Highlight Green']") });
+      await select(/Enterprise value estimation involves time-value of money, free-cashflow structure and cost of capital \(discount rate\) to bring money value back in time\./, "center");
+      await palette.locator("button", { hasText: /Note/ }).click(); await wait(500);
+      await p.locator("aside textarea").first().fill("EV = the whole business, not only the shareholders' part.");
+      await select(/The big picture of an MBA: key firm activities and financial statements\./, "center");
+      await palette.locator("button[aria-label='Highlight Green']").click(); await wait(500);
+      await select(/For-profit firm goal is maximizing current shareholder value \(or market capitalization\)\./, "top");
+      await wait(500);
+    }
+  },
+  {
+    // The answer key of a saved resource (slides view): each answer next to the passage of the document it comes from.
+    name: "agent-answers",
+    guard: true,
+    clip: async (p) => p.evaluate(() => {
+      const frame = document.querySelector("iframe");
+      let panel = frame.parentElement;
+      while (panel && !panel.querySelector("button") ) panel = panel.parentElement;
+      while (panel && panel.parentElement && panel.parentElement.querySelectorAll("iframe").length === 1 && panel.getBoundingClientRect().width > 700) panel = panel.parentElement;
+      const r = panel.getBoundingClientRect();
+      const top = Math.max(0, r.top), bottom = Math.min(window.innerHeight, r.bottom);
+      return { x: Math.round(r.left), y: Math.round(top), width: Math.round(r.width), height: Math.round(bottom - top) };
+    }),
+    run: async (p) => {
+      await go(p, "Workspaces"); await p.click("text=Expand all"); await wait(500);
+      await clickRowButton(p, "Quiz on Accounting Principles", "Open"); await wait(1200);
+      await p.locator("button", { hasText: /^Format & colour$/ }).first().click(); await wait(2500);
+      // The preview grid: Student view / Answer key rows x A4 / Letter / Slides columns. The last button is "Answer key, slides".
+      const buttons = p.locator("button", { hasText: /^Show(ing)?$/ });
+      // The page also lists them once per view; the preview grid is the first six, in reading order.
+      await buttons.nth(5).click(); await wait(4000);
+      await p.evaluate(() => document.querySelector("iframe").scrollIntoView({ block: "start" })); await wait(500);
+      const frame = p.frames().find((f) => f !== p.mainFrame());
+      await frame.evaluate(() => window.scrollTo(0, 420)); await wait(600);
+    }
+  },
+  {
+    name: "coach-read",
+    guard: true,
+    height: 1240,
+    run: async (p) => {
+      await cachedAnswer(p, "**/api/performance/coach", "coach-read.json");
+      await go(p, "Performance"); await wait(1200);
+      await p.locator("button", { hasText: /Read my results/ }).first().click();
+      await p.waitForSelector("text=Your top 5 next actions", { timeout: 110000 });
+      await wait(800);
+      await p.evaluate(() => { const el = [...document.querySelectorAll("p, h2, h3")].find((n) => /^Luna.s read$/i.test((n.textContent || "").trim())); if (el) el.scrollIntoView({ block: "start" }); });
+      await wait(600);
+    }
+  },
   // Phone shots (PWA bottom tabs).
   { name: "m-home", mobile: true, run: async (p) => { await openApp(p); } },
   { name: "m-workspaces", mobile: true, run: async (p, m) => { await go(p, "Workspaces", m); await wait(800); } },
@@ -217,13 +372,13 @@ async function shoot(browser) {
     const list = SHOTS.filter((s) => !!s.mobile === mobile && (!only.length || only.includes(s.name)));
     for (const shot of list) {
       const height = shot.height || (mobile ? 844 : 900);
-      const ctx = await newContext(browser, { width: mobile ? 390 : 1440, height, scale: mobile ? 3 : 2, mobile, market: shot.market });
+      const ctx = await newContext(browser, { width: mobile ? 390 : 1440, height, scale: mobile ? 3 : 2, mobile, market: shot.market, guard: shot.guard });
       const page = await ctx.newPage();
       try {
         await openApp(page);
         await shot.run(page, mobile);
         await wait(700);
-        await page.screenshot({ path: path.join(RAW, `${shot.name}.png`) });
+        await page.screenshot({ path: path.join(RAW, `${shot.name}.png`), ...(shot.clip ? { clip: await shot.clip(page) } : {}) });
         sizes[shot.name] = await optimise(shot.name, mobile);
         console.log("ok   ", shot.name, `${sizes[shot.name].width}x${sizes[shot.name].height}`);
       } catch (error) {

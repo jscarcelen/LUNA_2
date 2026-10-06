@@ -25,6 +25,12 @@ export const SHOTS = {
   "template-preview": { ...D, alt: "A4 preview of an exam template, student view" },
   marketplace: { ...D, alt: "Marketplace shelves for agents, templates, components, resources and study plans (sample listings)" },
   chat: { ...D, alt: "The Luna chatbot: ask about your material, run agents, write documents" },
+  "builder-prompt": { ...D, alt: "Agent builder, step 1: say in plain language what the agent does" },
+  "builder-inputs": { w: 1440, h: 1290, alt: "Agent builder, step 3: the questions the person running the agent answers (language, number of questions, difficulty)" },
+  "agent-answers": { w: 1312, h: 1610, natural: true, alt: "A generated quiz with its answers, each one showing where it comes from in the source documents" },
+  "quiz-answered": { w: 1440, h: 812, alt: "A quiz after checking: each answer marked, with where it is located in your documents" },
+  "reader-notes": { ...D, alt: "The reader with a sentence selected: highlight colours and a note box" },
+  "coach-read": { w: 1660, h: 650, natural: true, alt: "Luna's read of the results: a plain diagnosis and the top five next actions" },
   "m-home": { ...P, alt: "Luna on a phone: home", phone: true },
   "m-workspaces": { ...P, alt: "Luna on a phone: workspaces", phone: true },
   "m-plans": { ...P, alt: "Luna on a phone: study plans", phone: true },
@@ -41,7 +47,7 @@ export function Shot({ name, eager = false, sizes = "(max-width: 900px) 94vw, 10
     : { src: `/landing/${name}-1000.webp`, srcSet: `/landing/${name}-1000.webp 1000w, /landing/${name}-2000.webp 2000w` };
   return (
     <img
-      className={`lp-shot ${className}`}
+      className={`lp-shot${s.natural ? " lp-shot-natural" : ""} ${className}`}
       style={{ ...(fit ? { objectFit: "cover", objectPosition: fit } : null), ...style }}
       src={set.src}
       srcSet={set.srcSet}

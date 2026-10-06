@@ -1,0 +1,16 @@
+{
+  "name": "luna-promo-video",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Deterministic renderer for the Luna landing-page promo video (frames from index.html + synthesized music).",
+  "type": "module",
+  "scripts": {
+    "music": "node music.mjs",
+    "render": "node render.mjs",
+    "all": "node music.mjs && node render.mjs"
+  },
+  "devDependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "puppeteer-core": "^24.0.0"
+  }
+}

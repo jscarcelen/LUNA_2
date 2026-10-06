@@ -1,5 +1,16 @@
 # Implementation Log
 
+## 2026-10-06 (landing: promo video + 16 tester notes)
+
+- **Promo video** (`tools/promo-video`, README there): 58 s, 1920x1080, music only, nine scenes from the real screenshots,
+  rendered frame by frame from a deterministic timeline; on the landing page as "See Luna in 1 minute" (`PromoVideo.js`).
+- **Landing feedback (16 items from the beta tool)**: phone/native app labelled "coming soon"; marketplace is buy **and** sell in
+  Lunas (payments/top-ups coming soon); agent builder step shows the real prompt + questions pages, with the chatbot as its own
+  step; answers-with-sources, quiz-answered, notes palette and "Luna's read" views added; "Home" thumbnail removed; softer
+  folder/material wording; value-proposition lead instead of the disclaimer; roles section rewritten around purpose and
+  interaction; "generators" -> resource-generating agents.
+- `scripts/landing-capture/capture.mjs`: six new shots, a write guard for the shared demo account, `--only=<name>`.
+
 ## 2026-10-08 (beta feedback tool)
 
 - Temporary tool, see `apps/web/modules/feedback/README.md`: a Feedback button in the app (idea / problem / how it looks / AI result,

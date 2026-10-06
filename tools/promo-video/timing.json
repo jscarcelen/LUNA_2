@@ -1,0 +1,8 @@
+{
+  "fps": 30,
+  "duration": 58,
+  "bpm": 108,
+  "boundaryBeats": [10, 20, 32, 46, 60, 74, 86, 96],
+  "transitions": [0.7, 0.8, 0.8, 0.7, 0.8, 0.8, 0.7, 0.8],
+  "note": "boundaryBeats = the beat (at bpm) where each of the 8 scene changes starts. index.html and music.mjs both read this file, so picture and music stay in sync."
+}

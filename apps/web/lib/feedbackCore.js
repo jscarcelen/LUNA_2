@@ -30,6 +30,8 @@ const text = (value, max) => String(value || "").replaceAll("\u0000", "").trim()
  * `prompts` lists the in-app prompts that page runs, with their dashboard ids (docs/dashboard/manifest.mjs).
  */
 export const AREAS = {
+  landing: { label: "Landing page", files: ["apps/web/components/LandingPage.js", "apps/web/components/landing"], prompts: [] },
+  login: { label: "Log in / sign up", files: ["apps/web/app/login", "apps/web/components/auth"], prompts: [] },
   dashboard: { label: "Home", files: ["apps/web/modules/dashboard/ui/DashboardPage.js"], prompts: [] },
   workspaces: { label: "Workspaces", files: ["apps/web/modules/workspace/ui/WorkspaceBrowser.js", "apps/web/modules/reader/ReaderView.js"], prompts: ["apps/web/app/api/resources/concepts/route.js (P3)", "apps/web/modules/ai-tools/pipeline/conceptExtractor.js (U7)", "apps/web/modules/chat/engine.js (A8, Ask Luna)"] },
   plans: { label: "Study plans", files: ["apps/web/modules/plans/PlansPage.js"], prompts: ["apps/web/app/api/plans/generate/route.js (P1)", "apps/web/app/api/plans/revise/route.js (P2)", "apps/web/app/api/plans/update/route.js (P4)"] },

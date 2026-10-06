@@ -3,7 +3,7 @@
 Lets testers send written feedback from inside the app, and gives the owner one board to read it all and hand it to Claude.
 Built to be deleted when the beta ends.
 
-## Tester side (`FeedbackWidget.js`, mounted once in `components/AppShell.js`)
+## Tester side (`FeedbackWidget.js`, mounted in `components/AppShell.js` for the app and, via `SiteFeedback.js` in `app/layout.js`, on every other page such as the landing page)
 A "Feedback" button on every screen of `/app` and `/platform`. Pick a kind (Idea / Something is wrong / How it looks / AI result),
 write, and optionally:
 - **select text first** — it is quoted automatically (read on pointer-down, before the click clears the selection);
@@ -27,5 +27,5 @@ Table `feedback_items` (migration `202610080001_feedback_items.sql`, service rol
 ## How to remove it
 1. Delete `apps/web/modules/feedback/`, `apps/web/app/feedback-admin/`, `apps/web/app/api/feedback/`, `apps/web/lib/feedbackCore.js`,
    `apps/web/lib/feedbackRepository.js`, `apps/web/tests/feedback/`.
-2. In `components/AppShell.js` remove the `FeedbackWidget` import and element; in `RunAgentPage.js` remove the `feedbackContext` import and the two effects.
+2. Remove `SiteFeedback` from `app/layout.js`. In `components/AppShell.js` remove the `FeedbackWidget` import and element; in `RunAgentPage.js` remove the `feedbackContext` import and the two effects.
 3. `drop table public.feedback_items;` and delete the env var `LUNA_FEEDBACK_ADMIN_KEY`.

@@ -13,7 +13,7 @@ import { describeElement, imageToDataUrl, captureScreen, pickElement } from "./c
 const ink = "text-[var(--ink,#1d1d1f)]";
 const chip = "inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold";
 
-export function FeedbackWidget({ page = "", title = "", role = "", account = null }) {
+export function FeedbackWidget({ page = "", title = "", role = "", account = null, standalone = false }) {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false); // while picking or capturing, the panel steps out of the way
   const [kind, setKind] = useState("idea");
@@ -98,13 +98,13 @@ export function FeedbackWidget({ page = "", title = "", role = "", account = nul
         onClick={toggle}
         aria-expanded={open}
         aria-label="Send feedback"
-        className={`fixed bottom-[104px] right-3 z-[55] rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-bold shadow-[0_6px_20px_rgba(0,0,0,0.16)] transition active:scale-95 min-[761px]:bottom-4 min-[761px]:right-4 ${ink} ${hidden ? "hidden" : ""}`}
+        className={`fixed ${standalone ? "bottom-4 right-4" : "bottom-[104px] right-3 min-[761px]:bottom-4 min-[761px]:right-4"} z-[55] rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-bold shadow-[0_6px_20px_rgba(0,0,0,0.16)] transition active:scale-95 ${ink} ${hidden ? "hidden" : ""}`}
       >
         <span aria-hidden>✎</span> Feedback
       </button>
 
       {open && !hidden ? (
-        <div className="fixed inset-x-2 bottom-[104px] z-[56] max-h-[78dvh] overflow-y-auto rounded-3xl border border-black/10 bg-white p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] min-[761px]:inset-x-auto min-[761px]:bottom-16 min-[761px]:right-4 min-[761px]:w-[400px]" role="dialog" aria-label="Send feedback">
+        <div className={`fixed inset-x-2 ${standalone ? "bottom-16" : "bottom-[104px] min-[761px]:bottom-16"} z-[56] max-h-[78dvh] overflow-y-auto rounded-3xl border border-black/10 bg-white p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] min-[761px]:inset-x-auto min-[761px]:right-4 min-[761px]:w-[400px]`} role="dialog" aria-label="Send feedback">
           <div className="flex items-start justify-between gap-2">
             <div>
               <p className={`m-0 text-base font-bold ${ink}`}>Help us improve Luna</p>

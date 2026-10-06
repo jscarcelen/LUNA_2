@@ -1,4 +1,5 @@
 import "./globals.css";
+import { SiteFeedback } from "../modules/feedback/SiteFeedback";
 
 export const metadata = {
   title: "LUNA Platform",
@@ -21,7 +22,11 @@ export const viewport = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        {/* Beta feedback tool (temporary, see modules/feedback/README.md); the app mounts its own inside AppShell. */}
+        <SiteFeedback />
+      </body>
     </html>
   );
 }

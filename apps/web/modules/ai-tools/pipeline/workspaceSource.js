@@ -2,7 +2,7 @@ import { listWorkspaceTree } from "../../../lib/workspacesRepository.js";
 import { readWorkspaces } from "../../../lib/mockStore.js";
 import { getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient.js";
 import { currentOwnerUserId } from "../../../lib/session.js";
-import { isMasterDocument, masterDocumentMarkdown, parseMasterResource } from "./masterDocument.js";
+import { isMasterDocument, masterDocumentMarkdown, masterInfo, parseMasterResource } from "./masterDocument.js";
 
 function normalizeTopicTags(topicTags = []) {
   return topicTags.map((tag) => {
@@ -26,7 +26,9 @@ function readableMaster(doc) {
   const markdown = masterDocumentMarkdown(doc);
   if (!markdown) return doc;
   const resource = parseMasterResource(doc);
-  return { ...doc, name: String(resource?.name || doc.name || "Master document").trim(), content: markdown };
+  // `masterOriginals`: the documents it consolidates, so quotes from it can link to them.
+  const originals = (masterInfo(resource)?.originals || []).filter((original) => original?.id && original?.name).map((original) => ({ id: original.id, name: original.name }));
+  return { ...doc, name: String(resource?.name || doc.name || "Master document").trim(), content: markdown, masterOriginals: originals };
 }
 
 function normalizeDocuments(documents = []) {

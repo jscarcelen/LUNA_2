@@ -47,7 +47,7 @@ export async function POST(request) {
     // Template Studio v3: one layout engine for every format; layout/view selectable.
     if (template.templateV3 && typeof template.templateV3 === "object") {
       const doc = normalizeTemplate(template.templateV3);
-      const options = { layoutId: body?.layoutId || undefined, viewId: body?.viewId || null, showFieldMarkers: Boolean(body?.showFieldMarkers), highlightFields: Array.isArray(body?.highlightFields) ? body.highlightFields : [] };
+      const options = { layoutId: body?.layoutId || undefined, viewId: body?.viewId || null, showFieldMarkers: Boolean(body?.showFieldMarkers), highlightFields: Array.isArray(body?.highlightFields) ? body.highlightFields : [], interactiveLinks: Boolean(body?.interactiveLinks) };
       if (format === "html") {
         const rendered = renderV3Html(doc, sampleData, options);
         return NextResponse.json({ html: rendered.html, pageCount: rendered.pageCount, overflows: rendered.overflows });

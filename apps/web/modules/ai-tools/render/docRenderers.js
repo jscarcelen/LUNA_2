@@ -1,6 +1,10 @@
-import { PDFDocument, StandardFonts, degrees, rgb } from "pdf-lib";
-import { Document, Packer, Paragraph, TextRun, AlignmentType, ImageRun } from "docx";
+import { PDFDocument, PDFString, StandardFonts, degrees, rgb } from "pdf-lib";
+import { Document, ExternalHyperlink, Packer, Paragraph, TextRun, AlignmentType, ImageRun } from "docx";
+import { texToDocxMath } from "./docxMath.js";
 import { layoutDocument, lineHeightMm } from "./docModel.js";
+import { mathSpanHtml, mathStyleTag } from "./mathHtml.js";
+import { drawMathBox, embedMathFonts, pdfMathBox } from "./pdfMath.js";
+import { latexToUnicode } from "../../template-studio/engine/math/unicode";
 
 const MM_TO_PT = 72 / 25.4;
 const FONT_STACKS = {
@@ -23,7 +27,28 @@ function hexToRgb(hex = "#1d1d1f") {
 
 /* ------------------------------------------------------------------------------ HTML */
 
-export function renderDocHtml(template, data = {}, { showFieldMarkers = false, prelaid = null, highlight = [] } = {}) {
+/** `/source?…` links are the ones that open an original document: the app reader can take them over. */
+const isSourceHref = (href) => /\/source\?/.test(String(href || ""));
+
+/** Segments of one laid-out line: prose, KaTeX formulas, links. */
+function richSegHtml(seg) {
+  if (seg.t === "math") return mathSpanHtml(seg);
+  if (seg.t === "link") return `<a href="${escapeHtml(seg.href)}" target="_blank" rel="noopener noreferrer"${isSourceHref(seg.href) ? " data-luna-source" : ""}>${escapeHtml(seg.text)}</a>`;
+  return escapeHtml(seg.text);
+}
+
+/** A text item that carries formulas / links: one block per laid-out line, at the height the layout reserved for it. */
+function richItemHtml(item) {
+  return item.math.lines.map((line) => `<div class="lm${line.display ? " lm-d" : ""}" style="min-height:${Number(line.pitch).toFixed(2)}mm">${line.segs.length ? line.segs.map(richSegHtml).join("") : "&nbsp;"}</div>`).join("");
+}
+
+/**
+ * Inside the app a source link should open the document reader instead of a new tab. The preview
+ * iframe is sandboxed (no same-origin access), so the link posts a message to the page that hosts it.
+ */
+const SOURCE_LINK_SCRIPT = `<script>document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[data-luna-source]");if(!a)return;try{var u=new URL(a.href);var p=u.searchParams;parent.postMessage({type:"luna-open-source",documentId:p.get("d")||"",page:p.get("p")||"",section:p.get("s")||"",chunk:p.get("c")||"",quote:p.get("q")||"",href:a.href},"*");e.preventDefault();}catch(x){}});</script>`;
+
+export function renderDocHtml(template, data = {}, { showFieldMarkers = false, prelaid = null, highlight = [], interactiveLinks = false } = {}) {
   const { pages } = prelaid || layoutDocument(template, data);
   // Fields the user is inspecting: every place they fill is outlined, wherever it appears.
   const highlighted = new Set(highlight.map((value) => String(value || "").toLowerCase().replace(/[^a-z0-9]+/g, "")).filter(Boolean));
@@ -46,11 +71,13 @@ export function renderDocHtml(template, data = {}, { showFieldMarkers = false, p
         const mode = deg < 0 ? "writing-mode:vertical-rl;" : "writing-mode:vertical-rl;transform:rotate(180deg);";
         return `<div style="position:absolute;left:${left}mm;top:${top}mm;width:${item.h}mm;height:${item.w}mm;${mode}display:flex;align-items:center;justify-content:${item.style.align === "center" ? "center" : item.style.align === "right" ? "flex-end" : "flex-start"};font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};line-height:${item.style.lineHeight};white-space:nowrap;overflow:hidden;">${item.lines.map(escapeHtml).join(" ")}</div>`;
       }
-      return `<div style="${base}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:pre-wrap;word-wrap:break-word;${fieldStyle}">${marker}${item.href ? `<a href="${escapeHtml(item.href)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${item.lines.map(escapeHtml).join("\n")}</a>` : item.lines.map(escapeHtml).join("\n")}</div>`;
+      const content = item.math ? richItemHtml(item) : item.lines.map(escapeHtml).join("\n");
+      return `<div style="${base}min-height:${item.h}mm;font-family:${FONT_STACKS[item.style.fontFamily] || FONT_STACKS.sans};font-size:${item.style.fontSize}pt;font-weight:${item.style.fontWeight === "bold" ? 700 : 400};color:${item.style.color};text-align:${item.style.align};line-height:${item.style.lineHeight};white-space:${item.math ? "normal" : "pre-wrap"};word-wrap:break-word;${fieldStyle}">${marker}${item.href ? `<a href="${escapeHtml(item.href)}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;text-underline-offset:2px">${content}</a>` : content}</div>`;
     }).join("\n");
     return `<section class="doc-page" style="position:relative;width:${page.width}mm;height:${page.height}mm;background:${pageColor};overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.12);margin:0 auto 10mm;page-break-after:always;">${bg}${items}</section>`;
   }).join("\n");
-  return `<style>@media print{.doc-page{box-shadow:none;margin:0;}}</style><div class="doc-pages">${pageHtml}</div>`;
+  const linkCss = !pageHtml.includes("<a ") ? "" : ".doc-pages a[data-luna-source]{color:rgb(0,113,227);text-decoration:none}.doc-pages a[data-luna-source]:hover{text-decoration:underline}.doc-pages .lm a:not([data-luna-source]){color:inherit;text-decoration:underline;text-underline-offset:2px}";
+  return `<style>@media print{.doc-page{box-shadow:none;margin:0;}}${linkCss}</style>${mathStyleTag(pageHtml)}<div class="doc-pages">${pageHtml}</div>${interactiveLinks && pageHtml.includes("data-luna-source") ? SOURCE_LINK_SCRIPT : ""}`;
 }
 
 export function wrapDocHtml(fragment, { forPrint = false } = {}) {
@@ -111,6 +138,65 @@ async function embedImage(pdf, src) {
   return null;
 }
 
+/** A clickable rectangle over a stretch of text (an annotation pdf-lib has no helper for). */
+function addPdfLink(pdf, page, href, x, y, width, height) {
+  try {
+    const annotation = pdf.context.obj({ Type: "Annot", Subtype: "Link", Rect: [x, y, x + width, y + height], Border: [0, 0, 0], A: { Type: "Action", S: "URI", URI: PDFString.of(href) } });
+    page.node.addAnnot(pdf.context.register(annotation));
+  } catch {
+    // A link that cannot be written is only a missing click target.
+  }
+}
+
+const LINK_COLOR = rgb(0, 0.443, 0.89);
+
+/**
+ * A text item that carries formulas and links, drawn line by line at the heights the layout reserved:
+ * prose in the item's font, formulas typeset by the box typesetter, links blue and clickable. A line
+ * wider than the box is scaled down to fit, so nothing leaves the card.
+ */
+function drawRichItem({ pdf, pdfPage, item, font, math, x, top, w, pageH, color }) {
+  const fontSize = Number(item.style.fontSize) || 11;
+  let cursorTop = top;
+  for (const line of item.math.lines) {
+    const pitch = line.pitch * MM_TO_PT;
+    const lineHeight = lineHeightMm(item.style) * MM_TO_PT;
+    // Plain lines sit where the old text drawing put them; a tall line keeps its content centred in the extra room.
+    const baseline = pageH - cursorTop - fontSize - Math.max(0, (pitch - lineHeight) / 2);
+    const parts = line.segs.map((seg) => {
+      if (seg.t === "math") {
+        const box = pdfMathBox(math, seg.tex, seg.display);
+        if (box) return { seg, box, width: box.w * fontSize * 1.05 * (seg.shrink || 1) };
+        const text = pdfSafeText(latexToUnicode(seg.tex));
+        return { seg: { t: "text", text }, width: font.widthOfTextAtSize(text, fontSize) };
+      }
+      const text = pdfSafeText(seg.text);
+      return { seg: { ...seg, text }, width: font.widthOfTextAtSize(text, fontSize) };
+    });
+    const total = parts.reduce((sum, part) => sum + part.width, 0);
+    const fit = total > w ? Math.max(0.6, w / total) : 1;
+    const size = fontSize * fit;
+    const used = total * fit;
+    const align = line.display ? "center" : item.style.align;
+    let cursorX = x + (align === "center" ? (w - used) / 2 : align === "right" ? w - used : 0);
+    for (const part of parts) {
+      const width = part.width * fit;
+      if (part.box) {
+        drawMathBox(pdfPage, math, part.box, cursorX, baseline, size * 1.05 * (part.seg.shrink || 1), color);
+      } else if (part.seg.text) {
+        const isLink = part.seg.t === "link";
+        pdfPage.drawText(part.seg.text, { x: cursorX, y: baseline, size, font, color: isLink ? LINK_COLOR : color });
+        if (isLink) {
+          addPdfLink(pdf, pdfPage, part.seg.href, cursorX, baseline - size * 0.25, width, size * 1.15);
+          pdfPage.drawLine({ start: { x: cursorX, y: baseline - size * 0.12 }, end: { x: cursorX + width, y: baseline - size * 0.12 }, thickness: 0.4, color: LINK_COLOR });
+        }
+      }
+      cursorX += width;
+    }
+    cursorTop += pitch;
+  }
+}
+
 export async function renderDocPdfBuffer(template, data = {}, { prelaid = null } = {}) {
   const { size, pages } = prelaid || layoutDocument(template, data);
   const pdf = await PDFDocument.create();
@@ -124,6 +210,7 @@ export async function renderDocPdfBuffer(template, data = {}, { prelaid = null }
   };
   const pageW = size.width * MM_TO_PT;
   const pageH = size.height * MM_TO_PT;
+  let mathFonts = null;
   const imageCache = new Map();
   const getImage = async (src) => {
     if (!imageCache.has(src)) imageCache.set(src, await embedImage(pdf, src));
@@ -166,6 +253,12 @@ export async function renderDocPdfBuffer(template, data = {}, { prelaid = null }
       const font = fonts[`${family}${item.style.fontWeight === "bold" ? "Bold" : ""}`];
       const fontSize = Number(item.style.fontSize) || 11;
       const color = hexToRgb(item.style.color) || { r: 0.11, g: 0.11, b: 0.12 };
+      if (item.math && !Number(item.style.rotate)) {
+        if (!mathFonts) mathFonts = await embedMathFonts(pdf);
+        drawRichItem({ pdf, pdfPage, item, font, math: mathFonts, x, top, w, pageH, color: rgb(color.r, color.g, color.b) });
+        if (item.href) addPdfLink(pdf, pdfPage, item.href, x, pageH - top - h, w, h);
+        continue;
+      }
       const lh = lineHeightMm(item.style) * MM_TO_PT;
       let cursorY = pageH - top - fontSize;
       for (const rawLine of item.lines) {
@@ -221,6 +314,19 @@ export async function renderDocDocxBuffer(template, data = {}, { prelaid = null 
         continue;
       }
       const alignment = item.style.align === "center" ? AlignmentType.CENTER : item.style.align === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT;
+      if (item.math) {
+        // Formulas become native Word equations (editable), links real hyperlinks.
+        const runStyle = { bold: item.style.fontWeight === "bold", size: Math.round((Number(item.style.fontSize) || 11) * 2), color: String(item.style.color || "#1d1d1f").replace("#", ""), font: item.style.fontFamily === "serif" ? "Georgia" : item.style.fontFamily === "mono" ? "Courier New" : "Calibri" };
+        for (const line of item.math.lines) {
+          const runs = line.segs.map((seg) => {
+            if (seg.t === "math") return texToDocxMath(seg.tex, seg.display) || new TextRun({ ...runStyle, text: latexToUnicode(seg.tex) });
+            if (seg.t === "link") return new ExternalHyperlink({ link: seg.href, children: [new TextRun({ ...runStyle, text: seg.text, color: "0071E3", underline: {} })] });
+            return new TextRun({ ...runStyle, text: seg.text });
+          });
+          children.push(new Paragraph({ alignment: line.display ? AlignmentType.CENTER : alignment, spacing: { after: 40 }, children: runs.length ? runs : [new TextRun({ ...runStyle, text: "" })] }));
+        }
+        continue;
+      }
       for (const line of item.lines) {
         children.push(new Paragraph({
           alignment,
@@ -258,6 +364,20 @@ export async function renderDocPptxBuffer(template, data = {}, { prelaid = null 
       }
       if (item.type === "image") {
         if (item.src) slide.addImage({ ...box, data: item.src.startsWith("data:") ? item.src : undefined, path: item.src.startsWith("data:") ? undefined : item.src, sizing: { type: "contain", w: box.w, h: box.h } });
+        continue;
+      }
+      const textStyle = { fontSize: Number(item.style.fontSize) || 11, bold: item.style.fontWeight === "bold", color: String(item.style.color || "#1d1d1f").replace("#", ""), fontFace: item.style.fontFamily === "serif" ? "Georgia" : item.style.fontFamily === "mono" ? "Courier New" : "Calibri" };
+      if (item.math && !Number(item.style.rotate)) {
+        // PowerPoint cannot typeset LaTeX: formulas are written in readable Unicode, links stay clickable.
+        const runs = [];
+        item.math.lines.forEach((line, index) => {
+          const segs = line.segs.length ? line.segs : [{ t: "text", text: "" }];
+          segs.forEach((seg, at) => {
+            const options = { ...textStyle, ...(seg.t === "link" ? { hyperlink: { url: seg.href }, color: "0071E3", underline: { style: "sng" } } : {}), ...(at === segs.length - 1 && index < item.math.lines.length - 1 ? { breakLine: true } : {}) };
+            runs.push({ text: seg.t === "math" ? latexToUnicode(seg.tex) : seg.text, options });
+          });
+        });
+        slide.addText(runs, { ...box, align: item.style.align || "left", valign: "top", margin: 0 });
         continue;
       }
       slide.addText(item.lines.join("\n"), { ...box, ...(item.href ? { hyperlink: { url: item.href } } : {}), rotate: Number(item.style.rotate) ? (Number(item.style.rotate) > 0 ? 270 : 90) : 0, fontSize: Number(item.style.fontSize) || 11, bold: item.style.fontWeight === "bold", color: String(item.style.color || "#1d1d1f").replace("#", ""), align: item.style.align || "left", valign: "top", fontFace: item.style.fontFamily === "serif" ? "Georgia" : item.style.fontFamily === "mono" ? "Courier New" : "Calibri", margin: 0 });

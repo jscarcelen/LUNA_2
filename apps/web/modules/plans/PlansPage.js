@@ -1,5 +1,6 @@
 "use client";
 
+import { sourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
@@ -310,6 +311,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [draft, setDraft] = useState({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
   const [playing, setPlaying] = useState(null);
   const [readingDoc, setReadingDoc] = useState(null); // an uploaded document opened in the HTML reader
+  // A source tag in a generated document opens the original at the page it names (or, if it is not loaded here, in a new tab).
+  function openSource(target) {
+    const original = workspaceDocuments.find((entry) => entry.id === target.documentId);
+    if (original) setReadingDoc({ ...original, focus: null, scrollTo: { page: target.page, section: target.section } });
+    else window.open(sourceHref(target), "_blank", "noopener");
+  }
   const [reading, setReading] = useState(null); // { resource, document } — a generated document opened in the HTML reader // { activity, documentId, itemId, planDocumentId }
   const [deletingPlan, setDeletingPlan] = useState(null); // plan row to confirm-delete
   const [planView, setPlanView] = useState("list"); // "list" | "calendar" inside the open plan
@@ -1186,6 +1193,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {updateDialogs}
         {playing ? (
           <ReaderView
+              onOpenSource={openSource}
               resource={playing.resource}
               onUpdate={playing.resource && canUpdateResource(playing.resource) ? () => setUpdatingResource({ document: playing.resourceDocument, resource: playing.resource }) : undefined}
               activity={playing.activity}
@@ -1211,11 +1219,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             onDownloadDocument={onDownloadDocument}
             onUpdateDocumentContent={onUpdateDocumentContent}
             focus={readingDoc.focus}
+            scrollTo={readingDoc.scrollTo}
             planId={open.document.id}
           />
         ) : null}
         {reading ? (
           <ReaderView
+            onOpenSource={openSource}
             resource={reading.resource}
             onUpdate={reading.document && canUpdateResource(reading.resource) ? () => setUpdatingResource({ document: reading.document, resource: reading.resource }) : undefined}
             chat={{ documentId: reading.document?.id, planId: open.document.id }}

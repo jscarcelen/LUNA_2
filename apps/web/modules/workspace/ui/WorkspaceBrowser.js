@@ -1,5 +1,6 @@
 "use client";
 
+import { sourceHref } from "../../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import JSZip from "jszip";
 import { RowMenu } from "../../ui/RowMenu";
@@ -150,6 +151,8 @@ export function WorkspaceBrowser({
   const [planningRow, setPlanningRow] = useState(null);
   const [updatingRow, setUpdatingRow] = useState(null); // { document, resource }: the "Update…" dialog
   const [preview, setPreview] = useState(null);
+  // Opened from a source tag in a generated document: where in the original to start reading.
+  const [previewScroll, setPreviewScroll] = useState(null);
   const [formatFor, setFormatFor] = useState("");
   const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
   const [undo, setUndo] = useState(null); // { text, run }: offered while `text` is still what the status line says
@@ -913,6 +916,10 @@ export function WorkspaceBrowser({
       {playing ? (
         <ReaderView
           resource={playing.resource}
+          onOpenSource={(target) => {
+            const original = rawDocuments.find((entry) => entry.id === target.documentId);
+            if (original) { setPreviewScroll({ page: target.page, section: target.section }); setPreview(original); } else window.open(sourceHref(target), "_blank", "noopener");
+          }}
           chat={{ documentId: playing.document.id }}
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
@@ -926,7 +933,8 @@ export function WorkspaceBrowser({
         <DocumentReader
           document={preview}
           documents={rawDocuments}
-          onClose={() => setPreview(null)}
+          scrollTo={previewScroll}
+          onClose={() => { setPreview(null); setPreviewScroll(null); }}
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}
           onDownloadDocument={onDownloadDocument}

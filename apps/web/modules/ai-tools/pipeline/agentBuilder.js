@@ -140,7 +140,8 @@ function resolvedDocumentId(entry, rankedChunks) {
 }
 
 /** The passages a run read, for citing where each answer comes from (chunkIndex is 1-based, as shown to people). */
-function sourcesFromChunks(chunks = []) {
+function sourcesFromChunks(chunks = [], documents = []) {
+  const originalsOf = new Map(documents.filter((document) => document?.masterOriginals?.length).map((document) => [document.id, document.masterOriginals]));
   return chunks.slice(0, 40).map((chunk) => ({
     documentId: chunk.documentId || "",
     documentName: chunk.documentName || "",
@@ -148,7 +149,9 @@ function sourcesFromChunks(chunks = []) {
     heading: Array.isArray(chunk.headingPath) && chunk.headingPath.length ? chunk.headingPath.join(" › ") : String(chunk.section || ""),
     page: chunk.page ?? null,
     pageEnd: chunk.pageEnd ?? null,
-    content: String(chunk.content || "").slice(0, 4000)
+    content: String(chunk.content || "").slice(0, 4000),
+    // A passage of a master document knows which original documents it consolidates.
+    ...(originalsOf.has(chunk.documentId) ? { originals: originalsOf.get(chunk.documentId) } : {})
   }));
 }
 
@@ -557,7 +560,8 @@ ${enhancedRules}
 
 Additional hard rules:
 - Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
-- Never omit a required field; set optional fields to null if unused.${config.refinementPrompt ? REVISION_NOTE : ""}`;
+- Never omit a required field; set optional fields to null if unused.
+- Write every mathematical expression as valid LaTeX: inline $x^2$ or display $$\\frac{a}{b}$$, even when the material gives it as plain text or Unicode (S²ₓ becomes $S_x^2$). Never put sentences inside the dollars, and write currency as "5 USD" or \\$5.${config.refinementPrompt ? REVISION_NOTE : ""}`;
 
   const userMessage = JSON.stringify({
     task: "Generate content blocks",
@@ -880,7 +884,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       checks: [],
       referenceDocumentCount: blockDocs.length,
       referenceChunkCount: blockChunks.length,
-      sources: sourcesFromChunks(blockChunks),
+      sources: sourcesFromChunks(blockChunks, blockDocs),
       isBlockOutput: true,
     };
   }
@@ -986,7 +990,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length,
     // The passages the answer came from: used to link each question back to its source material.
-    sources: sourcesFromChunks(rankedChunks)
+    sources: sourcesFromChunks(rankedChunks, scopedDocuments)
   };
   emit({ step: "done", status: "end", ...payload });
   return payload;

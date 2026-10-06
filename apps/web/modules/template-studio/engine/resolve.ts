@@ -1,6 +1,7 @@
 import type { ContentSource, DataObject, DataValue, Element, FieldDef, GroupElement, ID, Layout, Page, Style, View } from "./types";
 import { findField, slug } from "./model";
 import { renderMath } from "./latex";
+import { splitRich, type RichSeg } from "./math/richText";
 
 /** Applies a view's overrides and visibility filter to a page's elements. */
 export function resolveView(layout: Layout, viewId: ID | null): Page[] {
@@ -102,6 +103,52 @@ export function valueToText(value: DataValue | undefined): string {
   if (typeof value === "object") return JSON.stringify(value);
   // Formulas are written as LaTeX by the agents; every export draws plain text, so convert here.
   return renderMath(String(value));
+}
+
+/** The text of a value with its LaTeX and links untouched (renderers that can typeset do so). */
+export function valueToRaw(value: DataValue | undefined): string {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.map((item) => valueToRaw(item)).join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+const stripMarkdown = (text: string) => text
+  .replace(/\*\*(.+?)\*\*/g, "$1")
+  .replace(/__(.+?)__/g, "$1")
+  .replace(/(^|\s)\*(?!\s)(.+?)\*(?=\s|$)/g, "$1$2")
+  .replace(/^#{1,6}\s+/gm, "")
+  .replace(/^\s*[-*]\s+/gm, "•  ");
+
+/**
+ * A text split into lines of segments: prose, formulas and links. Markdown emphasis is stripped from
+ * the prose (when `markdown`) without touching what is inside a formula, even when the emphasis
+ * wraps one.
+ */
+export function richSegments(raw: string, markdown: boolean): RichSeg[][] {
+  const segs = splitRich(raw);
+  const mark = (index: number) => `\uE000${index}\uE001`;
+  const specials: RichSeg[] = [];
+  let joined = "";
+  for (const seg of segs) {
+    if (seg.t === "text") joined += seg.text;
+    else { specials.push(seg); joined += mark(specials.length - 1); }
+  }
+  const paragraphs: RichSeg[][] = [];
+  for (const rawLine of joined.split(/\r?\n/)) {
+    const line = markdown ? stripMarkdown(rawLine) : rawLine;
+    const parts: RichSeg[] = [];
+    let last = 0;
+    for (const match of line.matchAll(/\uE000(\d+)\uE001/g)) {
+      if (match.index! > last) parts.push({ t: "text", text: line.slice(last, match.index) });
+      const special = specials[Number(match[1])];
+      if (special) parts.push(special);
+      last = match.index! + match[0].length;
+    }
+    if (last < line.length) parts.push({ t: "text", text: line.slice(last) });
+    paragraphs.push(parts);
+  }
+  return paragraphs;
 }
 
 /* ---------------------------------------------------------------- rich text (Markdown + LaTeX) → plain lines for M1 */

@@ -4,7 +4,7 @@ import { hasMath, latexToUnicode, renderMath } from "../../modules/template-stud
 describe("maths in generated text", () => {
   it("turns an inline formula into readable characters", () => {
     expect(renderMath("The variance is $S_x^2 = \\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2$ exactly."))
-      .toBe("The variance is Sₓ² = (1)/(n-1)∑ᵢ₌₁ⁿ(xᵢ-x̄)² exactly.");
+      .toBe("The variance is Sₓ² = (1)/(n-1)∑(i=1→n)(xᵢ-x̄)² exactly.");
   });
 
   it("handles display maths, \\( \\) and \\[ \\] delimiters", () => {
@@ -51,8 +51,9 @@ const mathData = {
 };
 
 describe("maths in exports", () => {
-  it("draws converted maths in HTML, never raw LaTeX", () => {
+  it("draws typeset maths in HTML (KaTeX), never raw LaTeX", () => {
     const { html } = renderHtml(createExamTemplate(), mathData);
+    expect(html).toContain('class="katex"');
     expect(html).toContain("∑");
     expect(html).not.toContain("\\frac");
     expect(html).not.toContain("\\sum");

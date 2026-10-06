@@ -6,6 +6,7 @@ import { defaultToggles, findBlock } from "../engine/outputTemplate";
 import type { Template } from "../engine/types";
 import { FormatCard, VisualizeModal } from "../TemplateWizard";
 import { TemplatePicker } from "./TemplatePicker";
+import { SourcePeek } from "../../reader/SourcePeek";
 import { card, fieldBase, ghostBtn, kicker } from "../ui";
 import { formatsOf, resolveStyle, styleFromTemplate, type OutputDocument, type OutputPlan, type OutputStyles } from "./outputDocument";
 
@@ -19,12 +20,12 @@ function idsFor(doc: OutputDocument, selection: PreviewSelection) {
   return { layout, view };
 }
 
-async function callRender(doc: OutputDocument, selection: PreviewSelection, format: string) {
+async function callRender(doc: OutputDocument, selection: PreviewSelection, format: string, extra: Record<string, unknown> = {}) {
   const { layout, view } = idsFor(doc, selection);
   const response = await fetch("/api/templates/render-preview", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ template: doc.compiled, sampleData: doc.data, format, layoutId: layout.id, viewId: view?.id || null })
+    body: JSON.stringify({ template: doc.compiled, sampleData: doc.data, format, layoutId: layout.id, viewId: view?.id || null, ...extra })
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload?.error || "Rendering failed");
@@ -250,17 +251,33 @@ export interface OutputPreviewPaneProps {
   onError?: (message: string) => void;
   /** The interactive HTML form of the output, shown in its own tab (separate from the page-size × view matrix). */
   interactive?: ReactNode;
+  /** A source tag was clicked: open that original document (otherwise it is shown over the preview). */
+  onOpenSource?: (target: { documentId: string; page: number; section: string; chunk: number; quote: string }) => void;
 }
 
 const MM_PX = 3.78;
 
-export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyHint, onError, interactive }: OutputPreviewPaneProps) {
+export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyHint, onError, interactive, onOpenSource }: OutputPreviewPaneProps) {
   const [tab, setTab] = useState<"preview" | "interactive">("preview");
   const [html, setHtml] = useState("");
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
   const [width, setWidth] = useState(560);
   const frameBox = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLIFrameElement>(null);
+  const [peek, setPeek] = useState<{ documentId: string; page: number; section: string; chunk: number; quote: string } | null>(null);
+
+  // The preview is a sandboxed page: a click on a source tag in it posts a message here, and the original opens in the app.
+  useEffect(() => {
+    const listen = (event: MessageEvent) => {
+      if (event.source !== frame.current?.contentWindow || event.data?.type !== "luna-open-source") return;
+      const target = { documentId: String(event.data.documentId || ""), page: Number(event.data.page) || 0, section: String(event.data.section || ""), chunk: Number(event.data.chunk) || 0, quote: String(event.data.quote || "") };
+      if (!target.documentId) return;
+      if (onOpenSource) onOpenSource(target); else setPeek(target);
+    };
+    window.addEventListener("message", listen);
+    return () => window.removeEventListener("message", listen);
+  }, [onOpenSource]);
 
   useEffect(() => {
     const node = frameBox.current;
@@ -277,7 +294,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
     const timer = window.setTimeout(async () => {
       setRendering(true);
       try {
-        const { html: rendered } = await callRender(doc, selection, "html");
+        const { html: rendered } = await callRender(doc, selection, "html", { interactiveLinks: true });
         if (!cancelled) { setHtml(rendered || ""); setError(""); }
       } catch (failure) {
         if (!cancelled) setError(String((failure as Error).message || failure));
@@ -346,12 +363,13 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
         {doc && tab === "preview" ? (
           <div ref={frameBox} className="h-[640px] overflow-hidden">
             {rendering ? <div className="h-0.5 animate-pulse bg-[var(--accent)]" /> : null}
-            <iframe title="Output preview" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={srcDoc} className="h-full w-full border-0" />
+            <iframe ref={frame} title="Output preview" sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox" srcDoc={srcDoc} className="h-full w-full border-0" />
           </div>
         ) : null}
         {doc && tab === "interactive" && interactive ? <div className="h-[640px] overflow-y-auto bg-[var(--bg)]">{interactive}</div> : null}
         {error ? <p className="absolute bottom-2 left-3 right-3 m-0 rounded-lg bg-white/95 px-3 py-1.5 text-xs text-[var(--color-danger)]">{error}</p> : null}
       </div>
+      {peek ? <SourcePeek target={peek} onClose={() => setPeek(null)} /> : null}
     </div>
   );
 }

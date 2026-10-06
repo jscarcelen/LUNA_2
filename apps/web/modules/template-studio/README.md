@@ -24,6 +24,25 @@ owns presentation, a mapping layer connects them.
 
 Tests: `apps/web/tests/template-studio/engine.test.ts`. Typecheck: `npm run typecheck`.
 
+## Maths and links in text (`engine/math/`)
+
+Generated text carries LaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) and Markdown links (`[label](url)`; the source tags
+`[D1 p.3]` of consolidated notes are links to `/source?d=…&p=3`). A `$` only opens a formula when what follows is one:
+`$40,000 … $5,000` are prices (`richText.ts`).
+
+- `richText.ts` `splitRich` cuts text into prose / formula / link segments; `breakMath` finds where a long formula may wrap.
+- `richLayout.ts` wraps those segments: a formula is one atom (width from the typesetter, height from KaTeX's own strut),
+  a line with tall maths is given the room it needs (`RichLine.pitch`, the components below move down), display maths gets
+  its own centred line(s), a formula wider than the line breaks at its relations/operators. `LaidOutTextItem.math`
+  keeps the raw segments next to the plain Unicode `lines`.
+- Renderers: **HTML** draws every formula with KaTeX and inlines its stylesheet + fonts only when the document has maths
+  (`ai-tools/render/mathHtml.js`, `katexAssets.generated.js` ← `scripts/generate-katex-assets.mjs`); **PDF** has no browser,
+  so `typeset.ts` lays the KaTeX parse tree out with TeX's rules (fractions, roots, limits, scripts, accents, stretchy
+  delimiters, matrices) and `ai-tools/render/pdfMath.js` draws the boxes with pdf-lib (Times + Symbol), links become
+  clickable annotations; **DOCX** gets native Word equations (`docxMath.js`) and hyperlinks; **PPTX** gets readable Unicode
+  (`unicode.ts`: `∑(i=1→n)`, `x̄`, `(a, b; c, d)`) with clickable tags.
+- `repair.ts` makes model-written maths valid (see the consolidator README).
+
 ## Blocks (pre-made objects)
 
 `engine/blocks.ts` packages a schema fragment with a group of elements bound to it. Built-in blocks live in code; user blocks are saved from a selection ("Save as block") into a local library and can be listed in the Marketplace as design blocks. Elements named `opt:<key>|Label` are controlled by the block's toggles. `{{n}}` in static text renders the item number.

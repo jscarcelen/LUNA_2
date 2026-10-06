@@ -80,4 +80,5 @@ Until the email provider exists, accounts still work but nothing is mailed; the 
 ## Migrations still to apply (in order, each safe to run twice)
 1. [ ] `supabase/migrations/202610060001_network_sharing_grants.sql` — live sharing, peer connections
 2. [ ] `supabase/migrations/202610070001_groups_exam_dates.sql` — student groups and exam dates
+3. [ ] `supabase/migrations/202610080001_feedback_items.sql` — the beta feedback tool (Feedback button + `/feedback-admin` board; key `LUNA_FEEDBACK_ADMIN_KEY` is already set in Vercel and in `apps/web/.env.local`)
 (and, if you have not: `202610050001_account_verification_phone_tokens.sql`, `202610030001_feature_requests.sql`). Until applied, those screens say "setup needed"; everything else works.

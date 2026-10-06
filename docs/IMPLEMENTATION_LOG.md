@@ -1,5 +1,12 @@
 # Implementation Log
 
+## 2026-10-08 (beta feedback tool)
+
+- Temporary tool, see `apps/web/modules/feedback/README.md`: a Feedback button in the app (idea / problem / how it looks / AI result,
+  quoted selected text, "point at something", screenshot attach/paste/capture, agent + run context), `POST /api/feedback`, table
+  `feedback_items` (migration `202610080001_feedback_items.sql`), and the owner's board at `/feedback-admin` (key `LUNA_FEEDBACK_ADMIN_KEY`)
+  with "Copy for Claude" (hand-off message: what, where, files, prompts) and "Save screenshots". Removal list in the README.
+
 ## 2026-10-06 (metaprompt pass over the app's prompts)
 
 - `CLAUDE.md` gets a "Prompt quality" rule (every user prompt is sharpened silently before acting) and the full method lives in

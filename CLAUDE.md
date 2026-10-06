@@ -206,6 +206,8 @@ fail** because they still expect the old `docx-ooxml-cdm` parser while uploads n
 - `app/platform` (real platform), `app/login`, `app/api/accounts/*`, `modules/accounts/`,
   `lib/accountsCore.js` (pure rules), `lib/session.js`, `lib/accountsRepository.js`, `lib/sharingRepository.js`,
   `lib/workspaceGuard.js` — accounts, see `docs/ACCOUNTS.md`.
+- `modules/feedback/` + `app/feedback-admin` + `app/api/feedback` — TEMPORARY beta feedback tool (delete when the beta ends; README lists how). When the user pastes a
+  "LUNA beta feedback to implement" brief, work through it item by item as the brief says.
 - `docs/` — `ROADMAP.md`, `IMPLEMENTATION_LOG.md`, `SUPABASE_SETUP.md`, `ACCOUNTS.md`, `VERCEL_DO_NOT_DO.md`.
 
 ### Agents and templates (product rules — enforce these always)
@@ -274,6 +276,7 @@ See `apps/web/modules/README.md`.
 `MATH_OCR_ENDPOINT`, `MATH_OCR_APP_ID`, `MATH_OCR_APP_KEY`, `OCR_LANGUAGES`, `OCR_MIN_CONFIDENCE`,
 `EXTRACTION_MIN_CONFIDENCE`, `LUNA_SESSION_SECRET` (32+ random chars signing the session cookie; required in
 production/preview on Vercel, a dev fallback is used locally), `LUNA_MAIL_FROM`, `LUNA_SMTP_URL` (SMTP provider, wins over Resend),
+`LUNA_FEEDBACK_ADMIN_KEY` (opens the temporary beta feedback board at `/feedback-admin`; see `apps/web/modules/feedback/README.md`),
 `RESEND_API_KEY`, `LUNA_PUBLIC_URL` (outgoing email; none configured = dev console preview / production "Email is not set up yet").
 
 ## Conventions

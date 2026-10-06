@@ -22,6 +22,7 @@ import { PlansPage } from "../modules/plans/PlansPage";
 import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 import { UiCritic } from "../modules/ui/UiCritic";
+import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
@@ -924,6 +925,8 @@ export function AppShell({ account = null, initialPage = "" }) {
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
       <UiCritic enabled={criticOn} />
+      {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
+      <FeedbackWidget page={page} title={title} role={role} account={account} />
     </div>
   );
 }

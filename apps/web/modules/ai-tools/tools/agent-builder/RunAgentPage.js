@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAgentGenerationStream } from "./useAgentGenerationStream";
+import { clearFeedbackContext, setFeedbackContext } from "../../../feedback/feedbackContext";
 import { GenerationProgress } from "./GenerationProgress";
 import { OutputDownloads, OutputPreviewPane, OutputStylePanel, renderOutputHtml } from "../../../template-studio/output/OutputDesigner";
 import { blocksToActivityItems, buildAutoDocument, buildOutputDocument, itemsToBlocks, planOutput, stylesFromSelectedBlocks } from "../../../template-studio/output/outputDocument";
@@ -281,6 +282,14 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   };
 
   const generation = useAgentGenerationStream();
+  // What the beta feedback tool attaches when someone sends feedback from this page (temporary, see modules/feedback).
+  const feedbackRun = generation.error ? `failed: ${String(generation.error).slice(0, 160)}` : generation.isGenerating ? "running" : output ? "produced a result" : "not run yet";
+  useEffect(() => {
+    if (!agentConfig) return undefined;
+    setFeedbackContext("agent", { id: agentDocumentId || builtinAgent?.id || "", name: agentConfig.name || "" });
+    return () => clearFeedbackContext("agent");
+  }, [agentConfig, agentDocumentId, builtinAgent]);
+  useEffect(() => { setFeedbackContext("run", feedbackRun); setFeedbackContext("step", `step ${flowStep}`); return () => { clearFeedbackContext("run"); clearFeedbackContext("step"); }; }, [feedbackRun, flowStep]);
 
   // Regenerate: a saved resource carries the request that produced it (answers, material, template, mapping).
   const resumeDocument = toolContext?.resumeResourceDocumentId ? (toolContext?.workspaces || []).flatMap((w) => w.subjects || []).flatMap((s) => s.documents || []).find((d) => d.id === toolContext.resumeResourceDocumentId) : null;

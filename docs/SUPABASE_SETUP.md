@@ -60,6 +60,7 @@ Apply the SQL migrations in order (all of `supabase/migrations/`):
   does not appear. Run `get_advisors` (security + performance) afterwards; the new table has RLS enabled and, like the other
   accounts tables, no policies (service role only).
 
+- `202610080001_feedback_items.sql` (TEMPORARY beta feedback tool: `feedback_items`, service role only; drop it when the tool is removed, see `apps/web/modules/feedback/README.md`)
 - `202610070001_groups_exam_dates.sql` (groups of students and exam dates: `account_groups` (owner, name, colour) and
   `account_group_members` (group + member, a student can be in many groups) with two triggers — a member must be a student
   the owner is connected to as their teacher/parent (accepted) and a group holds at most 200; the memberships go when the

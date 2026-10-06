@@ -3,6 +3,7 @@
 import { MASTERY_THRESHOLD, statusOf } from "../mastery";
 import { activityKindLabel } from "../metrics";
 import { dueLabel } from "../../plans/plan";
+import { DeadlineOrigin } from "../../plans/DeadlineBadge";
 import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
 import { CoachPanel } from "./CoachPanel";
 import { PlanTopics } from "./PlanTopics";
@@ -113,7 +114,9 @@ export const PANELS = [
       return (
         <div className="grid gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="m-0 text-sm text-soft-ink">
+            <p className="m-0 flex flex-wrap items-center gap-1.5 text-sm text-soft-ink">
+              {/* Who set the deadline: a solid dark badge for a teacher or parent, outlined for the learner's own. */}
+              {stats.deadline ? <DeadlineOrigin deadline={stats.deadline} plan={ctx.activePlan.plan} /> : null}
               {stats.deadline ? `${stats.deadline.title}: ${dueLabel(stats.deadline.date)}` : "No deadline"}
               {` · ${stats.done} of ${stats.total} steps done`}
               {stats.late.length ? ` · ${stats.late.length} late` : ""}

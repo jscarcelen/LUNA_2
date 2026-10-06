@@ -8,9 +8,10 @@
 import { hashPassword, normalizeEmail, validatePasswordPair } from "./accountsCore.js";
 import { limits } from "./accountLimits.js";
 import { consumeToken, invalidateTokens, issueToken, peekToken } from "./accountTokens.js";
-import { clearPendingInvites, findAccountByEmail, findAccountById, markEmailVerified, requestLink, setAccountPassword, supportsVerification, attachPendingLinks } from "./accountsRepository.js";
+import { clearPendingInvites, findAccountByEmail, findAccountById, findAccountsByIds, markEmailVerified, requestLink, setAccountPassword, supportsVerification, attachPendingLinks } from "./accountsRepository.js";
 import { sendMail } from "./mailer.js";
-import { invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, shareMail, verifyEmailMail } from "./mailTemplates.js";
+import { assignMail, examDateMail, invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, shareMail, verifyEmailMail } from "./mailTemplates.js";
+import { runPool } from "../modules/accounts/groups.js";
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 
 export const REQUEST_EMAIL_GAP_MS = 24 * 60 * 60 * 1000;
@@ -175,10 +176,12 @@ export const SHARE_EMAIL_GAP_MS = 60 * 60 * 1000;
  * @param {{ recipientIds: string[], itemName: string, permission?: string, copyOf?: string }} what
  * @returns {Promise<{ sent: number }>}
  */
-export async function notifyShared(owner, { recipientIds, itemName, permission, copyOf }, baseUrl, { now = Date.now() } = {}) {
+export async function notifyShared(owner, { recipientIds, itemName, permission, copyOf, batch = false }, baseUrl, { now = Date.now() } = {}) {
   let sent = 0;
   try {
     const client = createSupabaseAdminClient();
+    // A group send may mail up to 400 people an hour (one email each); a single share keeps the old 20 an hour.
+    const senderLimiter = batch ? limits.batchMailBySender : limits.notifyBySender;
     for (const recipientId of [...new Set(recipientIds || [])]) {
       if (senderLimiter.isBlocked(owner.id)) break;
       const recipient = await findAccountById(recipientId);
@@ -212,6 +215,70 @@ export async function notifyShared(owner, { recipientIds, itemName, permission, 
     }
   } catch (error) {
     console.warn("[accounts] could not send the share email:", error?.message || error);
+  }
+  return { sent };
+}
+
+/**
+ * Emails the students something was assigned to: ONE email per person per send (also for a whole group), saying what,
+ * the due date and WHO set it ("due 24 Oct, set by Prof. Rivera"). Names and the item's title only. Limited per
+ * sender (`batchMailBySender`) and per sender+person (3 an hour). Best effort: never throws, and callers run it
+ * after the response (`afterResponse`) so a slow mailer never holds the sender up.
+ * @param {object} sender the teacher / parent account row
+ * @param {Array<{ recipientId: string, itemName: string, itemType?: string, dueDate?: string, note?: string }>} deliveries
+ * @returns {Promise<{ sent: number }>}
+ */
+export async function notifyAssigned(sender, deliveries, baseUrl) {
+  let sent = 0;
+  try {
+    const list = (deliveries || []).filter((entry) => entry?.recipientId);
+    const people = new Map((await findAccountsByIds(list.map((entry) => entry.recipientId))).map((row) => [row.id, row]));
+    await runPool(list, async (entry) => {
+      const recipient = people.get(entry.recipientId);
+      const pair = `assign:${sender.id}:${entry.recipientId}`;
+      if (!recipient || limits.batchMailBySender.isBlocked(sender.id) || limits.shareCopyByPair.isBlocked(pair)) return { ok: false };
+      limits.batchMailBySender.fail(sender.id);
+      limits.shareCopyByPair.fail(pair);
+      try {
+        const result = await sendMail(assignMail({ to: recipient.email, sender: { displayName: sender.display_name, role: sender.role, email: sender.email }, itemName: entry.itemName, itemType: entry.itemType, dueDate: entry.dueDate, note: entry.note, url: pathUrl(baseUrl, "/platform") }));
+        if (result.delivered) sent += 1;
+      } catch (error) {
+        console.warn("[accounts] could not send the assignment email:", error?.message || error);
+      }
+      return { ok: true };
+    }, { concurrency: 5 });
+  } catch (error) {
+    console.warn("[accounts] could not send the assignment emails:", error?.message || error);
+  }
+  return { sent };
+}
+
+/**
+ * Emails the students an exam date was sent to / moved / cancelled (one email each). Same limits and guarantees as
+ * `notifyAssigned`. `rows` are `exam_dates` rows (recipient_id, title, exam_date, subject_hint, notes).
+ * @returns {Promise<{ sent: number }>}
+ */
+export async function notifyExamDates(sender, rows, kind, baseUrl) {
+  let sent = 0;
+  try {
+    const list = (rows || []).filter((row) => row?.recipient_id);
+    const people = new Map((await findAccountsByIds(list.map((row) => row.recipient_id))).map((row) => [row.id, row]));
+    await runPool(list, async (row) => {
+      const recipient = people.get(row.recipient_id);
+      const pair = `exam:${sender.id}:${row.recipient_id}`;
+      if (!recipient || limits.batchMailBySender.isBlocked(sender.id) || limits.shareCopyByPair.isBlocked(pair)) return { ok: false };
+      limits.batchMailBySender.fail(sender.id);
+      limits.shareCopyByPair.fail(pair);
+      try {
+        const result = await sendMail(examDateMail({ to: recipient.email, sender: { displayName: sender.display_name, role: sender.role, email: sender.email }, title: row.title, date: String(row.exam_date || "").slice(0, 10), subjectHint: row.subject_hint || "", notes: row.notes || "", kind, url: pathUrl(baseUrl, "/platform") }));
+        if (result.delivered) sent += 1;
+      } catch (error) {
+        console.warn("[accounts] could not send the exam date email:", error?.message || error);
+      }
+      return { ok: true };
+    }, { concurrency: 5 });
+  } catch (error) {
+    console.warn("[accounts] could not send the exam date emails:", error?.message || error);
   }
   return { sent };
 }

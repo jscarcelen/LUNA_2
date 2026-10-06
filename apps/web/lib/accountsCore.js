@@ -21,6 +21,7 @@ export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const ACCOUNTS_MIGRATION = "supabase/migrations/202610040001_accounts_links_sharing.sql";
 export const VERIFICATION_MIGRATION = "supabase/migrations/202610050001_account_verification_phone_tokens.sql";
 export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_sharing_grants.sql";
+export const GROUPS_MIGRATION = "supabase/migrations/202610070001_groups_exam_dates.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const TOKEN_KINDS = ["verify_email", "reset_password"];
 export const TOKEN_TTL_MS = { verify_email: 48 * 60 * 60 * 1000, reset_password: 60 * 60 * 1000 };
@@ -245,6 +246,10 @@ export function createRateLimiter({ limit, windowMs, now = () => Date.now() }) {
   };
   return {
     isBlocked: (key) => recent(key).length >= limit,
+    /** Events recorded for the key within the window. */
+    count: (key) => recent(key).length,
+    /** How many more events fit before the key is blocked. */
+    remaining: (key) => Math.max(0, limit - recent(key).length),
     fail(key) {
       const list = recent(key);
       list.push(now());
@@ -382,7 +387,7 @@ export function authorizeDelivery({ mode, sender, recipient, link }) {
 
 /* ------------------------------------------------------------------ setup detection */
 
-const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens|share_grants)([^a-z_]|$)/;
+const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens|share_grants|account_groups|account_group_members|exam_dates|exam_date_plans)([^a-z_]|$)/;
 
 /** Did this database error come from the accounts migration not having been applied yet? */
 export function isSetupNeededError(error) {

@@ -60,6 +60,17 @@ Apply the SQL migrations in order (all of `supabase/migrations/`):
   does not appear. Run `get_advisors` (security + performance) afterwards; the new table has RLS enabled and, like the other
   accounts tables, no policies (service role only).
 
+- `202610070001_groups_exam_dates.sql` (groups of students and exam dates: `account_groups` (owner, name, colour) and
+  `account_group_members` (group + member, a student can be in many groups) with two triggers — a member must be a student
+  the owner is connected to as their teacher/parent (accepted) and a group holds at most 200; the memberships go when the
+  link stops being accepted —; `exam_dates` (one row per recipient, rows of one send share `batch_id`; title, date,
+  subject hint, notes, `revoked_at` when cancelled, `accepted_at` / `dismissed_at` for the student) and `exam_date_plans`
+  (which study plans follow which date, so a change reaches them)). **Optional until you want groups and exam dates, safe to
+  run twice, takes effect within ~15 s:** without it assigning, due dates and "set by" origins all work (they only use tags
+  and plan JSON); groups, sending to a group and exam dates answer `503 { setupNeeded: true, migration }` naming this file,
+  and the screens show a notice. Run `get_advisors` afterwards; the new tables have RLS enabled and, like the other accounts
+  tables, no policies (service role only).
+
 From Claude Code, use the Supabase MCP `apply_migration` tool against the "Luna" project
 (ref `fekeupkjljbgimntxpnv`). Note: a Supabase free-tier project pauses after inactivity and must be
 restored from the dashboard before the app or MCP tools can reach the database.

@@ -9,13 +9,16 @@
  */
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 import { LinkError, assertEmailVerified, authorizeDelivery, classifyDeliverable } from "./accountsCore.js";
-import { assertSharingReady, findAccountById, findAccountsByIds, getAcceptedLink, listConnectedIds, supportsSharing } from "./accountsRepository.js";
+import { assertSharingReady, findAccountsByIds, listConnectedIds, supportsSharing } from "./accountsRepository.js";
+import { prepareBatch, runBatch } from "./batchSend.js";
+import { MAX_BATCH_RECIPIENTS } from "../modules/accounts/groups.js";
 import { isGrantKind, isPermission, normalizeGrant, resolveAccess } from "./grants.js";
 import { loadWorkspaceFacts } from "./workspaceGuard.js";
 import { isReservedSubjectName } from "../modules/accounts/shared.js";
 import { GENERATED_ROOT, LOOSE_FOLDER, MATERIAL_FOLDER, PLANS_ROOT, UPLOADED_FOLDER } from "../modules/plans/folders.js";
 
-export const MAX_GRANTEES = 50;
+/** One request shares with at most this many people (a group of 200 fits). */
+export const MAX_GRANTEES = MAX_BATCH_RECIPIENTS;
 
 const parseJson = (text) => {
   try {
@@ -158,13 +161,13 @@ function planResourceIdsOf(content) {
  * @param {"view" | "edit"} args.permission
  * @returns {Promise<{ itemName: string, results: Array<{ recipientId: string, ok: boolean, error?: string, status?: number, grantId?: string, created?: boolean, changed?: boolean, extra?: number }> }>}
  */
-export async function shareItem({ owner, kind, itemId, recipientIds, permission }) {
+export async function shareItem({ owner, kind, itemId, recipientIds, groupIds = [], permission }) {
   assertEmailVerified(owner, "share work");
   await assertSharingReady();
   if (!isGrantKind(kind)) throw new LinkError("bad_request", "Choose what to share.");
   if (!isPermission(permission)) throw new LinkError("bad_permission", "Choose “Can view” or “Can edit”.");
-  const ids = [...new Set((recipientIds || []).map((id) => String(id || "")).filter(Boolean))].slice(0, MAX_GRANTEES);
-  if (!ids.length) throw new LinkError("bad_request", "Choose at least one person.");
+  const ids = [...new Set((recipientIds || []).map((id) => String(id || "")).filter(Boolean))];
+  if (!ids.length && !(groupIds || []).length) throw new LinkError("bad_request", "Choose at least one person.");
 
   const item = await assertOwnsItem(owner, { kind, id: String(itemId || "") });
   if (kind === "document") {
@@ -196,23 +199,19 @@ export async function shareItem({ owner, kind, itemId, recipientIds, permission 
     }
   }
 
-  const results = [];
-  for (const recipientId of ids) {
-    try {
-      const recipient = await findAccountById(recipientId);
-      const link = recipient ? await getAcceptedLink(owner.id, recipient.id) : null;
-      const allowed = authorizeDelivery({ mode: "share", sender: { id: owner.id, role: owner.role }, recipient: recipient ? { id: recipient.id, role: recipient.role } : null, link });
-      if (!allowed.ok) throw new LinkError("not_allowed", allowed.error, allowed.status);
-      const main = await upsertGrant(client, { owner, grantee: recipient, kind, itemId: String(itemId), itemName: item.name, permission });
-      for (const extra of extras) await upsertGrant(client, { owner, grantee: recipient, kind: "document", itemId: extra.id, itemName: extra.name, permission });
-      for (const folder of extraFolders) await upsertGrant(client, { owner, grantee: recipient, kind: "folder", itemId: folder.id, itemName: folder.name, permission });
-      results.push({ recipientId, ok: true, grantId: main.grant.id, created: main.created, changed: main.changed, extra: extras.length + extraFolders.length });
-    } catch (error) {
-      if (!(error instanceof LinkError)) throw error;
-      results.push({ recipientId, ok: false, error: error.message, status: error.status });
-    }
-  }
-  return { itemName: item.name, results };
+  // Groups + individuals become one list of people, each once; the people and links are read once for everybody.
+  const batch = await prepareBatch(owner, { groupIds, recipientIds: ids });
+  const { results, summary } = await runBatch(owner, batch, async (recipientId, { recipient, link }) => {
+    const allowed = authorizeDelivery({ mode: "share", sender: { id: owner.id, role: owner.role }, recipient: recipient ? { id: recipient.id, role: recipient.role } : null, link });
+    if (!allowed.ok) throw new LinkError("not_allowed", allowed.error, allowed.status);
+    const main = await upsertGrant(client, { owner, grantee: recipient, kind, itemId: String(itemId), itemName: item.name, permission });
+    let changed = main.changed;
+    for (const extra of extras) changed = (await upsertGrant(client, { owner, grantee: recipient, kind: "document", itemId: extra.id, itemName: extra.name, permission })).changed || changed;
+    for (const folder of extraFolders) changed = (await upsertGrant(client, { owner, grantee: recipient, kind: "folder", itemId: folder.id, itemName: folder.name, permission })).changed || changed;
+    // Sharing again what they already have (same permission) changes nothing: reported as "already has it".
+    return { grantId: main.grant.id, created: main.created, changed, extra: extras.length + extraFolders.length, alreadyHadIt: !changed };
+  });
+  return { itemName: item.name, results, summary, groupsUsed: batch.groupsUsed };
 }
 
 /** Change what one person may do with an item of mine (owner only). */

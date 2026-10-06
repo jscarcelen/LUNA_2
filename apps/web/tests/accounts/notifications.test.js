@@ -129,7 +129,8 @@ describe("the words in the bell", () => {
     expect(describeEvent({ type: "link_request", person })).toBe("Prof. Rivera wants to connect with you");
     expect(describeEvent({ type: "link_accepted", person })).toBe("Prof. Rivera accepted your connection request");
     expect(describeEvent({ type: "link_declined", person: { email: "r@s.edu" } })).toBe("r@s.edu declined your connection request");
-    expect(describeEvent({ type: "assigned", person, title: "Quiz", dueDate: "2026-11-01" })).toBe("Prof. Rivera assigned you “Quiz” (due 2026-11-01)");
+    // A date on assigned work always says who set it.
+    expect(describeEvent({ type: "assigned", person, title: "Quiz", dueDate: "2026-11-01" })).toBe("Prof. Rivera assigned you “Quiz” (due 1 Nov, set by Prof. Rivera)");
     expect(describeEvent({ type: "shared", person, title: "Notes" })).toBe("Prof. Rivera shared “Notes” with you");
     const now = Date.now();
     expect(timeAgo(new Date(now - 20000), now)).toBe("just now");

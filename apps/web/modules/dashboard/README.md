@@ -12,6 +12,10 @@ The Home page, the same for a student, a teacher and a parent (only the name dif
    topic, kinds of mistake, repeated mistakes, and the plans' next steps merged soonest first. It reads by
    itself (`autoRead`; cached against the evidence). With no results yet, the steps due soonest are listed instead (`nextSteps`).
 
+A student also gets **Dates from my teachers** (`plans/ExamDates.js`) right under the gallery when a teacher or parent sent
+exam dates ("Plan for it" → `plans?generate=1&exam=<id>`). Deadlines show who set them (`plans/DeadlineBadge.js`: solid dark =
+a teacher or parent, outlined = your own); on the same day a plan or step with an imposed deadline ranks first.
+
 No plans yet → one line and a "Plan it for me" (`plans?generate=1`) or "Upload material" button.
 
 `home.js` is pure (greeting, plan ranking, coach input) and tested in `tests/dashboard/home.test.js`.

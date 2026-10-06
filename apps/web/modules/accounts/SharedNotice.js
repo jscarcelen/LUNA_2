@@ -12,7 +12,7 @@ export function SharedNotice({ by = "", assigned = false, due = "", live = false
     : "read-only — you can highlight and take notes";
   return (
     <div role="note" className="tw-scope pointer-events-none fixed bottom-4 left-1/2 z-[70] max-w-[92vw] -translate-x-1/2 rounded-full border border-ink/10 bg-white px-4 py-2 text-xs font-semibold text-ink shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
-      {assigned ? "Assigned by" : "Shared by"} {by || "another account"}{dueText ? ` · due ${dueText}` : ""} · {tail}
+      {assigned ? "Assigned by" : "Shared by"} {by || "another account"}{dueText ? ` · due ${dueText}, set by ${by || "the sender"}` : ""} · {tail}
     </div>
   );
 }

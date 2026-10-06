@@ -11,6 +11,8 @@
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { changeLink, getLinkById, listConnections, requestLink } from "../../../../lib/accountsRepository.js";
 import { revokeGrantsBetween } from "../../../../lib/grantsRepository.js";
+import { dropMembershipsBetween } from "../../../../lib/groupsRepository.js";
+import { revokeExamDatesBetween } from "../../../../lib/examDatesRepository.js";
 import { notifyLinkAccepted, notifyLinkRequest } from "../../../../lib/accountFlows.js";
 import { errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
@@ -56,6 +58,9 @@ export async function POST(request) {
       await changeLink(account, linkId, action);
       // Ending a connection ends the live access in both directions at once.
       if (before) await revokeGrantsBetween(before.requesterId, before.targetId).catch((error) => console.warn("[api/accounts/links] could not revoke shares:", error?.message || error));
+      // ...and the student leaves that person's groups, and their exam dates stop (reads ignore both anyway: this keeps the tables tidy).
+      if (before) await dropMembershipsBetween(before.requesterId, before.targetId).catch((error) => console.warn("[api/accounts/links] could not drop group memberships:", error?.message || error));
+      if (before) await revokeExamDatesBetween(before.requesterId, before.targetId).catch((error) => console.warn("[api/accounts/links] could not stop exam dates:", error?.message || error));
       if (action === "accept") await notifyLinkAccepted(account, linkId, publicBaseUrl(request));
       message = { accept: "Connected.", decline: "Request declined.", cancel: "Request cancelled.", remove: "Connection removed." }[action];
     } else {

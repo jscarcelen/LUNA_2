@@ -135,7 +135,8 @@ describe("assigning work", () => {
   it("delivers an activity with a due date and an 'assigned by' mark, minus the sender's private tags", async () => {
     const result = await deliverDocument({ sender: teacher, recipientId: student.id, documentId: quiz.id, mode: "assign", dueDate: "2026-11-01", note: "  Before Friday  " });
     expect(result.itemType).toBe("activity");
-    expect(tagsOf(result.copyDocumentId)).toEqual(["activity", "assigned-by:" + teacher.id, "difficulty:easy", "due:2026-11-01", "resource", "shared-by:" + teacher.id].sort());
+    // `due:` + the protected `due-by:<sender>`: the date is the sender's, locked for the receiver.
+    expect(tagsOf(result.copyDocumentId)).toEqual(["activity", "assigned-by:" + teacher.id, "difficulty:easy", "due-by:" + teacher.id, "due:2026-11-01", "resource", "shared-by:" + teacher.id].sort());
     expect(db.table("shared_items")[0]).toMatchObject({ mode: "assign", due_date: "2026-11-01", note: "Before Friday" });
   });
 
@@ -160,7 +161,7 @@ describe("assigning work", () => {
     expect(body.materialIds).toEqual([notesCopy.id]);
     expect(body.deadlines.map((deadline) => deadline.date)).toEqual(["2026-12-01", "2026-12-05"]);
 
-    expect(tagsOf(planCopy.id)).toEqual(["assigned-by:" + teacher.id, "due:2026-12-05", "shared-by:" + teacher.id, "study-plan"].sort());
+    expect(tagsOf(planCopy.id)).toEqual(["assigned-by:" + teacher.id, "due-by:" + teacher.id, "due:2026-12-05", "shared-by:" + teacher.id, "study-plan"].sort());
     // the activity inside the plan carries the step's own due date
     expect(tagsOf(quizCopy.id)).toContain("due:2026-11-10");
     expect(tagsOf(quizCopy.id)).toContain("assigned-by:" + teacher.id);

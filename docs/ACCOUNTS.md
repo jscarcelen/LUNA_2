@@ -25,6 +25,12 @@ else and every sharing v2 action answer `503 { setupNeeded: true, migration: "�
 reading routes (the Connections overview, the share list, the bell) quietly report "nothing shared", and the workspace
 tree has no "Shared with me". It takes effect within ~15 s of applying it, no redeploy.
 
+A fourth migration, `supabase/migrations/202610070001_groups_exam_dates.sql`, adds groups of students and exam dates (see
+"Groups" and "Exam dates" below). **Also optional and feature-detected:** until it is applied, groups, sending to a group and
+exam dates answer `503 { setupNeeded: true, migration: "…202610070001…" }` (reads answer "not supported"), the screens show a
+plain notice, and everything else works, **including deadline origins** ("Who set this deadline"), which only use tags and
+plan JSON. It takes effect within ~15 s of applying it, no redeploy.
+
 Set `LUNA_SESSION_SECRET` (32+ random characters, e.g. `openssl rand -base64 48`) on Vercel for
 **Production and Preview**. In production without it, nobody can log in or sign up (the routes answer 500
 with the reason) and every request is treated as the demo. Locally a fixed development value is used.
@@ -38,6 +44,11 @@ with the reason) and every request is treated as the demo. Locally a fixed devel
 | `account_links` | one row per pair and kind (`teacher_student`, `parent_student`, `peer`): requester, target (null until that email has an account), `status` pending / accepted / declined / revoked, `pair_key` (unique, direction-independent) |
 | `shared_items` | what was sent as a COPY: share or assign, item type (document, resource, activity, plan, agent, template, component), sender, recipient, source document, the recipient's copy, due date, note; `payload` + `imported_at` for components |
 | `share_grants` | LIVE shares: `owner_id`, `grantee_id`, `item_kind` document / folder / subject, `item_id`, `permission` view / edit, `item_name`, `notified_at`, `revoked_at` (history is kept; one live grant per person and item). A trigger deletes the grants when the original is deleted |
+
+| `account_groups` | a teacher's / parent's named cluster of students: `owner_id`, `name` (unique per owner, case-insensitive), `colour` (from a fixed palette) |
+| `account_group_members` | `(group_id, member_id)`, primary key on both: a student can be in many groups. Triggers: a member must be a student with an accepted teacher_student / parent_student link to the owner, at most 200 per group, and the row is deleted when the link stops being accepted |
+| `exam_dates` | an exam date sent to a student: `sender_id`, `recipient_id`, `title`, `exam_date`, `subject_hint`, `notes`, `batch_id` (the rows of one send), `group_id`, `shared_document_id`, `revoked_at` (cancelled), `accepted_at` (a plan follows it), `dismissed_at` (hidden by the student) |
+| `exam_date_plans` | which of the student's study plans follow which exam date, so a change or cancellation reaches them |
 
 An account's id is also its `owner_user_id` everywhere else, so the existing tables (workspaces, concepts,
 attempts…) work unchanged. RLS is enabled with no policies: access is service-role only, from the server.
@@ -201,9 +212,10 @@ mechanism; the dialog's plain **Share** now creates live grants, and this route 
 
 * **Assign** (teacher/parent → student over a `teacher_student` / `parent_student` link; activities and study plans only):
   a read-only copy lands in the recipient's first workspace under **Shared documents / <sender's name>**, tagged
-  `shared-by:<sender id>`, plus `assigned-by:<id>` and `due:YYYY-MM-DD`; activities then show in the student's Activities
-  with the due date. A plan travels with the activities it uses (ids rewritten to the copies; sub-plan and agent links
-  dropped; the due date becomes an extra deadline). Sending again refreshes the copy and keeps the receiver's highlights and
+  `shared-by:<sender id>`, plus `assigned-by:<id>`, `due:YYYY-MM-DD` and `due-by:<id>` (the date is the sender's: locked, see
+  "Who set this deadline"); activities then show in the student's Activities with the due date and the sender's name. A plan
+  travels with the activities it uses (ids rewritten to the copies; sub-plan and agent links dropped; the due date becomes an
+  extra deadline; every deadline of the copy is stamped `setBy: sender`). A recipient can also be a **group** (see "Groups"). Sending again refreshes the copy and keeps the receiver's highlights and
   ticked steps.
 * **Share (copy)** is kept for old clients and still works with the same rules; existing shared copies stay readable
   (nothing was migrated).
@@ -223,13 +235,101 @@ and private notes are reduced to their names. The page renders the existing `Per
 (read-only) plus a read-only study-plans overview; a parent can have several children (chips). Only
 `teacher_student` / `parent_student` links open it: a peer connection (a classmate, a colleague, another parent) never does.
 
+## Groups (My students / My children)
+
+A teacher or parent clusters the students they are connected to **as their teacher / parent** (accepted `teacher_student` /
+`parent_student`; a peer connection never qualifies) into named groups, to send to many at once and to read performance
+as a class. A student can be in several groups; deleting a group deletes only the grouping.
+
+* **API:** `GET/POST /api/accounts/groups` (`create`, `update`, `delete`, `addMembers`, `removeMembers`,
+  `setMemberGroups`); `GET /api/accounts/linked/members?groupId=…` (or `studentIds=a,b`, `offset`, `limit`) returns the
+  members' redacted workspaces **a page at a time** (10 by default, 25 at most; the page keeps asking while `hasMore`).
+  Pure rules in `modules/accounts/groups.js`, database side in `lib/groupsRepository.js`.
+* **Authorisation:** a group is only visible to its owner (any other account gets the same 404 as for a group that does not
+  exist, on every action). A member must be a linked student **at all times**: every read (`listGroups`, sending,
+  the members route) cuts the stored memberships down to the students currently connected (`activeMembership`), so a
+  student whose link ended is in no view and receives nothing even before the row is cleaned up; the links route also
+  deletes the memberships when a connection is removed (so a later re-connection does not silently bring the student back),
+  and the migration has a trigger for the same. Adding a non-linked account is refused (403). Up to 200 students per group,
+  50 groups per owner.
+* **UI:** the *Groups bar* above the student chips (`modules/accounts/GroupsBar.js`): "All students", a chip per group
+  (colour, count), "＋ New group" (name, colour, members), "Edit group…" (rename, colour, members), "Delete group"
+  (says the students stay), a per-student "Groups…" multi-select, and coloured dots on a student's chip. Choosing a group
+  switches to the **group view** (`GroupView.js`): the performance page becomes the class view fed by the members'
+  evidence (class × topic heatmap, who needs attention, topic coverage, headline: the existing panels of
+  `performance/dashboard/registry.js`, every attempt labelled with its student by `groupData.js`), a **comparison table**
+  (mastery, activities, last active, late steps), the **Study plans** tab as a table of the members' plan progress
+  (with who set each deadline), and **Sent**. Clicking a student anywhere opens their individual view (**← group** goes back).
+* **Sending to a group** (Share, Assign, share a copy of an agent/template/component, Exam date): the dialog has a
+  *Groups* section; the line says "Class 3B (12) + 2 individuals · 13 people in total"; the server resolves groups + individuals
+  to one list (each person once however the groups overlap), checks the accepted link **per person**, and answers per person
+  `{ recipientId, ok, alreadyHadIt?, deferred?, reason/status/error }` plus `summary: { delivered, skipped: { not_connected,
+  already_has_it, failed }, deferred }`, which the dialog prints ("Delivered to 11 people · skipped: 1 not connected, 1 already
+  had it").
+* **Large groups:** at most 200 people per request and **600 deliveries an hour per sender** (429 `rate_limited` before
+  anything is written); the people and links are read once, people are processed 4 at a time inside a 45 s budget
+  (`maxDuration` 60), and those not reached come back as `deferred` ("send again to finish"). **Email:** one email per person
+  (never one per item), sent **after the response** (`lib/afterResponse.js` / Next `after`), capped at 400 an hour per sender and
+  3 an hour per sender and person; a failing or missing mailer never changes or delays the answer.
+
+## Who set this deadline
+
+Every deadline on something received says who set it, in the data and on screen.
+
+* **Plans:** `deadline.setBy = { kind: "sender" | "self", accountId, name }`, `deadline.examDateId` (when it follows an exam date).
+  Assigning a plan stamps every deadline of the copy (and the due date given) as `sender`. The pure rules are in
+  `modules/plans/deadlines.js`. A plan step of a received plan also has `ownDueDate` (the student's own, earlier date next to the
+  given one); the date a step is judged by is the earlier of the two (`effectiveDue`).
+* **Activities and other copies:** the date stays `due:YYYY-MM-DD` and the server adds the protected tag `due-by:<sender id>`
+  (like `shared-by:` / `assigned-by:`, a client can never add or remove it). Assigned copies from before this change count as
+  imposed by their `assigned-by:` sender (`dueInfoOf`). The student's own date is `due-own:YYYY-MM-DD`.
+* **Imposed = locked** (enforced in `lib/workspaceGuard.js`, not only in the UI): on a plan the student owns, an edit that
+  changes or removes a deadline whose `setBy.kind` is `sender` is refused with 403 ("… was set by Prof. Rivera, so it cannot be
+  changed or removed. You can add your own deadline next to it"), and a *new* sender deadline is only accepted when it follows an
+  exam date that was really sent to this account (a plan cannot claim a teacher who set nothing); on a received copy
+  `sharedEditAllowed` lets the student add/change/remove their own deadlines and own step dates only; on an assigned activity the
+  `due:` tag is kept as sent whatever the client sends. The student can always add their own earlier deadline next to it, and when
+  both exist **both are shown**.
+* **Two clear looks** (`modules/plans/DeadlineBadge.js`): imposed = solid dark badge with the sender's name ("🔒 Prof. Rivera"),
+  own = outlined light badge "Your deadline" (guardians reading a student's plan see "Student's own"). Shown in Activities, Study
+  plans (cards, the plan header, the deadlines list with a locked date input and tooltip "Set by …", step dates, "Next up"), Home
+  (gallery cards, next steps, Dates from my teachers), the performance "This plan" panel, the group plan table, the bell
+  ("assigned you “Quiz” (due 24 Oct, set by Prof. Rivera)") and the emails.
+* **Priority:** an imposed deadline ranks above an equal own one: `nextDeadline` / `compareDeadlines` (plan.js, deadlines.js),
+  `upcoming()` (imposed first at the same distance), Home's `rankPlans` and `nextSteps`, and `conceptPriority(…, { imposed })` /
+  `rankDeadlines` in `priorityEngine.js` (a small tie-breaking weight, `IMPOSED_WEIGHT` 1.15, never a trump card).
+
+## Exam dates
+
+A teacher or parent sends **an exam date** (title, date, subject/topic name, notes, optionally a study plan or material shared
+live at the same time) to groups and students. Table `exam_dates`; code in `lib/examDatesRepository.js`,
+`/api/accounts/exam-dates`, `modules/accounts/examDates.js`.
+
+* **Send** (`POST { action: "send" }`): same recipient rules, per-person result and limits as the share routes; past dates are
+  refused; the same title + date to the same student is "already has it"; one email per student.
+* **Student:** *Dates from my teachers* on Home (below the plan gallery), an **Exam dates** tab in Study plans (hidden ones can be
+  brought back), and the bell. In **Plan it for me** and **New plan** a dropdown *Use a teacher's exam date* fills "Ready by": the
+  plan's deadline then has `setBy` = the teacher, `examDateId` and kind `exam`, shown as imposed and locked. An existing plan can be
+  tied to a date later (*Tie this plan to a teacher's exam date*: the **server** writes the locked deadline). Links are kept in
+  `exam_date_plans` (filled when such a plan is saved, and by the link action).
+* **Change / cancel:** the sender edits (`update`) or cancels (`cancel`) the batch. A change rewrites the deadline (title and date,
+  still imposed) of every plan linked to it, emails the students and shows in the bell ("moved"); a cancellation keeps the plan's
+  date as the **student's own, editable** deadline (`cancelledFrom` explains it), deletes the links, hides the date and notifies.
+  Ending the connection stops the dates between the two the same way.
+* **Teacher:** *My students → Exam dates*: the dates sent (per group / student; the list follows the selection), Edit, Cancel and
+  **Who has planned** (per recipient: a plan is linked or not, from `exam_date_plans`; "Show progress" reads the planned students'
+  workspaces through the link-authorised members route and shows the % done of the linked plan, read-only).
+
 ## Not done yet
 
 * SMS verification of the phone number (needs an SMS provider; the column is ready), email deliverability (SPF/DKIM/DMARC
   on your sending domain; Gmail SMTP is for testing), a "log out everywhere" button (a password change already does it),
   phone-number login.
-* Per-student class grouping, bulk assigning to a class, push notifications (the bell polls).
-* Sharing v2: no "share with a group/class", no link sharing for people outside the network, no comments on a shared item,
+* Push notifications (the bell polls). Groups are for teachers and parents only (a student cannot group classmates); a group
+  send is capped at 200 people per request (bigger classes: send in two goes); progress on an exam date is read on demand, not
+  stored; an exam date for several subjects is several dates; no recurring or all-day/time-of-day exams; a plan linked to a
+  date follows its title and date only (steps are not re-planned: use "Re-plan" in the plan).
+* Sharing v2: no link sharing for people outside the network, no comments on a shared item,
   no live co-editing cursor (two people editing the same document at the same moment: the last save wins), shared items do
   not count in the grantee's storage view, the grantee cannot reorganise a share into their own folders (move is owner-only on purpose).
 * Agents, templates and components have no live sync after the copy; a re-share of an agent replaces the recipient's copy.

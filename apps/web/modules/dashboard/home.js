@@ -1,4 +1,5 @@
 import { daysUntil, parsePlan, planProgress, withSubPlans } from "../plans/plan";
+import { deadlineOrigin, effectiveDue } from "../plans/deadlines";
 import { forPlan, joinAttempts, repeatedMistakes } from "../performance/metrics";
 import { buildEvidence, topicMastery } from "../performance/mastery";
 import { analyseErrors } from "../performance/errors";
@@ -28,7 +29,7 @@ export function planRowsOf(workspace) {
   const rows = [];
   for (const subject of workspace?.subjects || []) {
     for (const document of subject.documents || []) {
-      const plan = parsePlan(document);
+      const plan = parsePlan(document, { folders: subject.folders || [] });
       if (plan) rows.push({ document, plan, subjectId: subject.id, subjectName: subject.name, workspaceId: workspace.id });
     }
   }
@@ -46,7 +47,8 @@ export function documentsOf(workspace) {
  *   1. plans with work left and a deadline still ahead, the closest deadline first (more late steps break a tie);
  *   2. plans with work left whose deadline has passed (the most recent first), then those with no deadline at all;
  *   3. plans that are finished.
- * Returns `{ document, plan, children, progress, days, subjectId, subjectName, workspaceId }` for each.
+ * On the same day a plan whose deadline a teacher or parent set (`imposed`) comes before one with the learner's own.
+ * Returns `{ document, plan, children, progress, days, imposed, subjectId, subjectName, workspaceId }` for each.
  */
 export function rankPlans(rows = [], attempts = [], { limit = HOME_PLAN_LIMIT } = {}) {
   const ids = new Set(rows.map((row) => row.document.id));
@@ -59,13 +61,16 @@ export function rankPlans(rows = [], attempts = [], { limit = HOME_PLAN_LIMIT } 
     let group = 1;
     if (finished) group = 2;
     else if (days !== null && days >= 0) group = 0;
-    return { ...row, children, progress, days, group };
+    // A deadline a teacher or parent set outranks an equal one the learner set themselves.
+    const imposed = Boolean(progress.deadline) && deadlineOrigin(progress.deadline, { receivedFrom: row.plan.receivedFrom }).imposed;
+    return { ...row, children, progress, days, group, imposed };
   });
   entries.sort((a, b) => {
     if (a.group !== b.group) return a.group - b.group;
     if (a.group === 0 || a.group === 2) {
       const left = (a.days ?? 99999) - (b.days ?? 99999);
       if (left) return left;
+      if (a.imposed !== b.imposed) return a.imposed ? -1 : 1;
     } else {
       // Deadline passed (most recently) before no deadline at all.
       const aDays = a.days === null ? -99999 : a.days;
@@ -111,7 +116,7 @@ export function coachInputFor(entries = [], documents = [], allRows = []) {
   const several = entries.length > 1;
   const progresses = aggregated.map((plan) => planProgress(plan, attempts));
   const upcomingSteps = progresses
-    .flatMap((progress, index) => progress.next.map((item) => ({ title: several ? `${entries[index].plan.name}: ${item.title}` : item.title, dueDate: item.dueDate || "", kind: item.kind })))
+    .flatMap((progress, index) => progress.next.map((item) => ({ title: several ? `${entries[index].plan.name}: ${item.title}` : item.title, dueDate: effectiveDue(item), kind: item.kind })))
     .sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")))
     .slice(0, 6);
   const deadlines = progresses.map((progress) => progress.deadline?.date).filter(Boolean).sort();
@@ -133,21 +138,29 @@ export function coachInputFor(entries = [], documents = [], allRows = []) {
  */
 export function nextSteps(entries = [], limit = 5) {
   return entries
-    .flatMap((entry) => entry.progress.next.map((item) => ({
-      id: `${entry.document.id}:${item.id}`,
-      title: item.title,
-      kind: item.kind,
-      dueDate: item.dueDate || "",
-      days: item.dueDate ? daysUntil(item.dueDate) : null,
-      planId: entry.document.id,
-      planName: entry.plan.name,
-      colour: entry.plan.colour,
-      subjectId: entry.subjectId
-    })))
+    .flatMap((entry) => entry.progress.next.map((item) => {
+      // The date a step is judged by is the earlier of the given one and the learner's own (`ownDueDate`); a given date of a
+      // plan somebody sent is imposed and ranks above an equal own one.
+      const due = effectiveDue(item);
+      const imposed = Boolean(entry.plan.receivedFrom) && Boolean(item.dueDate) && due === item.dueDate;
+      return {
+        id: `${entry.document.id}:${item.id}`,
+        title: item.title,
+        kind: item.kind,
+        dueDate: due,
+        days: due ? daysUntil(due) : null,
+        imposed,
+        setByName: imposed ? entry.plan.receivedFrom?.name || "" : "",
+        planId: entry.document.id,
+        planName: entry.plan.name,
+        colour: entry.plan.colour,
+        subjectId: entry.subjectId
+      };
+    }))
     .sort((a, b) => {
       const left = a.days === null ? 99999 : a.days;
       const right = b.days === null ? 99999 : b.days;
-      return left - right;
+      return left - right || Number(b.imposed) - Number(a.imposed);
     })
     .slice(0, limit);
 }

@@ -4,17 +4,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PerformancePage } from "../performance/PerformancePage";
 import { joinAttempts } from "../performance/metrics";
 import { dueLabel, parsePlan, planProgress } from "../plans/plan";
+import { PlanDeadlines } from "../plans/DeadlineBadge";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { accountsApi } from "./api";
+import { ExamDatesTab } from "./ExamDatesTab";
+import { GroupView } from "./GroupView";
+import { GroupDots, GroupsBar, StudentGroupsMenu } from "./GroupsBar";
 import { SetupNotice } from "./SetupNotice";
 import { card, chip, ghostBtn, kicker } from "./ui";
 
 const noop = async () => null;
 
-/** A student's study plans, read-only: how far each is, what is next, what is late. */
-function ReadOnlyPlans({ documents, studentName }) {
+/** A student's study plans, read-only: how far each is, what is next, what is late, and who set each deadline. */
+function ReadOnlyPlans({ documents, folders = [], studentName }) {
   const attempts = useMemo(() => joinAttempts(documents), [documents]);
-  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
+  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document, { folders }) })).filter((row) => row.plan), [documents, folders]);
   if (!plans.length) return <p className={`${card} p-5 text-sm text-soft-ink`}>{studentName} has no study plans in this topic yet.</p>;
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -24,7 +28,8 @@ function ReadOnlyPlans({ documents, studentName }) {
         return (
           <article key={document.id} className={`${card} grid gap-2 p-5`} style={{ borderTop: `4px solid ${plan.colour || "#0071e3"}` }}>
             <h4 className="m-0 truncate text-base font-bold text-ink">{plan.name}</h4>
-            <p className="m-0 text-xs text-soft-ink">{progress.deadline ? `${progress.deadline.title} · ${dueLabel(progress.deadline.date)}` : "No deadline"}</p>
+            {/* Solid dark = a teacher or parent set it; outlined = the student's own. */}
+            <PlanDeadlines plan={plan} ownLabel="Student's own" />
             <div className="h-1.5 overflow-hidden rounded-full bg-ink/8" aria-label={`${Math.round(progress.ratio * 100)}% done`}><span className="block h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(progress.ratio * 100)}%` }} /></div>
             <div className="flex flex-wrap gap-1">
               <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{progress.done}/{progress.total} steps</span>
@@ -35,7 +40,7 @@ function ReadOnlyPlans({ documents, studentName }) {
               {(plan.items || []).slice(0, 12).map((item) => (
                 <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink">
                   <span className="min-w-0 truncate">{isDone(item) ? "✓ " : "○ "}{item.title}</span>
-                  <span className="shrink-0 text-soft-ink">{isDone(item) && progress.scoreByResource.has(item.resourceId) ? `${Math.round(progress.scoreByResource.get(item.resourceId) * 100)}%` : item.dueDate ? dueLabel(item.dueDate) : ""}</span>
+                  <span className="shrink-0 text-soft-ink">{isDone(item) && progress.scoreByResource.has(item.resourceId) ? `${Math.round(progress.scoreByResource.get(item.resourceId) * 100)}%` : item.dueDate ? dueLabel(item.dueDate) : ""}{item.ownDueDate ? ` · own ${dueLabel(item.ownDueDate)}` : ""}</span>
                 </li>
               ))}
             </ul>
@@ -46,16 +51,23 @@ function ReadOnlyPlans({ documents, studentName }) {
   );
 }
 
+const tabButton = (active) => `rounded-full border px-3.5 py-1.5 text-xs font-semibold ${active ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink"}`;
+
 /**
- * "My students" (teacher) / "My children" (parent): pick a connected student — a parent can have several —
- * and read their performance and study plans. Everything here is read-only and comes from the student's
- * own account through an accepted connection; uploaded material and private notes are not shown, only
- * their names.
+ * "My students" (teacher) / "My children" (parent): pick a connected student — a parent can have several — or a GROUP of
+ * them, and read their performance and study plans. Everything here is read-only and comes from the students' own
+ * accounts through an accepted connection; uploaded material and private notes are not shown, only their names.
+ *
+ *  - Groups bar: "All students", one chip per group, "+ New group"; a student can be in several groups. Choosing a group
+ *    switches the view to the GROUP view (class panels fed by its members, comparison, plan table); clicking a student
+ *    opens their individual view.
+ *  - Tabs: Performance · Study plans · Sent · Exam dates (dates you send to groups or students; they plan for them).
  */
-export function LinkedStudentsPage({ account, onOpenPage }) {
+export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
   const [students, setStudents] = useState(null);
   const [setupNeeded, setSetupNeeded] = useState(false);
   const [error, setError] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -63,6 +75,9 @@ export function LinkedStudentsPage({ account, onOpenPage }) {
   const [sent, setSent] = useState([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [subjectId, setSubjectId] = useState("");
+  const [groups, setGroups] = useState([]);
+  const [groupsSetup, setGroupsSetup] = useState(null);
+  const [notice, setNotice] = useState("");
   const noun = account.role === "parent" ? "child" : "student";
 
   useEffect(() => {
@@ -77,6 +92,11 @@ export function LinkedStudentsPage({ account, onOpenPage }) {
       setSelectedId((current) => current || list[0]?.id || "");
     });
     accountsApi.shared().then((result) => { if (live && result.ok) setSent(result.data.sent || []); });
+    accountsApi.groups().then((result) => {
+      if (!live) return;
+      if (result.setupNeeded) { setGroupsSetup({ migration: result.migration || "" }); return; }
+      if (result.ok) setGroups(result.data.groups || []);
+    });
     return () => { live = false; };
   }, []);
 
@@ -95,88 +115,124 @@ export function LinkedStudentsPage({ account, onOpenPage }) {
   }, []);
   useEffect(() => { loadStudent(selectedId); }, [selectedId, loadStudent]);
 
+  const group = groups.find((entry) => entry.id === groupId) || null;
+  // Only the students of the chosen group are listed (a group is only ever made of connected students).
+  const shown = useMemo(() => (group && students ? students.filter((entry) => group.memberIds.includes(entry.id)) : students), [group, students]);
+  const groupsOfStudent = useCallback((id) => groups.filter((entry) => entry.memberIds.includes(id)), [groups]);
   const student = students?.find((entry) => entry.id === selectedId) || null;
   const subject = data?.workspaces?.find((workspace) => workspace.id === workspaceId)?.subjects?.find((entry) => entry.id === subjectId) || null;
   const sentToStudent = sent.filter((item) => item.recipient.id === selectedId);
+  const inGroupView = Boolean(group) && !selectedId;
+
+  // Choosing a group shows the group view (no student selected); "All students" goes back to one student at a time.
+  const selectGroup = (id) => { setGroupId(id); setSelectedId(id ? "" : (selectedId || students?.[0]?.id || "")); setError(""); };
+  const openStudent = (id) => { setSelectedId(id); setError(""); };
+  const onGroupsChanged = (next) => {
+    setGroups(next.groups || []);
+    // The group being looked at may have been deleted.
+    if (groupId && !(next.groups || []).some((entry) => entry.id === groupId)) { setGroupId(""); setSelectedId((current) => current || students?.[0]?.id || ""); }
+  };
 
   if (setupNeeded) return <section className="tw-scope grid gap-3"><SetupNotice /></section>;
 
+  const tabs = inGroupView
+    ? [["performance", "Group performance"], ["plans", "Study plans"], ["sent", `Sent to ${group.name}`], ["exams", "Exam dates"]]
+    : student ? [["performance", "Performance"], ["plans", "Study plans"], ["sent", `Sent to ${student.displayName || noun}`], ["exams", "Exam dates"]] : [["exams", "Exam dates"]];
+
   return (
     <section className="tw-scope grid gap-3">
-      <div className={`${card} p-4`}>
+      <div className={`${card} grid gap-3 p-4`}>
         <p className={kicker}>{account.role === "parent" ? "My children" : "My students"}</p>
-        {students === null ? <p className="m-0 mt-1 text-sm text-soft-ink">Loading…</p> : students.length ? (
-          <div className="mt-2 flex flex-wrap gap-1.5" role="tablist" aria-label={`Choose a ${noun}`}>
-            {students.map((entry) => (
-              <button key={entry.id} type="button" role="tab" aria-selected={entry.id === selectedId} onClick={() => setSelectedId(entry.id)}
-                className={`inline-flex max-w-[14rem] items-center truncate rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${entry.id === selectedId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
-                <span className="truncate">{entry.displayName || entry.email}</span>
-              </button>
-            ))}
-          </div>
+        {students === null ? <p className="m-0 text-sm text-soft-ink">Loading…</p> : students.length ? (
+          <>
+            <GroupsBar groups={groups} students={students} groupId={groupId} onSelectGroup={selectGroup} onChanged={onGroupsChanged} setup={groupsSetup} noun={noun} />
+            <div className="flex flex-wrap gap-1.5" role="tablist" aria-label={`Choose a ${noun}`}>
+              {shown.map((entry) => (
+                <button key={entry.id} type="button" role="tab" aria-selected={entry.id === selectedId} onClick={() => openStudent(entry.id)}
+                  className={`inline-flex max-w-[14rem] items-center gap-1.5 truncate rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${entry.id === selectedId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
+                  <span className="truncate">{entry.displayName || entry.email}</span>
+                  <GroupDots groups={groupsOfStudent(entry.id)} />
+                </button>
+              ))}
+              {group && !shown.length ? <span className="text-xs text-soft-ink">No {noun}s in this group yet.</span> : null}
+            </div>
+          </>
         ) : (
-          <p className="m-0 mt-1 text-sm text-soft-ink">
+          <p className="m-0 text-sm text-soft-ink">
             No connected {noun}s yet. Send a request from <button type="button" className="font-semibold text-[var(--accent-ink)] underline" onClick={() => onOpenPage?.("connections")}>Connections</button>; once they accept you can follow their work here.
           </p>
         )}
       </div>
 
       {error ? <p className={`${card} p-4 text-sm text-[var(--color-danger)]`} role="alert">{error}</p> : null}
+      {notice ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]" role="status">{notice}</p> : null}
 
-      {student ? (
+      {students?.length && (student || inGroupView || tab === "exams") ? (
         <>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex gap-1.5" role="tablist" aria-label="View">
-              {[["performance", "Performance"], ["plans", "Study plans"], ["sent", `Sent to ${student.displayName || noun}`]].map(([value, label]) => (
-                <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold ${tab === value ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink"}`}>{label}</button>
+            <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="View">
+              {group && student ? <button type="button" className={ghostBtn} onClick={() => setSelectedId("")}>← {group.name}</button> : null}
+              {tabs.map(([value, label]) => (
+                <button key={value} type="button" role="tab" aria-selected={tab === value} onClick={() => setTab(value)} className={tabButton(tab === value)}>{label}</button>
               ))}
             </div>
-            <span className="flex items-center gap-2 text-[11px] text-soft-ink">
-              Read-only view of {student.displayName || student.email}’s work · uploaded material and private notes are not shown
-              <button type="button" className={ghostBtn} disabled={loading} onClick={() => loadStudent(selectedId)}>{loading ? "Loading…" : "Refresh"}</button>
-            </span>
+            {student && tab !== "exams" ? (
+              <span className="flex flex-wrap items-center gap-2 text-[11px] text-soft-ink">
+                <StudentGroupsMenu key={student.id} student={student} groups={groups} memberOf={groupsOfStudent(student.id).map((entry) => entry.id)} onChanged={onGroupsChanged} noun={noun} />
+                Read-only view of {student.displayName || student.email}’s work · uploaded material and private notes are not shown
+                <button type="button" className={ghostBtn} disabled={loading} onClick={() => loadStudent(selectedId)}>{loading ? "Loading…" : "Refresh"}</button>
+              </span>
+            ) : null}
           </div>
 
-          {loading && !data ? <p className={`${card} p-5 text-sm text-soft-ink`}>Loading {student.displayName || noun}’s workspace…</p> : null}
+          {tab === "exams" ? (
+            <ExamDatesTab account={account} groups={groups} students={students} workspaces={workspaces} scope={{ groupId: inGroupView ? groupId : "", studentId: student ? selectedId : "" }} noun={noun} onNotice={setNotice} />
+          ) : inGroupView ? (
+            <GroupView key={`${group.id}:${group.memberIds.join(",")}`} group={group} tab={tab} sent={sent} noun={noun} onOpenStudent={openStudent} />
+          ) : (
+            <>
+              {loading && !data ? <p className={`${card} p-5 text-sm text-soft-ink`}>Loading {student.displayName || noun}’s workspace…</p> : null}
 
-          {data && tab === "performance" ? (
-            <PerformancePage
-              key={selectedId}
-              role="student"
-              profileName={student.displayName || ""}
-              workspaces={data.workspaces}
-              selectedWorkspaceId={workspaceId}
-              selectedSubjectId={subjectId}
-              onSaveGeneratedQuizDocument={noop}
-              onRemoveDocument={noop}
-              onOpenPage={() => {}}
-              onSelectSubject={setSubjectId}
-            />
-          ) : null}
+              {data && tab === "performance" ? (
+                <PerformancePage
+                  key={selectedId}
+                  role="student"
+                  profileName={student.displayName || ""}
+                  workspaces={data.workspaces}
+                  selectedWorkspaceId={workspaceId}
+                  selectedSubjectId={subjectId}
+                  onSaveGeneratedQuizDocument={noop}
+                  onRemoveDocument={noop}
+                  onOpenPage={() => {}}
+                  onSelectSubject={setSubjectId}
+                />
+              ) : null}
 
-          {data && tab === "plans" ? (
-            <div className="grid gap-3">
-              <SubjectTabs workspaces={data.workspaces} selectedWorkspaceId={workspaceId} selectedSubjectId={subjectId} onSelectSubject={setSubjectId} />
-              <ReadOnlyPlans documents={subject?.documents || []} studentName={student.displayName || noun} />
-            </div>
-          ) : null}
+              {data && tab === "plans" ? (
+                <div className="grid gap-3">
+                  <SubjectTabs workspaces={data.workspaces} selectedWorkspaceId={workspaceId} selectedSubjectId={subjectId} onSelectSubject={setSubjectId} />
+                  <ReadOnlyPlans documents={subject?.documents || []} folders={subject?.folders || []} studentName={student.displayName || noun} />
+                </div>
+              ) : null}
 
-          {tab === "sent" ? (
-            <div className={`${card} p-5`}>
-              <p className={kicker}>What you sent</p>
-              {sentToStudent.length ? (
-                <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
-                  {sentToStudent.map((item) => (
-                    <li key={item.id} className="rounded-xl border border-ink/10 px-3 py-2">
-                      <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                      <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? "Assigned" : "Shared"}{item.dueDate ? ` · due ${dueLabel(item.dueDate)}` : ""}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : <p className="m-0 mt-2 text-sm text-soft-ink">Nothing yet. Use “Share with…” on a document in Workspaces, or on a study plan in Study plans, to send or assign work.</p>}
-              <button type="button" className={`${ghostBtn} mt-3`} onClick={() => onOpenPage?.("workspaces")}>Open Workspaces</button>
-            </div>
-          ) : null}
+              {tab === "sent" ? (
+                <div className={`${card} p-5`}>
+                  <p className={kicker}>What you sent</p>
+                  {sentToStudent.length ? (
+                    <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
+                      {sentToStudent.map((item) => (
+                        <li key={item.id} className="rounded-xl border border-ink/10 px-3 py-2">
+                          <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
+                          <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? "Assigned" : "Shared"}{item.dueDate ? ` · due ${dueLabel(item.dueDate)} (set by you, locked for them)` : ""}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className="m-0 mt-2 text-sm text-soft-ink">Nothing yet. Use “Share with…” on a document in Workspaces, or on a study plan in Study plans, to send or assign work.</p>}
+                  <button type="button" className={`${ghostBtn} mt-3`} onClick={() => onOpenPage?.("workspaces")}>Open Workspaces</button>
+                </div>
+              ) : null}
+            </>
+          )}
         </>
       ) : null}
     </section>

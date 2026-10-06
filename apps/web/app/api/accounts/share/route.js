@@ -1,9 +1,11 @@
 /**
  * GET  /api/accounts/share -> { sent, received }  what you sent / what was sent to you
  * POST /api/accounts/share Body: { mode: "share" | "assign", documentId, recipientIds: [], dueDate?, note? }
- * The sender is the logged-in account; the copy is made on the server into each recipient's own
- * workspace ("Shared documents / <your name>"), read-only. Needs an accepted connection with each
- * recipient. Assigning (activities and study plans, teacher/parent -> student) can carry a due date.
+ * The COPY mechanism: the sender is the logged-in account; the copy is made on the server into each
+ * recipient's own workspace ("Shared documents / <your name>"), read-only. Needs an accepted connection with
+ * each recipient. Assigning (activities and study plans, teacher/parent -> student over a teacher_student /
+ * parent_student link, never a peer connection) can carry a due date. The dialog's plain "Share" now creates
+ * LIVE shares with view/edit permissions instead: see /api/accounts/grants (lib/grants.js).
  */
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { listSharedItems } from "../../../../lib/accountsRepository.js";

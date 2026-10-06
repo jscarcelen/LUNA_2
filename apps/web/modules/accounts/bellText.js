@@ -20,6 +20,8 @@ export function describeEvent(event) {
   if (event.type === "link_accepted") return `${who} accepted your connection request`;
   if (event.type === "link_declined") return `${who} declined your connection request`;
   if (event.type === "assigned") return `${who} assigned you “${event.title}”${event.dueDate ? ` (due ${event.dueDate})` : ""}`;
+  if (event.type === "grant") return `${who} shared “${event.title}” with you (${event.permission === "edit" ? "can edit" : "can view"})`;
+  if (event.type === "shared" && ["agent", "template", "component"].includes(event.itemType)) return `${who} shared the ${event.itemType} “${event.title}” with you`;
   if (event.type === "shared") return `${who} shared “${event.title}” with you`;
   return who;
 }

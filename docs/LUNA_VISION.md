@@ -437,6 +437,15 @@ than in one model call).
   marketplace, but by sending to and collaborating with other accounts. Add **friends**. This is
   what makes it a **digital environment**.
 
+### Your network, and sharing with permissions (founder spec, 2026-10-05)
+- **Build your network.** Students, parents, teachers… anyone can connect with anyone, with no limit; both sides
+  accept. Role-specific powers stay explicit: only a teacher/parent connected to a *student* assigns work and follows
+  that student's performance; a plain peer connection never exposes performance or anything private.
+- **Share files, folders, study plans, agents, templates and components, only with connections.** A file or folder
+  (a whole topic, a study-plan folder) is shared *live* with **view** or **edit** rights: edit changes the original, so every
+  version sees the update; the owner always stays the owner (only they delete, move or share again), can see who has access
+  and take it away at once. Agents, templates and components are shared as the recipient's own copy.
+
 ## 8. Agent architecture principles
 
 - The agent architecture is a tool for building agents: **things that control agents**. Agents are
@@ -610,6 +619,7 @@ Set de guardrails
 In study plan, when there are multiple uploaded reference materials, the first step is to create a master document with all the information of all documents. It would be nice to include how it traces back to each original document. Then, whenever making a reference from a generated material (e.g., quiz) to the source, it will refer to this consolidated document, which will make it easier. Hence, you need to make a pre-built agent in the agent tab that is called something like 'Summary notes consolidator', allows selecting the different documents from the workspaces, the language, and generates an exhaustive structured document with all the information. It is key to make sure that all the information is there, but many times the documents have overlapping information, that should only appear once — my point is that it is consolidated and comprehensive, not just a stack of all documents one after the other, because then it is useless. Include formulas, tables, image descriptions, etc.
 
 ## Appendix B — Change log of this document
+- 2026-10-05 — Added "Your network, and sharing with permissions" (§7): open network (any role with any role), live shares of files/folders/plans with view or edit rights, agents/templates/components shared as copies (see docs/ACCOUNTS.md).
 - 2026-10-04 — Added §5.1o: Ask Luna beside the material (plan documents + reference documents + what the user is doing, hint-not-answer, no attempts recorded) and the very simple Home (greeting, four most urgent plan cards, next steps).
 - 2026-10-04 — Added §5.1p: the master document of a study plan and the Summary Notes Consolidator agent.
 - 2026-10-04 — Accounts (see docs/ACCOUNTS.md): sign in with email next to the unchanged demo; teacher↔student and parent↔student connections that need both sides to accept (also requested at sign-up by email); teachers/parents assign activities and study plans and share read-only files that land under "Shared documents / <sender>"; a parent can follow several children's performance. Founder: "Same between parent and students and vice versa."

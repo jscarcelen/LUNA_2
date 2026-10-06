@@ -23,6 +23,17 @@ export const accountsApi = {
   changeLink: (action, linkId) => post("/api/accounts/links", { action, linkId }),
   shared: () => call("/api/accounts/share"),
   send: (payload) => post("/api/accounts/share", payload),
+  // live shares with permissions (files, folders, topics, study plans)
+  grantOverview: () => call("/api/accounts/grants"),
+  grantsOn: (kind, id) => call(`/api/accounts/grants?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`),
+  shareLive: ({ kind, itemId, recipientIds, permission }) => post("/api/accounts/grants", { action: "share", kind, itemId, recipientIds, permission }),
+  changePermission: (grantId, permission) => post("/api/accounts/grants", { action: "permission", grantId, permission }),
+  revokeGrant: (grantId) => post("/api/accounts/grants", { action: "revoke", grantId }),
+  leaveGrant: (grantId) => post("/api/accounts/grants", { action: "leave", grantId }),
+  // copies of agents, templates and components
+  shareCopy: (payload) => post("/api/accounts/share-copy", payload),
+  pendingComponents: () => call("/api/accounts/share-copy"),
+  markComponentsImported: (ids) => post("/api/accounts/share-copy", { kind: "imported", ids }),
   resendVerification: () => post("/api/accounts/resend-verification", {}),
   verifyEmail: (token) => post("/api/accounts/verify-email", { token }),
   requestPasswordReset: (email) => post("/api/accounts/password-reset/request", { email }),

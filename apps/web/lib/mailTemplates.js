@@ -90,6 +90,33 @@ export function linkAcceptedMail({ to, accepter, url }) {
   });
 }
 
+/**
+ * Someone shared something with you (a live share with permissions, or a copy of an agent / template /
+ * component). Only the sharer's name, role and email and the item's name are included, nothing of its content.
+ * @param {{ to: string, sharer: object, itemName: string, permission?: "view" | "edit", copyOf?: string, url: string }} args
+ *   `permission` for a live share; `copyOf` ("agent", "template", "component") for a copy the recipient owns.
+ */
+export function shareMail({ to, sharer, itemName, permission, copyOf, url }) {
+  const who = whoLine(sharer);
+  const item = oneLine(itemName).slice(0, 120) || "an item";
+  const first = copyOf
+    ? `${who} shared the ${copyOf} “${item}” with you. You get your own copy to use and change; it does not change theirs.`
+    : `${who} shared “${item}” with you${permission === "edit" ? " and you can edit it" : " (view only)"}.`;
+  const second = copyOf
+    ? "You will find it in your own library the next time you open Luna."
+    : permission === "edit"
+      ? "Because you can edit it, what you change is changed in the original, and everyone who has it sees your edits. You find it in your workspace under Shared with me."
+      : "You find it in your workspace under Shared with me. You can read it, highlight it and take your own notes.";
+  return build({
+    to,
+    subject: `${nameOf(sharer)} shared “${item}” with you on Luna`,
+    heading: copyOf ? `A ${copyOf} was shared with you` : "Something was shared with you",
+    paragraphs: [first, second],
+    button: { label: "Open Luna", url },
+    footer: "You only get emails like this from people you are connected to, at most one an hour per person. You can end a connection at any time from the Connections page."
+  });
+}
+
 /** A request for an address with no account yet: minimal, honest, sent at most once a week per sender and address. */
 export function invitationMail({ to, sender, url }) {
   const who = whoLine(sender);

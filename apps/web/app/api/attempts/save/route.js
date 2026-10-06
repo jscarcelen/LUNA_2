@@ -28,7 +28,8 @@ export async function POST(request) {
 
     // The owner comes from the session (a real account) or is the demo owner; a body value is never trusted.
     const resolvedOwner = await ownerUserIdForFresh(request);
-    const denied = await denyUnlessOwner(request, { documentId: String(activityDocumentId) });
+    // A quiz shared with this account (live share) can be answered: the attempt is stored under the answerer.
+    const denied = await denyUnlessOwner(request, { documentId: String(activityDocumentId), allowShared: true });
     if (denied) return denied;
 
     const result = await saveAttempt(attempt, {

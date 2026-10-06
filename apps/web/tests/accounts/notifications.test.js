@@ -42,6 +42,7 @@ let parent;
 beforeEach(() => {
   db.reset();
   repo.resetSchemaCache();
+  repo.resetSharingCache();
   clearAccountLimits();
   mail.sent.length = 0;
   mail.fail = false;
@@ -187,11 +188,12 @@ describe("the email when a request arrives", () => {
     expect(link().target_id).toBeNull();
   });
 
-  it("sends nothing for an address whose account has another role, and the answer is the same", async () => {
-    const wrong = await postLinks(teacher, { action: "request", email: parent.email, relation: "student" });
+  it("treats an address whose account has another role like any other connection (it can be a peer), and the answer is the same", async () => {
+    const other = await postLinks(teacher, { action: "request", email: parent.email, relation: "student" });
     const unknown = await postLinks(teacher, { action: "request", email: "ghost@nowhere.com", relation: "student" });
-    expect((await wrong.json()).message).toBe((await unknown.json()).message);
-    expect(mail.sent.map((message) => message.to)).toEqual(["ghost@nowhere.com"]);
+    expect((await other.json()).message).toBe((await unknown.json()).message);
+    expect(mail.sent.map((message) => message.to).sort()).toEqual(["elena@home.com", "ghost@nowhere.com"]);
+    expect(db.table("account_links").find((row) => row.target_email === parent.email).kind).toBe("peer");
   });
 
   it("never fails the request when the mail fails", async () => {

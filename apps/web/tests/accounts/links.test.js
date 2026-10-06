@@ -23,6 +23,7 @@ let parent;
 
 beforeEach(() => {
   db.reset();
+  repo.resetSharingCache();
   teacher = account({ email: "rivera@school.edu", display_name: "Prof. Rivera", role: "teacher" });
   student = account({ email: "maria@home.com", display_name: "Maria", role: "student" });
   parent = account({ email: "elena@home.com", display_name: "Elena", role: "parent" });
@@ -51,12 +52,22 @@ describe("asking to connect", () => {
     expect(connections.incoming[0].other).toMatchObject({ displayName: "Prof. Rivera", role: "teacher", email: "rivera@school.edu" });
   });
 
-  it("revokes a waiting request whose roles turn out not to fit (a 'student' who signed up as a parent)", async () => {
+  it("settles the kind from the real roles when the person signs up (a 'student' who signed up as a parent is a peer, with no student powers)", async () => {
     await repo.requestLink(teacher, { email: "dad@home.com", relation: "student" });
+    expect(links()[0].kind).toBe("teacher_student");
+    const dad = account({ email: "dad@home.com", display_name: "Dad", role: "parent" });
+    await repo.attachPendingLinks(dad);
+    expect(links()[0]).toMatchObject({ status: "pending", kind: "peer", target_id: dad.id, pair_key: "peer:dad@home.com|rivera@school.edu" });
+    expect((await repo.listConnections(dad)).incoming).toHaveLength(1);
+  });
+
+  it("drops a waiting request that would have to be a peer connection when the sharing migration is missing", async () => {
+    await repo.requestLink(teacher, { email: "dad@home.com", relation: "student" });
+    db.drop("share_grants");
+    repo.resetSharingCache();
     const dad = account({ email: "dad@home.com", display_name: "Dad", role: "parent" });
     await repo.attachPendingLinks(dad);
     expect(links()[0].status).toBe("revoked");
-    expect((await repo.listConnections(dad)).incoming).toHaveLength(0);
   });
 
   it("is active only after the other side accepts", async () => {
@@ -90,19 +101,91 @@ describe("asking to connect", () => {
     expect(links()).toHaveLength(1);
   });
 
-  it("only allows teacher<->student and parent<->student", async () => {
-    await expect(repo.requestLink(teacher, { email: parent.email, relation: "parent" })).rejects.toThrow(LinkError);
-    await expect(repo.requestLink(parent, { email: teacher.email, relation: "teacher" })).rejects.toThrow(LinkError);
-    await expect(repo.requestLink(student, { email: "x@y.co", relation: "student" })).rejects.toThrow(/can connect with teacher or parent/);
-    expect(links()).toHaveLength(0);
+  it("is an open network: any role can ask any role, and the kind comes from the two roles", async () => {
+    const tom = account({ email: "tom@home.com", display_name: "Tom", role: "student" });
+    const ana = account({ email: "ana@school.edu", display_name: "Ana", role: "teacher" });
+    const dan = account({ email: "dan@home.com", display_name: "Dan", role: "parent" });
+    await repo.requestLink(teacher, { email: parent.email });            // teacher -> parent
+    await repo.requestLink(parent, { email: dan.email });                // parent -> parent
+    await repo.requestLink(student, { email: tom.email });               // student -> student
+    await repo.requestLink(teacher, { email: ana.email, relation: "student" }); // the hint is only a hint: they are really a teacher
+    await repo.requestLink(teacher, { email: student.email });           // teacher -> student, no hint needed
+    await repo.requestLink(student, { email: parent.email });            // student -> parent
+    const kinds = Object.fromEntries(links().map((row) => [`${row.requester_email}>${row.target_email}`, row.kind]));
+    expect(kinds).toEqual({
+      [`${teacher.email}>${parent.email}`]: "peer",
+      [`${parent.email}>${dan.email}`]: "peer",
+      [`${student.email}>${tom.email}`]: "peer",
+      [`${teacher.email}>${ana.email}`]: "peer",
+      [`${teacher.email}>${student.email}`]: "teacher_student",
+      [`${student.email}>${parent.email}`]: "parent_student"
+    });
   });
 
-  it("answers the same whether the email has no account or an account with a different role", async () => {
+  it("still needs both sides, with no limit on how many connections you build", async () => {
+    const others = Array.from({ length: 12 }, (_, index) => account({ email: `peer${index}@home.com`, display_name: `Peer ${index}`, role: index % 2 ? "student" : "teacher" }));
+    for (const other of others) {
+      await repo.requestLink(student, { email: other.email });
+      const row = links().find((entry) => entry.target_id === other.id);
+      expect(row.status).toBe("pending");
+      await repo.changeLink(other, row.id, "accept");
+    }
+    expect(await repo.listConnectedIds(student.id)).toEqual(new Set(others.map((other) => other.id)));
+    expect((await repo.listConnections(student)).accepted).toHaveLength(12);
+  });
+
+  it("peer requests follow the same two-way state machine and cooldown", async () => {
+    const tom = account({ email: "tom@home.com", display_name: "Tom", role: "student" });
+    await repo.requestLink(student, { email: tom.email });
+    const row = links()[0];
+    expect(await repo.getAcceptedLink(student.id, tom.id)).toBeNull();
+    await expect(repo.changeLink(student, row.id, "accept")).rejects.toThrow(/Only the person who was asked/);
+    expect(await repo.changeLink(tom, row.id, "decline")).toBe("declined");
+    await repo.requestLink(student, { email: tom.email }); // inside the 24 h cooldown: nothing changes
+    expect(links()[0].status).toBe("declined");
+    // asking back is the second yes
+    const back = await repo.requestLink(tom, { email: student.email });
+    expect(back.status).toBe("pending");
+    expect(await repo.changeLink(student, links()[0].id, "accept")).toBe("accepted");
+    expect(await repo.getAcceptedLink(tom.id, student.id)).toMatchObject({ kind: "peer", status: "accepted" });
+    expect(await repo.changeLink(tom, links()[0].id, "remove")).toBe("revoked");
+  });
+
+  it("a peer connection never shows a student's performance; teacher_student does", async () => {
+    const ana = account({ email: "ana@school.edu", display_name: "Ana", role: "teacher" });
+    const tom = account({ email: "tom@home.com", display_name: "Tom", role: "student" });
+    for (const [from, to] of [[ana, tom], [student, tom], [teacher, student]]) {
+      await repo.requestLink(from, { email: to.email });
+      const row = links().find((entry) => entry.requester_id === from.id && entry.target_id === to.id);
+      await repo.changeLink(to, row.id, "accept");
+    }
+    expect(await repo.linkedStudentWorkspaces(student, tom.id)).toBeNull(); // student -> student
+    expect(await repo.linkedStudentWorkspaces(teacher, student.id)).not.toBeNull(); // real teacher_student link
+    expect(await repo.linkedStudentWorkspaces(ana, tom.id)).not.toBeNull();
+    // a teacher who is only a peer of a student (forced here) sees nothing
+    links().find((entry) => entry.requester_id === ana.id).kind = "peer";
+    expect(await repo.linkedStudentWorkspaces(ana, tom.id)).toBeNull();
+  });
+
+  it("answers the same whether the email has no account or an account with another role", async () => {
     const unknown = await repo.requestLink(teacher, { email: "ghost@nowhere.com", relation: "student" });
-    const wrongRole = await repo.requestLink(teacher, { email: parent.email, relation: "student" });
-    expect(wrongRole).toEqual(unknown);
-    // the mismatch left no trace the parent could see
-    expect(links().filter((row) => row.target_email === parent.email)).toHaveLength(0);
+    const parentAsked = await repo.requestLink(teacher, { email: parent.email, relation: "student" });
+    expect(parentAsked).toEqual(unknown);
+  });
+
+  it("explains a missing migration for connections that are not teacher/parent <-> student, and keeps the classic ones working", async () => {
+    db.drop("share_grants");
+    repo.resetSharingCache();
+    const tom = account({ email: "tom@home.com", display_name: "Tom", role: "student" });
+    await expect(repo.requestLink(student, { email: tom.email })).rejects.toMatchObject({ status: 503, code: "setup_needed", setup: { setupNeeded: true, migration: expect.stringContaining("202610060001") } });
+    await expect(repo.requestLink(teacher, { email: parent.email })).rejects.toMatchObject({ status: 503 });
+    expect(links()).toHaveLength(0);
+    expect((await repo.requestLink(teacher, { email: student.email, relation: "student" })).status).toBe("pending");
+    expect(links()[0].kind).toBe("teacher_student");
+  });
+
+  it("rejects an unknown role hint", async () => {
+    await expect(repo.requestLink(teacher, { email: student.email, relation: "wizard" })).rejects.toThrow(LinkError);
   });
 
   it("rejects your own email and malformed ones", async () => {

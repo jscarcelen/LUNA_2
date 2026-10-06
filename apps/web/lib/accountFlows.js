@@ -10,7 +10,7 @@ import { limits } from "./accountLimits.js";
 import { consumeToken, invalidateTokens, issueToken, peekToken } from "./accountTokens.js";
 import { clearPendingInvites, findAccountByEmail, findAccountById, markEmailVerified, requestLink, setAccountPassword, supportsVerification, attachPendingLinks } from "./accountsRepository.js";
 import { sendMail } from "./mailer.js";
-import { invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, verifyEmailMail } from "./mailTemplates.js";
+import { invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, shareMail, verifyEmailMail } from "./mailTemplates.js";
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 
 export const REQUEST_EMAIL_GAP_MS = 24 * 60 * 60 * 1000;
@@ -163,6 +163,57 @@ export async function notifyLinkRequest(requester, event, baseUrl, { now = Date.
     console.warn("[accounts] could not send the connection email:", error?.message || error);
     return { sent: false };
   }
+}
+
+export const SHARE_EMAIL_GAP_MS = 60 * 60 * 1000;
+
+/**
+ * Tells the people something was shared with: one email per sharer and person per hour (stored in
+ * share_grants.notified_at for live shares), and the sharer's own hourly cap (20) on top. Only names and roles
+ * are sent, never the content. Best effort: never throws, never changes the sharer's answer.
+ * @param {object} owner the sharer's account row
+ * @param {{ recipientIds: string[], itemName: string, permission?: string, copyOf?: string }} what
+ * @returns {Promise<{ sent: number }>}
+ */
+export async function notifyShared(owner, { recipientIds, itemName, permission, copyOf }, baseUrl, { now = Date.now() } = {}) {
+  let sent = 0;
+  try {
+    const client = createSupabaseAdminClient();
+    for (const recipientId of [...new Set(recipientIds || [])]) {
+      if (senderLimiter.isBlocked(owner.id)) break;
+      const recipient = await findAccountById(recipientId);
+      if (!recipient) continue;
+      let grantRows = [];
+      if (!copyOf) {
+        const { data, error } = await client.from("share_grants").select("id, notified_at").eq("owner_id", owner.id).eq("grantee_id", recipientId).is("revoked_at", null);
+        if (error) throw error;
+        grantRows = data || [];
+        if (grantRows.some((row) => recent(row.notified_at, SHARE_EMAIL_GAP_MS, now))) continue;
+      }
+      if (copyOf) {
+        const pair = `${owner.id}:${recipientId}`;
+        if (limits.shareCopyByPair.isBlocked(pair)) continue;
+        limits.shareCopyByPair.fail(pair);
+      }
+      senderLimiter.fail(owner.id);
+      const result = await sendMail(shareMail({
+        to: recipient.email,
+        sharer: { displayName: owner.display_name, role: owner.role, email: owner.email },
+        itemName,
+        permission,
+        copyOf,
+        url: pathUrl(baseUrl, "/platform")
+      }));
+      if (result.delivered) sent += 1;
+      if ((result.delivered || result.devPreview) && grantRows.length) {
+        const { error } = await client.from("share_grants").update({ notified_at: new Date(now).toISOString() }).in("id", grantRows.map((row) => row.id));
+        if (error) throw error;
+      }
+    }
+  } catch (error) {
+    console.warn("[accounts] could not send the share email:", error?.message || error);
+  }
+  return { sent };
 }
 
 /** Tells the person who asked that their request was accepted (once per pair per 24 h). Never throws. */

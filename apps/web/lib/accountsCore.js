@@ -11,7 +11,8 @@ export { classifyDeliverable };
 /* ------------------------------------------------------------------ constants */
 
 export const ROLES = ["student", "teacher", "parent"];
-export const LINK_KINDS = ["teacher_student", "parent_student"];
+/** `peer` is every other pair (student-student, teacher-teacher, parent-teacher, ...): it shares what is explicitly shared and nothing else. */
+export const LINK_KINDS = ["teacher_student", "parent_student", "peer"];
 export const LINK_STATUSES = ["pending", "accepted", "declined", "revoked"];
 export const MIN_PASSWORD_LENGTH = 8;
 export const MAX_PASSWORD_LENGTH = 200;
@@ -19,6 +20,7 @@ export const SESSION_COOKIE = "luna_session";
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const ACCOUNTS_MIGRATION = "supabase/migrations/202610040001_accounts_links_sharing.sql";
 export const VERIFICATION_MIGRATION = "supabase/migrations/202610050001_account_verification_phone_tokens.sql";
+export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_sharing_grants.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const TOKEN_KINDS = ["verify_email", "reset_password"];
 export const TOKEN_TTL_MS = { verify_email: 48 * 60 * 60 * 1000, reset_password: 60 * 60 * 1000 };
@@ -269,19 +271,38 @@ export class LinkError extends Error {
   }
 }
 
-/** The only two valid pairs: a teacher with a student, a parent with a student. */
+/**
+ * The relation between two accounts, decided by their roles. Teacher+student and parent+student keep their
+ * role-specific powers (assigning work, seeing the student's performance); every other pair - student and
+ * student, teacher and teacher, parent and teacher, parent and parent - is a `peer` connection that exposes
+ * nothing but what is explicitly shared. Anyone can connect with anyone. Unknown roles give null.
+ */
 export function kindForRoles(roleA, roleB) {
+  if (!isRole(roleA) || !isRole(roleB)) return null;
   const pair = [roleA, roleB].sort().join("+");
   if (pair === "student+teacher") return "teacher_student";
   if (pair === "parent+student") return "parent_student";
-  return null;
+  return "peer";
 }
 
-/** Which relations may an account of this role ask for? (the role of the person they ask) */
+/** The kind to store for a request to someone who has no (confirmed) account yet: from the role the requester hinted at, else peer. It is settled from the real roles when they sign up. */
+export function kindForRequest(requesterRole, hintedRole) {
+  return (isRole(hintedRole) && kindForRoles(requesterRole, hintedRole)) || "peer";
+}
+
+/** Which roles may an account of this role ask? Any: the network is open. */
 export function relationsFor(role) {
-  if (role === "teacher" || role === "parent") return ["student"];
-  if (role === "student") return ["teacher", "parent"];
-  return [];
+  return isRole(role) ? [...ROLES] : [];
+}
+
+/**
+ * Does this link give a teacher/parent the right to assign work to a student and to follow the student's
+ * performance? Only the two role-specific kinds, between the right roles. A peer connection never does.
+ */
+export function hasGuardianPowers(link, guardianRole, studentRole) {
+  if (!link || link.status !== "accepted") return false;
+  if (studentRole !== "student" || (guardianRole !== "teacher" && guardianRole !== "parent")) return false;
+  return (link.kind === "teacher_student" || link.kind === "parent_student") && kindForRoles(guardianRole, studentRole) === link.kind;
 }
 
 /** One row per pair and kind, whoever asked first: built from the two (unique) emails. */
@@ -329,8 +350,9 @@ export function transitionLink(link, actorId, action) {
 }
 
 /**
- * Is a stored by-email request still valid now that the person exists? (a teacher who asked for a
- * "student" email that turned out to be a parent account is never linked.)
+ * Does the kind stored with a by-email request match the real roles once the person exists? When it does
+ * not, the kind is settled from the real roles (a teacher who asked for a "student" email that turned out to
+ * be a parent becomes a peer connection: no student powers).
  */
 export function linkFitsAccounts(kind, requesterRole, targetRole) {
   return kindForRoles(requesterRole, targetRole) === kind;
@@ -339,8 +361,9 @@ export function linkFitsAccounts(kind, requesterRole, targetRole) {
 /* ------------------------------------------------------------------ sending things */
 
 /**
- * May `sender` send something to `recipient`? Needs an accepted link of the right kind between exactly
- * these two accounts. Anyone linked can SHARE; only a teacher or parent can ASSIGN, and only to a student.
+ * May `sender` send something to `recipient`? Needs an accepted link between exactly these two accounts.
+ * Anyone linked can SHARE (whatever the kind of connection); only a teacher or parent can ASSIGN, only to a
+ * student, and only over a teacher_student / parent_student link (never a peer connection).
  * @returns {{ ok: true } | { ok: false, status: number, error: string }}
  */
 export function authorizeDelivery({ mode, sender, recipient, link }) {
@@ -349,15 +372,17 @@ export function authorizeDelivery({ mode, sender, recipient, link }) {
   if (sender.id === recipient.id) return deny(400, "Choose someone else to send this to.");
   const ends = new Set([link?.requesterId, link?.targetId]);
   if (!link || link.status !== "accepted" || !ends.has(sender.id) || !ends.has(recipient.id)) return deny(403, "You can only send to accounts you are connected to (the connection must be accepted by both sides).");
-  if (kindForRoles(sender.role, recipient.role) !== link.kind) return deny(403, "These two accounts cannot be connected.");
-  if (mode === "assign" && !((sender.role === "teacher" || sender.role === "parent") && recipient.role === "student")) return deny(403, "Only a teacher or parent can assign work, and only to a student.");
   if (mode !== "share" && mode !== "assign") return deny(400, "Unknown way of sending.");
+  if (mode === "assign") {
+    if (!((sender.role === "teacher" || sender.role === "parent") && recipient.role === "student")) return deny(403, "Only a teacher or parent can assign work, and only to a student.");
+    if (!hasGuardianPowers(link, sender.role, recipient.role)) return deny(403, "You can only assign work to a student you are connected to as their teacher or parent.");
+  }
   return { ok: true };
 }
 
 /* ------------------------------------------------------------------ setup detection */
 
-const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens)([^a-z_]|$)/;
+const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens|share_grants)([^a-z_]|$)/;
 
 /** Did this database error come from the accounts migration not having been applied yet? */
 export function isSetupNeededError(error) {

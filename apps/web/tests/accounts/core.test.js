@@ -13,6 +13,8 @@ import {
   isSetupNeededError,
   isValidEmail,
   kindForRoles,
+  kindForRequest,
+  hasGuardianPowers,
   linkFitsAccounts,
   normalizeDisplayName,
   normalizeEmail,
@@ -173,18 +175,38 @@ describe("rate limiter", () => {
 });
 
 describe("which accounts may be linked", () => {
-  it("allows teacher-student and parent-student only, in either order", () => {
+  it("keeps the teacher and parent powers for their own pairs, in either order", () => {
     expect(kindForRoles("teacher", "student")).toBe("teacher_student");
     expect(kindForRoles("student", "teacher")).toBe("teacher_student");
     expect(kindForRoles("parent", "student")).toBe("parent_student");
     expect(kindForRoles("student", "parent")).toBe("parent_student");
-    for (const [a, b] of [["teacher", "parent"], ["parent", "teacher"], ["student", "student"], ["teacher", "teacher"], ["parent", "parent"], ["admin", "student"]]) expect(kindForRoles(a, b)).toBeNull();
   });
-  it("tells each role who it may ask", () => {
-    expect(relationsFor("teacher")).toEqual(["student"]);
-    expect(relationsFor("parent")).toEqual(["student"]);
-    expect(relationsFor("student")).toEqual(["teacher", "parent"]);
+  it("makes every other pair of roles a peer connection (the network is open)", () => {
+    for (const [a, b] of [["teacher", "parent"], ["parent", "teacher"], ["student", "student"], ["teacher", "teacher"], ["parent", "parent"]]) expect(kindForRoles(a, b)).toBe("peer");
+    expect(kindForRoles("admin", "student")).toBeNull();
+  });
+  it("lets every role ask every role", () => {
+    for (const role of ["teacher", "parent", "student"]) expect(relationsFor(role)).toEqual(["student", "teacher", "parent"]);
     expect(relationsFor("nobody")).toEqual([]);
+  });
+  it("guesses the kind of a request to an address with no account from the role hinted, else peer", () => {
+    expect(kindForRequest("teacher", "student")).toBe("teacher_student");
+    expect(kindForRequest("parent", "student")).toBe("parent_student");
+    expect(kindForRequest("teacher", "teacher")).toBe("peer");
+    expect(kindForRequest("teacher", "")).toBe("peer");
+    expect(kindForRequest("teacher", "wizard")).toBe("peer");
+  });
+  it("gives a student's performance and assigning only to teacher_student / parent_student links, never to a peer", () => {
+    const link = (kind) => ({ status: "accepted", kind });
+    expect(hasGuardianPowers(link("teacher_student"), "teacher", "student")).toBe(true);
+    expect(hasGuardianPowers(link("parent_student"), "parent", "student")).toBe(true);
+    expect(hasGuardianPowers(link("peer"), "teacher", "student")).toBe(false);
+    expect(hasGuardianPowers(link("peer"), "parent", "student")).toBe(false);
+    expect(hasGuardianPowers(link("teacher_student"), "parent", "student")).toBe(false); // wrong kind for the roles
+    expect(hasGuardianPowers(link("teacher_student"), "student", "teacher")).toBe(false); // a student has no such power over a teacher
+    expect(hasGuardianPowers(link("teacher_student"), "teacher", "teacher")).toBe(false);
+    expect(hasGuardianPowers({ status: "pending", kind: "teacher_student" }, "teacher", "student")).toBe(false);
+    expect(hasGuardianPowers(null, "teacher", "student")).toBe(false);
   });
   it("makes the pair key independent of who asked", () => {
     expect(pairKey("teacher_student", "T@x.com", "s@x.com")).toBe(pairKey("teacher_student", "s@x.com", "t@x.com"));
@@ -193,6 +215,7 @@ describe("which accounts may be linked", () => {
   it("checks that a stored by-email request still fits once the person has signed up", () => {
     expect(linkFitsAccounts("teacher_student", "teacher", "student")).toBe(true);
     expect(linkFitsAccounts("teacher_student", "teacher", "parent")).toBe(false);
+    expect(linkFitsAccounts("peer", "teacher", "parent")).toBe(true);
   });
 });
 
@@ -276,9 +299,14 @@ describe("who may send what to whom", () => {
     expect(authorizeDelivery({ mode: "share", sender: teacher, recipient: { id: "S2", role: "student" }, link: link() }).ok).toBe(false);
     expect(authorizeDelivery({ mode: "share", sender: { id: "T2", role: "teacher" }, recipient: student, link: link() }).ok).toBe(false);
   });
-  it("a parent link does not let a teacher in, and the roles must match the link kind", () => {
+  it("sharing works over any kind of connection, assigning only over teacher_student / parent_student", () => {
     expect(authorizeDelivery({ mode: "share", sender: parent, recipient: student, link: link({ requesterId: "P", kind: "parent_student" }) }).ok).toBe(true);
-    expect(authorizeDelivery({ mode: "share", sender: teacher, recipient: student, link: link({ kind: "parent_student" }) }).ok).toBe(false);
+    expect(authorizeDelivery({ mode: "share", sender: student, recipient: { id: "S2", role: "student" }, link: link({ requesterId: "S", targetId: "S2", kind: "peer" }) }).ok).toBe(true);
+    expect(authorizeDelivery({ mode: "share", sender: teacher, recipient: parent, link: link({ targetId: "P", kind: "peer" }) }).ok).toBe(true);
+    // a teacher cannot assign through a link of the wrong kind, even to a student
+    expect(authorizeDelivery({ mode: "assign", sender: teacher, recipient: student, link: link({ kind: "parent_student" }) }).ok).toBe(false);
+    expect(authorizeDelivery({ mode: "assign", sender: teacher, recipient: student, link: link({ kind: "peer" }) }).status).toBe(403);
+    expect(authorizeDelivery({ mode: "assign", sender: teacher, recipient: parent, link: link({ targetId: "P", kind: "peer" }) }).ok).toBe(false);
   });
   it("refuses sending to yourself, to nobody, and unknown modes", () => {
     expect(authorizeDelivery({ mode: "share", sender: teacher, recipient: teacher, link: link() }).ok).toBe(false);

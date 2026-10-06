@@ -49,6 +49,7 @@ const verified = (over) => unverified({ email_verified_at: new Date().toISOStrin
 beforeEach(() => {
   db.reset();
   repo.resetSchemaCache();
+  repo.resetSharingCache();
   clearAccountLimits();
   mail.sent.length = 0;
   mail.result = { delivered: true, provider: "test" };
@@ -176,9 +177,9 @@ describe("sign-up", () => {
     const response = await call(signup.POST, "/api/accounts/signup", form({ invites: [{ email: "Mom@Home.com", relation: "parent" }, { email: "maria@home.com", relation: "teacher" }, { email: "x@y.co", relation: "student" }] }));
     const body = await response.json();
     expect(body.invites).toEqual([]);
-    expect(body.invitesQueued).toBe(1); // the self-request and the impossible relation are dropped
+    expect(body.invitesQueued).toBe(2); // your own address is dropped; any role can be asked now
     expect(db.table("account_links")).toHaveLength(0);
-    expect(db.table("accounts").find((row) => row.email === "maria@home.com").pending_invites).toEqual([{ email: "mom@home.com", relation: "parent" }]);
+    expect(db.table("accounts").find((row) => row.email === "maria@home.com").pending_invites).toEqual([{ email: "mom@home.com", relation: "parent" }, { email: "x@y.co", relation: "student" }]);
   });
 });
 

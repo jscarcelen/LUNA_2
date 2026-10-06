@@ -5,6 +5,7 @@ import { TemplateThumbnail, compatibleAgentNames, templateFolderOf } from "./Tem
 import { TemplateMatrix } from "./TemplateMatrix";
 import { KIND_LABEL, templateComponents, templateKind, type TemplateKind } from "./matrix";
 import { card, kicker, primaryBtn } from "./ui";
+import { requestShare, useSharingAvailable } from "../accounts/shareEvents";
 
 export interface SavedTemplateRow { id: string; name: string; folderId?: string; templateV3?: unknown; docModel?: unknown; dataFields?: unknown[] }
 
@@ -19,6 +20,8 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
   const [folder, setFolder] = useState<string>("");
   const [newFolder, setNewFolder] = useState("");
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
+  const canShare = useSharingAvailable();
+  const shareButton = (row: SavedTemplateRow) => canShare ? <button type="button" title="Share a copy with people you are connected to" className="shrink-0 rounded-lg border border-ink/10 px-2 py-1 text-[11px] font-semibold text-soft-ink hover:border-[var(--accent)]/50 hover:text-ink" onClick={() => requestShare({ kind: "template", id: row.id, name: row.name })}>Share…</button> : null;
 
   const folders = useMemo(() => [...new Set([...templates.map(templateFolderOf).filter(Boolean), ...extraFolders])].sort(), [templates, extraFolders]);
   const createFolder = () => { const name = newFolder.trim(); if (!name) return; setExtraFolders((current) => [...new Set([...current, name])]); setFolder(name); setNewFolder(""); };
@@ -76,6 +79,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
                 <button type="button" onClick={() => onOpen(row)} className="block w-full text-left"><TemplateThumbnail template={row} width={170} /><p className="m-0 mt-2 truncate text-sm font-semibold text-ink">{row.name}</p><p className="m-0 mt-0.5"><KindChip row={row} /></p><p className="m-0 mt-0.5 text-[11px] text-soft-ink">{(row.dataFields || []).length} fields{templateFolderOf(row) ? ` · ${templateFolderOf(row)}` : ""}</p><AgentChips names={compatibleAgentNames(row, agents)} /></button>
                 <div className="mt-1 flex items-center gap-1">
                   {onMoveToFolder ? <select className="min-w-0 flex-1 rounded-lg border border-ink/10 px-2 py-1 text-[11px] text-soft-ink" value={templateFolderOf(row)} onChange={(event) => onMoveToFolder(row, event.target.value)}><option value="">Unfiled</option>{folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}</select> : null}
+                  {shareButton(row)}
                   {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg border border-ink/10 text-xs text-soft-ink hover:border-[rgba(215,0,21,0.4)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${row.name}"? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
                 </div>
               </div>
@@ -99,6 +103,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
                   <span className="truncate text-sm font-semibold text-ink">{row.name} <KindChip row={row} />{templateFolderOf(row) ? <span className="ml-2 text-xs font-normal text-soft-ink">📁 {templateFolderOf(row)}</span> : null}</span>
                   <span className="shrink-0 text-xs text-soft-ink">{(row.dataFields || []).length} fields</span>
                 </button>
+                {shareButton(row)}
                 {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${row.name}"? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
               </div>
             ))}

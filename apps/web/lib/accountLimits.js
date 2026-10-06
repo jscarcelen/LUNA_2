@@ -17,7 +17,9 @@ export const limits = {
   resendByAddress: createRateLimiter({ limit: 10, windowMs: HOUR }),
   settingsWrongGuesses: createRateLimiter({ limit: 5, windowMs: QUARTER }),
   /** Emails sent to other people, per sender. */
-  notifyBySender: createRateLimiter({ limit: 20, windowMs: HOUR })
+  notifyBySender: createRateLimiter({ limit: 20, windowMs: HOUR }),
+  /** "X shared an agent/template/component with you" emails: 3 an hour per sharer and person. */
+  shareCopyByPair: createRateLimiter({ limit: 3, windowMs: HOUR })
 };
 
 export function clearAccountLimits() {

@@ -244,6 +244,7 @@ export function AppShell({ account = null, initialPage = "" }) {
           onRemoveSubject={handleRemoveSubject}
           onCreateFolder={handleCreateFolder}
           onMoveFolder={handleMoveFolder}
+          onMoveDocuments={handleMoveDocuments}
           onAddTopicTag={handleAddTopicTag}
           onRenameFolder={handleRenameFolder}
           onRemoveFolder={handleRemoveFolder}
@@ -453,8 +454,32 @@ export function AppShell({ account = null, initialPage = "" }) {
     }
   }
 
-  async function handleMoveFolder(folderId, newParentFolderId) {
-    await runWorkspaceAction("moveFolder", { folderId, newParentFolderId });
+  // Moves a folder (and everything in it) under another folder, or to the root of any topic of the workspace.
+  // Returns what moved ({ folders, documents, name, renamed, notes, previous... }), or { error } when it was refused.
+  async function handleMoveFolder(folderId, newParentFolderId, options = {}) {
+    if (!folderId) return null;
+    const result = await postWorkspaceAction("moveFolder", {
+      workspaceId: selectedWorkspaceId,
+      folderId,
+      newParentFolderId: newParentFolderId || "",
+      targetSubjectId: options.targetSubjectId || "",
+      nextName: options.nextName || ""
+    });
+    return result.ok ? result.data.moved || null : { error: String(result.data?.error || "The move did not go through.") };
+  }
+
+  // Moves documents (ids stay the same) to a folder, or the root of a topic, of the workspace.
+  async function handleMoveDocuments(documentIds, options = {}) {
+    const ids = (Array.isArray(documentIds) ? documentIds : [documentIds]).filter(Boolean);
+    if (!ids.length) return null;
+    const result = await postWorkspaceAction("moveDocument", {
+      workspaceId: selectedWorkspaceId,
+      documentIds: ids,
+      targetSubjectId: options.targetSubjectId || "",
+      targetFolderId: options.targetFolderId || "",
+      targetFolderIds: Array.isArray(options.targetFolderIds) ? options.targetFolderIds : []
+    });
+    return result.ok ? result.data.moved || null : { error: String(result.data?.error || "The move did not go through.") };
   }
 
   async function handleCreateSubject(name) {

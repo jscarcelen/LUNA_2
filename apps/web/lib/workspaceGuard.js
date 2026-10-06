@@ -16,8 +16,8 @@ import { isProtectedTag, isSharedDocument, sharedEditAllowed, SHARED_SUBJECT_NAM
 
 const REFERENCE_KEYS = {
   workspaceIds: ["workspaceId"],
-  subjectIds: ["subjectId"],
-  folderIds: ["folderId", "parentFolderId", "newParentFolderId"],
+  subjectIds: ["subjectId", "targetSubjectId"],
+  folderIds: ["folderId", "parentFolderId", "newParentFolderId", "targetFolderId"],
   documentIds: ["documentId"]
 };
 
@@ -29,15 +29,15 @@ export function referencesIn(payload = {}) {
   return {
     workspaceIds: pick(REFERENCE_KEYS.workspaceIds),
     subjectIds: pick(REFERENCE_KEYS.subjectIds),
-    folderIds: uniq([...pick(REFERENCE_KEYS.folderIds), ...(Array.isArray(payload.folderIds) ? payload.folderIds : [])]),
-    documentIds: pick(REFERENCE_KEYS.documentIds)
+    folderIds: uniq([...pick(REFERENCE_KEYS.folderIds), ...(Array.isArray(payload.folderIds) ? payload.folderIds : []), ...(Array.isArray(payload.targetFolderIds) ? payload.targetFolderIds : [])]),
+    documentIds: uniq([...pick(REFERENCE_KEYS.documentIds), ...(Array.isArray(payload.documentIds) ? payload.documentIds : [])])
   };
 }
 
 const NOT_YOURS = { ok: false, status: 404, error: "That item was not found in your workspace." };
 const deny = (error) => ({ ok: false, status: 403, error });
 
-const RESTRUCTURE_ACTIONS = new Set(["renameSubject", "removeSubject", "createFolder", "renameFolder", "moveFolder", "removeFolder", "addTopicTag", "renameTopicTag", "removeTopicTag", "uploadDocuments"]);
+const RESTRUCTURE_ACTIONS = new Set(["renameSubject", "removeSubject", "createFolder", "renameFolder", "moveFolder", "moveDocument", "removeFolder", "addTopicTag", "renameTopicTag", "removeTopicTag", "uploadDocuments"]);
 const FOLDER_ACTIONS = new Set(["renameFolder", "moveFolder", "removeFolder"]);
 const FROZEN_DOCUMENT_ACTIONS = new Set(["renameDocument", "removeDocument", "updateDocumentContent", "reviewDocumentExtraction", "reprocessDocument"]);
 
@@ -88,6 +88,9 @@ export function authorizeWorkspaceAction({ action, payload = {}, ownerUserId, fa
   const sharedCopy = document && isSharedDocument({ tags: document.tags });
 
   if (sharedCopy && FROZEN_DOCUMENT_ACTIONS.has(action)) return deny(SHARED_DOCUMENT_MESSAGE);
+
+  // Moving documents (one or a selection): a received copy stays where the sender's topic put it, and nothing is filed into "Shared documents".
+  if (action === "moveDocument" && refs.documentIds.some((id) => isSharedDocument({ tags: facts.documents.get(id)?.tags || [] }) || sharedSubject(facts.documents.get(id)?.subjectId))) return deny(SHARED_DOCUMENT_MESSAGE);
 
   if (action === "updateGeneratedDocument" && sharedCopy) {
     const file = payload.file || {};

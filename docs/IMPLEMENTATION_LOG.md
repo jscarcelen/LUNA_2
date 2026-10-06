@@ -1,5 +1,32 @@
 # Implementation Log
 
+## 2026-10-05 (moving between topics)
+
+### Folders and documents can move to any topic or folder
+
+- **Before**: drag and drop worked only inside one topic ("0 items moved · 1 left where they were (they
+  belong to another top-level folder)"), there was no way to move on a phone, and `moveFolder` only wrote
+  `parent_folder_id`.
+- **Server** (`lib/workspaceMove.js`, wired through `moveFolder` / new `moveDocument` in
+  `lib/workspacesRepository.js` and API actions `moveFolder`, `moveDocument` in `app/api/workspaces-supabase/route.js`;
+  the guard in `lib/workspaceGuard.js` reads `targetSubjectId`, `targetFolderId(s)` and `documentIds`, and refuses
+  received read-only copies and the "Shared documents" topic). Same workspace only. Across topics: documents, the
+  folder subtree, `document_chunks`, `attempts` and `study_plans` rows take the new `subject_id`; the topic's own
+  tags are re-created in the target topic; a document's notes file and attempt records (unfiled documents naming it
+  in their JSON) travel with it; document ids never change. A folder cannot go into its own subtree; a name clash
+  becomes "Name (2)"; the topic skeleton is not moved; a plan's folder (or plan document) goes under the target's
+  "Study plans" with its quizzes. Writes go through a journal: undo steps are registered before each change and run
+  in reverse on failure ("nothing was changed"). Warnings name plans that still point at documents that left.
+- **UI** (`modules/workspace/ui/WorkspaceBrowser.js`, `MoveDialog.js`, `modules/workspace/moveModel.js`): the refusal is
+  gone; drop on any folder or topic; per-row checkbox + "Move to…" for a selection; ⋯ → "Move to…" on documents and
+  folders (the folder ⋯ menu now also carries New subfolder / Rename / Delete, which had been hover-only);
+  `FolderPicker` gained `disabledIds` and draws topics as roots; the status line says what moved and offers **Undo**.
+- **Tests**: `tests/workspace/*` (subtree, cycle, name clash, rollback ordering and idempotent undo against an
+  in-memory Supabase fake; guard rules; client model).
+- **Not done / limits**: no migration needed. The plans page only resolves documents of its own topic, so a plan left
+  behind shows a moved document as missing (the move warns about it). Undo of a folder move restores the folder and
+  its name; extra links a document had to folders outside the moved tree are not restored.
+
 ## 2026-10-05 (landing page + Luna logo)
 
 ### New public page, one logo everywhere

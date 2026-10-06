@@ -1,4 +1,5 @@
 import { renderInline } from "./markdown.js";
+import { linkSourceBlocks } from "../ai-tools/pipeline/sourceLinks.js";
 
 /**
  * A generated document as reading HTML: the typed blocks of a block agent (or the items of a quiz
@@ -10,7 +11,9 @@ const text = (value) => (value === undefined || value === null ? "" : Array.isAr
 
 const CALLOUT_LABEL = { info: "Info", tip: "Tip", warning: "Careful", note: "Note", important: "Important" };
 
-export function blocksToReaderHtml(blocks = [], { title = "" } = {}) {
+export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "" } = {}) {
+  // Source tags ("[D1 p.3]") become links to the original document (the app opens its reader at that page).
+  const blocks = linkSourceBlocks(rawBlocks, linkBase);
   const out = [];
   let hasTitle = false;
   let table = [];
@@ -76,6 +79,7 @@ export function blocksToReaderHtml(blocks = [], { title = "" } = {}) {
 
 export const READER_CSS = `
 .md h1{font-size:2em;margin-top:.2em}
+.md a[data-luna-source]{color:#0071e3;text-decoration:none}.md a[data-luna-source]:hover{text-decoration:underline}
 .md .md-sub{color:#6e6e73;margin-top:-.3em}
 .md .md-list-title{font-weight:650;margin-bottom:0}
 .md .md-callout{margin:1em 0;padding:12px 16px;border-radius:14px;background:#f5f5f7;border-left:4px solid #0071e3}

@@ -16,6 +16,7 @@ import { compileForSave } from "../adapters/agentTemplate";
 import { fieldsFromAgentFields, slug } from "../engine/model";
 import { templateFromFields } from "../engine/autoTemplate";
 import { bestSentences, headingFor, locateSource, sourceUrl, terms, type SourcePassage } from "../../activities/engine/activity";
+import { linkSourceBlocks, originalLinks } from "../../ai-tools/pipeline/sourceLinks.js";
 import { localizeTemplate, wordsFor, type LabelLanguage } from "./labels";
 import { PALETTES } from "../engine/design";
 import type { DataObject, Element, GroupElement, Template } from "../engine/types";
@@ -375,7 +376,10 @@ function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string
   const url = found.passage.documentId
     ? sourceUrl({ documentId: found.passage.documentId, chunkIndex: found.passage.chunkIndex, extract: found.extract }, linkBase)
     : "";
-  return { text: quote ? `${label} — “${quote}”` : label, url };
+  // A master document says which original each statement came from: those originals get links too.
+  const originals = found.passage.originals?.length ? originalLinks(found.passage.content, found.extract, found.passage.originals, linkBase) : "";
+  const cite = quote ? `${label} — “${quote}”` : label;
+  return { text: originals ? `${cite} → ${originals}` : cite, url };
 }
 
 /**
@@ -385,7 +389,8 @@ function sourceFor(block: FlatBlock, passages: SourcePassage[], linkBase: string
  */
 export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitle?: string; subject?: string; agentName?: string; framed?: boolean; passages?: SourcePassage[]; linkBase?: string; language?: LabelLanguage }): OutputPlan | null {
   let title = input.title || "";
-  let incoming = input.blocks.filter((block) => block && typeof block.type === "string");
+  // Source tags ("[D1 p.3]") become links that open the original document at that place.
+  let incoming = (linkSourceBlocks(input.blocks, input.linkBase || "") as FlatBlock[]).filter((block) => block && typeof block.type === "string");
   // A document gets a page header (title) and footer by default — unless the AI wrote its own header.
   const wantsFrame = !input.framed;
   const hasOwnHeader = incoming.some((block) => block.type === "document_header" || block.type === "exam_header");

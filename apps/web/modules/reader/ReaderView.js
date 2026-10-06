@@ -9,6 +9,8 @@ import { htmlToMarkdown } from "./documentView";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { DownloadPanel } from "./DownloadPanel";
 import { AskLuna } from "../chat/AskLuna";
+import { parseSourceHref } from "../ai-tools/pipeline/sourceLinks.js";
+import { SourcePeek } from "./SourcePeek";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -27,7 +29,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onOpenSource, scrollTo = null }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -43,6 +45,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [articleKey, setArticleKey] = useState(0);
+  // A source link clicked inside the page: the host opens the document (onOpenSource) or it is shown over this screen.
+  const [peek, setPeek] = useState(null);
   const listRef = useRef(list);
   const onSaveRef = useRef(onSaveHighlights);
   listRef.current = list;
@@ -89,6 +93,22 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     return () => { window.clearTimeout(timer); observer.disconnect(); };
   }, [list, noting, html, playable]);
   useEffect(() => () => clearHighlights(), []);
+
+  // Opened from a source tag: go to the page (or the section) the tag names.
+  useEffect(() => {
+    if (!scrollTo || !html) return undefined;
+    const timer = window.setTimeout(() => {
+      const root = rootRef.current;
+      if (!root) return;
+      let element = scrollTo.page ? root.querySelector(`[data-page="${Number(scrollTo.page)}"]`) : null;
+      if (!element && scrollTo.section) {
+        const wanted = String(scrollTo.section).toLowerCase();
+        element = [...root.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((heading) => String(heading.textContent || "").toLowerCase().includes(wanted)) || null;
+      }
+      element?.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [scrollTo, html]);
 
   // Notes and highlights save by themselves a moment after the last change, and when the reader is closed.
   useEffect(() => {
@@ -194,6 +214,15 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
 
   // Tapping a highlight opens its note.
   function onPageClick(event) {
+    const link = event.target?.closest?.("a[data-luna-source]");
+    if (link) {
+      const target = parseSourceHref(link.getAttribute("href"));
+      if (target?.documentId) {
+        event.preventDefault();
+        if (onOpenSource) onOpenSource(target); else setPeek(target);
+        return;
+      }
+    }
     if (!noting || !rootRef.current || window.getSelection()?.toString()) return;
     const hit = highlightAt(rootRef.current, list, event.clientX, event.clientY);
     if (hit) { setNotesOpen(true); setFocusId(hit.id); }
@@ -324,6 +353,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         ) : null}
         {askOn ? <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="aside" launcherClassName={notesOpen && noting ? "lg:right-[21rem]" : ""} /> : null}
       </div>
+      {peek ? <SourcePeek target={peek} onClose={() => setPeek(null)} /> : null}
       {toolbar ? (
         <div className="fixed z-[62] flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]" style={{ left: toolbar.x, top: toolbar.y }} onMouseDown={(event) => event.preventDefault()}>
           {HIGHLIGHT_COLORS.map((entry) => <button key={entry.id} type="button" title={entry.label} aria-label={`Highlight ${entry.label}`} onClick={() => apply(entry.id)} className="size-6 rounded-full border border-ink/15 transition hover:scale-110" style={{ background: entry.css }} />)}

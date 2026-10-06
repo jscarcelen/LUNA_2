@@ -457,6 +457,24 @@ export const REQUESTS = [
     ]
   },
   {
+    id: "A12", stage: "agents", name: "Summary Notes Consolidator · repair broken formulas", status: "live",
+    purpose: "Last, optional pass of the Summary Notes Consolidator: every formula in the finished notes is checked with KaTeX; the ones local fixes (delimiters, doubled backslashes, Unicode maths, missing braces) cannot rescue are sent in ONE small batched request to be rewritten as valid LaTeX.",
+    why: "Source PDFs often carry maths as flattened text and models copy it. A formula that does not render would show as broken markup in the HTML, PDF and slides, so it is repaired or, failing that, shown as a code span.",
+    position: "Once per consolidation, after the sections are merged, only when at least one formula is still invalid after the local repairs (most runs never make this request).",
+    trigger: "Summary Notes Consolidator · master document of a plan",
+    file: SRC.consolidator, anchor: /const FIX_SYSTEM_PROMPT/,
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: 3000, format: "JSON schema (strict): fixes [{ id, latex }]", streaming: false },
+    input: "System prompt + the list of failed formulas (up to 40 per request, no surrounding text).",
+    output: "One corrected formula per id, accepted only if KaTeX renders it.",
+    fallbacks: "A formula that still fails is shown as a code span, never as broken markup. Without an OpenAI key only the local repairs run.",
+    tokens: { basis: "estimated", typical: { in: 700, out: 400 }, scale: null },
+    seconds: { typical: 4, note: "estimate" },
+    prompts: [
+      { label: "System prompt", file: SRC.consolidator, re: /const FIX_SYSTEM_PROMPT = `([\s\S]*?)`;/ }
+    ]
+  },
+  {
     id: "A6", stage: "agents", name: "Legacy quiz endpoint", status: "legacy",
     purpose: "The original quiz generator route. The product now uses A1 through the shared agent flow; this endpoint is kept but not called by the UI.",
     why: "Historical.",
@@ -698,7 +716,7 @@ export const NODES = [
   { id: "run", col: 6, lane: 0, label: "Run an agent", sub: "choices + material", phase: "agents" },
   { id: "retr", col: 7, lane: 1, label: "Retrieve passages", sub: "≤ 48k characters", phase: "agents" },
   { id: "agent", col: 7, lane: 2, label: "Agent generates JSON", sub: "Luna 3 Pro (default) / Max", reqs: ["A1", "A2", "A3", "A7"], phase: "agents" },
-  { id: "master", col: 7, lane: 3, label: "Master document", sub: "2+ documents → one, traced", reqs: ["A9", "A10", "A11"], phase: "agents" },
+  { id: "master", col: 7, lane: 3, label: "Master document", sub: "2+ documents → one, traced", reqs: ["A9", "A10", "A11", "A12"], phase: "agents" },
   { id: "tpl", col: 8, lane: 1, label: "Template Studio engine", sub: "HTML · PDF · DOCX · PPTX", phase: "agents" },
   { id: "design", col: 8, lane: 2, label: "AI template design", sub: "optional", reqs: ["T1", "T2", "T3", "T4"], phase: "design" },
   { id: "res", col: 9, lane: 3, label: "Resources", sub: "quiz · flashcards · summary", phase: "agents" },
@@ -739,8 +757,8 @@ export const COMPARISON_NOTES = [
 
 export const PROCESS = [
   { n: 1, id: "upload", title: "Upload", color: "#0071e3", line: "Bring your material in.", body: "PDF, Word, slides, photos or handwritten notes. Every file is read in full — text, headings, formulas, tables, figures — split into searchable passages and mapped into a tree of concepts.", out: "Searchable library + concept map", ai: "U1–U7" },
-  { n: 2, id: "plan", title: "Study plan", color: "#2f9e5b", line: "Turn material and a deadline into a schedule.", body: "Pick what to study and when the exam is. LUNA schedules reading, practice, spaced repetition and a final review. Add material later and only the unfinished work is re-planned. With two or more documents the first thing built is a master document that merges them (every fact once, each statement traced to its original), and the plan's quizzes cite it.", out: "Dated steps, goals, concept tags, master document", ai: "P1–P3 · A9–A11" },
-  { n: 3, id: "agents", title: "Agents", color: "#8a4fd6", line: "Create practice that complements the plan.", body: "Pre-built agents (quizzes, flashcards, summaries) or your own, built in four steps. They read your material, answer your settings and produce documents in the formats you pick in Template Studio.", out: "Quizzes · flashcards · summaries · consolidated notes · worksheets", ai: "A1–A5 · A9–A11 · T1–T4" },
+  { n: 2, id: "plan", title: "Study plan", color: "#2f9e5b", line: "Turn material and a deadline into a schedule.", body: "Pick what to study and when the exam is. LUNA schedules reading, practice, spaced repetition and a final review. Add material later and only the unfinished work is re-planned. With two or more documents the first thing built is a master document that merges them (every fact once, each statement traced to its original), and the plan's quizzes cite it.", out: "Dated steps, goals, concept tags, master document", ai: "P1–P3 · A9–A12" },
+  { n: 3, id: "agents", title: "Agents", color: "#8a4fd6", line: "Create practice that complements the plan.", body: "Pre-built agents (quizzes, flashcards, summaries) or your own, built in four steps. They read your material, answer your settings and produce documents in the formats you pick in Template Studio.", out: "Quizzes · flashcards · summaries · consolidated notes · worksheets", ai: "A1–A5 · A9–A12 · T1–T4" },
   { n: 4, id: "market", title: "Marketplace", color: "#e0730f", line: "Sell what you built, if you want to.", body: "Agents, templates, resources and plans can be listed. Buyers pay in lunas; sellers earn lunas, which they can spend on AI or (planned) cash out.", out: "Lunas earned from sales", ai: "none" }
 ];
 

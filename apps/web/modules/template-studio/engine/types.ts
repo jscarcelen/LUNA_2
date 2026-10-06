@@ -259,6 +259,8 @@ export interface SchemaNode {
 
 /* ---------------------------------------------------------------- layout output (what renderers draw) */
 
+import type { RichLine } from "./math/richLayout";
+
 export interface LaidOutTextItem {
   type: "text";
   x: number; y: number; w: number; h: number;
@@ -270,6 +272,13 @@ export interface LaidOutTextItem {
   elementId: ID;
   /** Where the text links to, when its element has a link field with a value. */
   href?: string;
+  /**
+   * Present when the text carries formulas or links: the same lines as segments (prose, raw LaTeX,
+   * `[label](url)` links) with the height each line was given, so renderers can typeset the maths
+   * (KaTeX in HTML, the box typesetter in PDF) and draw the links. `lines` always holds the plain
+   * Unicode version for renderers that cannot.
+   */
+  math?: { lines: RichLine[] };
 }
 export interface LaidOutImageItem { type: "image"; x: number; y: number; w: number; h: number; style: Style; src: string; elementId: ID }
 export interface LaidOutRectItem { type: "rect"; x: number; y: number; w: number; h: number; style: Style; elementId: ID; ellipse?: boolean }

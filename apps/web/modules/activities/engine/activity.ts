@@ -251,7 +251,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
 
 /* ---------------------------------------------------------------- source citations */
 
-export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string; page?: number | null; pageEnd?: number | null }
+export interface SourcePassage { documentId?: string; documentName: string; chunkIndex: number; content: string; heading?: string; page?: number | null; pageEnd?: number | null; /** For a master document: the original documents it consolidates. */ originals?: { id: string; name: string }[] }
 
 const STOP = new Set(["the", "a", "an", "of", "and", "or", "is", "are", "to", "in", "on", "for", "with", "that", "this", "it", "as", "by", "be", "which", "what", "de", "la", "el", "los", "las", "que", "y", "en", "un", "una"]);
 export const terms = (value: string) => [...new Set(String(value || "").toLowerCase().split(/[^a-z0-9áéíóúüñ]+/).filter((word) => word.length > 3 && !STOP.has(word)))];

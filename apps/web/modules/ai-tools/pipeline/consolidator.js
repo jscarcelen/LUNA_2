@@ -1,6 +1,7 @@
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
 import { conformBlocks } from "../blocks/blockRegistry.js";
 import { formatSourceTag } from "./masterDocument.js";
+import { codeSpanInvalid, invalidFormulas, isValidTex, repairMathText, replaceFormula } from "../../template-studio/engine/math/repair";
 
 /**
  * Summary Notes Consolidator — the pipeline behind the agent that merges several documents into ONE
@@ -406,6 +407,81 @@ export function missingFormulas(chunks = [], blocks = []) {
   return missing;
 }
 
+/* ------------------------------------------------------------------ valid maths in the notes */
+
+const MATH_FIELDS = ["text", "term", "meaning", "detail"];
+const MATH_FIX_MAX_TOKENS = 3000;
+const MATH_FIX_BATCH = 40;
+
+const FIX_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: { fixes: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: { type: "string" }, latex: { type: "string" } }, required: ["id", "latex"] } } },
+  required: ["fixes"]
+};
+
+const FIX_SYSTEM_PROMPT = `You repair LaTeX formulas so that they compile in KaTeX. You receive a list of formulas that failed, each with an id. For every one return the corrected formula: the same mathematical meaning, written as standard LaTeX WITHOUT dollar signs or any other delimiter, and no explanation. If the item is plain text or Unicode maths, rewrite it as LaTeX (S²ₓ → S_x^2, √ → \\sqrt{}, x̄ → \\bar{x}, ∑ᵢ₌₁ⁿ → \\sum_{i=1}^{n}, (a)/(b) → \\frac{a}{b}). Use only standard commands (\\frac, \\sqrt, \\sum, \\int, \\bar, \\hat, \\alpha, \\leq, \\pm, \\cdot, \\text{...}, \\begin{pmatrix}...). Return JSON: { "fixes": [ { "id": "...", "latex": "..." } ] }. Output only JSON.`;
+
+/** Every string of a note block that can hold maths, as [read, write] pairs. */
+function mathSlots(block) {
+  const slots = [];
+  for (const key of MATH_FIELDS) if (typeof block[key] === "string" && block[key]) slots.push([() => block[key], (value) => { block[key] = value; }]);
+  for (const bullet of block.bullets || []) if (bullet?.text) slots.push([() => bullet.text, (value) => { bullet.text = value; }]);
+  return slots;
+}
+
+/**
+ * Makes every formula in the notes valid LaTeX that KaTeX renders: canonical delimiters, flattened
+ * Unicode maths rebuilt, doubled backslashes and Unicode inside the dollars fixed, stray dollars
+ * escaped (`repairMathText`). Formulas the local fixes cannot save are sent, in ONE small batched
+ * request, to the model (when `ask` is given); whatever still fails is shown as a code span rather
+ * than as broken markup. Returns new blocks (the input is not changed) and what was done.
+ */
+export async function repairNotesMath(blocks = [], { ask = null } = {}) {
+  const copy = blocks.map((block) => ({ ...block, bullets: block.bullets ? block.bullets.map((bullet) => ({ ...bullet })) : block.bullets }));
+  const stats = { repaired: 0, invalid: 0, modelFixed: 0, codeSpans: 0, modelCalls: 0 };
+  const slots = copy.flatMap(mathSlots);
+  const pending = [];
+  for (const [read, write] of slots) {
+    const before = read();
+    if (!/[$\\\u0080-￿]|\)\s*\/\s*\(/.test(before)) continue;
+    const fixed = repairMathText(before);
+    if (fixed.changed) { write(fixed.text); stats.repaired += 1; }
+    for (const formula of fixed.invalid) pending.push({ formula, write, read });
+  }
+  stats.invalid = pending.length;
+  if (pending.length && ask) {
+    const unique = [...new Set(pending.map((entry) => entry.formula.tex))].slice(0, MATH_FIX_BATCH * 3);
+    for (let from = 0; from < unique.length; from += MATH_FIX_BATCH) {
+      const batch = unique.slice(from, from + MATH_FIX_BATCH);
+      try {
+        stats.modelCalls += 1;
+        const result = await ask({ system: FIX_SYSTEM_PROMPT, user: JSON.stringify({ formulas: batch.map((latex, index) => ({ id: `F${from + index + 1}`, latex })) }), schema: FIX_SCHEMA, schemaName: "formula_fixes", maxTokens: MATH_FIX_MAX_TOKENS });
+        for (const fix of Array.isArray(result?.parsed?.fixes) ? result.parsed.fixes : []) {
+          const index = Number(String(fix?.id || "").replace(/^F/, "")) - 1;
+          const original = unique[index];
+          const latex = String(fix?.latex || "").replace(/^\$+|\$+$/g, "").trim();
+          if (!original || !latex || !isValidTex(latex)) continue;
+          for (const entry of pending) {
+            if (entry.formula.tex !== original) continue;
+            entry.write(replaceFormula(entry.read(), original, latex));
+          }
+          stats.modelFixed += 1;
+        }
+      } catch {
+        // The model is only a second chance: a failed request leaves the code-span fallback to do its job.
+      }
+    }
+  }
+  for (const [read, write] of slots) {
+    const value = read();
+    if (!invalidFormulas(value).length) continue;
+    write(codeSpanInvalid(value));
+    stats.codeSpans += 1;
+  }
+  return { blocks: copy, stats };
+}
+
 /* ------------------------------------------------------------------ prompts */
 
 const NOTE_FORMAT = `Block types for "blocks":
@@ -417,7 +493,7 @@ const NOTE_FORMAT = `Block types for "blocks":
 Set every field a type does not use to null.`;
 
 const COMPLETENESS_RULES = `1. COMPLETENESS: keep every distinct fact, definition, rule, theorem, step, worked example, date, name, number, formula, table row and figure description. Condense the wording, never the information. Do not summarise detail away and do not add anything that is not in the material.
-2. FORMULAS: every formula stays, in LaTeX, copied exactly: inline $...$ or display $$...$$ (never describe a formula in words instead). Keep the meaning of its variables next to it.
+2. FORMULAS: write EVERY mathematical expression as valid LaTeX — inline between single dollar signs, or display between double dollar signs for important or long formulas (definitions, results, anything with a fraction, sum, integral, root or matrix). This holds even when the material gives the maths as plain text, Unicode or a flattened line from a PDF: reconstruct it as LaTeX. For example "S²ₓ" becomes $S_x^2$; "(1)/(n-1) ∑ᵢ₌₁ⁿ(xᵢ − x̄)²" becomes $\\frac{1}{n-1}\\sum_{i=1}^{n}(x_i-\\bar{x})^2$; √ becomes \\sqrt{...}; x̄ becomes \\bar{x}; ± becomes \\pm; ≤ becomes \\leq; Greek letters become \\alpha, \\sigma, \\mu...; sub- and superscripts become _{...} and ^{...}. Never mix plain-text maths with LaTeX in one expression, never put a sentence inside the dollars (use \\text{...} only for a short label), and never describe a formula in words instead. Keep each formula complete, in ONE block and ONE piece (never split a formula across bullets or blocks), and keep the meaning of its variables next to it. A currency amount is written "5 USD" or \\$5, never with a bare dollar sign.
 3. TABLES: keep every row and every column. Tables of up to three columns become table_row blocks (introduce the table in a paragraph that names its columns); a wider table becomes a bullet_list with one bullet per row, each bullet naming the value of every column ("Row label — Column 2: x; Column 3: y").
 4. FIGURES: a line like ![description](…) is a figure, chart, graph, diagram or scheme. Never drop it: write what it shows (type, axes, series, key values, labels, the point it makes) and its caption in a callout of type note that starts with "Figure:". Never print file paths or URLs.
 5. SOURCES: every block (every bullet in a list) lists in "sources" the sourceIds of ALL the passages it was written from — at least one, only ids present in the input. When overlapping information from several passages is merged into one statement, list all of them.`;
@@ -665,6 +741,14 @@ export async function runConsolidation({ documents = [], options = {}, deps = {}
   emit({ step: "generate", status: "progress", phase: "check", done: 0, total: 1, label: "Checking that nothing is missing" });
   const text = stringsFor(options.language);
   const documentTitle = title || (docs.length === 1 ? docs[0].name.replace(/\.[^.]+$/, "") : docs.slice(0, 3).map((doc) => doc.name.replace(/\.[^.]+$/, "")).join(" · "));
+  // Every formula must be LaTeX that renders: repaired locally, then (one batched request) by the model, else shown as code.
+  const flat = sections.flatMap((section) => section.blocks);
+  const repaired = await repairNotesMath(flat, { ask: callModel ? ask : null });
+  stats.mathRepair = repaired.stats;
+  {
+    let at = 0;
+    for (const section of sections) { section.blocks = repaired.blocks.slice(at, at + section.blocks.length); at += section.blocks.length; }
+  }
   const body = [];
   for (const section of sections) {
     if (!section.blocks.length) continue;
@@ -673,14 +757,15 @@ export async function runConsolidation({ documents = [], options = {}, deps = {}
   let finalBlocks = body;
   const absent = missingFormulas(chunks, finalBlocks);
   if (absent.length) {
-    const extra = absent.slice(0, 80).map(({ formula, sid }) => ({ type: "paragraph", text: `$$${formula}$$`, sources: [sid] }));
+    const extra = (await repairNotesMath(absent.slice(0, 80).map(({ formula, sid }) => ({ type: "paragraph", text: `$$${formula}$$`, sources: [sid] })))).blocks;
     finalBlocks = [...body, { type: "section_header", title: text.extra, intro: text.extraIntro }, ...notesToBlocks(extra, byId)];
   }
   const cited = citedSources(sections.flatMap((section) => section.blocks));
   const header = [
     { type: "document_header", title: documentTitle },
     { type: "callout", text: text.intro(docs.length), callout_type: "info" },
-    { type: "bullet_list", title: text.key, items: docs.map((doc) => `${doc.tag} — ${doc.name} (${text.passages(doc.chunkCount)})`) }
+    // `_docs` lets the output turn each document's name in the key into a link that opens the original.
+    { type: "bullet_list", title: text.key, items: docs.map((doc) => `${doc.tag} — ${doc.name} (${text.passages(doc.chunkCount)})`), _docs: docs.map((doc) => ({ tag: doc.tag, id: doc.id, name: doc.name })) }
   ];
   const blocks = conformBlocks([...header, ...finalBlocks]);
   const coverage = { passages: chunks.length, passagesCited: [...allIds].filter((id) => cited.has(id)).length, formulasMissingAfterMerge: absent.length, formulasAppended: Math.min(absent.length, 80) };

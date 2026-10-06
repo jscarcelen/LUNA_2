@@ -2,6 +2,7 @@ import Link from "next/link";
 import { loadWorkspaceTreeForAi } from "../../modules/ai-tools/pipeline/workspaceSource.js";
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "../../modules/ai-tools/pipeline/chunking.js";
 import { MARKDOWN_CSS, markdownToHtml } from "../../modules/reader/markdown.js";
+import { pickPassage } from "../../modules/reader/sourceTarget.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,10 @@ export default async function SourcePage({ searchParams }) {
   const documentId = String(params?.d || "").trim();
   const chunkNumber = Math.max(1, Number(params?.c) || 1);
   const quote = String(params?.q || "").slice(0, 400);
+  // `p=<page>` and `s=<section>` open the passage that holds that page or sits under that heading (the source tags of consolidated notes).
+  const pageNumber = Math.max(0, Number(params?.p) || 0);
+  const section = String(params?.s || "").slice(0, 160);
+  const embed = String(params?.embed || "") === "1";
 
   let documentName = "";
   let chunks = [];
@@ -43,7 +48,7 @@ export default async function SourcePage({ searchParams }) {
       chunks = chunkDocuments([{ ...document, documentId: document.id, documentName }], { chunkWords: DEFAULT_CHUNK_WORDS, overlapWords: DEFAULT_OVERLAP_WORDS });
     }
   }
-  let index = Math.min(chunkNumber, chunks.length) - 1;
+  let index = Math.max(0, pickPassage(chunks, { chunk: chunkNumber, page: pageNumber, section }));
   // The words are the reliable address: if the document was re-chunked or edited since the link was
   // made, open the passage that really contains the quote.
   if (quote && chunks.length && !(chunks[index] && findQuote(String(chunks[index].content || ""), quote))) {
@@ -67,17 +72,17 @@ export default async function SourcePage({ searchParams }) {
 
   const content = String(chunk.content || "");
   const heading = Array.isArray(chunk.headingPath) && chunk.headingPath.length ? chunk.headingPath.join(" › ") : chunk.section || "";
-  const link = (n) => `/source?d=${encodeURIComponent(documentId)}&c=${n}`;
+  const link = (n) => `/source?d=${encodeURIComponent(documentId)}&c=${n}${embed ? "&embed=1" : ""}`;
 
   return (
-    <main style={page}>
-      <div style={card}>
+    <main style={embed ? { ...page, minHeight: 0, padding: "12px 8px" } : page}>
+      <div style={embed ? { ...card, boxShadow: "none", border: "none", padding: "8px 16px" } : card}>
         <p style={kicker}>Source passage</p>
         <h1 style={{ margin: "8px 0 2px", fontSize: 24, letterSpacing: "-0.01em" }}>{documentName}</h1>
         <p style={{ margin: 0, color: "#6e6e73", fontSize: 14 }}>{heading ? `${heading} · ` : ""}{chunk.page ? (chunk.pageEnd && chunk.pageEnd !== chunk.page ? `pages ${chunk.page}–${chunk.pageEnd} · ` : `page ${chunk.page} · `) : ""}passage {chunk.chunkIndex + 1} of {chunks.length}</p>
         <style dangerouslySetInnerHTML={{ __html: MARKDOWN_CSS }} />
         <div className="md" style={{ marginTop: 20, padding: "8px 22px 14px", background: "#fff", borderRadius: 14, border: "1px solid rgba(0,0,0,0.06)" }} dangerouslySetInnerHTML={{ __html: markdownToHtml(content, { quote }) }} />
-        <script dangerouslySetInnerHTML={{ __html: "document.getElementById('quote')&&document.getElementById('quote').scrollIntoView({block:'center'})" }} />
+        <script dangerouslySetInnerHTML={{ __html: `var t=document.getElementById('quote')${pageNumber ? `||document.getElementById('page-${pageNumber}')` : ""};t&&t.scrollIntoView({block:'${pageNumber && !quote ? "start" : "center"}'})` }} />
         <nav style={{ display: "flex", justifyContent: "space-between", gap: 12, marginTop: 20, fontSize: 14 }}>
           {index > 0 ? <Link href={link(index)} style={{ color: "#0071e3" }}>← Previous passage</Link> : <span />}
           <Link href="/" style={{ color: "#6e6e73" }}>Back to LUNA</Link>

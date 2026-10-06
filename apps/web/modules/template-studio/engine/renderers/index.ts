@@ -5,7 +5,7 @@ import { flattenFields } from "../model";
 // The v2 renderers already draw laid-out pages; v3 produces the same page/item shape.
 import { renderDocHtml, renderDocPdfBuffer, renderDocDocxBuffer, renderDocPptxBuffer } from "../../../ai-tools/render/docRenderers.js";
 
-export interface RenderOptions { layoutId?: ID; viewId?: ID | null; showFieldMarkers?: boolean; /** Field names or ids to outline in the preview. */ highlightFields?: string[] }
+export interface RenderOptions { layoutId?: ID; viewId?: ID | null; showFieldMarkers?: boolean; /** Source links post a message to the hosting page (the app opens its reader) instead of only opening a tab. */ interactiveLinks?: boolean; /** Field names or ids to outline in the preview. */ highlightFields?: string[] }
 
 /** Field names the caller gave (template slot names) resolved to the ids the layout items carry. */
 function highlightIds(template: Template, names: string[] = []): string[] {
@@ -32,7 +32,7 @@ export function exportersFor(layoutClass: LayoutClass): ExportFormat[] {
 
 export function renderHtml(template: Template, data: DataObject, options: RenderOptions = {}): { html: string; pageCount: number; overflows: number } {
   const prelaid = toRenderable(template, data, options);
-  return { html: renderDocHtml({}, data, { showFieldMarkers: Boolean(options.showFieldMarkers), prelaid, highlight: highlightIds(template, options.highlightFields) }), pageCount: prelaid.pages.length, overflows: prelaid.result.overflows.length };
+  return { html: renderDocHtml({}, data, { showFieldMarkers: Boolean(options.showFieldMarkers), prelaid, highlight: highlightIds(template, options.highlightFields), interactiveLinks: Boolean(options.interactiveLinks) }), pageCount: prelaid.pages.length, overflows: prelaid.result.overflows.length };
 }
 export async function renderPdf(template: Template, data: DataObject, options: RenderOptions = {}): Promise<Buffer> {
   const prelaid = toRenderable(template, data, options);

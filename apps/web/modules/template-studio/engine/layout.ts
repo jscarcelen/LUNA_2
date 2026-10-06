@@ -3,7 +3,9 @@ import type {
   TextElement
 } from "./types";
 import { findField } from "./model";
-import { resolveFieldValue, resolveSource, resolveView, richTextToLines, valueToText, type Scope } from "./resolve";
+import { resolveFieldValue, resolveSource, resolveView, richSegments, richTextToLines, valueToRaw, valueToText, type Scope } from "./resolve";
+import { layoutRich } from "./math/richLayout";
+import type { RichSeg } from "./math/richText";
 import { deriveData } from "./derive";
 
 const MM_PER_PT = 0.352778;
@@ -81,14 +83,46 @@ function fitFont(paragraphs: string[], style: LaidOutTextItem["style"], widthMm:
   return { fontSize, lines: paragraphs.flatMap((line) => wrapText(line, widthMm, fontSize, bold)) };
 }
 
+/** `fitFont` for text with formulas: same rules (shrink for a word wider than the box, or on a slide for height), tall formulas included. */
+function fitRich(paragraphs: RichSeg[][], style: LaidOutTextItem["style"], widthMm: number, heightMm: number) {
+  const designed = style.fontSize;
+  const bold = style.fontWeight === "bold";
+  const floor = Math.max(5, designed * 0.6);
+  const longest = Math.max(0, ...paragraphs.flat().filter((seg) => seg.t !== "math").flatMap((seg) => (seg.t === "text" || seg.t === "link" ? seg.text.split(/\s+/) : [])).map((word) => word.length));
+  let fontSize = designed;
+  for (;;) {
+    const laid = layoutRich(paragraphs, { fontSize, fontWeight: style.fontWeight, lineHeight: style.lineHeight }, widthMm);
+    const avgCharMm = fontSize * MM_PER_PT * (bold ? 0.55 : 0.5);
+    const wordFits = longest * avgCharMm <= widthMm + 0.01;
+    const heightFits = heightMm <= 0 || laid.height <= Math.max(heightMm, lineHeightMm({ ...style, fontSize })) + 0.6;
+    if ((wordFits && heightFits) || fontSize <= floor) return { ...laid, fontSize };
+    fontSize = Math.round((fontSize - 0.5) * 10) / 10;
+  }
+}
+
 function textItem(element: TextElement, x: number, y: number, scopes: Scope[], ctx: Ctx): Laid {
   const { value, isField } = resolveSource(ctx.fields, element.source, scopes);
   const designedStyle = { fontFamily: "sans", fontSize: 11, fontWeight: "normal", color: "#1d1d1f", align: "left", lineHeight: 1.35, ...element.style } as LaidOutTextItem["style"];
   const hasValue = !isField || value !== undefined;
   if (element.collapseEmpty && isField && value !== undefined && !valueToText(value).trim()) return { items: [], bottom: y, right: x + element.frame.w, height: 0 };
-  const raw = isField && value === undefined ? (element.placeholder ? element.placeholder : `{${fieldName(ctx.fields, element)}}`) : valueToText(value);
-  const paragraphs = element.format === "rich" ? richTextToLines(raw) : raw.split(/\r?\n/);
+  const placeholderText = isField && value === undefined ? (element.placeholder ? element.placeholder : `{${fieldName(ctx.fields, element)}}`) : null;
+  const raw = placeholderText ?? valueToText(value);
   const room = ctx.slides ? Math.max(element.frame.h, (ctx.contentBottom ?? y + element.frame.h) - y) : 0;
+  // Formulas and links keep their LaTeX / address next to the measured lines, so the renderers can typeset them.
+  const richParagraphs = placeholderText === null ? richSegments(valueToRaw(value), element.format === "rich") : null;
+  const carriesRich = Boolean(richParagraphs?.some((segments) => segments.some((seg) => seg.t !== "text")));
+  if (carriesRich && richParagraphs) {
+    const rich = fitRich(richParagraphs, designedStyle, element.frame.w, room);
+    const style = { ...designedStyle, fontSize: rich.fontSize };
+    const height = Math.max(element.frame.h, rich.height + 1);
+    const link = element.linkFieldId ? resolveFieldValue(ctx.fields, element.linkFieldId, scopes) : undefined;
+    // A text that has links of its own cannot also be one big link (anchors do not nest): its own win.
+    const ownLinks = rich.rich.some((line) => line.segs.some((seg) => seg.t === "link"));
+    const wholeHref = !ownLinks && typeof link === "string" && /^https?:\/\//i.test(link.trim()) && rich.lines.join("").trim() ? link.trim() : undefined;
+    const item: LaidOutTextItem = { type: "text", x, y, w: element.frame.w, h: height, style, lines: rich.lines, math: { lines: rich.rich }, isField, fieldId: element.source.type === "field" ? element.source.fieldId : undefined, hasValue, elementId: element.id, ...(wholeHref ? { href: wholeHref } : {}) };
+    return { items: [item], bottom: y + height, right: x + element.frame.w, height };
+  }
+  const paragraphs = element.format === "rich" ? richTextToLines(raw) : raw.split(/\r?\n/);
   const fitted = fitFont(paragraphs, designedStyle, element.frame.w, room);
   const style = { ...designedStyle, fontSize: fitted.fontSize };
   const lines = fitted.lines;

@@ -25,17 +25,19 @@ export function normaliseMath(value) {
 
 export function renderInline(text) {
   const maths = [];
-  let source = normaliseMath(text).replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
+  // `\$` is a literal dollar sign (a price), not the start of a formula.
+  let source = normaliseMath(String(text ?? "").replace(/\\\$/g, "")).replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
   source = source.replace(/\$(?!\s)([^$\n]*?[^\s$])\$(?!\d)/g, (match, latex) => (/^\s|\s$/.test(latex) || /^\d/.test(latex) && !/[\\^_{}=+\-*/]/.test(latex) ? match : (maths.push(renderMath(latex, false)), `\uE000${maths.length - 1}\uE001`)));
   let html = escapeHtml(source);
   html = html
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => `<span class="md-figure">Figure${alt ? `: ${alt}` : ""}</span>`)
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>')
+    // Links to the original documents (`/source?d=…&p=…`) carry a mark: inside the app they open the reader at that page.
+    .replace(/\[([^[\]]+)\]\((https?:[^)\s]+|\/source\?[^)\s]+)\)/g, (_, label, href) => `<a href="${href}" target="_blank" rel="noreferrer"${/\/source\?/.test(href) ? " data-luna-source" : ""}>${label}</a>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
     .replace(/__([^_]+)__/g, "<strong>$1</strong>")
     .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<em>$2</em>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
-  return html.replace(/\uE000(\d+)\uE001/g, (_, index) => maths[Number(index)] || "");
+  return html.replace(/\uE000(\d+)\uE001/g, (_, index) => maths[Number(index)] || "").replace(/\uE002/g, "$");
 }
 
 const plain = (value) => String(value ?? "").toLowerCase().replace(/[*_`#>|$\\{}]/g, " ").replace(/^\s*(?:[-+]|\d+[.)])\s+/gm, " ").replace(/\s+/g, " ").trim();
@@ -75,7 +77,7 @@ export function markdownToHtml(markdown, { quote = "" } = {}) {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     const page = line.match(/^\s*<!--\s*page\s+(\d+)\s*-->\s*$/i);
-    if (page) { flushParagraph(); out.push(`<div class="md-page">Page ${page[1]}</div>`); continue; }
+    if (page) { flushParagraph(); out.push(`<div class="md-page" id="page-${page[1]}" data-page="${page[1]}">Page ${page[1]}</div>`); continue; }
     if (!line.trim()) { flushParagraph(); continue; }
 
     if (/^```/.test(line)) {

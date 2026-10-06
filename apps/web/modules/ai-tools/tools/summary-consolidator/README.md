@@ -52,6 +52,16 @@ a 3-column table row only); duplicates the model does not recognise as equal can
 near-duplicate bullets across *batches* of an oversized section are only merged while the second round
 shrinks them.
 
+## Valid maths in the notes
+
+The prompts require **every** mathematical expression as LaTeX (`$…$` inline, `$$…$$` for important or long formulas),
+reconstructed even when the source has plain/Unicode text (`S²ₓ` → `$S_x^2$`, `(1)/(n-1) ∑ᵢ₌₁ⁿ(xᵢ − x̄)²` →
+`\frac{1}{n-1}\sum_{i=1}^{n}(x_i-\bar{x})^2`), never mixed with plain text, never split across blocks, currency as USD or `\$`.
+Then `repairNotesMath` (`pipeline/consolidator.js`, rules in `template-studio/engine/math/repair.ts`) checks the result:
+`\(…\)`/`\[…\]` → dollars, doubled backslashes, Unicode inside the dollars, flattened maths lifted into `$…$`, braces,
+stray `$` escaped; **every formula is validated by running KaTeX** (`throwOnError`). Formulas no local fix saves go to the
+model in one small batched request (dashboard request A12, only if a key is set); what still fails is shown as a code span.
+
 ## Provenance in the output
 
 Every unit of text ends with a visible tag — `[D1 p.3 · D2 §Osmosis]` — and a **source key** at the top
@@ -59,6 +69,13 @@ lists `D1 — Biology notes.docx`, … . The blocks also carry the same places a
 suffixes) and `_refs` (document id/name, page, heading, passage), one entry per paragraph / bullet /
 table row. `pipeline/masterDocument.js` turns the blocks into Markdown with each tag expanded to the
 full document names, which is how retrieval, `/source` and the chat read a master document.
+
+**Links to the originals** (`pipeline/sourceLinks.js`): each part of a tag becomes a link — `[D1 p.3]` →
+`/source?d=<document>&p=3`, `[D2 §Osmosis]` → `…&s=Osmosis` — using the unit's `_refs`; the source key (`_docs`) links each
+document's name. HTML (preview, download), PDF (clickable), PPTX/DOCX hyperlinks and the reader all show them. Inside the app a
+click opens the original at that page (`ReaderView` `onOpenSource` → `DocumentReader` `scrollTo`, else a `SourcePeek` overlay);
+`/source` accepts `p=<page>`, `s=<section>`, `c=<passage>` (`reader/sourceTarget.js`), `embed=1` for the overlay. Quizzes and
+summaries made from a master document also link the originals their quoted passage names (`originalLinks`).
 
 ## Master document of a study plan
 

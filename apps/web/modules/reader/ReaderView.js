@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { activityLook, outputTitle, resourceBlocks } from "../resources/look";
 import { MARKDOWN_CSS, renderMath } from "./markdown";
 import { htmlToMarkdown } from "./documentView";
@@ -287,7 +288,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         <div className="min-w-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect} onClick={onPageClick}>
           <div ref={rootRef}>
             {playable
-              ? <ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} />
+              ? <ErrorBoundary onClose={onClose} title="This activity hit a problem"><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
               : html
                 ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
                 : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read here.</p>}

@@ -1,6 +1,7 @@
 import type { AgentSpec, ContextSlot, ExampleDef, InputDef, InputType, ValidationRule } from "./types";
 import type { FieldDef } from "./types";
 import { createField, createId } from "../../template-studio/engine/model";
+import { QUIZ_AGENT } from "../../ai-tools/tools/quiz-generator/quizAgent";
 
 export { createField, createId };
 
@@ -124,7 +125,8 @@ export function createQuizSpec(): AgentSpec {
   const spec = createAgentSpec("Quiz Generator");
   spec.purpose = { headline: "Quiz or exam questions", description: "Reads the documents you choose and writes exam-quality questions with answer options, the correct answer and a short explanation.", category: "Assessment" };
   spec.instructions = {
-    core: "You are an expert teacher writing assessment questions. Using ONLY the reference material, write clear, unambiguous questions at the requested difficulty and of the requested types. For multiple-choice give 4 options with exactly one correct answer and plausible distractors; for true/false give the two options; for short-answer give an empty options list and a model answer. Every item needs a one-sentence explanation of why the answer is correct and a short topic tag. Never repeat a question. Spread questions across the material rather than clustering on one passage.",
+    // One prompt for the built-in quiz agent, wherever it is built from.
+    core: QUIZ_AGENT.instructions,
     constraints: ["Return exactly the requested number of questions."]
   };
   const count = createInput("How many questions?", "number", { default: 10, min: 1, max: 50 });

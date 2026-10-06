@@ -998,3 +998,8 @@
 
 ## 2026-10-05 — Setup checklist
 - `docs/SETUP_CHECKLIST.md`: the steps only the owner can do (migrations, email provider, hand tests, first live runs, before real users).
+
+## 2026-10-06 (1) — Checking answers no longer closes the quiz; menu order; sharper quiz prompt
+- Bug: checking the answers of a quiz closed the window (the callers closed it from `onSubmit`, which fires when the answers are checked). The Study plans and Workspace callers now keep it open; "Done" closes it. A broken activity shows a message with a way out instead of taking the page down (`ui/ErrorBoundary.js`, `app/error.js`).
+- Menu: Activities sits under Study plans.
+- Quiz Generator prompt: one checkable answer per question, no broad "explain/discuss" questions (bounded answers with a stated length), rules for multiple choice (no negative stems, same-category distractors), true/false, calculations and the three difficulty levels. The Agent Studio quiz spec uses the same text.

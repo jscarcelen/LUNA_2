@@ -1153,7 +1153,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 await saveAttempt(attempt, playing.documentId);
                 const row = plans.find((r) => r.document.id === playing.planDocumentId);
                 if (row) save({ ...row.plan, items: row.plan.items.map((entry) => entry.id === playing.itemId ? { ...entry, doneAt: new Date().toISOString() } : entry) }, playing.planDocumentId);
-                setPlaying(null);
+                // The window stays open: checking the answers is when the learner reads what was right and wrong.
               }}
               onClose={() => setPlaying(null)}
             />

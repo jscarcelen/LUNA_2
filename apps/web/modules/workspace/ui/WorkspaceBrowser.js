@@ -417,7 +417,7 @@ export function WorkspaceBrowser({
   async function saveAttempt(attempt, documentId) {
     const row = rowsByDocumentId.get(documentId);
     const content = JSON.stringify({ kind: "attempt", activityDocumentId: documentId, activityId: row?.resource.activity?.id || "", attempt }, null, 2);
-    setPlaying(null);
+    // The window stays open after checking: that is when the answers are read.
     try {
       await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Activity"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }, row?.document.subjectId);
       setStatus(`Saved: ${attempt.score}/${attempt.total}.`);

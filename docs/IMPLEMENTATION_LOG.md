@@ -1,5 +1,17 @@
 # Implementation Log
 
+## 2026-10-06 (metaprompt pass over the app's prompts)
+
+- `CLAUDE.md` gets a "Prompt quality" rule (every user prompt is sharpened silently before acting) and the full method lives in
+  `.claude/skills/metaprompt/SKILL.md`, with a "LUNA prompts" section for prompts that ship in the app.
+- Rewritten with the same method (data in XML tags above the task, explicit output format, positive rules each with a reason,
+  self-check; **no schema, field, model or parameter changed**): agent improvers (refine A4, improve A5, iterate A7, vague
+  instructions → rules A3), study plans (generate P1, re-plan P2, update P4), concept maps (resource concepts P3, document concept
+  tree U7), performance coach F1, written-answer grading F2 (wording only), Ask Luna chat A8, Template Studio T1-T4.
+- Left alone on purpose (tuned over many sessions, no live run here): agent-run prompts A1/A2, consolidator A9-A12, extraction/OCR U1-U6.
+- Not yet run against the live model: first runs should be compared with the previous dashboard version's prompts.
+- `docs/dashboard/manifest.mjs`: regexes for A4, A5, P1-P4, U7 follow the new prompt wrappers (`dashboard:check` 0 warnings).
+
 ## 2026-10-07 (groups, deadline origin, exam dates)
 
 ### Groups of students, "who set this deadline", exam dates

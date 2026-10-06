@@ -203,7 +203,7 @@ export const REQUESTS = [
     seconds: { typical: 9, note: "measured: 7.9–9.8 s" },
     prompts: [
       { label: "System prompt", file: SRC.concepts, re: /const SYSTEM_PROMPT = `([\s\S]*?)`;/ },
-      { label: "User message", file: SRC.concepts, re: /\{ role: "user", content: (`DOCUMENT TEXT:[^`]*`) \}/ },
+      { label: "User message", file: SRC.concepts, re: /\{ role: "user", content: (`<document>[^`]*`) \}/ },
       { label: "Output schema", file: SRC.concepts, re: /const EXTRACTION_SCHEMA = (\{[\s\S]*?\n\});/ }
     ]
   },
@@ -225,7 +225,7 @@ export const REQUESTS = [
     seconds: { typical: 5, note: "measured 4.7 s for 9 steps" },
     prompts: [
       { label: "System prompt", file: SRC.generate, re: /content: `(You are a study planner\.[\s\S]*?)`\n          \},/ },
-      { label: "User message", file: SRC.generate, re: /content: (`Deadline: \$\{deadline\}[^`]*`)/ }
+      { label: "User message", file: SRC.generate, re: /content: (`<today>\$\{today\}<\/today>[\s\S]*?`)\n          \}\n        \]/ }
     ]
   },
   {
@@ -244,7 +244,7 @@ export const REQUESTS = [
     seconds: { typical: 8, note: "estimate" },
     prompts: [
       { label: "System prompt", file: SRC.revise, re: /content: `(You are a study planner re-planning[\s\S]*?)`\n          \},/ },
-      { label: "User message", file: SRC.revise, re: /content: (`Today: \$\{today\}[^`]*`)/ }
+      { label: "User message", file: SRC.revise, re: /content: (`<today>\$\{today\}<\/today>[\s\S]*?`)\n          \}\n        \]/ }
     ]
   },
   {
@@ -263,7 +263,7 @@ export const REQUESTS = [
     seconds: { typical: 8, note: "estimate" },
     prompts: [
       { label: "System prompt", file: SRC.planUpdate, re: /content: `(You are a study planner updating[\s\S]*?)`\n          \},/ },
-      { label: "User message", file: SRC.planUpdate, re: /content: (`Today: \$\{today\}[^`]*`)/ }
+      { label: "User message", file: SRC.planUpdate, re: /content: (`<today>\$\{today\}<\/today>[\s\S]*?`)\n          \}\n        \]/ }
     ]
   },
   {
@@ -281,8 +281,8 @@ export const REQUESTS = [
     tokens: { basis: "estimated", typical: { in: 1500, out: 450 }, scale: null },
     seconds: { typical: 5, note: "estimate" },
     prompts: [
-      { label: "System prompt", file: SRC.resConcepts, re: /\{ role: "system", content: "([^"]*)" \}/ },
-      { label: "User message", file: SRC.resConcepts, re: /\{ role: "user", content: (`Resource:[^\n]*`) \}\n/ }
+      { label: "System prompt", file: SRC.resConcepts, re: /\{ role: "system", content: `([\s\S]*?)` \},\n\s*\{ role: "user"/ },
+      { label: "User message", file: SRC.resConcepts, re: /\{ role: "user", content: (`<resource_name>[^\n]*`) \}\n/ }
     ]
   },
 
@@ -360,7 +360,7 @@ export const REQUESTS = [
     tokens: { basis: "estimated", typical: { in: 1300, out: 450 }, scale: null },
     seconds: { typical: 5, note: "estimate" },
     prompts: [
-      { label: "System prompt", file: SRC.refine, re: /\{ role: "system", content: "([^"]*)" \}/ },
+      { label: "System prompt", file: SRC.refine, re: /const REFINE_SYSTEM = `([\s\S]*?)`;/ },
       { label: "User message", file: SRC.refine, re: /(\{ role: "user", content: JSON\.stringify\(\{[^\n]*\}\) \})/ }
     ]
   },
@@ -379,7 +379,7 @@ export const REQUESTS = [
     tokens: { basis: "estimated", typical: { in: 1200, out: 250 }, scale: null },
     seconds: { typical: 4, note: "estimate" },
     prompts: [
-      { label: "System prompt", file: SRC.improve, re: /\{ role: "system", content: "([^"]*)" \}/ },
+      { label: "System prompt", file: SRC.improve, re: /const IMPROVE_SYSTEM = `([\s\S]*?)`;/ },
       { label: "User message", file: SRC.improve, re: /(\{ role: "user", content: JSON\.stringify\(\{[^\n]*\}\) \})/ }
     ]
   },

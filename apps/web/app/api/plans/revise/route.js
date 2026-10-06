@@ -72,9 +72,9 @@ export async function POST(request) {
     const kinds = scoped ? [...new Set(agents.flatMap((agent) => agent.makes))] : (Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"]);
     const schemaKeys = [...new Set([...kinds, ...pending.map((item) => item.generate).filter(Boolean)])];
     const agentSection = scoped && !agents.length
-      ? `\n\nThe learner allowed NO agents: do not ask Luna to generate any resource (generate must be empty on every step); schedule studying the material itself.`
+      ? `The learner allowed NO agents: Luna builds nothing, so generate is "" on every step and the plan schedules studying the material itself.`
       : agents.length
-      ? `\nAgents Luna may use (the learner's chosen scope; use only what is needed):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}\n`
+      ? `Agents Luna may use (the learner's chosen scope; use only what is needed, and nothing outside this list):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
       : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
     const performance = body?.performance || null;
@@ -84,9 +84,7 @@ export async function POST(request) {
     const history = performance
       ? `The learner has done ${performance.activities || 0} activities, averaging ${Math.round((performance.average || 0) * 100)}%.${(performance.weakConcepts || []).length ? ` They keep getting these wrong: ${performance.weakConcepts.slice(0, 12).join(", ")}.` : ""}`
       : "There is no performance history yet.";
-    const conceptSection = conceptMap.length
-      ? `\n\nConcept map (the ONLY allowed concept names for tags, used EXACTLY as written):\n${conceptMap.map((concept) => `- ${concept.name}${concept.topic ? ` (under: ${concept.topic})` : ""}`).join("\n")}`
-      : "";
+    const conceptList = conceptMap.map((concept) => `- ${concept.name}${concept.topic ? ` (under: ${concept.topic})` : ""}`).join("\n");
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -98,20 +96,24 @@ export async function POST(request) {
         messages: [
           {
             role: "system",
-            content: `You are a study planner re-planning an existing plan because new material was added.
-Hard rules:
-1. Work already DONE is fixed. Never schedule it again and never repeat it; use it only to avoid duplicating content.
-2. Schedule everything still to do — the pending steps and the steps for the new material — between ${today} and ${deadline}, at about ${minutesPerWeek} minutes a week and never more than 90 minutes on one day. If the time left cannot hold everything, shorten or drop the least important practice rather than overloading days.
-3. Keep each pending step that is still useful: return it with its keepId (you may move its date and change its minutes). Steps that Luna has already built (built=true) must be kept. Planned-but-unbuilt practice (built=false, generate set) may be replaced.
-4. For each NEW uploaded document add a reading step (generate "", sourceId = the document id) and practice generated from it, using only these kinds: ${kinds.join(", ")} (generate = the kind, sourceId = the document id). New GENERATED resources are already pending steps: keep them (keepId) and place them in the schedule.
-5. EXHAUSTIVE COVERAGE: every concept of the concept map must remain studied AND tested by a generated activity somewhere in the final schedule (done steps count). Each activity is generated from the concepts listed on its step with at least one question per concept, so list them; keep steps to 8 concepts at most and let the final exam list them all.
-5b. Space repetition, give weak concepts more time and earlier practice, and leave the last fifth of the remaining time for review and a practice exam instead of new content.
-6. Every step names the concepts it serves.${agentSection}${conceptSection}
-Dates are YYYY-MM-DD, between ${today} and ${deadline}.`
+            content: `You are a study planner re-planning an existing plan because new material was added. Schedule everything still to do, the pending steps and the steps for the new material, between ${today} and ${deadline}, without touching work that is already done. Return the JSON schema you are given: "newGoals" first, then "items" in date order, then the "note".
+
+<rules>
+1. Done work is fixed. Never schedule or repeat it; use it only to avoid duplicating content, because the learner already spent that time.
+2. Window and pace: every dueDate is YYYY-MM-DD from ${today} to ${deadline} inclusive, at about ${minutesPerWeek} minutes a week and at most 90 minutes on any one day, each step 15-90 minutes. If the time left cannot hold everything, shorten or drop the least important practice rather than overloading days, because an overloaded plan gets abandoned.
+3. Keep every pending step that is still useful: return it with its keepId (you may move its date and change its minutes). Steps Luna has already built (built=true) are always kept, because the learner's resource is attached to them. Planned-but-unbuilt practice (built=false, generate set) may be replaced.
+4. For each NEW uploaded document add a reading step (generate "", sourceId = the document id) and practice generated from it, using only these kinds: ${kinds.join(", ") || "none"} (generate = the kind, sourceId = the document id). New GENERATED resources already appear as pending steps: keep them (keepId) and place them in the schedule. New steps have an empty keepId.
+5. Exhaustive coverage: every concept of the concept map stays studied AND tested by a generated activity somewhere in the final schedule (done steps count). Each activity is generated from the concepts listed on its step with at least one question per concept, so list them; a step lists at most 8 concepts and the final exam lists them all.
+6. Spaced repetition: a topic comes back a few days later as a short check. Weak concepts get more time and earlier practice. The last fifth of the remaining time holds review and a practice exam, not new content, because the learner needs it to consolidate.
+7. Every step names the concepts it serves, using the concept map wording exactly as written, because the app matches them by name. Write titles, goals and the note in the language of the material.
+8. newGoals: 0-3 goals for the NEW material only, each naming the concepts it covers and a targetScore between 0 and 1; none when an existing goal already covers it. The note is two sentences to the learner: what changed in the plan and why.
+</rules>
+
+Before you answer, check: no done step appears in items; every built=true step is present with its keepId; every dueDate lies between ${today} and ${deadline}; no day exceeds 90 minutes; every concept of the map is studied and tested; every generate value is one of the allowed kinds. Fix what fails, then answer.`
           },
           {
             role: "user",
-            content: `Today: ${today}\nDeadlines: ${(body?.deadlines || []).map((d) => `${d.title} ${d.date}`).join("; ") || deadline}\n\n${history}\n\nALREADY DONE (fixed):\n${list(done, (item) => `- ${item.title} (${item.kind})${item.concepts?.length ? ` — ${item.concepts.join(", ")}` : ""}`)}\n\nPENDING STEPS (movable):\n${list(pending, (item) => `- [${item.id}] ${item.title} (${item.kind}, ${item.minutes} min, was due ${item.dueDate || "no date"}, built=${item.built}${item.generate ? `, generate=${item.generate}` : ""})${item.concepts?.length ? ` — ${item.concepts.join(", ")}` : ""}`)}\n\nNEW UPLOADED MATERIAL:\n${list(fresh, (item) => `- [${item.id}] ${item.name}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`)}\n\nExisting goals:\n${list(body?.goals || [], (goal) => `- ${goal.title}`)}${Object.keys(resourceNames).length ? `\n\nResource names:\n${Object.entries(resourceNames).map(([id, name]) => `- [${id}] ${name}`).join("\n")}` : ""}`
+            content: `<today>${today}</today>\n<deadlines>${(body?.deadlines || []).map((d) => `${d.title} ${d.date}`).join("; ") || deadline}</deadlines>\n\n<learner_history>\n${history}\n</learner_history>\n\n<done_fixed>\n${list(done, (item) => `- ${item.title} (${item.kind})${item.concepts?.length ? ` — ${item.concepts.join(", ")}` : ""}`)}\n</done_fixed>\n\n<pending_steps movable="true">\n${list(pending, (item) => `- [${item.id}] ${item.title} (${item.kind}, ${item.minutes} min, was due ${item.dueDate || "no date"}, built=${item.built}${item.generate ? `, generate=${item.generate}` : ""})${item.concepts?.length ? ` — ${item.concepts.join(", ")}` : ""}`)}\n</pending_steps>\n\n<new_uploaded_material>\n${list(fresh, (item) => `- [${item.id}] ${item.name}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`)}\n</new_uploaded_material>\n\n<existing_goals>\n${list(body?.goals || [], (goal) => `- ${goal.title}`)}\n</existing_goals>${Object.keys(resourceNames).length ? `\n\n<resource_names>\n${Object.entries(resourceNames).map(([id, name]) => `- [${id}] ${name}`).join("\n")}\n</resource_names>` : ""}${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${conceptList ? `\n\n<concept_map>\nThe only allowed concept names:\n${conceptList}\n</concept_map>` : ""}\n\nRe-plan everything still to do between ${today} and ${deadline} now.`
           }
         ]
       })

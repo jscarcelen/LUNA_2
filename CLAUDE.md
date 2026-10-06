@@ -7,6 +7,26 @@ functionality, tracking, revenue model, agent principles) and every change must 
 its alignment checklist. Invoke the `luna-vision` skill (`.claude/skills/luna-vision/SKILL.md`)
 before planning or implementing, and append any new founder context to that document.
 
+## Prompt quality — metaprompt on every request
+
+The user wants every prompt they write sharpened before it is acted on. The full method is the
+`metaprompt` skill (`.claude/skills/metaprompt/SKILL.md`; invoke it for an explicit "metaprompt this /
+mejora este prompt").
+
+For every non-trivial request, silently run its diagnosis (ambiguous intent, missing context, no output
+spec, hidden assumptions, vague criteria, buried instruction, no verification) and act on the sharpened
+version: infer the most useful reading of what was asked, break a blob into steps, and make "good / clear /
+detailed" concrete against `docs/LUNA_VISION.md` and the rules below. Do not add goals the user did not imply, and
+do not ask for clarification unless a critical fact is truly unknowable. If the reading you chose is not
+obvious, say it in one line before starting. Do not paste a rewritten prompt back unless the user asks for one.
+Answer in the language of the user's message.
+
+The same principles govern every prompt that **ships inside the app** (agent builder and its
+refine/improve/iterate improvers, study-plan generator/revise/update, concept maps, consolidator, coach,
+grading, template studio): data before task, XML tags, explicit output format, positive rules with a reason,
+reasoning before answer, self-check. See "LUNA prompts" in the skill, and run `npm run dashboard:check` after
+editing one (the dashboard extracts prompts from source).
+
 ## What LUNA is
 
 LUNA is an education platform where teachers, students and (eventually) parents upload course

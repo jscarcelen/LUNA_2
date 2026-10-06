@@ -123,26 +123,46 @@ export async function POST(request) {
     // 1. Improve the request into a complete brief for the document.
     const brief = await chat(apiKey, {
       name: "template_brief", schema: briefSchema(builtInBlocks().map((block) => block.name)), temperature: 0.2,
-      system: `You are the lead document designer of an education platform. A teacher describes the printable they want; you rewrite it as an exact brief and split the document into sections.
-Use the house components wherever they fit — they are already designed, consistent and tested, and a document built from them looks better than one drawn from scratch. For each section, name the catalogue block in reuseBlock and switch on the options it needs; only leave reuseBlock empty when the catalogue genuinely has nothing for that section, and then write a full design request for it.
+      system: `You are the lead document designer of an education platform. A teacher describes the printable they want; you rewrite it as an exact brief and split the document into sections, returned in the brief JSON. Work in this order: first improvedPrompt (resolve every ambiguity explicitly), then the canvas, palette and sections that follow from it.
 
-FORMAT RULES — honour the [Format: ...] tag in the user's prompt:
+Use the house components wherever they fit, because they are already designed, consistent and tested, and a document built from them looks better than one drawn from scratch. For each section, name the catalogue block in reuseBlock and switch on the options it needs; leave reuseBlock empty only when the catalogue genuinely has nothing for that section, and then write a full design request for it.
+
+<format_rules>
+Honour the [Format: ...] tag in the user's prompt, and always set canvas from it. "Slides" means slides-16-9, "US Letter" means letter-portrait, "A4" means a4-portrait, "Cards" means card-a6.
 - a4-portrait / letter-portrait: questions stack vertically; header has pageScope "first", footer pageScope "every"; repeating content has placement "flow"; HTML export mimics A4 but has no page breaks.
 - slides-16-9 / slides-4-3: each repeating item gets its own slide (placement "new_page"); header has pageScope "every"; no footer unless specifically asked; one idea per slide, large type.
 - card-a6: small cards, 2–4 per A4 page; each card is a self-contained item; no header/footer unless laminating separators are needed.
-Always set canvas from the [Format:] tag. If the user says "Slides" → slides-16-9. If "US Letter" → letter-portrait. If "A4" → a4-portrait. If "Cards" → card-a6.
+</format_rules>
 
-AUDIENCE RULES — honour the [Audience: ...] tag:
+<audience_rules>
+Honour the [Audience: ...] tag.
 - Kids: big type (≥11pt body), round cards (radius ≥6mm), playful emoji in badges, plenty of white space for writing, bright pastel colours.
 - Teens: clean structured cards, 9–10pt body, moderate radius, one accent colour, professional but approachable.
 - Adults: minimal, tight spacing, 8–9pt body, flat design, muted palette.
+</audience_rules>
 
-CATALOGUE OF COMPONENTS:
+<catalogue>
 ${catalogue}
+</catalogue>
 
-Design every section as a CARD, not as lines of text: say in each request which pastel fill and stroke the card uses, its radius, the badge or strip that carries the number or icon, the padding, and where the student writes. Decide the palette once in styleNotes and make the sections use it consistently (a different pastel per section, one accent for headings and badges). For children, make it playful: bigger type, rounder cards, a friendly emoji, plenty of writing space.
-Rules: exactly one section has repeats=true (the generated content) unless the document genuinely repeats nothing. A header is pageScope "first" (or "every" for slides), a footer is pageScope "every" and placement "fixed". Keep it to the fewest sections that do the job. Anything the AI writes is a field, never fixed text; anything the teacher writes every time is also a field. Give answer-bearing documents a second view that hides the answer fields. ${library}
-${DESIGN_RULES}`,
+<library>
+${library || "(the user has no saved templates or blocks)"}
+</library>
+
+Design every section as a CARD, not as lines of text: say in each request which pastel fill and stroke the card uses, its radius, the badge or strip that carries the number or icon, the padding, and where the student writes. Decide the palette once in styleNotes and make the sections use it consistently (a different pastel per section, one accent for headings and badges). For children, make it playful: bigger type, rounder cards, a friendly emoji, plenty of writing space. Each section request must be self-contained, because the designer who draws it does not see the rest of the document.
+
+Structure rules:
+- Exactly one section has repeats=true (the generated content), unless the document genuinely repeats nothing, because the platform generates one item per repeat.
+- A header is pageScope "first" (or "every" for slides); a footer is pageScope "every" and placement "fixed".
+- Use the fewest sections that do the job.
+- Anything the AI writes is a field, and anything the teacher writes every time is also a field; fixed text is only for wording that never changes.
+- Give answer-bearing documents a second view that hides the answer fields, so the teacher can print a student copy and an answer key.
+
+<design_rules>
+${DESIGN_RULES}
+</design_rules>
+
+Before answering, check that canvas matches the [Format:] tag, that exactly one section repeats, that every reuseBlock is an exact catalogue name (or empty), and that each section request names its colours, radius and badge.`,
       messages: [
         { role: "user", content: `Components you can use (choose by exact name in reuseBlock):\n${catalogue}` },
         image

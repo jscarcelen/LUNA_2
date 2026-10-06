@@ -76,9 +76,9 @@ export async function POST(request) {
     const agents = scoped ? body.agents.filter((agent) => agent?.id && Array.isArray(agent.makes) && agent.makes.length) : [];
     const kinds = scoped ? [...new Set(agents.flatMap((agent) => agent.makes))] : (Array.isArray(body?.kinds) && body.kinds.length ? body.kinds : ["quiz", "flashcards"]);
     const agentSection = scoped && !agents.length
-      ? `\n\nThe learner allowed NO agents: do not ask Luna to generate any resource (generate must be empty on every step); schedule studying the material itself.`
+      ? `The learner allowed NO agents: Luna builds nothing, so generate is "" on every step and the plan schedules studying the material itself.`
       : agents.length
-      ? `\n\nAgents Luna may use to build resources (the learner chose this scope; use only what the plan needs — you do not have to use all of them, and never anything else):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
+      ? `Agents Luna may use to build resources (the learner chose this scope; use only what the plan needs, not necessarily all of them, and nothing outside this list):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
       : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
     const performance = body?.performance || null;
@@ -96,8 +96,20 @@ export async function POST(request) {
     // Concept map: canonical set of concepts the plan may reference as tags.
     // Every concept map node must appear in at least one activity's concepts array.
     const conceptMap = Array.isArray(body?.conceptMap) ? body.conceptMap : [];
-    const conceptMapSection = conceptMap.length
-      ? `\n\nConcept map (CANONICAL — the ONLY allowed concept names, used EXACTLY as written):\n${conceptMap.map((c) => `- ${c.name}${c.topic ? ` (under: ${c.topic})` : ""}`).join("\n")}\n\nEXHAUSTIVE COVERAGE — the most important rule of this plan. The learner must be tested on EVERYTHING in the material, so:\n1. Every one of the ${conceptMap.length} concepts above must be STUDIED in a step and TESTED by at least one generated activity (quiz, exam, worksheet or flashcards). A concept that is only read is NOT covered.\n2. Each activity is generated from the concepts you list on its step, with at least one question per listed concept. A concept you leave out of every activity's "concepts" list gets no question at all.\n3. Keep each step to at most 8 concepts: group related concepts together and use more steps rather than overloading one.\n4. The final practice exam lists ALL ${conceptMap.length} concepts.\n5. Weak concepts are tested in at least two separate steps, spaced apart.\n6. Before you finish, fill the "coverage" ledger: one entry per concept, with the step that studies it and the activity step that tests it. If you cannot name a testing step for a concept, add a step.\n7. Use names EXACTLY as listed — no paraphrasing, no synonyms, no concepts that are not in the map.`
+    const conceptMapList = conceptMap.map((c) => `- ${c.name}${c.topic ? ` (under: ${c.topic})` : ""}`).join("\n");
+    const coverageRules = conceptMap.length
+      ? `
+
+<coverage_rules>
+Exhaustive coverage is the most important rule of this plan, because the learner must be tested on everything in the material. The ${conceptMap.length} concepts are listed in <concept_map> in the user message; they are the only allowed concept names.
+1. Every one of the ${conceptMap.length} concepts is STUDIED in a step and TESTED by at least one generated activity (quiz, exam, worksheet or flashcards). A concept that is only read is not covered.
+2. Each activity is generated from the concepts listed on its step, with at least one question per listed concept, so list them: a concept left out of every activity's "concepts" gets no question at all.
+3. A step lists at most 8 concepts. Group related concepts together and use more steps rather than overloading one, because a step with more cannot be finished in 90 minutes.
+4. The final practice exam lists ALL ${conceptMap.length} concepts.
+5. Weak concepts are tested in at least two separate steps, spaced apart, because one correct answer does not show they are fixed.
+6. Fill the "coverage" ledger before you finalise "items": one entry per concept, with the title of the step that studies it and of the activity step that tests it. If you cannot name a testing step for a concept, add a step.
+7. Write concept names exactly as listed, with no paraphrasing, synonyms or concepts outside the map, because the app matches them by name.
+</coverage_rules>`
       : "";
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -110,12 +122,29 @@ export async function POST(request) {
         messages: [
           {
             role: "system",
-            content: `You are a study planner. Turn material and a deadline into a schedule that a person can actually keep.
-Rules: spread the work from ${today} to ${deadline} at about ${minutesPerWeek} minutes a week, never more than 90 minutes on one day, and leave the last fifth of the time for review and a practice exam rather than new content. Space repetition: a topic studied once comes back a few days later as a short check. Weak concepts get more time and earlier practice than strong ones. Cover EVERYTHING: no part of the material may be left without practice. Only use these resource kinds when asking Luna to generate something: ${kinds.join(", ")}. Every step names the concepts it serves, using the concept wording given with the material so the plan links back to it. Dates are YYYY-MM-DD, between ${today} and ${deadline}.${agentSection}${conceptMapSection}`
+            content: `You are a study planner. Build a dated schedule the learner can actually keep, from the material, deadline and learner history in the user message. Return the JSON schema you are given; fill "goals" and "coverage" (the ledger) before "items".
+
+<rules>
+1. Dates: every dueDate is YYYY-MM-DD, from ${today} to ${deadline} inclusive. A step outside that window cannot be done before the exam.
+2. Workload: about ${minutesPerWeek} minutes a week in total, at most 90 minutes on any one day, each step 15-90 minutes. A plan that overloads a day gets abandoned, so use more days rather than longer days.
+3. Review window: the last fifth of the time before ${deadline} holds review and a practice exam only, never new content, because the learner needs those days to consolidate. The practice exam is the last step.
+4. Spaced repetition: a topic studied once comes back a few days later as a short check of 15-30 minutes, because recalling after a gap fixes it in memory better than rereading.
+5. Weak concepts get more minutes and earlier practice than strong ones, because that is where the score is gained. With no history, assume an average pace and check understanding early.
+6. Complete coverage: every part of the material gets practice, so that no part is only read.
+7. Generated resources: set generate only to one of these kinds: ${kinds.join(", ") || "none"}; use "" for steps that read or review existing material, because Luna can build only those kinds. When generate is set, sourceId is the id of the material it is built from.
+8. Concept tags: each goal and step names the concepts it serves, using the wording given with the material, so the plan links back to it.
+9. Language: write the name, note, goal titles and step titles in the language of the material, because the learner reads them as written.
+</rules>
+
+<step_format>
+A well-formed step has a title that says what to do and on what, starting with a verb or its type ("Read: osmosis and diffusion", "Quiz: the cell membrane"); one kind (read, activity, review or exam) that matches the title; a realistic number of minutes; a sourceId taken from the material list (empty only when no single document applies); the exact title of the goal it serves; and its concepts. The plan has 2-6 goals, each naming the concepts it covers and a targetScore between 0 and 1 (the share of questions the learner should get right). The note is two sentences to the learner: what the plan does and why it is spread this way.
+</step_format>${coverageRules}
+
+Before you answer, check the schedule against the rules: every dueDate lies between ${today} and ${deadline}; no day exceeds 90 minutes; the last fifth holds no new content; every generate value is allowed; every step's concepts come from the material and its goal is one of your goals${conceptMap.length ? "; the coverage ledger has one entry per concept and each tested concept has a real activity step" : ""}. Fix what fails, then answer.`
           },
           {
             role: "user",
-            content: `Deadline: ${deadline}\n\n${history}\n\nMaterial available:\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}`
+            content: `<today>${today}</today>\n<deadline>${deadline}</deadline>\n\n<learner_history>\n${history}\n</learner_history>\n\n<material>\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}\n</material>${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${conceptMapList ? `\n\n<concept_map>\n${conceptMapList}\n</concept_map>` : ""}\n\nBuild the study plan from ${today} to ${deadline} now.`
           }
         ]
       })

@@ -49,8 +49,21 @@ export async function POST(request) {
         temperature: 0.2,
         response_format: { type: "json_schema", json_schema: { name: "resource_concepts", strict: true, schema: SCHEMA } },
         messages: [
-          { role: "system", content: "You are a teacher cataloguing material for a study planner. List what a resource teaches as small, checkable learning goals — never a summary of the document, never one goal per question. Prefer the wording a syllabus would use, so the same goal from two different resources reads the same." },
-          { role: "user", content: `Resource: ${name}\nMaterial it came from: ${sources.join(", ") || "unknown"}\n\nQuestions it contains:\n${questions.map((question, index) => `${index + 1}. ${question}`).join("\n") || "(none)"}\n\nContent sample:\n${sample}` }
+          { role: "system", content: `You are a teacher cataloguing material for a study planner. Read the resource in the user message and list what it teaches as 3 to 12 small, checkable learning goals, after a one or two sentence "context" saying what the resource is about and where it sits in the subject.
+
+<what_a_goal_is>
+A goal is checkable when one question could test it and a learner could get that question right or wrong ("factorising quadratics", "parts of a plant cell"). Give each goal a name of 2-6 words, one short sentence of detail saying what the learner can do once they have it, and a level (remember, understand, apply or analyse) that matches what the questions actually ask of the learner.
+</what_a_goal_is>
+
+<rules>
+1. Write goals, never a summary of the document and never one goal per question: questions that test the same skill share one goal, because plans link resources through goals that several resources have in common.
+2. Use the wording a syllabus would use, in its general form ("factorising quadratics", not "factorising x^2 + 5x + 6"), because the same goal coming from two different resources must read the same.
+3. Base every goal on the questions and content sample given, because the person edits this list and goals the material does not support are noise.
+4. Write context, names and details in the language of the resource.
+</rules>
+
+Before you answer, check that each goal can be traced to the questions or the sample, that no two goals overlap, and that names are 2-6 words. Fix what fails, then answer.` },
+          { role: "user", content: `<resource_name>${name}</resource_name>\n<source_material>${sources.join(", ") || "unknown"}</source_material>\n\n<questions>\n${questions.map((question, index) => `${index + 1}. ${question}`).join("\n") || "(none)"}\n</questions>\n\n<content_sample>\n${sample}\n</content_sample>\n\nList what this resource teaches now.` }
         ]
       })
     });

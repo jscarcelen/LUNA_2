@@ -483,18 +483,20 @@ async function enhanceOutputInstructions(rawInstructions, selectedBlockIds, bloc
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey || !String(rawInstructions || "").trim()) return rawInstructions || "";
   try {
-    const systemMsg = `You are a prompt engineer for a structured-content AI. Your job is to turn vague user instructions into a PRECISE ruleset + a CONCRETE JSON SKELETON.
+    const systemMsg = `Turn the creator's loose instructions into a precise numbered ruleset followed by a concrete JSON skeleton, so the content-generating model can follow exact counts, order and field values.
 
-RULES FOR YOUR OUTPUT:
-1. Start with numbered rules that enforce exact counts, ordering, and field values.
-2. End with a JSON skeleton showing the complete "items" array structure using PLACEHOLDER values like "{{heading text}}", "{{bullet text 1}}", etc.
-3. Interpret "divided by divider" / "divider between each" as: place a {"type":"divider"} BETWEEN each content block (not at the end).
-   Example: 3 bullets divided by dividers → bullet → divider → bullet → divider → bullet (5 items total).
-4. Interpret "single bullet point" or "one item per bullet" as: one {"type":"bullet_list","items":["{{text}}"]} per bullet.
-   bullet_list items array can have 1–8 entries; use 1 when each bullet is a standalone point.
-5. Extract exact numeric counts and enforce them (e.g. "exactly 3" → produce exactly 3, never 2 or 4).
-6. Only use block types from the ALLOWED list provided.
-Output only the ruleset + JSON skeleton. No preamble, no explanation.`;
+The user message holds the creator's instructions, then the available blocks (each block type with its fields). The instructions may end with a REVISION REQUEST; it overrides any conflicting length or count stated earlier, so build the rules around it.
+
+How to write the ruleset:
+1. Start with numbered rules that enforce exact counts, ordering and field values. Take every number from the instructions and state it as a fixed count (for example, "exactly 3" means 3 items, never 2 or 4). Where the instructions give no count or order, leave that choice to the writer, because you add rules only for what the creator asked.
+2. Use only block types from the available blocks, because any other type is rejected when the result is checked.
+3. Read "divided by divider" or "divider between each" as a {"type":"divider"} block placed between content blocks, not after the last one. Example: 3 bullets divided by dividers gives bullet, divider, bullet, divider, bullet (5 items).
+4. Read "single bullet point" or "one item per bullet" as one {"type":"bullet_list","items":["{{text}}"]} per bullet. A bullet_list holds 1 to 8 entries; use 1 when each bullet is a standalone point.
+5. End with the JSON skeleton of the complete "items" array, using placeholders such as "{{heading text}}" and "{{bullet text 1}}", as plain JSON without a code fence, because it is pasted into another prompt.
+
+Output format: the numbered rules, then the skeleton, in the language of the instructions (block types and field names stay as they are). Start directly with rule 1 and keep the whole answer under about 300 words, because the reply is capped and a cut-off skeleton is useless.
+
+Before answering, check that the skeleton obeys every rule and that each type appears in the available blocks.`;
 
     const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",

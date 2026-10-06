@@ -191,7 +191,17 @@ function geometryIssues(dsl) {
 export async function designComponent({ apiKey, prompt, previous = null, image = "", context = "", maxHeight = 120 }) {
   const plan = await chat(apiKey, {
     name: "component_plan", schema: PLAN_SCHEMA, temperature: 0.2,
-    system: `You are a senior worksheet designer for an education platform. Turn the user's request into an exact component specification that a builder can draw without guessing. Resolve ambiguity with sensible assumptions and state them. Decide what repeats (the list and its item fields) and what appears once. Compute the grid: columns, cell width = 186/columns − 3 mm, cell height that comfortably fits the content, coordinates for every element. ${DESIGN_RULES}`,
+    system: `You are a senior worksheet designer for an education platform. Turn the user's request into an exact component specification that a builder can draw without guessing, because the builder follows your numbers literally and cannot ask questions.
+1. Interpret the request: resolve ambiguity with sensible assumptions and state them in the interpretation.
+2. Decide what repeats (the list and its item fields) and what appears once.
+3. Compute the grid: columns, cell width = 186/columns − 3 mm, a cell height that comfortably fits the content, and coordinates in mm for every element.
+4. Write the checks the final design must satisfy.
+
+<design_rules>
+${DESIGN_RULES}
+</design_rules>
+
+Before answering, check that every element of one item sits inside its cell, that every item field has a place in the layout, and that sampleCount matches the grid.`,
     messages: [
       ...(context ? [{ role: "system", content: context }] : []),
       ...(previous ? [{ role: "assistant", content: `Current component: ${JSON.stringify(previous)}` }] : []),
@@ -203,8 +213,14 @@ export async function designComponent({ apiKey, prompt, previous = null, image =
 
   const built = await chat(apiKey, {
     name: "component", schema: DSL_SCHEMA, temperature: 0.3,
-    system: `You build the component exactly as specified in the plan, in the DSL. "elements" describe ONE item; "header" the once-only part above. Unused DSL keys must be "" / 0 / false (never omitted). ${DESIGN_RULES}`,
-    messages: [{ role: "user", content: `PLAN:\n${JSON.stringify(plan)}\n\nUSER REQUEST:\n${prompt}` }]
+    system: `You build the component exactly as specified in the plan (in the user message), in the DSL, because the plan was already checked for geometry and the user's request is only there to settle details the plan leaves open. "elements" describe ONE item; "header" is the once-only part above it. Give every DSL key a value: use "" / 0 / false for the ones a design does not need, because the strict schema rejects a missing key.
+
+<design_rules>
+${DESIGN_RULES}
+</design_rules>
+
+Before answering, check that every field named in the plan has an element, that all coordinates are in mm inside the cell, and that no two texts overlap.`,
+    messages: [{ role: "user", content: `<plan>\n${JSON.stringify(plan)}\n</plan>\n\n<user_request>\n${prompt}\n</user_request>\n\nDraw the component from the plan.` }]
   });
   if (built.list && !built.list.sampleCount && plan.sampleCount) built.list.sampleCount = plan.sampleCount;
   if (built.list && plan.derive && !built.list.derive) built.list.derive = plan.derive;
@@ -215,8 +231,14 @@ export async function designComponent({ apiKey, prompt, previous = null, image =
   if (issues.length) {
     const fixed = await chat(apiKey, {
       name: "component_review", schema: REVIEW_SCHEMA, temperature: 0.2,
-      system: `You are the design reviewer. Return the corrected DSL (same shape, all keys present) fixing every listed issue while keeping the plan's intent. ${DESIGN_RULES}`,
-      messages: [{ role: "user", content: `PLAN:\n${JSON.stringify(plan)}\n\nDSL:\n${JSON.stringify(dsl)}\n\nISSUES:\n- ${issues.join("\n- ")}` }]
+      system: `You are the design reviewer. Return the corrected DSL (same shape, all keys present) that fixes every listed issue and keeps the plan's intent, because the issues were found by exact geometry checks and the plan is what the user approved. Change only the elements the issues point at (move, resize or widen them) and leave the rest as it is, so that fixes do not create new overlaps. List what you changed in issuesFixed.
+
+<design_rules>
+${DESIGN_RULES}
+</design_rules>
+
+Before answering, re-check each listed issue against your corrected coordinates: no two texts overlap, every text is wide enough for its characters, and every element is inside the cell.`,
+      messages: [{ role: "user", content: `<plan>\n${JSON.stringify(plan)}\n</plan>\n\n<dsl>\n${JSON.stringify(dsl)}\n</dsl>\n\n<issues>\n- ${issues.join("\n- ")}\n</issues>\n\nReturn the corrected DSL.` }]
     });
     dsl = normalise({ ...fixed, name: fixed.name || dsl.name }, maxHeight);
   }

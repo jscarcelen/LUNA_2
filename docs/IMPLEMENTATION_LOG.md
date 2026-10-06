@@ -1065,3 +1065,7 @@
 ## 2026-10-06 (2) — Plans follow moved documents; Share on phone
 - Study plans look their material up across the whole workspace (a document moved to another topic still opens from the plan and keeps its attempts); lists, pickers and filing stay inside the topic.
 - Folder ⋯ menu has "Share…" so folders can be shared from a phone.
+
+## 2026-10-06 (3) — Section headers; every agent reads the whole workspace
+- Section header (badge + title): air above it, none below; the card fits what is shown, so a section without an intro line leaves no hole; sections are numbered on their own (SECTION 1, 2, 3 — they were all "1").
+- Agent run page: the material picker lists every document of the workspace (all topics, grouped by topic and folder), for every agent, not only the open topic; a plan's steps read their sources across topics too.

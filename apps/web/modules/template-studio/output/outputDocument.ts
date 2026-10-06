@@ -413,12 +413,19 @@ export function planOutput(input: { blocks: FlatBlock[]; title?: string; subtitl
   });
 
   // Question numbers run through the whole document: 1, 2, 3… across multiple choice, true / false, open…
-  const NUMBERED: Record<string, string> = { "block-exam-question": "questions", "block-open-question": "questions", "block-true-false": "statements", "block-fill-blanks": "sentences" };
-  let counter = 0;
+  // Sections are numbered on their own (SECTION 1, 2, 3…), not as one more question.
+  const NUMBERED: Record<string, { list: string; counter: string }> = {
+    "block-exam-question": { list: "questions", counter: "items" },
+    "block-open-question": { list: "questions", counter: "items" },
+    "block-true-false": { list: "statements", counter: "items" },
+    "block-fill-blanks": { list: "sentences", counter: "items" },
+    "block-section-header": { list: "sections", counter: "sections" }
+  };
+  const counters: Record<string, number> = {};
   for (const run of runs) {
-    const listKey = NUMBERED[run.componentKey];
-    const rows = listKey ? run.data[listKey] : null;
-    if (Array.isArray(rows)) run.data = { ...run.data, [listKey]: rows.map((row) => ({ ...(row as Record<string, unknown>), __n: (counter += 1) })) };
+    const numbered = NUMBERED[run.componentKey];
+    const rows = numbered ? run.data[numbered.list] : null;
+    if (numbered && Array.isArray(rows)) run.data = { ...run.data, [numbered.list]: rows.map((row) => ({ ...(row as Record<string, unknown>), __n: (counters[numbered.counter] = (counters[numbered.counter] || 0) + 1) })) };
   }
 
   // An exam header already carries Name and Date: a math set inside it does not repeat them.

@@ -245,3 +245,42 @@ describe("numbering and title", () => {
     expect(renamed.some((i) => i.type === "text" && i.lines.join(" ") === "Midterm — Chapter 2")).toBe(true);
   });
 });
+
+describe("section headers", () => {
+  const blocks: any[] = [
+    { type: "section_header", title: "Alpha", intro: null },
+    { type: "paragraph", text: "First body." },
+    { type: "section_header", title: "Beta", intro: "Read carefully." },
+    { type: "paragraph", text: "Second body." },
+    { type: "section_header", title: "Gamma", intro: null },
+    { type: "paragraph", text: "Third body." }
+  ];
+  const laid = () => {
+    const plan: any = planOutput({ blocks, title: "Doc", framed: false });
+    const doc: any = buildOutputDocument(plan, {});
+    const layout = doc.template.layouts[0];
+    return layoutDocument(doc.template, doc.data, { layoutId: layout.id }).pages.flatMap((p: any) => p.items) as any[];
+  };
+
+  it("are numbered one after the other, not all SECTION 1", () => {
+    const labels = laid().filter((i) => i.type === "text" && /^SECTION \d+$/i.test(i.lines.join(" "))).map((i) => i.lines.join(" "));
+    expect(labels).toEqual(["SECTION 1", "SECTION 2", "SECTION 3"]);
+  });
+
+  it("leave air above the badge and no hole under a title without an intro", () => {
+    const items = laid();
+    const text = (value: string) => items.find((i) => i.type === "text" && i.lines.join(" ") === value);
+    const alpha = text("Alpha");
+    const first = text("First body.");
+    const beta = text("Beta");
+    const intro = text("Read carefully.");
+    // Under "Alpha" (no intro) the body starts soon after the title; "Beta" keeps its intro line in between.
+    expect(first.y - (alpha.y + alpha.h)).toBeLessThan(10);
+    expect(intro).toBeTruthy();
+    expect(intro.y).toBeGreaterThan(beta.y + beta.h - 1);
+    // Above the second badge there is more room than under the first title.
+    const badge2 = items.find((i) => i.type === "text" && i.lines.join(" ") === "SECTION 2");
+    const body1 = items.filter((i) => i.type === "text" && i.lines.join(" ") === "First body.")[0];
+    expect(badge2.y - (body1.y + body1.h)).toBeGreaterThan(first.y - (alpha.y + alpha.h));
+  });
+});

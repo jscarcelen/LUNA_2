@@ -377,9 +377,10 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (flowStep === 2) loadTemplates();
   }, [flowStep, loadTemplates]);
 
+  // Every agent can read anything in the workspace — Accounting and Statistics alike — not just the topic that is open.
   const documents = useMemo(
-    () => (selectedSubject?.documents || []).filter((document) => document.sourceType !== "generated"),
-    [selectedSubject]
+    () => (selectedWorkspace?.subjects || []).flatMap((subject) => subject.documents || []).filter((document) => document.sourceType !== "generated"),
+    [selectedWorkspace]
   );
   const approvedDocuments = useMemo(
     () => documents.filter((document) => String(document.reviewStatus || "approved") === "approved"),
@@ -495,8 +496,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         inputValues: answersByQuestionId,
         scope: {
           workspaceId,
-          // Picked documents may belong to any subject, so the consolidator is not limited to the open one.
-          subjectId: consolidating ? "" : subjectId,
+          // Picked documents may belong to any topic of the workspace, so an agent is not limited to the open one.
+          subjectId: (knowledgeMode === "workspace" && referenceDocumentIds.length) || (agentConfig.scope?.documentIds || []).length ? "" : subjectId,
           documentIds: [...(knowledgeMode === "workspace" ? referenceDocumentIds : []), ...((agentConfig.scope && agentConfig.scope.documentIds) || [])],
           styleDocumentIds
         }
@@ -756,7 +757,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     if (!onSaveGeneratedQuizDocument) return;
     setIsSavingDocument(true);
     try {
-      const sourceNames = referenceDocumentIds.map((id) => (consolidating ? workspaceDocuments : documents).find((document) => document.id === id)?.name).filter(Boolean);
+      const sourceNames = referenceDocumentIds.map((id) => workspaceDocuments.find((document) => document.id === id)?.name).filter(Boolean);
       const payload = buildResource({
         name,
         activity: activity && activity.questions.length ? { ...activity, title: name } : null,
@@ -938,13 +939,11 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the agent read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
               {agentConfig.materialSlots?.[0]?.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{agentConfig.materialSlots[0].description}</p> : null}
               <div className="mt-3 grid gap-3">
-                {consolidating ? (
-                  <WorkspaceDocumentPicker workspace={selectedWorkspace} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} />
-                ) : null}
                 {!consolidating ? <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} /> : null}
+                {consolidating ? <WorkspaceDocumentPicker workspace={selectedWorkspace} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} /> : null}
                 {!consolidating && knowledgeMode === "workspace" ? (
                   <>
-                    <DocumentPicker documents={approvedDocuments} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} emptyText="No approved documents in this subject yet. Upload some in Workspaces." />
+                    <WorkspaceDocumentPicker workspace={selectedWorkspace} selectedIds={referenceDocumentIds} onChange={setReferenceDocumentIds} />
                     {!showStyleDocs ? (
                       <button type="button" className="justify-self-start text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setShowStyleDocs(true)}>+ Add an example of the style you want (optional)</button>
                     ) : (

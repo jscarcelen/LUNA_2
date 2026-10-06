@@ -414,15 +414,19 @@ function sectionHeader(): BlockDef {
   const intro = createField("Section intro", "text", { description: "One-line instruction for the section" });
   const sections = createField("Sections", "array", { children: [createField("item", "object", { children: [title, intro] })] });
   const W = PAGE.width;
+  // A section starts something new: air above it (TOP), none below it — the badge and title belong to what follows.
+  // The card fits what is shown, so a section without an intro line leaves no hole under its title.
+  const TOP = 10;
   const group = createGroup({
     name: "Section header",
-    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 24 },
+    fitContent: true,
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: TOP + 18.5 },
     layout: { mode: "free", gap: 0 },
     repeat: { fieldId: sections.id, mode: "flow" },
     children: [
-      ...chip("SECTION {{n}}", accent, { x: 0, y: 0, w: 27, h: 6 }),
-      field(title.id, "Multiple choice", { x: 0, y: 8, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
-      field(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: 17.5, w: W, h: 5.5 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line" })
+      ...chip("SECTION {{n}}", accent, { x: 0, y: TOP, w: 27, h: 6 }),
+      field(title.id, "Multiple choice", { x: 0, y: TOP + 8, w: W, h: 9 }, { fontSize: TYPE.heading + 2, fontWeight: "bold", color: INK.strong }),
+      field(intro.id, "Choose the correct answer for each question. Only one option is correct.", { x: 0, y: TOP + 17.5, w: W, h: 1 }, { fontSize: TYPE.small, color: INK.muted }, { name: "opt:intro|Intro line", collapseEmpty: true })
     ]
   });
   return { id: "block-section-header", family: "Section header", variant: "Badge + title", name: "Section header", description: "Numbered section badge, title and intro line — one per section.", category: "structure", icon: "§", fields: [sections], elements: [group], options: [{ key: "intro", label: "Intro line", default: true }], accent: { main: accent.main, tint: accent.tint }, builtIn: true };

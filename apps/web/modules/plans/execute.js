@@ -180,7 +180,8 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
         contextPrompt: "",
         inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
       } : {}),
-      scope: { workspaceId, subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
+      // No topic filter: the chosen documents may sit in any topic of the workspace (a document moved after the plan was made).
+      scope: { workspaceId, subjectId: sourceDocumentIds.length ? "" : subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
     };
     // A long run (the master document) streams its progress; the others are one quick request.
     if (recipe.streams) {

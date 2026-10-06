@@ -1061,3 +1061,7 @@
 - **Performance engine**: `buildEvidence` carries `verdict`, `score`, `feedback`, `errorCause`, `graded`, `kind`, `skill`, `quantitative`; `analyseErrors` prefers the stored `errorCause`; mastery counts a "close" answer as partial credit (`creditOf`). `lib/attemptsRepository.js` stores the fine cause chosen inside the decided group.
 - UI copy: `ERROR_TYPES` blurbs, the coach prompt (`/api/performance/coach`), dashboard catalogue (new request **F2 "Mark written answers"**, F1 text, free-steps notes). `npm run dashboard:check` passes; `dashboard:publish` not run.
 - Tests: `tests/grading/{quantitative,grading,gradeBatch,errorDecision}.test.js` (quantitative detection, decision table, local grader, batch + route with mocked fetch, stored causes, partial-credit mastery); `tests/agent-studio/mastery.test.js` updated to the new rules.
+
+## 2026-10-06 (2) — Plans follow moved documents; Share on phone
+- Study plans look their material up across the whole workspace (a document moved to another topic still opens from the plan and keeps its attempts); lists, pickers and filing stay inside the topic.
+- Folder ⋯ menu has "Share…" so folders can be shared from a phone.

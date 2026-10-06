@@ -289,6 +289,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
+  // A plan's material can sit in another topic (a document moved after the plan was made): things are looked up across the workspace, while lists and filing stay in this topic.
+  const workspaceDocuments = useMemo(() => (workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects || []).flatMap((s) => s.documents || []), [workspaces, selectedWorkspaceId]);
   // Agents anywhere in the workspace (like the AI Tools hub) can be put in a plan's scope.
   const agentDocuments = useMemo(() => (workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects || []).flatMap((s) => s.documents || []).filter((d) => d.sourceType === "generated" && (d.tags || []).includes("ai-agent")), [workspaces, selectedWorkspaceId]);
   const agentCatalog = useMemo(() => planAgentCatalog(agentDocuments), [agentDocuments]);
@@ -322,8 +324,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [masteryByConceptId, setMasteryByConceptId] = useState({});
 
   const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
-  const resources = useMemo(() => documents.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [documents]);
-  const attempts = useMemo(() => joinAttempts(documents), [documents]);
+  const resources = useMemo(() => workspaceDocuments.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [workspaceDocuments]);
+  const attempts = useMemo(() => joinAttempts(workspaceDocuments), [workspaceDocuments]);
   const concepts = useMemo(() => conceptIndex(resources), [resources]);
   const conceptsByResourceId = useMemo(() => {
     const map = new Map();
@@ -527,7 +529,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       if (planFolders.planId) await onUpdateDocumentMeta?.(row.document.id, { folderIds: [planFolders.planId], tags: row.document.tags || [] });
       const result = await executePlan({
         plan: row.plan,
-        documents,
+        documents: workspaceDocuments,
         agentDocuments,
         subjectName: subject?.name || "",
         workspaceId: selectedWorkspaceId,
@@ -839,7 +841,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                         const kind = ITEM_KINDS.find((entry) => entry.id === item.kind) || ITEM_KINDS[0];
                         const itemConcepts = item.resourceId ? (conceptsByResourceId.get(item.resourceId) || []) : [];
                         // Resolve resource for skill tags + activity detection
-                        const itemResourceDoc = item.resourceId ? documents.find((d) => d.id === item.resourceId) : null;
+                        const itemResourceDoc = item.resourceId ? workspaceDocuments.find((d) => d.id === item.resourceId) : null;
                         const itemResource = itemResourceDoc ? parseResource(itemResourceDoc) : null;
                         const activity = itemResource?.activity?.questions?.length ? itemResource.activity : null;
                         const skillTags = inferSkillTags(item, itemResource);
@@ -847,7 +849,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                         const agentName = itemResource?.meta?.agentName
                           || (item.generate && !item.resourceId ? ((plan.agentScope || []).find((entry) => (entry.makes || []).includes(item.generate))?.label || BUILTIN_PLAN_AGENTS.find((entry) => entry.makes.includes(item.generate))?.label || "") : "");
                         // What "Open" shows: the generated material, or the document the step asks you to read.
-                        const readable = item.sourceDocumentId ? documents.find((entry) => entry.id === item.sourceDocumentId) : null;
+                        const readable = item.sourceDocumentId ? workspaceDocuments.find((entry) => entry.id === item.sourceDocumentId) : null;
                         const linkedDocument = itemResourceDoc && !itemResource ? itemResourceDoc : null;
                         return (
                           <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
@@ -1088,7 +1090,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             onConfirm={({ materialIds, resourceIds }) => {
               const resourceIdSet = new Set(resources.map((r) => r.document.id));
               const isGenerated = (id) => {
-                const document = documents.find((d) => d.id === id);
+                const document = workspaceDocuments.find((d) => d.id === id);
                 return document ? isGeneratedDocument(document, resourceIdSet) : resourceIdSet.has(id);
               };
               // Earlier versions filed generated resources under materialIds; they are read as resources here.
@@ -1103,7 +1105,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 return Boolean(i.doneAt) || progress.scoreByResource.get(i.resourceId) !== undefined;
               });
               const addedItems = resourceIds.filter((id) => !prevGenerated.has(id)).map((id) => {
-                const document = documents.find((d) => d.id === id);
+                const document = workspaceDocuments.find((d) => d.id === id);
                 if (!document || open.plan.items.some((i) => i.resourceId === id)) return null;
                 const row = resources.find((r) => r.document.id === id);
                 return newItem({ resourceId: id, title: row?.resource.name || document.name, kind: row?.resource.activity ? "activity" : "read" });
@@ -1126,7 +1128,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {revising ? (
           <RevisePlanDialog
             row={{ document: open.document, plan: revising.plan }}
-            documents={documents}
+            documents={workspaceDocuments}
             resources={resources}
             attempts={attempts}
             conceptMap={graphConcepts}
@@ -1161,7 +1163,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {readingDoc ? (
           <DocumentReader
             document={readingDoc}
-            documents={documents}
+            documents={workspaceDocuments}
             onClose={() => setReadingDoc(null)}
             onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
             onUpdateGeneratedDocument={onUpdateGeneratedDocument}
@@ -1273,7 +1275,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             if (savedDocumentId && planFolders.planId) await onUpdateDocumentMeta?.(savedDocumentId, { folderIds: [planFolders.planId], tags: [PLAN_TAG] });
             const result = await executePlan({
               plan,
-              documents,
+              documents: workspaceDocuments,
               agentDocuments,
               subjectName: subject?.name || "",
               workspaceId: selectedWorkspaceId,

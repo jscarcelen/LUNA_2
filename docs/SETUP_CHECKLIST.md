@@ -49,3 +49,9 @@ Until the email provider exists, accounts still work but nothing is mailed; the 
 - [ ] Terms of Service and Privacy Policy pages (the sign-up links point nowhere yet); under-13 rules depend on your country.
 - [ ] Rate limits are per server instance; move them to the database if you get real traffic.
 - [ ] Real payments, lunas purchases and marketplace payouts do not exist yet.
+
+## G. Added 2026-10-06 — sharing with view/edit rights, open network
+1. [ ] Supabase SQL Editor → run `supabase/migrations/202610060001_network_sharing_grants.sql` (safe to run twice). Until then everything classic keeps working; peer connections and live shares answer "setup needed".
+2. [ ] Hand test with the three test accounts (password `LunaTest#2026`): parent requests the teacher (a peer connection) → teacher accepts; teacher shares a folder with the student as "Can edit" → student edits a document under Shared with me → the original changes; switch to "Can view" → read-only at once; remove → gone. Share an agent, a template and a "My blocks" component (they arrive as the receiver's own copies).
+3. [ ] Written answers: in a quiz with short answers press Check — Luna marks them by meaning ("Almost" gets half marks). Needs the OpenAI key (already set).
+4. [ ] Move: drag a document from Accounting to Statistics, or use ⋯ → Move to…; try Undo.

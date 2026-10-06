@@ -757,6 +757,7 @@ export function WorkspaceBrowser({
                           items={[
                             (onCreateFolder || onCreateSubject) ? { label: "New subfolder", icon: "＋", className: "sm:hidden", onSelect: () => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
                             { label: "Rename", icon: "✎", className: "sm:hidden", onSelect: () => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
+                            onShareDocument ? { label: "Share…", icon: "↗", className: "sm:hidden", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
                             onMoveFolder && !folder.isSubject ? { label: "Move to…", icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
                             { label: "Delete", icon: "🗑", danger: true, className: "sm:hidden", onSelect: () => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); } }
                           ]}

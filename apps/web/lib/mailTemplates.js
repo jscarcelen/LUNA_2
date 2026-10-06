@@ -5,6 +5,8 @@
  * stripped of line breaks.
  */
 
+import { dueSentence, shortDate } from "../modules/plans/deadlines.js";
+
 const ACCENT = "#0071e3";
 const ROLE_WORD = { student: "student", teacher: "teacher", parent: "parent" };
 
@@ -114,6 +116,54 @@ export function shareMail({ to, sharer, itemName, permission, copyOf, url }) {
     paragraphs: [first, second],
     button: { label: "Open Luna", url },
     footer: "You only get emails like this from people you are connected to, at most one an hour per person. You can end a connection at any time from the Connections page."
+  });
+}
+
+/**
+ * Work was assigned to a student by their teacher or parent. The due date always says who set it. One email per
+ * person per send (also for a whole group), names and the item's title only, never its content.
+ * @param {{ to: string, sender: object, itemName: string, itemType?: string, dueDate?: string, note?: string, url: string }} args
+ */
+export function assignMail({ to, sender, itemName, itemType = "", dueDate = "", note = "", url }) {
+  const who = whoLine(sender);
+  const item = oneLine(itemName).slice(0, 120) || "new work";
+  const kind = itemType === "plan" ? "study plan" : itemType === "activity" ? "activity" : "item";
+  const due = dueSentence(dueDate, nameOf(sender));
+  const paragraphs = [`${who} assigned you the ${kind} “${item}”${due ? ` (${due})` : ""}.`];
+  if (oneLine(note)) paragraphs.push(`Their message: “${oneLine(note).slice(0, 300)}”`);
+  paragraphs.push(due ? `The date is set by ${nameOf(sender)}, so you cannot change it, but you can add your own earlier deadline in your study plan.` : "You find it in your workspace under Shared documents.");
+  return build({
+    to,
+    subject: `${nameOf(sender)} assigned you “${item}”${due ? ` (${due})` : ""} on Luna`,
+    heading: "New work was assigned to you",
+    paragraphs,
+    button: { label: "Open Luna", url },
+    footer: "You only get emails like this from your teachers and parents, one per assignment. You can end a connection at any time from the Connections page."
+  });
+}
+
+/**
+ * An exam date from a teacher or parent: new, moved, or cancelled.
+ * @param {{ to: string, sender: object, title: string, date: string, subjectHint?: string, notes?: string, kind?: "new" | "changed" | "cancelled", url: string }} args
+ */
+export function examDateMail({ to, sender, title, date, subjectHint = "", notes = "", kind = "new", url }) {
+  const who = whoLine(sender);
+  const name = oneLine(title).slice(0, 120) || "an exam";
+  const day = shortDate(date);
+  const subject = oneLine(subjectHint) ? ` (${oneLine(subjectHint).slice(0, 80)})` : "";
+  const paragraphs = kind === "cancelled"
+    ? [`${who} cancelled the exam date “${name}”${subject}${day ? ` (it was ${day})` : ""}.`, "If you had planned for it, your study plan keeps the date as your own deadline, so nothing you prepared is lost. You can change or remove it."]
+    : kind === "changed"
+      ? [`${who} changed the exam date “${name}”${subject}: it is now ${day || "to be confirmed"}.`, "Study plans you linked to this exam follow the new date by themselves."]
+      : [`${who} sent you an exam date: “${name}”${subject}, ${day ? `on ${day}` : "date to be confirmed"} (set by ${nameOf(sender)}).`, "You can plan for it: in Study plans, choose “Use a teacher's exam date” and Luna schedules your work up to that day."];
+  if (oneLine(notes) && kind !== "cancelled") paragraphs.push(`Notes: “${oneLine(notes).slice(0, 300)}”`);
+  return build({
+    to,
+    subject: kind === "cancelled" ? `${nameOf(sender)} cancelled “${name}” on Luna` : kind === "changed" ? `${nameOf(sender)} moved “${name}” to ${day} on Luna` : `${nameOf(sender)} sent you an exam date: “${name}”, ${day}`,
+    heading: kind === "cancelled" ? "An exam date was cancelled" : kind === "changed" ? "An exam date changed" : "You have a new exam date",
+    paragraphs,
+    button: { label: "Open Luna", url },
+    footer: "You only get emails like this from your teachers and parents. You can end a connection at any time from the Connections page."
   });
 }
 

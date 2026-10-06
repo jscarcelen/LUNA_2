@@ -16,7 +16,7 @@ import { MoveDialog } from "./MoveDialog";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
-import { dueDateOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
+import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
 import { requestLeaveShare } from "../../accounts/shareEvents";
 
@@ -495,7 +495,7 @@ export function WorkspaceBrowser({
     return (
       <span className="flex flex-wrap items-center gap-1 text-[11px] text-soft-ink">
         <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? "generated" : "material"}</span>
-        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>Shared by {sharedInfoOf(document).ownerName || "another account"} · {sharedInfoOf(document).permission === "edit" ? "can edit" : "can view"}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}` : ""}</span> : null}
+        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>Shared by {sharedInfoOf(document).ownerName || "another account"} · {sharedInfoOf(document).permission === "edit" ? "can edit" : "can view"}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}${dueInfoOf(document).imposed ? `, set by ${senderNameOf(document, folders) || "the sender"}` : ""}` : ""}</span> : null}
         {isFavourite(document) ? <span className={`${chip} bg-[#fff3cd] text-[#8a5a00]`}>★</span> : null}
         {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{row.resource.meta.questionCount} questions</span> : null}
         {resourceDifficulty(document) ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{resourceDifficulty(document)}</span> : null}

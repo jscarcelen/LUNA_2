@@ -13,7 +13,10 @@ flows and the setup step.
 - `shareEvents.js` — the bridge that lets agent cards, template cards, custom components and folder rows call "Share…" without knowing about accounts
   (`requestShare`, `useSharingAvailable`, `requestLeaveShare`); AppShell owns the one dialog.
 - `shared.js` also holds `SHARED_WITH_ME_SUBJECT`, `isReservedSubjectName`, `sharedInfoOf` (the `shared` marker on tree nodes) and `relationLabel`.
-- `LinkedStudentsPage.js` — "My students" / "My children": chips, `PerformancePage` read-only, plans overview.
+- `LinkedStudentsPage.js` — "My students" / "My children": Groups bar, student chips (with group dots), `PerformancePage` read-only, plans overview, Sent, Exam dates; a selected group shows `GroupView`.
+- `groups.js` — **pure** group rules (palette, caps, `activeMembership`, `resolveRecipients` de-duplication, `selectionStats`, per-person `summarizeResults`, `runPool` with a time budget). `GroupsBar.js` — the Groups bar, member picker, per-student "Groups…". `GroupView.js` + `groupData.js` (pure: the members as one synthetic class workspace, comparison, plan table, `examPlanStatus`) — the group view.
+- `examDates.js` — **pure** exam date rules (validation, recipient shape, ordering). `ExamDatesTab.js` — the teacher's list / send / edit / cancel / who has planned.
+- `shared.js` also holds `dueInfoOf` (imposed vs own date of a copy: `due:` + protected `due-by:`, the student's `due-own:`).
 - `ShareDialog.js` — "Share…" for a file, folder, topic, study plan (live share: Can view / Can edit, People with access) or an
   agent, template, component (their own copy), and "Assign" (teacher/parent → student, with a due date).
 - `PlatformNotice.js`, `SharedNotice.js` — banners ("Verify your email" with Resend, under-13 students); "Shared by …" pill in the reader.

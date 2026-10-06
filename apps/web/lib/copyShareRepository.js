@@ -20,7 +20,7 @@ import { SHARED_FROM_PREFIX, isReservedSubjectName } from "../modules/accounts/s
 
 export const COPY_KINDS = ["agent", "template", "component"];
 export const MAX_COMPONENT_BYTES = 200 * 1024;
-const MAX_RECIPIENTS = 50;
+const MAX_RECIPIENTS = 200;
 
 const parseJson = (text) => {
   try {

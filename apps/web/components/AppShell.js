@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SideNav } from "./SideNav";
 import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
@@ -76,6 +76,19 @@ export function AppShell({ account = null, initialPage = "" }) {
     })();
     return () => { alive = false; };
   }, [account?.id]);
+  // Exam dates teachers and parents sent to this student ("Dates from my teachers": Home, Study plans). Students of the
+  // real platform only; reloaded whenever the page changes (cheap), and after hiding one or linking a plan.
+  const [examDates, setExamDates] = useState([]);
+  const loadExamDates = useCallback(async () => {
+    if (account?.role !== "student") return;
+    const result = await accountsApi.examDates();
+    if (result.ok) setExamDates(result.data.examDates || []);
+  }, [account?.id, account?.role]);
+  useEffect(() => { loadExamDates(); }, [loadExamDates, page]);
+  const dismissExamDate = useCallback(async (entry, hide) => {
+    const result = hide ? await accountsApi.dismissExamDate(entry.id) : await accountsApi.restoreExamDate(entry.id);
+    if (result.ok) setExamDates(result.data.examDates || []);
+  }, []);
   const profileName = account ? account.displayName : (roleProfiles[role]?.name || "");
   // Every move to another page is a history entry, so the browser's Back button (and an iPhone swipe)
   // returns to the page you were on instead of leaving the app.
@@ -117,6 +130,7 @@ export function AppShell({ account = null, initialPage = "" }) {
   const planParams = page.startsWith("plans?") ? new URLSearchParams(page.split("?")[1]) : null;
   const openPlanId = planParams?.get("open") || "";
   const startGenerating = Boolean(planParams?.get("generate"));
+  const startExamDateId = planParams?.get("exam") || "";
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
   const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (pageTitles[page.split("?")[0]] || "LUNA")));
   const navItems = [...(navByRole[role] || []), ...(account ? (platformNavExtras[role] || []) : [])];
@@ -203,12 +217,14 @@ export function AppShell({ account = null, initialPage = "" }) {
         loading={isWorking}
         onOpenPlan={({ documentId, subjectId }) => { if (subjectId) setSelectedSubjectId(subjectId); setPage(`plans?open=${documentId}`); }}
         onOpenPage={(target) => setPage(target)}
+        examDates={examDates}
+        onDismissExamDate={dismissExamDate}
       />
     );
     if (page === "dashboard") return home;
     // The real platform only: connections to other accounts, and a connected student's performance.
     if (account && page === "connections") return <ConnectionsPage account={account} onOpenPage={setPage} />;
-    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} onOpenPage={setPage} />;
+    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} />;
     if (page === "performance") {
       return (
         <PerformancePage
@@ -321,6 +337,14 @@ export function AppShell({ account = null, initialPage = "" }) {
           onSelectSubject={handleSelectSubject}
           openPlanId={openPlanId}
           startGenerating={startGenerating}
+          startExamDateId={startExamDateId}
+          examDates={examDates}
+          onDismissExamDate={dismissExamDate}
+          onLinkPlanToExamDate={async (examDateId, planDocumentId) => {
+            const result = await accountsApi.linkPlanToExamDate(examDateId, planDocumentId);
+            if (result.ok) { setExamDates(result.data.examDates || []); await loadWorkspaces(); }
+            return result;
+          }}
         />
       );
     }
@@ -439,7 +463,7 @@ export function AppShell({ account = null, initialPage = "" }) {
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return home;
-  }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking]);
+  }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking, examDates]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);

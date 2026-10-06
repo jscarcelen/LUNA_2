@@ -3,7 +3,7 @@
  * from(table).select / insert / update / delete with eq, in, is, order, limit, maybeSingle, single.
  * (`.or(...)` is not supported — tests that need it mock the function that uses it.)
  */
-const TABLES = ["accounts", "account_links", "shared_items", "workspaces", "subjects", "folders", "documents", "document_tags", "document_folders", "topic_tags", "generated_document_exports", "account_tokens", "share_grants"];
+const TABLES = ["accounts", "account_links", "shared_items", "workspaces", "subjects", "folders", "documents", "document_tags", "document_folders", "topic_tags", "generated_document_exports", "account_tokens", "share_grants", "account_groups", "account_group_members", "exam_dates", "exam_date_plans"];
 
 /** Columns added by the verification migration; `legacySchema()` removes them to simulate a database that has not had it. */
 const V2_DEFAULTS = { email_verified_at: null, phone: null, phone_verified_at: null, password_changed_at: null, notifications_seen_at: null, pending_invites: null };

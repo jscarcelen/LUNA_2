@@ -1,5 +1,42 @@
 # Implementation Log
 
+## 2026-10-07 (groups, deadline origin, exam dates)
+
+### Groups of students, "who set this deadline", exam dates
+
+- **Groups** (teacher / parent, `lib/groupsRepository.js`, `modules/accounts/groups.js`, `GroupsBar.js`, `GroupView.js`,
+  `groupData.js`, `/api/accounts/groups`, `/api/accounts/linked/members`): named clusters of the students you are connected to as
+  their teacher / parent; a student can be in many; membership is checked against the live links on every read (a student whose
+  link ended is in no group view or send), plus a trigger and cleanup on link removal; 200 per group, 50 groups per owner. My
+  students gets a Groups bar (all / group chips with counts, new / edit / delete group, per-student "Groups…", coloured dots).
+  A group opens a **group view**: the existing class panels (class × topic heatmap, who needs attention, topic coverage, headline)
+  fed by the members' evidence (every attempt labelled with its student), a comparison table, a plan-progress table, Sent;
+  click a student to drill down. The members' workspaces come from one route, a page at a time, authorised per member by an
+  accepted link with the same redaction as the single-student route.
+- **Send to a group** (`lib/batchSend.js`; Share, Assign, share a copy, Exam date): groups + individuals become one
+  de-duplicated list, people and links are read once, 4 at a time inside a 45 s budget (rest `deferred`), 200 people per
+  request and 600 deliveries an hour per sender, per-person results and a summary `{ delivered, skipped: { not_connected,
+  already_has_it, failed } }` shown in the dialog; assigning skips copies that are already current. Emails: one per person
+  (`notifyAssigned`, `notifyExamDates`, `notifyShared` with a batch cap), run after the response (`lib/afterResponse.js`).
+- **Deadline origin** (`modules/plans/deadlines.js`, `DeadlineBadge.js`): plan deadlines carry `setBy` (+ `examDateId`);
+  assigned plans stamp every deadline as the sender's; assigned copies get the protected tag `due-by:<sender>` next to
+  `due:` (the student's own date is `due-own:`, plan steps have `ownDueDate`). The guard refuses editing/removing an imposed
+  deadline (403), refuses plans that claim an imposed deadline without a real exam date, and lets the student add their own.
+  Shown in Activities, plan cards / page / deadline list / steps / "Next up", Home, the performance "This plan" panel, the bell
+  and the emails ("due 24 Oct, set by Prof. Rivera") with two looks (solid dark with the sender's name / outlined "Your
+  deadline"). Imposed ranks above an equal own deadline in `nextDeadline`, `upcoming`, `rankPlans`, `nextSteps`, `priorityEngine`.
+  Also fixed: a received plan's tick used to be refused when the page wrote back its screen-only `documentId`.
+- **Exam dates** (`lib/examDatesRepository.js`, `/api/accounts/exam-dates`, `ExamDatesTab.js`, `plans/ExamDates.js`): send to
+  groups / students (optionally sharing a plan with it); students see "Dates from my teachers" (Home, Study plans → Exam dates,
+  bell); "Use a teacher's exam date" in Plan it for me / New plan locks the plan's deadline to it, and an existing plan can be
+  tied to a date (server-written); the sender edits or cancels (plans follow the new date / keep the date as their own deadline,
+  emails + bell); the teacher's Exam dates tab shows who has planned and, on demand, how far.
+- **Migration** `supabase/migrations/202610070001_groups_exam_dates.sql` (not applied by this change; feature-detected,
+  groups and exam dates answer 503 `setupNeeded` until it is; deadline origin needs no migration). See `docs/SETUP_CHECKLIST.md` H.
+- **Tests**: `tests/accounts/groups.test.js`, `examDates.test.js`, `groupData.test.js`, `tests/plans/deadlines.test.js`
+  (membership rules, authorisation, link ending, dedupe, per-person results, rate limits and deferral, lock enforcement, exam date
+  lifecycle, sorting priority); existing assign / bell tests updated for the new tags and wording.
+
 ## 2026-10-05 (moving between topics)
 
 ### Folders and documents can move to any topic or folder

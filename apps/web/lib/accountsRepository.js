@@ -317,6 +317,25 @@ export async function listConnectedIds(accountId) {
   return new Set(rows.map((row) => (row.requesterId === accountId ? row.targetId : row.requesterId)).filter(Boolean));
 }
 
+/** Every accepted link of an account, by the id of the person at the other end (one query, for batch sends). */
+export async function listAcceptedLinkMap(accountId) {
+  const rows = await selectLinks((query) => query.or(`requester_id.eq.${accountId},target_id.eq.${accountId}`).eq("status", "accepted"));
+  return new Map(rows.map((row) => [row.requesterId === accountId ? row.targetId : row.requesterId, row]).filter(([id]) => id));
+}
+
+/**
+ * The students a teacher or parent is connected to AS their teacher / parent (accepted teacher_student /
+ * parent_student link; a peer connection never counts). Public columns only. This is the list a group can hold and
+ * whose performance may be read: the one place "who are my students right now" is decided.
+ */
+export async function listGuardianStudents(guardian) {
+  if (!guardian?.id || (guardian.role !== "teacher" && guardian.role !== "parent")) return [];
+  const rows = (await selectLinks((query) => query.or(`requester_id.eq.${guardian.id},target_id.eq.${guardian.id}`).eq("status", "accepted")))
+    .filter((row) => row.kind === (guardian.role === "teacher" ? "teacher_student" : "parent_student"));
+  const others = await findAccountsByIds(rows.map((row) => (row.requesterId === guardian.id ? row.targetId : row.requesterId)));
+  return others.filter((other) => other.role === "student").map((other) => publicAccount(other));
+}
+
 /** One link by id (any status), or null. */
 export async function getLinkById(linkId) {
   if (!linkId) return null;
@@ -504,6 +523,8 @@ export async function listSharedItems(accountId, limit = 100) {
     itemType: row.item_type,
     title: row.title,
     dueDate: row.due_date || "",
+    // A date on assigned work is always the sender's: the receiver cannot change it.
+    dueSetBy: row.mode === "assign" && row.due_date ? (byId.get(row.sender_id)?.display_name || "") : "",
     note: row.note || "",
     copyDocumentId: row.copy_document_id || "",
     sentAt: row.updated_at || row.created_at,
@@ -557,10 +578,20 @@ export async function listNotifications(account, { now = Date.now() } = {}) {
     grants = grantRows || [];
   }
 
+  // Exam dates sent to this account (needs the groups / exam dates migration: without it there are none).
+  let examRows = [];
+  if (account.role === "student") {
+    const { data: examData, error: examError } = await client.from("exam_dates").select("*").eq("recipient_id", account.id).order("updated_at", { ascending: false }).limit(30);
+    if (examError && !isSetupNeededError(examError)) throw examError;
+    const connected = new Set(links.filter((row) => row.status === "accepted").map((row) => (row.requesterId === account.id ? row.targetId : row.requesterId)));
+    examRows = (examData || []).filter((row) => connected.has(row.sender_id));
+  }
+
   const people = await findAccountsByIds([
     ...links.map((row) => (row.requesterId === account.id ? row.targetId : row.requesterId)),
     ...(items || []).map((row) => row.sender_id),
-    ...grants.map((row) => row.owner_id)
+    ...grants.map((row) => row.owner_id),
+    ...examRows.map((row) => row.sender_id)
   ]);
   const byId = new Map(people.map((row) => [row.id, row]));
   const person = (id, fallbackEmail = "") => ({ id: id || "", displayName: byId.get(id)?.display_name || "", role: byId.get(id)?.role || "", email: byId.get(id)?.email || fallbackEmail });
@@ -576,13 +607,21 @@ export async function listNotifications(account, { now = Date.now() } = {}) {
 
   const received = (items || [])
     .filter((row) => time(row.updated_at || row.created_at) >= since)
-    .map((row) => ({ id: `item:${row.id}:${row.updated_at}`, type: row.mode === "assign" ? "assigned" : "shared", at: row.updated_at || row.created_at, person: person(row.sender_id), title: row.title, itemType: row.item_type, dueDate: row.due_date || "" }));
+    .map((row) => ({ id: `item:${row.id}:${row.updated_at}`, type: row.mode === "assign" ? "assigned" : "shared", at: row.updated_at || row.created_at, person: person(row.sender_id), title: row.title, itemType: row.item_type, dueDate: row.due_date || "", dueSetBy: row.mode === "assign" && row.due_date ? person(row.sender_id).displayName || person(row.sender_id).email : "" }));
 
   const granted = grants
     .filter((row) => time(row.updated_at || row.created_at) >= since)
     .map((row) => ({ id: `grant:${row.id}:${row.updated_at}`, type: "grant", at: row.updated_at || row.created_at, person: person(row.owner_id), title: row.item_name || "an item", itemKind: row.item_kind, permission: row.permission }));
 
-  const events = [...answers, ...received, ...granted]
+  // One line per exam date: the cancellation if it was cancelled, the change if it moved, otherwise "sent you an exam date".
+  const examEvents = examRows.map((row) => {
+    const base = { person: person(row.sender_id), title: row.title, examDate: String(row.exam_date || "").slice(0, 10), subjectHint: row.subject_hint || "", examDateId: row.id };
+    if (row.revoked_at) return { ...base, id: `exam:${row.id}:cancel:${row.revoked_at}`, type: "exam_date_cancelled", at: row.revoked_at };
+    if (time(row.updated_at) - time(row.created_at) > 2000) return { ...base, id: `exam:${row.id}:change:${row.updated_at}`, type: "exam_date_changed", at: row.updated_at };
+    return { ...base, id: `exam:${row.id}:new`, type: "exam_date", at: row.created_at };
+  }).filter((event) => time(event.at) >= since);
+
+  const events = [...answers, ...received, ...granted, ...examEvents]
     .sort((a, b) => time(b.at) - time(a.at))
     .slice(0, MAX_NOTIFICATIONS)
     .map((event) => ({ ...event, unread: seenSupported && time(event.at) > seenAt }));

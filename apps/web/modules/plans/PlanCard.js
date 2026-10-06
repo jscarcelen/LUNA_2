@@ -1,6 +1,7 @@
 "use client";
 
 import { dueLabel } from "./plan";
+import { PlanDeadlines } from "./DeadlineBadge";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -37,7 +38,9 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
           {subjectName ? <p className={`${kicker} truncate`}>{subjectName}</p> : null}
           <h4 className="m-0 truncate text-base font-bold text-ink">{plan.name}</h4>
           {sharedLabel ? <p className="m-0 mt-0.5 text-[11px] font-semibold text-[#0058b0]">{sharedLabel}</p> : null}
-          <p className="m-0 mt-0.5 text-xs text-soft-ink">{progress.deadline ? `${progress.deadline.title} · ${dueLabel(progress.deadline.date)}` : "No deadline"}{subPlans.length ? ` · ${subPlans.length} sub-plan${subPlans.length === 1 ? "" : "s"}` : ""}</p>
+          {/* The next deadline with who set it (solid dark badge = a teacher or parent, outlined = your own); both when the plan has both. */}
+          <PlanDeadlines plan={{ ...plan, deadlines: [...(plan.deadlines || []), ...subPlans.flatMap((row) => row.plan.deadlines || [])] }} className="mt-1" />
+          {subPlans.length ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{subPlans.length} sub-plan{subPlans.length === 1 ? "" : "s"}</p> : null}
         </div>
         <Ring ratio={progress.ratio} colour={plan.colour} />
       </div>
@@ -56,7 +59,17 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
         <div>
           <p className={kicker}>Next up</p>
           <ul className="m-0 mt-1 grid list-none gap-1 p-0">
-            {progress.next.slice(0, 3).map((item) => <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink"><span className="truncate">{item.title}</span><span className="shrink-0 text-soft-ink">{dueLabel(item.dueDate)}</span></li>)}
+            {progress.next.slice(0, 3).map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink">
+                <span className="truncate">{item.title}</span>
+                {/* A step of a plan somebody assigned: its date is theirs (locked); an own date added next to it shows too. */}
+                <span className="flex shrink-0 items-center gap-1 text-soft-ink">
+                  {plan.receivedFrom && item.dueDate ? <span title={`Set by ${plan.receivedFrom.name || "your teacher"}`} aria-label="Set by your teacher">🔒</span> : null}
+                  {dueLabel(item.dueDate)}
+                  {item.ownDueDate ? <span className="rounded-full border border-ink/25 px-1.5 text-[10px] font-semibold text-ink" title="Your own deadline">{dueLabel(item.ownDueDate)}</span> : null}
+                </span>
+              </li>
+            ))}
           </ul>
         </div>
       ) : <p className="m-0 text-xs text-soft-ink">Everything done. 🎉</p>}

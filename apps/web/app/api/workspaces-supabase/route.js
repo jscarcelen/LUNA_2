@@ -36,6 +36,7 @@ import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } f
 import { accountIdForFresh, hasRevokedSession, ownerUserIdForFresh } from "../../../lib/session.js";
 import { guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
 import { loadGrantContext, purgeGrantsFor } from "../../../lib/grantsRepository.js";
+import { loadExamDatesMap, syncPlanLinks } from "../../../lib/examDatesRepository.js";
 import { listTreeWithShared } from "../../../lib/sharedTree.js";
 import { extractAndSaveConcepts } from "../../../lib/conceptsRepository.js";
 import { NextResponse } from "next/server";
@@ -88,8 +89,9 @@ export async function POST(request) {
     // Real accounts: every id in the request must be theirs or shared with them, and what they only
     // view (or received as a copy) stays read-only. (The public demo has one shared owner and no accounts,
     // so it is not checked.)
-    if (await accountIdForFresh(request)) {
-      const verdict = await guardWorkspaceAction({ client: createSupabaseAdminClient(), action, payload, ownerUserId, loadGrantContext });
+    const isAccount = Boolean(await accountIdForFresh(request));
+    if (isAccount) {
+      const verdict = await guardWorkspaceAction({ client: createSupabaseAdminClient(), action, payload, ownerUserId, loadGrantContext, loadExamDates: loadExamDatesMap });
       if (!verdict.ok) return NextResponse.json({ error: verdict.error }, { status: verdict.status });
       payload = verdict.payload;
       if (verdict.shared?.ownerId) dataOwnerId = verdict.shared.ownerId;
@@ -241,11 +243,14 @@ export async function POST(request) {
         folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
         tags: payload.tags || []
       });
+      // A new plan that follows a teacher's exam date is linked to it, so the date's changes reach the plan.
+      if (isAccount && savedDocument?.id) await syncPlanLinks(ownerUserId, savedDocument.id, payload.file?.content);
       return await ok(ownerUserId, { savedDocument });
     }
 
     if (action === "updateGeneratedDocument") {
       const savedDocument = await updateGeneratedDocumentContent(payload.subjectId, payload.documentId, payload.file || {});
+      if (isAccount && dataOwnerId === ownerUserId) await syncPlanLinks(ownerUserId, payload.documentId, payload.file?.content);
       return await ok(ownerUserId, { savedDocument });
     }
 

@@ -10,6 +10,9 @@
  * Plans are workspace documents tagged `study-plan`, filed in a folder like everything else.
  */
 
+import { compareDeadlines, effectiveDue, isImposed, selfSetBy } from "./deadlines.js";
+import { senderNameOf } from "../accounts/shared.js";
+
 export const PLAN_TAG = "study-plan";
 
 export const PLAN_COLOURS = ["#0071e3", "#2f9e5b", "#b25e00", "#8e44ad", "#d7003a", "#0aa2c0"];
@@ -31,15 +34,29 @@ export const DEADLINE_KINDS = [
 let counter = 0;
 const id = (prefix) => `${prefix}_${Date.now().toString(36)}${(counter += 1).toString(36)}`;
 
-export function parsePlan(document) {
+/**
+ * @param {object} document a workspace document tagged `study-plan`
+ * @param {{ folders?: object[] }} [options] the folders of its topic: a received copy is filed in a folder named after the sender,
+ *   which is how `receivedFrom.name` ("Prof. Rivera") is known
+ */
+export function parsePlan(document, { folders = [] } = {}) {
   if (!document || !(document.tags || []).includes(PLAN_TAG)) return null;
   try {
     const parsed = JSON.parse(String(document.content || "{}"));
     if (parsed?.kind !== "study-plan") return null;
+    // A plan that came from someone else (a copy they assigned, or a live share): its deadlines were set by them
+    // unless they say otherwise. `name` is filled in by the screens that know the sender's folder (senderNameOf).
+    const copyFrom = (document.tags || []).map((tag) => String(tag)).find((tag) => tag.toLowerCase().startsWith("shared-by:"));
+    const receivedFrom = copyFrom
+      ? { id: copyFrom.slice("shared-by:".length), name: senderNameOf(document, folders) }
+      : document.shared && typeof document.shared === "object" && document.shared.ownerId
+        ? { id: String(document.shared.ownerId), name: String(document.shared.ownerName || "") }
+        : null;
     // Plans written before deadlines and sub-plans existed still open.
     return {
       ...parsed,
       documentId: document.id,
+      receivedFrom,
       deadlines: Array.isArray(parsed.deadlines) ? parsed.deadlines : (parsed.examDate ? [newDeadline("Exam", parsed.examDate, "exam")] : []),
       goals: Array.isArray(parsed.goals) ? parsed.goals : [],
       items: Array.isArray(parsed.items) ? parsed.items : [],
@@ -70,7 +87,8 @@ export function buildPlan({ name, examDate = "", deadlines = [], startDate = "",
   };
 }
 
-export const newDeadline = (title, date, kind = "exam") => ({ id: id("dl"), title: String(title || "Deadline").trim(), date, kind });
+/** A deadline the plan's owner sets (`setBy.kind === "self"`); deadlines a teacher or parent sets carry their own `setBy` (see deadlines.js). */
+export const newDeadline = (title, date, kind = "exam") => ({ id: id("dl"), title: String(title || "Deadline").trim(), date, kind, setBy: selfSetBy() });
 
 /** A goal is what has to be achieved — optionally the concepts that make it up. */
 export const newGoal = (title, targetScore = 0.8) => ({ id: id("goal"), title: String(title || "").trim(), targetScore, note: "", concepts: [], resourceIds: [], deadlineId: "" });
@@ -96,11 +114,24 @@ export function dueLabel(date) {
   return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-/** The plan's next deadline (or its last one when they have all passed). */
+/** The plan's next deadline (or its last one when they have all passed). On the same date an imposed deadline comes first. */
 export function nextDeadline(plan) {
-  const list = [...(plan.deadlines || [])].filter((deadline) => deadline.date).sort((a, b) => a.date.localeCompare(b.date));
+  const list = [...(plan.deadlines || [])].filter((deadline) => deadline.date).sort(compareDeadlines);
   if (!list.length) return null;
   return list.find((deadline) => daysUntil(deadline.date) >= 0) || list[list.length - 1];
+}
+
+/**
+ * The deadlines a card shows: the next one, and — when the plan also has one of the other origin (a teacher's
+ * date and the learner's own earlier one) — the next of that origin too, so a student sees both.
+ * @returns {object[]} one or two deadlines, the earlier first
+ */
+export function visibleDeadlines(plan) {
+  const first = nextDeadline(plan);
+  if (!first) return [];
+  const upcomingList = [...(plan.deadlines || [])].filter((deadline) => deadline.date && daysUntil(deadline.date) >= 0).sort(compareDeadlines);
+  const other = upcomingList.find((deadline) => isImposed(deadline) !== isImposed(first) && deadline.id !== first.id);
+  return other ? [first, other].sort(compareDeadlines) : [first];
 }
 
 /** A plan with everything its sub-plans contain, so a parent can be read as one piece of work. */
@@ -132,8 +163,8 @@ export function planProgress(plan, attempts = []) {
   const done = items.filter(isDone);
   const scores = items.map((item) => attemptByResource.get(item.resourceId)).filter((score) => score !== undefined);
   const average = scores.length ? scores.reduce((sum, score) => sum + score, 0) / scores.length : 0;
-  const late = items.filter((item) => !isDone(item) && daysUntil(item.dueDate) !== null && daysUntil(item.dueDate) < 0);
-  const next = items.filter((item) => !isDone(item)).sort((a, b) => String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999")));
+  const late = items.filter((item) => !isDone(item) && daysUntil(effectiveDue(item)) !== null && daysUntil(effectiveDue(item)) < 0);
+  const next = items.filter((item) => !isDone(item)).sort((a, b) => String(effectiveDue(a) || "9999").localeCompare(String(effectiveDue(b) || "9999")));
   const goals = (plan.goals || []).map((goal) => {
     const goalItems = items.filter((item) => item.goalId === goal.id || (goal.resourceIds || []).includes(item.resourceId));
     const goalScores = goalItems.map((item) => attemptByResource.get(item.resourceId)).filter((score) => score !== undefined);
@@ -211,7 +242,7 @@ export function calendarDays(rows = [], { from, days = 42, attempts = [] } = {})
     for (const deadline of plan.deadlines || []) {
       if (!deadline.date) continue;
       const entry = byDate.get(deadline.date) || [];
-      entry.push({ id: deadline.id, title: deadline.title, kind: "deadline", deadlineKind: deadline.kind, planId: document.id, planName: plan.name, colour: plan.colour, minutes: 0, done: false });
+      entry.push({ id: deadline.id, title: deadline.title, kind: "deadline", deadlineKind: deadline.kind, planId: document.id, planName: plan.name, colour: plan.colour, minutes: 0, done: false, imposed: isImposed(deadline), setByName: isImposed(deadline) ? deadline.setBy?.name || "" : "" });
       byDate.set(deadline.date, entry);
     }
   }
@@ -222,21 +253,28 @@ export function calendarDays(rows = [], { from, days = 42, attempts = [] } = {})
   });
 }
 
-/** What needs doing now, across every plan: late first, then today, then the next few days. */
+/**
+ * What needs doing now, across every plan: late first, then today, then the next few days. At the same
+ * distance an imposed deadline (set by a teacher or parent) comes before an own one, and a step of a plan that
+ * was received (`plan.receivedFrom`) before the learner's own work.
+ */
 export function upcoming(rows = [], attempts = [], withinDays = 7) {
   const out = [];
   for (const { document, plan } of rows) {
     const progress = planProgress(plan, attempts);
     for (const item of progress.next) {
-      const days = daysUntil(item.dueDate);
+      const due = effectiveDue(item);
+      const days = daysUntil(due);
       if (days === null || days > withinDays) continue;
-      out.push({ ...item, planId: document.id, planName: plan.name, colour: plan.colour, days });
+      const imposed = Boolean(plan.receivedFrom) && Boolean(item.dueDate) && due === item.dueDate;
+      out.push({ ...item, dueDate: due, planId: document.id, planName: plan.name, colour: plan.colour, days, imposed, setByName: imposed ? plan.receivedFrom?.name || "" : "" });
     }
     for (const deadline of plan.deadlines || []) {
       const days = daysUntil(deadline.date);
       if (days === null || days < 0 || days > withinDays) continue;
-      out.push({ id: deadline.id, title: deadline.title, kind: "deadline", planId: document.id, planName: plan.name, colour: plan.colour, days, dueDate: deadline.date });
+      const imposed = isImposed(deadline);
+      out.push({ id: deadline.id, title: deadline.title, kind: "deadline", planId: document.id, planName: plan.name, colour: plan.colour, days, dueDate: deadline.date, imposed, setByName: imposed ? deadline.setBy?.name || "" : "" });
     }
   }
-  return out.sort((a, b) => a.days - b.days);
+  return out.sort((a, b) => a.days - b.days || Number(Boolean(b.imposed)) - Number(Boolean(a.imposed)));
 }

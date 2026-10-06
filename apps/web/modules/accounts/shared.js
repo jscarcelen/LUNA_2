@@ -17,13 +17,20 @@
 export const SHARED_SUBJECT_NAME = "Shared documents";
 export const SHARED_BY_PREFIX = "shared-by:";
 export const ASSIGNED_BY_PREFIX = "assigned-by:";
+/**
+ * `due-by:<sender id>` says that the `due:YYYY-MM-DD` tag of this copy was set by that sender: it is IMPOSED, the
+ * receiver cannot change or remove it (server-enforced). The receiver's own date for the same item is
+ * `due-own:YYYY-MM-DD`, an ordinary tag they edit freely.
+ */
+export const DUE_BY_PREFIX = "due-by:";
+export const DUE_OWN_PREFIX = "due-own:";
 
 const lower = (value) => String(value || "").trim().toLowerCase();
 
 /** Tags only the server may add or remove; a client request can never change them. */
 export function isProtectedTag(tag) {
   const value = lower(tag);
-  return value.startsWith(SHARED_BY_PREFIX) || value.startsWith(ASSIGNED_BY_PREFIX);
+  return value.startsWith(SHARED_BY_PREFIX) || value.startsWith(ASSIGNED_BY_PREFIX) || value.startsWith(DUE_BY_PREFIX);
 }
 
 const tagValue = (document, prefix) => {
@@ -50,6 +57,32 @@ export function dueDateOf(document) {
   const found = (document?.tags || []).find((tag) => /^due:\d{4}-\d{2}-\d{2}$/.test(String(tag)));
   return found ? String(found).slice(4) : "";
 }
+
+/**
+ * The deadlines of an activity or other document, with their origin.
+ *   imposed: the sender's date (`due:` + `due-by:<id>`, or a legacy assigned copy's `due:`), locked for the receiver
+ *   own:     the receiver's own date (`due-own:` next to an imposed one, otherwise the plain `due:` tag)
+ *   date:    the earlier of the two (what sorts and what is "late")
+ * `byId` is the sender; the name is the folder the copy sits in (`senderNameOf`).
+ * @returns {{ imposed: { date: string, byId: string } | null, own: { date: string } | null, date: string }}
+ */
+export function dueInfoOf(document) {
+  const tags = (document?.tags || []).map((tag) => String(tag).trim());
+  const lowered = tags.map((tag) => tag.toLowerCase());
+  const due = dueDateOf(document);
+  const byTag = lowered.find((tag) => tag.startsWith(DUE_BY_PREFIX));
+  const assignedTag = lowered.find((tag) => tag.startsWith(ASSIGNED_BY_PREFIX));
+  const ownTag = tags.find((tag) => /^due-own:\d{4}-\d{2}-\d{2}$/i.test(tag));
+  const byId = byTag ? byTag.slice(DUE_BY_PREFIX.length) : assignedTag ? assignedTag.slice(ASSIGNED_BY_PREFIX.length) : "";
+  const imposed = due && byId ? { date: due, byId } : null;
+  const ownDate = ownTag ? ownTag.slice(DUE_OWN_PREFIX.length) : imposed ? "" : due;
+  const own = ownDate ? { date: ownDate } : null;
+  const dates = [imposed?.date, own?.date].filter(Boolean).sort();
+  return { imposed, own, date: dates[0] || "" };
+}
+
+/** The tag prefix a receiver's own date is stored under: `due-own:` next to an imposed date, the plain `due:` otherwise. */
+export const ownDueTagPrefix = (document) => (dueInfoOf(document).imposed ? DUE_OWN_PREFIX : "due:");
 
 export const isIsoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) && !Number.isNaN(Date.parse(`${value}T00:00:00Z`));
 
@@ -97,14 +130,21 @@ export function sharedEditAllowed(oldContent, newContent) {
     const copy = { ...object };
     delete copy.highlights;
     delete copy.updatedAt;
+    // Screen-only fields the plan page adds when it opens a plan and writes it back.
+    delete copy.documentId;
+    delete copy.receivedFrom;
     if (Array.isArray(copy.items)) {
       copy.items = copy.items.map((item) => {
         if (!item || typeof item !== "object") return item;
         const next = { ...item };
         delete next.doneAt;
+        // The receiver may add their own (earlier) date to a step they were given.
+        delete next.ownDueDate;
         return next;
       });
     }
+    // The receiver's own deadlines are theirs to add, change and remove; what the sender set stays exactly as sent.
+    if (Array.isArray(copy.deadlines)) copy.deadlines = copy.deadlines.filter((deadline) => deadline?.setBy?.kind !== "self");
     return copy;
   };
   return stable(clean(before)) === stable(clean(after));

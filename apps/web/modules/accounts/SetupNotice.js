@@ -5,6 +5,7 @@
  */
 export const ACCOUNTS_MIGRATION = "supabase/migrations/202610040001_accounts_links_sharing.sql";
 export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_sharing_grants.sql";
+export const GROUPS_MIGRATION = "supabase/migrations/202610070001_groups_exam_dates.sql";
 
 export function SetupNotice({ compact = false, migration = ACCOUNTS_MIGRATION, title = "Accounts need one database step" }) {
   return (

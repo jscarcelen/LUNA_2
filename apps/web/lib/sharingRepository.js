@@ -13,7 +13,8 @@ import { createSupabaseAdminClient } from "./supabaseClient.js";
 import { LinkError, assertEmailVerified, authorizeDelivery, classifyDeliverable } from "./accountsCore.js";
 import { findAccountById, getAcceptedLink } from "./accountsRepository.js";
 import { createFolder, createSubject, createWorkspace, updateDocumentMeta } from "./workspacesRepository.js";
-import { ASSIGNED_BY_PREFIX, SHARED_BY_PREFIX, SHARED_SUBJECT_NAME, isIsoDate, isProtectedTag } from "../modules/accounts/shared.js";
+import { ASSIGNED_BY_PREFIX, DUE_BY_PREFIX, DUE_OWN_PREFIX, SHARED_BY_PREFIX, SHARED_SUBJECT_NAME, isIsoDate, isProtectedTag } from "../modules/accounts/shared.js";
+import { senderSetBy } from "../modules/plans/deadlines.js";
 
 const COPY_COLUMNS = [
   "name", "content", "preview", "size_bytes", "source_type", "source_mime_type", "source_content_base64", "source_render_html",
@@ -22,7 +23,7 @@ const COPY_COLUMNS = [
 ];
 
 /** Tags that describe the sender's own use of a document and must not travel with the copy. */
-const dropTag = (tag) => isProtectedTag(tag) || tag === "favourite" || String(tag).startsWith("due:");
+const dropTag = (tag) => isProtectedTag(tag) || tag === "favourite" || String(tag).startsWith("due:") || String(tag).startsWith(DUE_OWN_PREFIX);
 
 /* ------------------------------------------------------------------ reading the sender's document */
 
@@ -80,8 +81,17 @@ export function carryReceiverLayer(oldContent, newContent) {
   if (Array.isArray(before.highlights) && before.highlights.length) after.highlights = before.highlights;
   if (Array.isArray(before.items) && Array.isArray(after.items)) {
     const done = new Map(before.items.filter((item) => item?.id && item.doneAt).map((item) => [item.id, item.doneAt]));
-    after.items = after.items.map((item) => (item?.id && done.has(item.id) ? { ...item, doneAt: done.get(item.id) } : item));
+    const own = new Map(before.items.filter((item) => item?.id && item.ownDueDate).map((item) => [item.id, item.ownDueDate]));
+    after.items = after.items.map((item) => {
+      let next = item;
+      if (item?.id && done.has(item.id)) next = { ...next, doneAt: done.get(item.id) };
+      if (item?.id && own.has(item.id)) next = { ...next, ownDueDate: own.get(item.id) };
+      return next;
+    });
   }
+  // The receiver's own deadlines survive a refresh; the sender's are replaced by what the sender sent now.
+  const mine = Array.isArray(before.deadlines) ? before.deadlines.filter((deadline) => deadline?.setBy?.kind === "self") : [];
+  if (mine.length) after.deadlines = [...(Array.isArray(after.deadlines) ? after.deadlines : []), ...mine];
   return JSON.stringify(after, null, 2);
 }
 
@@ -90,7 +100,7 @@ export function carryReceiverLayer(oldContent, newContent) {
  * cleared (a step then reads as plain text), sub-plan and agent links are dropped, and a due date given when
  * assigning becomes one more deadline.
  */
-export function remapPlanForRecipient(plan, idMap, { recipientName = "", senderName = "", dueDate = "" } = {}) {
+export function remapPlanForRecipient(plan, idMap, { recipientName = "", senderName = "", senderId = "", dueDate = "" } = {}) {
   const mapId = (id) => idMap.get(id) || "";
   const next = { ...plan, learner: recipientName || plan.learner || "", parentPlanId: "", agentScope: null };
   next.items = (plan.items || []).map((item) => {
@@ -99,9 +109,12 @@ export function remapPlanForRecipient(plan, idMap, { recipientName = "", senderN
   });
   next.goals = (plan.goals || []).map((goal) => ({ ...goal, resourceIds: (goal.resourceIds || []).map(mapId).filter(Boolean) }));
   next.materialIds = (plan.materialIds || []).map(mapId).filter(Boolean);
-  if (dueDate) {
-    next.deadlines = [...(plan.deadlines || []), { id: `dl_assigned_${Date.now().toString(36)}`, title: `Due (set by ${senderName || "your teacher"})`, date: dueDate, kind: "hand_in" }];
-  }
+  // Every deadline of the plan the sender sends was set by the sender: it is imposed (locked) for the receiver, who
+  // can add their own next to it. The due date given when assigning is one more of them.
+  const setBy = senderSetBy({ id: senderId, name: senderName });
+  const imposed = (plan.deadlines || []).map(({ examDateId: _exam, ...deadline }) => ({ ...deadline, setBy }));
+  if (dueDate) imposed.push({ id: `dl_assigned_${Date.now().toString(36)}`, title: `Due (set by ${senderName || "your teacher"})`, date: dueDate, kind: "hand_in", setBy });
+  next.deadlines = imposed;
   return next;
 }
 
@@ -126,16 +139,23 @@ async function copyExports(client, fromId, toId) {
  * Creates (or refreshes) one copy. `overrides.content` replaces the content (used for a rewritten plan).
  * @returns {Promise<{ copyId: string, created: boolean }>}
  */
-async function placeCopy(client, { sender, recipient, place, source, mode, itemType, dueDate, note, overrides = {}, extraTags = [] }) {
+async function placeCopy(client, { sender, recipient, place, source, mode, itemType, dueDate, note, overrides = {}, extraTags = [], skipIfCurrent = false, dryRun = false }) {
   const baseTags = source.tags.filter((tag) => !dropTag(tag));
-  const tags = [...new Set([...baseTags, `${SHARED_BY_PREFIX}${sender.id}`, ...(mode === "assign" ? [`${ASSIGNED_BY_PREFIX}${sender.id}`] : []), ...(dueDate ? [`due:${dueDate}`] : []), ...extraTags])];
+  // A date the sender gives is imposed: `due:` plus `due-by:<sender>` (protected: the receiver cannot change either;
+  // their own date goes in `due-own:`).
+  const tags = [...new Set([...baseTags, `${SHARED_BY_PREFIX}${sender.id}`, ...(mode === "assign" ? [`${ASSIGNED_BY_PREFIX}${sender.id}`] : []), ...(dueDate ? [`due:${dueDate}`, `${DUE_BY_PREFIX}${sender.id}`] : []), ...extraTags])];
 
   const { data: existingItem, error: itemError } = await client
     .from("shared_items")
-    .select("id, copy_document_id")
+    .select("id, copy_document_id, due_date, updated_at")
     .eq("sender_id", sender.id).eq("recipient_id", recipient.id).eq("source_document_id", source.row.id)
     .maybeSingle();
   if (itemError) throw itemError;
+  // A batch send does not rewrite copies that already match the original (same due date, original not edited since).
+  if (skipIfCurrent && existingItem?.copy_document_id && (existingItem.due_date || "") === (dueDate || "") && source.row.updated_at && existingItem.updated_at && String(source.row.updated_at) <= String(existingItem.updated_at)) {
+    return { copyId: existingItem.copy_document_id, created: false, alreadyHadIt: true };
+  }
+  if (dryRun) return { copyId: "", created: false, alreadyHadIt: false };
 
   const columns = {};
   for (const column of COPY_COLUMNS) if (column in source.row) columns[column] = source.row[column];
@@ -195,10 +215,11 @@ async function placeCopy(client, { sender, recipient, place, source, mode, itemT
  * @param {string} [args.dueDate] YYYY-MM-DD, assignments only
  * @param {string} [args.note]
  */
-export async function deliverDocument({ sender, recipientId, documentId, mode, dueDate = "", note = "" }) {
+export async function deliverDocument({ sender, recipientId, documentId, mode, dueDate = "", note = "", context = null, skipIfCurrent = false }) {
   assertEmailVerified(sender, "share or assign work");
-  const recipient = await findAccountById(recipientId);
-  const link = recipient ? await getAcceptedLink(sender.id, recipient.id) : null;
+  // A batch send looks the people and links up once for everybody and passes them in (`context`).
+  const recipient = context?.recipient || await findAccountById(recipientId);
+  const link = context ? context.link || null : recipient ? await getAcceptedLink(sender.id, recipient.id) : null;
   const allowed = authorizeDelivery({
     mode,
     sender: { id: sender.id, role: sender.role },
@@ -222,6 +243,11 @@ export async function deliverDocument({ sender, recipientId, documentId, mode, d
   if (kind.itemType === "plan") {
     const plan = parseJson(source.row.content);
     if (!plan || plan.kind !== "study-plan") throw new LinkError("not_deliverable", "This plan could not be read.", 400);
+    if (skipIfCurrent) {
+      // Already delivered and nothing changed since: leave the receiver's copy (and everything in it) alone.
+      const current = await placeCopy(client, { ...common, source, itemType: "plan", dueDate: due, skipIfCurrent: true, dryRun: true });
+      if (current?.alreadyHadIt) return { copyDocumentId: current.copyId, itemType: "plan", copiedResources: 0, refreshed: false, alreadyHadIt: true };
+    }
     // The plan travels with the resources it points at, so the receiver can follow it on their own.
     const idMap = new Map();
     for (const resourceId of planResourceIds(plan)) {
@@ -231,12 +257,12 @@ export async function deliverDocument({ sender, recipientId, documentId, mode, d
       const placed = await placeCopy(client, { ...common, source: resource, mode: "share", itemType: resource.tags.includes("activity") ? "activity" : "resource", dueDate: resource.tags.includes("activity") ? itemDue : "", extraTags: mode === "assign" ? [`${ASSIGNED_BY_PREFIX}${sender.id}`] : [] });
       idMap.set(resourceId, placed.copyId);
     }
-    const rewritten = remapPlanForRecipient(plan, idMap, { recipientName: recipient.display_name, senderName: sender.display_name, dueDate: due });
+    const rewritten = remapPlanForRecipient(plan, idMap, { recipientName: recipient.display_name, senderName: sender.display_name, senderId: sender.id, dueDate: due });
     const content = JSON.stringify(rewritten, null, 2);
     const placed = await placeCopy(client, { ...common, source, itemType: "plan", dueDate: due, overrides: { content, preview: source.row.preview } });
     return { copyDocumentId: placed.copyId, itemType: "plan", copiedResources: idMap.size, refreshed: !placed.created };
   }
 
-  const placed = await placeCopy(client, { ...common, source, itemType: kind.itemType, dueDate: due });
-  return { copyDocumentId: placed.copyId, itemType: kind.itemType, copiedResources: 0, refreshed: !placed.created };
+  const placed = await placeCopy(client, { ...common, source, itemType: kind.itemType, dueDate: due, skipIfCurrent });
+  return { copyDocumentId: placed.copyId, itemType: kind.itemType, copiedResources: 0, refreshed: !placed.created, ...(placed.alreadyHadIt ? { alreadyHadIt: true } : {}) };
 }

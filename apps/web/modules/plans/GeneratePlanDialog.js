@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { PlanProgress } from "./PlanProgress";
 import { PLAN_COLOURS, buildPlan, newDeadline, newGoal, newItem } from "./plan";
+import { examDeadline } from "./deadlines.js";
+import { ExamDatePicker } from "./ExamDates";
 import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
 import { capConceptTree } from "./conceptTree";
 import { MASTER_STEP_ID, planBuildSteps } from "./master";
@@ -94,9 +96,11 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], workspaceId = "", onCancel, onDone, onSavePlan, onBuild }) {
-  const [name, setName] = useState("");
-  const [deadline, setDeadline] = useState("");
+export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], workspaceId = "", examDates = [], initialExam = null, onCancel, onDone, onSavePlan, onBuild }) {
+  // "Use a teacher's exam date": the plan is ready by that date, which is locked and follows the teacher's changes.
+  const [exam, setExam] = useState(initialExam);
+  const [name, setName] = useState(initialExam?.title || "");
+  const [deadline, setDeadline] = useState(initialExam?.date || "");
   const [minutes, setMinutes] = useState(120);
   const [agentIds, setAgentIds] = useState(DEFAULT_PLAN_AGENT_IDS);
   const [picked, setPicked] = useState([]);
@@ -223,7 +227,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
       });
       const plan = buildPlan({
         name: name.trim() || proposal.name || "Study plan",
-        deadlines: [newDeadline("Exam", deadline, "exam")],
+        deadlines: [exam ? examDeadline(exam) : newDeadline("Exam", deadline, "exam")],
         colour: PLAN_COLOURS[Math.floor(Math.random() * PLAN_COLOURS.length)],
         note: proposal.note || "",
         goals,
@@ -277,9 +281,10 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
         <h4 className="m-0 text-lg font-bold text-ink">Plan it for me</h4>
         <p className="m-0 mt-1 text-xs text-soft-ink">Choose what to study and when it has to be ready. Luna spreads the work, generates the practice it needs, and gives more time to what you keep getting wrong.</p>
         <div className="mt-4 grid gap-3">
+          <ExamDatePicker examDates={examDates} value={exam?.id || ""} onChange={(entry) => { setExam(entry); if (entry) { setDeadline(entry.date); setName((current) => current || entry.title); } }} />
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-xs font-semibold text-soft-ink">Plan name<input className={input} value={name} onChange={(event) => setName(event.target.value)} placeholder="Maths final · June" /></label>
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Ready by<input type="date" className={input} value={deadline} onChange={(event) => setDeadline(event.target.value)} /></label>
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Ready by<input type="date" className={`${input} disabled:bg-[var(--surface-soft)]`} disabled={Boolean(exam)} title={exam ? `🔒 Set by ${exam.senderName || "your teacher"}` : undefined} value={deadline} onChange={(event) => setDeadline(event.target.value)} /></label>
           </div>
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Time per week
             <select className={input} value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}>

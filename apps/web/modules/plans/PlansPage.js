@@ -24,6 +24,9 @@ import { buildConceptForest, capConceptTree } from "./conceptTree.js";
 import { UpdatePlanDialog } from "./UpdatePlanDialog";
 import { UpdateDialog } from "../resources/UpdateDialog";
 import { canUpdateResource } from "../resources/update";
+import { deadlineOrigin, effectiveDue, examDeadline } from "./deadlines.js";
+import { DeadlineOrigin, OriginBadge } from "./DeadlineBadge";
+import { ExamDatePicker, ExamDatesCard, PlanExamLink } from "./ExamDates";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -289,7 +292,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, onShareDocument }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -335,7 +338,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [graphPrereqs, setGraphPrereqs] = useState([]);
   const [masteryByConceptId, setMasteryByConceptId] = useState({});
 
-  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
+  // `folders` lets a received copy name who sent it (its deadlines were set by them: locked, with their name on the badge).
+  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document, { folders }) })).filter((row) => row.plan), [documents, folders]);
+  const [pickedExam, setPickedExam] = useState(null); // an exam date chosen for "Plan it for me" / "New plan"
+  // Home's "Plan for it" arrives as plans?generate=1&exam=<id>: open "Plan it for me" with that date once the dates are loaded.
+  useEffect(() => { if (startExamDateId && examDates.length) { const found = examDates.find((entry) => entry.id === startExamDateId); if (found) { setPickedExam(found); setGenerating(true); } } }, [startExamDateId, examDates.length]);
   const resources = useMemo(() => workspaceDocuments.map((document) => ({ document, resource: parseResource(document) })).filter((row) => row.resource), [workspaceDocuments]);
   const attempts = useMemo(() => joinAttempts(workspaceDocuments), [workspaceDocuments]);
   const concepts = useMemo(() => conceptIndex(resources), [resources]);
@@ -488,7 +495,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   }
 
   async function save(plan, documentId) {
-    const content = JSON.stringify({ ...plan, updatedAt: new Date().toISOString() }, null, 2);
+    // `receivedFrom` and `documentId` only exist while a plan is on screen; they are not part of what is stored.
+    const { receivedFrom: _receivedFrom, documentId: _documentId, ...stored } = plan;
+    const content = JSON.stringify({ ...stored, updatedAt: new Date().toISOString() }, null, 2);
     const deadline = nextDeadline(plan);
     const file = { name: `${plan.name}.plan.json`, content, preview: `${(plan.items || []).length} steps${deadline ? ` · ${deadline.date}` : ""}`, sizeBytes: content.length };
     setBusy(true);
@@ -688,7 +697,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               {parent ? <button type="button" className="ml-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpenId(parent.document.id)}>part of "{parent.plan.name}"</button> : null}
               <h3 className="m-0 mt-1 text-2xl font-bold tracking-tight text-ink">{plan.name}</h3>
               <p className="m-0 mt-1 text-sm text-soft-ink">
-                {progress.deadline ? `${progress.deadline.title}: ${dueLabel(progress.deadline.date)}` : "No deadline set"}
+                {progress.deadline ? <><DeadlineOrigin deadline={progress.deadline} plan={plan} className="mr-1.5 align-middle" />{`${progress.deadline.title}: ${dueLabel(progress.deadline.date)}`}</> : "No deadline set"}
                 {plan.learner ? ` · ${plan.learner}` : ""}
                 {progress.total ? ` · ${progress.done} of ${progress.total} steps done` : ""}
                 {children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"} (${wholeProgress.done}/${wholeProgress.total} in total)` : ""}
@@ -775,18 +784,29 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <section className={`${card} p-5`}>
           <p className={kicker}>Deadlines</p>
           <div className="mt-2 grid gap-2">
-            {(plan.deadlines || []).map((deadline) => (
-              <div key={deadline.id} className="flex flex-wrap items-center gap-1.5 rounded-xl border border-ink/10 p-2">
-                <input className="min-w-0 flex-1 rounded-lg border border-ink/12 px-2 py-1 text-sm" value={deadline.title} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, title: event.target.value } : entry)) }))} />
-                <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
-                  {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
-                </select>
-                <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
-                <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date)}</span>
-                <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
-              </div>
-            ))}
-            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt("What is the deadline? e.g. Mock exam"); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ Add a deadline</button>
+            {[...(plan.deadlines || [])].sort((a, b) => String(a.date || "9999").localeCompare(String(b.date || "9999")) || Number(deadlineOrigin(b, { receivedFrom: plan.receivedFrom }).imposed) - Number(deadlineOrigin(a, { receivedFrom: plan.receivedFrom }).imposed)).map((deadline) => {
+              // A deadline a teacher or parent set is locked (the server refuses changes too): dark badge + 🔒. Your own are editable.
+              const origin = deadlineOrigin(deadline, { receivedFrom: plan.receivedFrom });
+              return (
+                <div key={deadline.id} className={`flex flex-wrap items-center gap-1.5 rounded-xl border p-2 ${origin.imposed ? "border-ink/25 bg-[var(--surface-soft)]" : "border-ink/10"}`}>
+                  <DeadlineOrigin deadline={deadline} plan={plan} />
+                  <input className="min-w-0 flex-1 rounded-lg border border-ink/12 px-2 py-1 text-sm disabled:bg-transparent disabled:text-ink" disabled={origin.locked} title={origin.locked ? origin.tooltip : undefined} value={deadline.title} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, title: event.target.value } : entry)) }))} />
+                  <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent" disabled={origin.locked} value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
+                    {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                  </select>
+                  <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent disabled:text-ink" disabled={origin.locked} title={origin.locked ? `🔒 Set by ${origin.by}` : undefined} aria-label={origin.locked ? `Date, locked, set by ${origin.by}` : "Date"} value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
+                  <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date)}</span>
+                  {origin.locked ? (
+                    <span className="text-xs text-soft-ink" title={origin.tooltip} aria-label={origin.tooltip}>🔒</span>
+                  ) : (
+                    <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" aria-label="Remove this deadline" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
+                  )}
+                  {deadline.cancelledFrom ? <span className="basis-full text-[11px] text-soft-ink">{deadline.cancelledFrom} cancelled this exam date. The date stays as your own deadline: change or remove it as you like.</span> : null}
+                </div>
+              );
+            })}
+            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt(plan.receivedFrom ? "Your own deadline, e.g. Finish before the weekend" : "What is the deadline? e.g. Mock exam"); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ {(plan.deadlines || []).some((entry) => deadlineOrigin(entry, { receivedFrom: plan.receivedFrom }).imposed) ? "Add your own deadline" : "Add a deadline"}</button>
+            <PlanExamLink plan={plan} examDates={examDates} busy={busy} onLink={async (examDateId) => { const result = await onLinkPlanToExamDate?.(examDateId, open.document.id); setStatus(result?.ok ? "Linked: the plan now follows your teacher's exam date." : (result?.error || "Could not link the exam date.")); }} />
           </div>
         </section>
 
@@ -936,12 +956,30 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                 </p>
                               )}
                             </span>
-                            <input
-                              type="date"
-                              className="rounded-lg border border-ink/12 px-2 py-1 text-xs"
-                              value={item.dueDate || ""}
-                              onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
-                            />
+                            {plan.receivedFrom && item.dueDate ? (
+                              <span className="flex flex-wrap items-center gap-1.5">
+                                {/* A step of a plan somebody sent you: their date is locked; your own (earlier) date goes next to it. */}
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#1d1d1f] px-2 py-1 text-xs font-semibold text-white" title={`🔒 Set by ${plan.receivedFrom.name || "your teacher"}. You cannot change it; add your own date next to it.`}>
+                                  <span aria-hidden="true">🔒</span>{dueLabel(item.dueDate)}<span className="max-w-[7rem] truncate font-normal opacity-80">· {plan.receivedFrom.name || "Your teacher"}</span>
+                                </span>
+                                <input
+                                  type="date"
+                                  className="rounded-lg border border-ink/25 px-2 py-1 text-xs"
+                                  aria-label="Your own deadline for this step"
+                                  title="Your own deadline (optional)"
+                                  max={item.dueDate}
+                                  value={item.ownDueDate || ""}
+                                  onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, ownDueDate: event.target.value } : entry)) }))}
+                                />
+                              </span>
+                            ) : (
+                              <input
+                                type="date"
+                                className="rounded-lg border border-ink/12 px-2 py-1 text-xs"
+                                value={item.dueDate || ""}
+                                onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, dueDate: event.target.value } : entry)) }))}
+                              />
+                            )}
                             {/* Every step can be opened: the quiz or flashcards to do, the summary to read, the document to study. */}
                             {activity ? (
                               <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>Do activity</button>
@@ -1250,10 +1288,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-            {[["plans", "Plans"], ["calendar", "Calendar"]].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
+            {[["plans", "Plans"], ["calendar", "Calendar"], ...(examDates.length ? [["exams", `Exam dates (${examDates.filter((entry) => !entry.dismissedAt).length})`]] : [])].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
           </div>
-          <button type="button" className={ghostBtn} onClick={() => setGenerating(true)}>✦ Plan it for me</button>
-          <button type="button" className={primaryBtn} onClick={() => { setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan</button>
+          <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>
+          <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan</button>
         </div>
       </div>
 
@@ -1269,6 +1307,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 <button type="button" className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition hover:bg-[var(--surface-soft)] ${alert.days < 0 ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : alert.days === 0 ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/40" : "border-ink/10"}`} onClick={() => setOpenId(alert.planId)}>
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: alert.colour }} />
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{alert.kind === "deadline" ? "★ " : ""}{alert.title}</span><span className="block text-[11px] text-soft-ink">{alert.planName}</span></span>
+                  {alert.imposed || alert.kind === "deadline" ? <OriginBadge imposed={Boolean(alert.imposed)} by={alert.setByName} /> : null}
                   <span className={`shrink-0 text-xs font-semibold ${alert.days < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(alert.dueDate)}</span>
                 </button>
               </li>
@@ -1279,7 +1318,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
       {status ? <p className="m-0 px-1 text-xs text-[var(--accent-ink)]">{status}</p> : null}
 
-      {tab === "calendar" ? <PlanCalendar rows={plans} attempts={attempts} onOpenPlan={setOpenId} onMoveItem={moveItem} /> : (
+      {tab === "exams" ? (
+        <ExamDatesCard
+          examDates={examDates}
+          showHidden
+          title="Exam dates from my teachers"
+          emptyHint="Nothing yet. When a teacher or parent sends you an exam date it shows here and in the bell."
+          onPlan={(entry) => { setPickedExam(entry); setGenerating(true); }}
+          onOpenPlan={(documentId) => { const row = plans.find((entry) => entry.document.id === documentId); if (row) { setTab("plans"); setOpenId(documentId); } else setStatus("That plan is in another topic: open it from there."); }}
+          onDismiss={(entry, hide) => onDismissExamDate?.(entry, hide)}
+        />
+      ) : tab === "calendar" ? <PlanCalendar rows={plans} attempts={attempts} onOpenPlan={setOpenId} onMoveItem={moveItem} /> : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {roots.map(({ document, plan }) => {
             const children = plans.filter((row) => row.plan.parentPlanId === document.id);
@@ -1306,7 +1355,15 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         </div>
       )}
 
-      {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { const plan = buildPlan(draft); const saved = await save(plan); await fileNewPlan(plan, saved?.id || saved?.documentId || ""); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+      {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} examDates={examDates} onCancel={() => setCreating(false)} onCreate={async () => {
+        // A teacher's exam date becomes the plan's first deadline: locked, and it follows the date if the teacher moves it.
+        const exam = draft.examDateId ? examDates.find((entry) => entry.id === draft.examDateId) : null;
+        const plan = buildPlan({ ...draft, deadlines: exam ? [examDeadline(exam)] : [] });
+        const saved = await save(plan);
+        await fileNewPlan(plan, saved?.id || saved?.documentId || "");
+        setCreating(false);
+        setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" });
+      }} /> : null}
       {updateDialogs}
       {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
@@ -1318,6 +1375,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           folders={folders}
           resources={resources}
           attempts={attempts}
+          examDates={examDates}
+          initialExam={pickedExam}
           onCancel={() => setGenerating(false)}
           onDone={(message, info) => { setGenerating(false); setStatus(message); if (info && info.built === false) fileNewPlan(info.plan, info.savedId); }}
           onSavePlan={(plan) => save(plan)}
@@ -1408,7 +1467,7 @@ function DeletePlanDialog({ planRow, documents, folders, busy, onCancel, onConfi
   );
 }
 
-function CreateDialog({ draft, setDraft, busy, plans, onCancel, onCreate }) {
+function CreateDialog({ draft, setDraft, busy, plans, examDates = [], onCancel, onCreate }) {
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>
@@ -1416,7 +1475,8 @@ function CreateDialog({ draft, setDraft, busy, plans, onCancel, onCreate }) {
         <p className="m-0 mt-1 text-xs text-soft-ink">A name and a first deadline. Goals, resources and further deadlines are added inside.</p>
         <div className="mt-4 grid gap-3">
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input autoFocus className={field} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Maths final · June" /></label>
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">First deadline<input type="date" className={field} value={draft.examDate} onChange={(event) => setDraft({ ...draft, examDate: event.target.value })} /></label>
+          <ExamDatePicker examDates={examDates} value={draft.examDateId || ""} onChange={(exam) => setDraft({ ...draft, examDateId: exam?.id || "", examDate: exam?.date || draft.examDate, name: draft.name || exam?.title || "" })} />
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">First deadline<input type="date" className={field} disabled={Boolean(draft.examDateId)} value={draft.examDate} onChange={(event) => setDraft({ ...draft, examDate: event.target.value })} /></label>
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">What is it for?<textarea className={field} rows={2} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Cover units 4 to 6 and fix the mistakes from the mock." /></label>
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Part of
             <select className={field} value={draft.parentPlanId} onChange={(event) => setDraft({ ...draft, parentPlanId: event.target.value })}>

@@ -17,11 +17,14 @@
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { changeGrantPermission, leaveGrant, listGrantOverview, listGrantsOnItem, revokeGrant, shareItem } from "../../../../lib/grantsRepository.js";
 import { notifyShared } from "../../../../lib/accountFlows.js";
+import { afterResponse } from "../../../../lib/afterResponse.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
 import { errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// A group of 200 is processed a few people at a time within a 45 s budget (lib/batchSend.js); the rest is returned as `deferred`.
+export const maxDuration = 60;
 
 export async function GET(request) {
   const unconfigured = rejectUnconfigured();
@@ -61,13 +64,16 @@ export async function POST(request) {
         kind: String(body?.kind || ""),
         itemId: String(body?.itemId || ""),
         recipientIds: Array.isArray(body?.recipientIds) ? body.recipientIds : [],
+        groupIds: Array.isArray(body?.groupIds) ? body.groupIds : [],
         permission
       });
       const failed = done.results.filter((result) => !result.ok);
-      if (failed.length === done.results.length) return json({ error: failed[0].error, results: done.results }, failed[0].status || 400);
-      // Best effort and never part of the answer: the email cannot change what the sharer sees.
-      await notifyShared(account, { recipientIds: done.results.filter((result) => result.ok && result.changed).map((result) => result.recipientId), itemName: done.itemName, permission }, publicBaseUrl(request));
-      return json({ results: done.results, itemName: done.itemName, permission });
+      if (failed.length === done.results.length && !done.results.some((result) => result.deferred)) return json({ error: failed[0].error, results: done.results, summary: done.summary }, failed[0].status || 400);
+      // Best effort, after the response, and never part of the answer: the email cannot change what the sharer sees.
+      const mailed = done.results.filter((result) => result.ok && result.changed).map((result) => result.recipientId);
+      const baseUrl = publicBaseUrl(request);
+      await afterResponse(() => notifyShared(account, { recipientIds: mailed, itemName: done.itemName, permission, batch: mailed.length > 1 }, baseUrl));
+      return json({ results: done.results, summary: done.summary, groupsUsed: done.groupsUsed, itemName: done.itemName, permission });
     }
     if (action === "permission") {
       await changeGrantPermission(account, String(body?.grantId || ""), String(body?.permission || ""));

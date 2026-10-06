@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { defaultLearner } from "../performance/learners";
-import { daysUntil, parsePlan } from "../plans/plan";
+import { daysUntil, dueLabel, parsePlan } from "../plans/plan";
 import { ReaderView } from "../reader/ReaderView";
 import { UpdateDialog } from "../resources/UpdateDialog";
 import { canUpdateResource } from "../resources/update";
+import { DUE_OWN_PREFIX, dueInfoOf, senderNameOf } from "../accounts/shared";
+import { OriginBadge } from "../plans/DeadlineBadge";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -17,9 +19,9 @@ const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font
 function parse(document) {
   try { return JSON.parse(String(document.content || "{}")); } catch { return null; }
 }
+/** The date an activity is judged by: the earlier of the sender's (imposed) date and your own. */
 function dueOf(document) {
-  const tag = (document.tags || []).find((t) => String(t).startsWith("due:"));
-  return tag ? String(tag).slice(4) : "";
+  return dueInfoOf(document).date;
 }
 function scoreTone(pct) {
   return pct >= 80 ? "text-[#2f9e5b]" : pct >= 50 ? "text-[#b25e00]" : "text-[var(--color-danger)]";
@@ -67,7 +69,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const rows = activities.map((a) => {
     const list = attemptsFor(a).sort((x, y) => String(y.attempt.at).localeCompare(String(x.attempt.at)));
     const best = list.reduce((m, p) => Math.max(m, p.attempt.total ? p.attempt.score / p.attempt.total : 0), 0);
-    return { ...a, attempts: list, best, due: dueOf(a.document), done: list.length > 0, folder: (subject?.folders || []).find((f) => (a.document.folderIds || []).includes(f.id))?.name || "" };
+    return { ...a, attempts: list, best, due: dueOf(a.document), dueInfo: dueInfoOf(a.document), dueBy: senderNameOf(a.document, subject?.folders || []), done: list.length > 0, folder: (subject?.folders || []).find((f) => (a.document.folderIds || []).includes(f.id))?.name || "" };
   });
   /** Priority: what is late first, then what is due soonest, then everything without a date. */
   const priority = (row) => {
@@ -109,8 +111,10 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   }
   async function setDue(row, date) {
     if (!onUpdateDocumentMeta) return;
-    const tags = (row.document.tags || []).filter((t) => !String(t).startsWith("due:"));
-    await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: date ? [...tags, `due:${date}`] : tags });
+    // A date the sender set is theirs (the server keeps it whatever is sent); your own date sits next to it as `due-own:`.
+    const prefix = row.dueInfo?.imposed ? DUE_OWN_PREFIX : "due:";
+    const tags = (row.document.tags || []).filter((t) => !String(t).startsWith(prefix));
+    await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: date ? [...tags, `${prefix}${date}`] : tags });
   }
 
   if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see its activities.</p></section>;
@@ -198,7 +202,15 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                       <p className="m-0 flex flex-wrap items-center gap-2 text-sm font-bold text-ink"><span className="truncate">{r.parsed.activity.title}</span>{r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>done</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>to do</span>}{overdue ? <span className={`${chip} bg-[rgba(255,59,48,0.12)] text-[var(--color-danger)]`}>overdue</span> : null}</p>
                       <p className="m-0 mt-0.5 text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</p>
                     </button>
-                    <label className="flex items-center gap-1 text-[11px] text-soft-ink">Due<input type="date" className="rounded-lg border border-ink/15 px-2 py-1 text-xs" value={r.due} onChange={(event) => setDue(r, event.target.value)} /></label>
+                    {r.dueInfo.imposed ? (
+                      <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink" title={`Set by ${r.dueBy || "your teacher"}. You cannot change it; add your own earlier date next to it.`}>
+                        <OriginBadge imposed by={r.dueBy} />
+                        <span className="font-semibold text-ink">{dueLabel(r.dueInfo.imposed.date)}</span>
+                        <label className="flex items-center gap-1">Your date<input type="date" className="rounded-lg border border-ink/25 px-2 py-1 text-xs" max={r.dueInfo.imposed.date} value={r.dueInfo.own?.date || ""} onChange={(event) => setDue(r, event.target.value)} /></label>
+                      </span>
+                    ) : (
+                      <label className="flex items-center gap-1.5 text-[11px] text-soft-ink"><OriginBadge imposed={false} /><input type="date" aria-label="Your deadline" className="rounded-lg border border-ink/15 px-2 py-1 text-xs" value={r.due} onChange={(event) => setDue(r, event.target.value)} /></label>
+                    )}
                     <button type="button" className={primaryBtn} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
                     {canUpdateResource(r.parsed) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdating(r)}>✦ Update…</button> : null}
                     {onRemoveDocument ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${r.parsed.activity.title}"?`)) onRemoveDocument(r.document.id); }}>Delete</button> : null}

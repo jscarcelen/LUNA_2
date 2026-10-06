@@ -3,6 +3,8 @@
 import { useMemo } from "react";
 import { PlanCard } from "../../plans/PlanCard";
 import { PLAN_TAG, dueLabel } from "../../plans/plan";
+import { ExamDatesCard } from "../../plans/ExamDates";
+import { OriginBadge } from "../../plans/DeadlineBadge";
 import { joinAttempts } from "../../performance/metrics";
 import { CoachPanel } from "../../performance/dashboard/CoachPanel";
 import { HOME_PLAN_LIMIT, coachInputFor, documentsOf, greeting, nextSteps, planRowsOf, rankPlans } from "../home";
@@ -20,7 +22,7 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * `onOpenPlan({ documentId, subjectId })` opens one plan in Study plans; `onOpenPage(target)` goes
  * to any other page.
  */
-export function DashboardPage({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage }) {
+export function DashboardPage({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate }) {
   const workspace = workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null;
   const documents = useMemo(() => documentsOf(workspace), [workspace]);
   const rows = useMemo(() => planRowsOf(workspace), [workspace]);
@@ -30,6 +32,15 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
   const steps = useMemo(() => nextSteps(entries, 5), [entries]);
   const hasMaterial = documents.some((document) => document.sourceType !== "generated" && !(document.tags || []).includes(PLAN_TAG));
   const hasEvidence = coach.topics.length > 0 || coach.errorTypes.length > 0;
+  // Exam dates teachers or parents sent (students only; the card is absent when there are none), right under the plan gallery.
+  const examCard = examDates.some((entry) => !entry.dismissedAt) ? (
+    <ExamDatesCard
+      examDates={examDates}
+      onPlan={(entry) => onOpenPage?.(`plans?generate=1&exam=${entry.id}`)}
+      onOpenPlan={(documentId) => onOpenPlan?.({ documentId, subjectId: rows.find((row) => row.document.id === documentId)?.subjectId || "" })}
+      onDismiss={(entry, hide) => onDismissExamDate?.(entry, hide)}
+    />
+  ) : null;
 
   return (
     <section className="tw-scope grid gap-6">
@@ -40,11 +51,14 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
           {[0, 1, 2, 3].map((index) => <div key={index} className="h-56 animate-pulse rounded-[18px] bg-ink/5" />)}
         </div>
       ) : !entries.length ? (
+        <>
+        {examCard}
         <div className={`${card} grid justify-items-start gap-3`}>
           <p className="m-0 text-base font-semibold text-ink">No study plans yet.</p>
           <p className="m-0 text-sm text-soft-ink">{hasMaterial ? "Let Luna turn your material into a plan with deadlines, activities and a way to track how it is going." : "Upload your course material and Luna will turn it into a plan with deadlines and activities."}</p>
           <button type="button" className={primaryBtn} onClick={() => onOpenPage?.(hasMaterial ? "plans?generate=1" : "workspaces")}>{hasMaterial ? "✦ Plan it for me" : "Upload material"}</button>
         </div>
+        </>
       ) : (
         <>
           <div className="grid grid-flow-col auto-cols-[82%] gap-3 overflow-x-auto pb-1 sm:auto-cols-[calc((100%-0.75rem)/2)] lg:auto-cols-[calc((100%-2.25rem)/4)]" aria-label="Study plans, closest deadline first">
@@ -60,6 +74,8 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
               />
             ))}
           </div>
+
+          {examCard}
 
           <div className={card}>
             <p className={kicker}>Next steps from Luna</p>
@@ -86,6 +102,7 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
                           <button type="button" className="flex w-full items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 text-left transition hover:bg-[var(--surface-soft)]" onClick={() => onOpenPlan?.({ documentId: step.planId, subjectId: step.subjectId })}>
                             <span className="size-2.5 shrink-0 rounded-full" style={{ background: step.colour }} />
                             <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{step.title}</span><span className="block truncate text-[11px] text-soft-ink">{step.planName}</span></span>
+                            {step.imposed ? <OriginBadge imposed by={step.setByName} /> : null}
                             <span className={`shrink-0 text-xs font-semibold ${step.days !== null && step.days < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(step.dueDate)}</span>
                           </button>
                         </li>

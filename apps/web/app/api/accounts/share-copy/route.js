@@ -14,6 +14,9 @@
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { listPendingComponents, markComponentsImported, shareCopy } from "../../../../lib/copyShareRepository.js";
 import { notifyShared } from "../../../../lib/accountFlows.js";
+import { afterResponse } from "../../../../lib/afterResponse.js";
+import { resolveBatchRecipients } from "../../../../lib/groupsRepository.js";
+import { summarizeResults } from "../../../../modules/accounts/groups.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
 import { errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
 
@@ -47,17 +50,23 @@ export async function POST(request) {
     const kind = String(body?.kind || "");
     if (kind === "imported") return json({ imported: await markComponentsImported(found.account.id, Array.isArray(body?.ids) ? body.ids : []) });
 
+    // Groups the sender chose are expanded here (their current members), each person once.
+    const groupIds = Array.isArray(body?.groupIds) ? body.groupIds : [];
+    const individual = Array.isArray(body?.recipientIds) ? body.recipientIds : [];
+    const people = groupIds.length ? await resolveBatchRecipients(found.account, { groupIds, individualIds: individual }) : null;
     const done = await shareCopy({
       sender: found.account,
       kind,
       id: String(body?.id || ""),
       component: body?.component && typeof body.component === "object" ? body.component : null,
-      recipientIds: Array.isArray(body?.recipientIds) ? body.recipientIds : []
+      recipientIds: people ? people.recipients.map((entry) => entry.id) : individual
     });
     const failed = done.results.filter((result) => !result.ok);
-    if (failed.length === done.results.length) return json({ error: failed[0].error, results: done.results }, failed[0].status || 400);
-    await notifyShared(found.account, { recipientIds: done.results.filter((result) => result.ok).map((result) => result.recipientId), itemName: done.title, copyOf: kind }, publicBaseUrl(request));
-    return json({ results: done.results, title: done.title });
+    if (failed.length === done.results.length) return json({ error: failed[0].error, results: done.results, summary: summarizeResults(done.results) }, failed[0].status || 400);
+    const baseUrl = publicBaseUrl(request);
+    const mailed = done.results.filter((result) => result.ok).map((result) => result.recipientId);
+    await afterResponse(() => notifyShared(found.account, { recipientIds: mailed, itemName: done.title, copyOf: kind, batch: mailed.length > 1 }, baseUrl));
+    return json({ results: done.results, summary: summarizeResults(done.results), groupsUsed: people?.groupsUsed || [], title: done.title });
   } catch (error) {
     return errorResponse(error);
   }

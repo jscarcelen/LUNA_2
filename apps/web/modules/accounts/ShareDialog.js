@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ROLE_LABEL, accountsApi } from "./api";
 import { SHARING_MIGRATION, SetupNotice } from "./SetupNotice";
+import { selectionStats, skipReasonOf, summarizeResults, summaryLine } from "./groups";
 import { classifyDeliverable, sharedInfoOf } from "./shared";
 import { field, ghostBtn, kicker, primaryBtn } from "./ui";
 
@@ -16,6 +17,7 @@ const PERMISSIONS = [
 ];
 
 const who = (person) => person.displayName || person.email;
+const skipLabel = (entry) => (skipReasonOf(entry) === "not_connected" ? "not connected any more" : entry.error || "failed");
 
 /**
  * "Share…": send something to people you are connected to (and only them; the server checks again).
@@ -46,6 +48,17 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [access, setAccess] = useState(null);
+  // Groups of students (teacher / parent): choosing a group selects all its currently connected members.
+  const [groups, setGroups] = useState([]);
+  const [groupIds, setGroupIds] = useState([]);
+  const [outcome, setOutcome] = useState(null);
+
+  useEffect(() => {
+    if (account.role !== "teacher" && account.role !== "parent") return undefined;
+    let alive = true;
+    accountsApi.groups().then((result) => { if (alive && result.ok) setGroups(result.data.groups || []); });
+    return () => { alive = false; };
+  }, [account.role]);
 
   useEffect(() => {
     let alive = true;
@@ -81,6 +94,11 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
 
   const toggle = (id) => setPicked((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
   const eligible = picked.filter((id) => rows.some((row) => row.other.id === id));
+  const toggleGroup = (id) => setGroupIds((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
+  const groupMap = useMemo(() => new Map(groups.map((group) => [group.id, { name: group.name, memberIds: group.memberIds }])), [groups]);
+  // "Group A (12) + 2 individuals": a person in several chosen groups (or also ticked by hand) counts once.
+  const stats = useMemo(() => selectionStats({ groupIds, individualIds: eligible, groups: groupMap }), [groupIds, eligible, groupMap]);
+  const nameById = useMemo(() => new Map((connections?.accepted || []).map((row) => [row.other.id, who(row.other)])), [connections]);
 
   const handle = (result) => {
     if (result.setupNeeded) { setSetup({ migration: result.migration || SHARING_MIGRATION, title: "Sharing with permissions needs one database step" }); return false; }
@@ -92,19 +110,27 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
     setBusy(true);
     setError("");
     setSuccess("");
+    setOutcome(null);
     let result;
-    if (mode === "assign") result = await accountsApi.send({ mode: "assign", documentId: item.id, recipientIds: eligible, dueDate, note });
-    else if (live) result = await accountsApi.shareLive({ kind: item.kind, itemId: item.id, recipientIds: eligible, permission });
-    else result = await accountsApi.shareCopy({ kind: item.kind, id: item.id, component: item.component, recipientIds: eligible });
+    if (mode === "assign") result = await accountsApi.send({ mode: "assign", documentId: item.id, recipientIds: eligible, groupIds, dueDate, note });
+    else if (live) result = await accountsApi.shareLive({ kind: item.kind, itemId: item.id, recipientIds: eligible, groupIds, permission });
+    else result = await accountsApi.shareCopy({ kind: item.kind, id: item.id, component: item.component, recipientIds: eligible, groupIds });
     setBusy(false);
     if (!handle(result)) return;
     const results = result.data.results || [];
-    const okCount = results.filter((entry) => entry.ok).length;
-    const failed = results.filter((entry) => !entry.ok);
+    const summary = result.data.summary || summarizeResults(results);
     const what = mode === "assign" ? "Assigned" : live ? `Shared (${permission === "edit" ? "can edit" : "can view"})` : "Sent a copy of";
-    const message = `${what} “${item.name}” with ${okCount} ${okCount === 1 ? "person" : "people"}${failed.length ? ` · ${failed.length} could not be sent: ${failed[0].error}` : ""}.`;
+    // Per person: delivered, or skipped (not connected any more / already has it / failed).
+    const message = `${what} “${item.name}”. ${summaryLine(summary)}.`;
     onDone?.(message);
-    if (live && mode === "share") {
+    const skipped = results.filter((entry) => !entry.ok || entry.alreadyHadIt);
+    if (skipped.length || summary.deferred || groupIds.length) {
+      setOutcome({ summary, skipped });
+      setSuccess(message);
+      setPicked([]);
+      setGroupIds([]);
+      if (live && mode === "share") await loadAccess();
+    } else if (live && mode === "share") {
       setSuccess(message);
       setPicked([]);
       await loadAccess();
@@ -139,8 +165,27 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
               </div>
             ) : null}
 
+            {groups.length ? (
+              <div>
+                <p className={`${kicker} mb-1.5`}>Groups</p>
+                <ul className="m-0 grid max-h-40 list-none gap-1 overflow-y-auto p-0">
+                  {groups.map((group) => (
+                    <li key={group.id}>
+                      <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 text-sm">
+                        <input type="checkbox" checked={groupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} disabled={!group.memberCount} />
+                        <span className="size-2 shrink-0 rounded-full" style={{ background: group.colour }} />
+                        <span className="min-w-0 flex-1 truncate font-semibold text-ink">{group.name}</span>
+                        <span className="text-[11px] text-soft-ink">{group.memberCount} {group.memberCount === 1 ? "student" : "students"}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <p className="m-0 mt-1 text-[11px] text-soft-ink">Choosing a group sends to all its students who are connected to you right now.</p>
+              </div>
+            ) : null}
+
             <div>
-              <p className={`${kicker} mb-1.5`}>{mode === "assign" ? "Your students" : "People you are connected to"}</p>
+              <p className={`${kicker} mb-1.5`}>{groups.length ? (mode === "assign" ? "…and individual students" : "…and individual people") : mode === "assign" ? "Your students" : "People you are connected to"}</p>
               {connections === null ? <p className="m-0 text-sm text-soft-ink">Loading…</p> : rows.length ? (
                 <>
                   {rows.length > 6 ? <input className={`${field} mb-1.5 w-full`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search your network" aria-label="Search your network" /> : null}
@@ -180,6 +225,7 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
               <label className="grid gap-1 text-xs font-semibold text-soft-ink">
                 Due date (optional)
                 <input className={field} type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+                <span className="text-[11px] font-normal text-soft-ink">It shows as set by you ({account.displayName}) and is locked for them: they cannot change or remove it, but they can add their own earlier date next to it.</span>
               </label>
             ) : null}
             {mode === "assign" ? (
@@ -197,7 +243,13 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
                   : `They get their own copy of this ${word}: they can use it and change it, but it is not kept in sync with yours.`}
             </p>
 
+            {stats.people ? <p className="m-0 text-xs font-semibold text-ink" role="status">{stats.line ? `${stats.line} · ` : ""}{stats.people} {stats.people === 1 ? "person" : "people"} in total</p> : null}
             {success ? <p className="m-0 text-xs text-[var(--accent-ink)]" role="status">{success}</p> : null}
+            {outcome?.skipped?.length ? (
+              <ul className="m-0 grid max-h-32 list-none gap-0.5 overflow-y-auto p-0 text-[11px] text-soft-ink">
+                {outcome.skipped.slice(0, 30).map((entry) => <li key={entry.recipientId}>{nameById.get(entry.recipientId) || "Someone"}: {entry.alreadyHadIt ? "already has it" : entry.deferred ? "not processed yet" : skipLabel(entry)}</li>)}
+              </ul>
+            ) : null}
             {error ? <p className="m-0 text-xs text-[var(--color-danger)]" role="alert">{error}</p> : null}
 
             {live && access?.length ? (
@@ -222,7 +274,7 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
 
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className={ghostBtn} onClick={onClose}>{success ? "Done" : "Cancel"}</button>
-          {deliverable.ok && !setup ? <button type="button" className={primaryBtn} disabled={busy || !eligible.length} onClick={send}>{busy ? "Sending…" : mode === "assign" ? "Assign" : live ? "Share" : "Send a copy"}</button> : null}
+          {deliverable.ok && !setup ? <button type="button" className={primaryBtn} disabled={busy || !stats.people} onClick={send}>{busy ? "Sending…" : mode === "assign" ? "Assign" : live ? "Share" : "Send a copy"}</button> : null}
         </div>
       </div>
     </div>

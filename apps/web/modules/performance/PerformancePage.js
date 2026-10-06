@@ -32,7 +32,7 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onRemoveDocument, onOpenPage, onSelectSubject }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -75,7 +75,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const resources = useMemo(() => readResources(documents), [documents]);
   const all = useMemo(() => joinAttempts(documents), [documents]);
   const goals = useMemo(() => documents.map(parseGoal).filter(Boolean), [documents]);
-  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
+  const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document, { folders: subject?.folders || [] }) })).filter((row) => row.plan), [documents, subject]);
   const resourceByDocumentId = useMemo(() => {
     const map = new Map();
     for (const document of documents) { const resource = parseResource(document); if (resource) map.set(document.id, resource); }
@@ -269,7 +269,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     selectedTopic,
     selected: topics.find((entry) => entry.topic === selectedTopic) || null,
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),
-    onPickLearner: (name) => setLearner(name),
+    // Clicking a student in a class panel filters to them; a group view (My students) also opens their individual view.
+    onPickLearner: (name) => { setLearner(name); onOpenLearner?.(name); },
     onOpenPage,
     onPractise: (action) => practise(action),
     onSchedule: () => onOpenPage?.("plans"),

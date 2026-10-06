@@ -19,7 +19,13 @@ export const limits = {
   /** Emails sent to other people, per sender. */
   notifyBySender: createRateLimiter({ limit: 20, windowMs: HOUR }),
   /** "X shared an agent/template/component with you" emails: 3 an hour per sharer and person. */
-  shareCopyByPair: createRateLimiter({ limit: 3, windowMs: HOUR })
+  shareCopyByPair: createRateLimiter({ limit: 3, windowMs: HOUR }),
+  /** People reached by group / batch sends (share, assign, exam date), per sender: 600 deliveries an hour (three full groups of 200). */
+  batchDeliveriesBySender: createRateLimiter({ limit: 600, windowMs: HOUR }),
+  /** Emails about batch sends, per sender (one per person; the per-sender cap keeps a mistake from mailing thousands). */
+  batchMailBySender: createRateLimiter({ limit: 400, windowMs: HOUR }),
+  /** At most this many groups created per hour (a script cannot fill the table). */
+  groupWritesBySender: createRateLimiter({ limit: 120, windowMs: HOUR })
 };
 
 export function clearAccountLimits() {

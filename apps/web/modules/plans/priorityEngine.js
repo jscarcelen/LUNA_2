@@ -3,6 +3,17 @@
  *
  * Pure functions — no DB access.
  */
+import { IMPOSED_WEIGHT, compareDeadlines } from "./deadlines.js";
+
+/**
+ * Orders deadlines by urgency: the nearest first, and on the same day the one a teacher or parent set (imposed)
+ * before the learner's own.
+ * @param {object[]} deadlines plan deadlines (`{ date, setBy }`)
+ * @returns {object[]} a sorted copy; deadlines without a date go last
+ */
+export function rankDeadlines(deadlines = []) {
+  return [...deadlines].sort(compareDeadlines);
+}
 
 /**
  * Compute priority score for a concept given the student's current state and exam context.
@@ -13,7 +24,7 @@
  * @param {Date|string|null} examDate
  * @returns {number} 0–1+ (can exceed 1 in urgent situations; callers should rank, not cap)
  */
-export function conceptPriority(state, concept, examDate = null) {
+export function conceptPriority(state, concept, examDate = null, { imposed = false } = {}) {
   const daysUntilExam = examDate
     ? Math.max(0, (new Date(examDate) - Date.now()) / 86400000)
     : 365;
@@ -24,11 +35,13 @@ export function conceptPriority(state, concept, examDate = null) {
   const importance = concept.importance ?? 0.5;                // 0–1 from knowledge graph
 
   // Urgency ramps up sharply in the last 14 days
-  const urgency = daysUntilExam <= 3  ? 2.5
+  const baseUrgency = daysUntilExam <= 3  ? 2.5
     : daysUntilExam <= 7  ? 2.0
     : daysUntilExam <= 14 ? 1.5
     : daysUntilExam <= 30 ? 1.2
     : 1.0;
+  // A date a teacher or parent set outranks an equal one the learner set for themselves (the tie-break, not a trump card).
+  const urgency = examDate && imposed ? baseUrgency * IMPOSED_WEIGHT : baseUrgency;
 
   // Forgetting risk — increases after 7+ days without practice
   const daysSince = state.last_practiced
@@ -70,11 +83,11 @@ export function conceptPriority(state, concept, examDate = null) {
  * @returns {{ concept, state, priority, recommended }[]}
  */
 export function rankConcepts(concepts, stateByConceptId, opts = {}) {
-  const { examDate = null, topN = 5 } = opts;
+  const { examDate = null, examImposed = false, topN = 5 } = opts;
 
   const ranked = concepts.map((concept) => {
     const state    = stateByConceptId[concept.id] ?? {};
-    const priority = conceptPriority(state, concept, examDate);
+    const priority = conceptPriority(state, concept, examDate, { imposed: examImposed });
     return { concept, state, priority };
   }).sort((a, b) => b.priority - a.priority);
 

@@ -17,7 +17,8 @@
  * `authorizeWorkspaceAction` is pure (it gets the facts it needs), `guardWorkspaceAction` fetches them.
  * The public demo does not go through this: it has no accounts and no shared documents.
  */
-import { isProtectedTag, isReservedSubjectName, isSharedDocument, sharedEditAllowed } from "../modules/accounts/shared.js";
+import { dueInfoOf, isProtectedTag, isReservedSubjectName, isSharedDocument, sharedEditAllowed } from "../modules/accounts/shared.js";
+import { checkDeadlineEdit, unbackedClaims } from "../modules/plans/deadlines.js";
 import {
   PRIVATE_DOCUMENT_TAGS,
   atLeast,
@@ -56,7 +57,36 @@ const RESTRUCTURE_ACTIONS = new Set(["renameSubject", "removeSubject", "createFo
 const FOLDER_ACTIONS = new Set(["renameFolder", "moveFolder", "removeFolder"]);
 const FROZEN_DOCUMENT_ACTIONS = new Set(["renameDocument", "removeDocument", "updateDocumentContent", "reviewDocumentExtraction", "reprocessDocument"]);
 
-const SHARED_TOPIC_MESSAGE = "“Shared documents” and “Shared with me” are filled by the people you are connected to, so they cannot be restructured.";
+const parseObject = (text) => {
+  try {
+    const parsed = JSON.parse(String(text || ""));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Deadlines a teacher or parent set (`deadline.setBy.kind === "sender"`) are locked for the person who owns the
+ * plan: an edit that changes or removes one is refused, and a plan cannot claim a new one unless it follows an
+ * exam date that really was sent to this account (`facts.examDates`, loaded by guardWorkspaceAction). The
+ * receiver's own deadlines are untouched.
+ * @returns {string} the reason to refuse, or "" when the plan may be saved
+ */
+export function planDeadlineRefusal(oldContent, newContent, { examDates, accountId }) {
+  // Only study plans have deadlines: anything else (a quiz, a resource) is not even parsed.
+  if (!String(newContent || "").includes("study-plan")) return "";
+  const after = parseObject(newContent);
+  if (!after || after.kind !== "study-plan") return "";
+  const before = parseObject(oldContent);
+  const checked = checkDeadlineEdit(before?.kind === "study-plan" ? before : { deadlines: [] }, after);
+  if (!checked.ok) return checked.error;
+  const unbacked = unbackedClaims(checked.claims, examDates, accountId);
+  if (unbacked.length) return `“${String(unbacked[0].title || "This deadline").trim()}” can only come from an exam date your teacher or parent sent you.`;
+  return "";
+}
+
+const SHARED_TOPIC_MESSAGE ="“Shared documents” and “Shared with me” are filled by the people you are connected to, so they cannot be restructured.";
 const SHARED_DOCUMENT_MESSAGE = "This was shared with you, so it is read-only. You can read it, highlight it, take notes and answer it.";
 const MIXED_MESSAGE = "A shared item cannot be mixed with your own files in one step (nothing is moved in or out of a share).";
 
@@ -196,11 +226,24 @@ export function authorizeWorkspaceAction({ action, payload = {}, ownerUserId, fa
     if (!sharedEditAllowed(document.content, file.content)) return deny(SHARED_DOCUMENT_MESSAGE);
   }
 
+  // A plan the account owns: what a teacher or parent set cannot be changed or removed, and nothing can pretend to be theirs.
+  if (action === "updateGeneratedDocument" && document && !sharedCopy && document.tags.includes("study-plan")) {
+    const refusal = planDeadlineRefusal(document.content, (effective.file || {}).content, { examDates: facts.examDates, accountId: ownerUserId });
+    if (refusal) return deny(refusal);
+  }
+  if (action === "saveGeneratedQuizDocument") {
+    const refusal = planDeadlineRefusal("", (effective.file || {}).content, { examDates: facts.examDates, accountId: ownerUserId });
+    if (refusal) return deny(refusal);
+  }
+
   if (action === "updateDocumentMeta" && document) {
     const requested = (Array.isArray(effective.tags) ? effective.tags : []).filter((tag) => !isProtectedTag(tag));
     if (sharedCopy) {
-      // Favourites and the like may change; where it is filed and who sent it may not.
-      next.tags = [...requested, ...document.tags.filter(isProtectedTag)];
+      // Favourites and the like may change; where it is filed and who sent it may not. A date the sender set stays
+      // exactly as sent (the receiver's own date lives in `due-own:`).
+      const imposedDue = dueInfoOf(document).imposed;
+      const kept = imposedDue ? document.tags.filter((tag) => /^due:\d{4}-\d{2}-\d{2}$/.test(String(tag))) : [];
+      next.tags = [...(imposedDue ? requested.filter((tag) => !/^due:/i.test(String(tag).trim())) : requested), ...document.tags.filter(isProtectedTag), ...kept];
       next.folderIds = document.folderIds;
     } else {
       next.tags = requested;
@@ -272,8 +315,8 @@ export async function loadWorkspaceFacts(client, refs, { actorId = "" } = {}) {
       name: row.name,
       tags,
       folderIds: foldersOf.get(row.id) || (row.folder_id ? [row.folder_id] : []),
-      // The text a reader sees: only needed to check edits of shared copies.
-      content: shared ? displayContentOf(row.content) : ""
+      // The text a reader sees: only needed to check edits of shared copies and the locked deadlines of a study plan.
+      content: shared || tags.includes("study-plan") ? displayContentOf(row.content) : ""
     });
   }
 
@@ -328,8 +371,10 @@ export function displayContentOf(content) {
  * @param {object} args
  * @param {(accountId: string) => Promise<{ grants: Array, connections: Set<string> }>} [args.loadGrantContext]
  *   fetches this account's live grants and connections; only called when the request names something that is not the account's own
+ * @param {(accountId: string) => Promise<Map<string, { senderId: string, recipientId: string, date: string, revoked?: boolean }>>} [args.loadExamDates]
+ *   the exam dates sent to this account; only called when a plan being saved mentions one (`examDateId`)
  */
-export async function guardWorkspaceAction({ client, action, payload, ownerUserId, loadGrantContext }) {
+export async function guardWorkspaceAction({ client, action, payload, ownerUserId, loadGrantContext, loadExamDates }) {
   const body = payload || {};
   // The stand-in folder of a shared topic is not a database id: leave it out of the lookups.
   const refs = referencesIn(body);
@@ -341,6 +386,10 @@ export async function guardWorkspaceAction({ client, action, payload, ownerUserI
     const context = await loadGrantContext(ownerUserId);
     facts.grants = context.grants || [];
     facts.connections = context.connections || new Set();
+  }
+  // A plan that claims to follow a teacher's exam date is checked against the dates really sent to this account.
+  if (loadExamDates && (action === "updateGeneratedDocument" || action === "saveGeneratedQuizDocument") && String(body.file?.content || "").includes("\"examDateId\"")) {
+    facts.examDates = await loadExamDates(ownerUserId);
   }
   return authorizeWorkspaceAction({ action, payload: body, ownerUserId, facts });
 }

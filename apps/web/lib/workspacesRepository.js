@@ -28,6 +28,7 @@ import {
   toVectorLiteral
 } from "../modules/ai-tools/pipeline/embeddings.js";
 import { processUploadedDocument } from "../modules/document-processing/index.js";
+import { moveDocumentsTo, moveFolderTree } from "./workspaceMove.js";
 import JSZip from "jszip";
 import katex from "katex";
 import TurndownService from "turndown";
@@ -1352,14 +1353,30 @@ export async function renameFolder(folderId, nextName) {
   if (error) throw error;
 }
 
-export async function moveFolder(folderId, newParentFolderId) {
+/**
+ * Moves a folder (with its subfolders and every document filed in them) under another folder, to the
+ * root of a topic, or to another topic of the same workspace. See lib/workspaceMove.js for the rules.
+ * `newParentFolderId` "" = the root of the target topic (the folder's own topic when none is given).
+ */
+export async function moveFolder(folderId, newParentFolderId, options = {}) {
   const client = createSupabaseAdminClient();
-  // newParentFolderId = "" means move to subject root (set parent_folder_id to null).
-  const { error } = await client
-    .from("folders")
-    .update({ parent_folder_id: newParentFolderId || null, updated_at: new Date().toISOString() })
-    .eq("id", folderId);
-  if (error) throw error;
+  return moveFolderTree(client, {
+    folderId,
+    targetFolderId: newParentFolderId || "",
+    targetSubjectId: options.targetSubjectId || "",
+    nextName: options.nextName || ""
+  });
+}
+
+/** Moves one or more documents (ids stay the same) to a folder / topic of the same workspace. */
+export async function moveDocument(documentIds, options = {}) {
+  const client = createSupabaseAdminClient();
+  return moveDocumentsTo(client, {
+    documentIds: Array.isArray(documentIds) ? documentIds : [documentIds],
+    targetSubjectId: options.targetSubjectId || "",
+    targetFolderId: options.targetFolderId || "",
+    targetFolderIds: Array.isArray(options.targetFolderIds) ? options.targetFolderIds : []
+  });
 }
 
 export async function removeFolder(folderId) {

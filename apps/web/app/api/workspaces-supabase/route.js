@@ -7,6 +7,7 @@ import {
   getUploadedDocumentDownload,
   listDocumentBlockTemplates,
   listWorkspaceTree,
+  moveDocument,
   moveFolder,
   removeDocument,
   deleteDocumentBlockTemplate,
@@ -152,8 +153,23 @@ export async function POST(request) {
     }
 
     if (action === "moveFolder") {
-      await moveFolder(payload.folderId, payload.newParentFolderId || "");
-      return await ok(ownerUserId);
+      // newParentFolderId "" = the root of targetSubjectId (or of the folder's own topic); any topic of the same workspace.
+      const moved = await moveFolder(payload.folderId, payload.newParentFolderId || "", {
+        targetSubjectId: payload.targetSubjectId || "",
+        nextName: typeof payload.nextName === "string" ? payload.nextName : ""
+      });
+      return await ok(ownerUserId, { moved });
+    }
+
+    if (action === "moveDocument") {
+      // documentId or documentIds (a multi-selection moves in one request); no target folder = the root of the topic.
+      const documentIds = Array.isArray(payload.documentIds) && payload.documentIds.length ? payload.documentIds : [payload.documentId];
+      const moved = await moveDocument(documentIds, {
+        targetSubjectId: payload.targetSubjectId || "",
+        targetFolderId: payload.targetFolderId || "",
+        targetFolderIds: Array.isArray(payload.targetFolderIds) ? payload.targetFolderIds : []
+      });
+      return await ok(ownerUserId, { moved });
     }
 
     if (action === "removeFolder") {
@@ -324,6 +340,8 @@ export async function POST(request) {
         qualityReport
       }, { status: 422 });
     }
-    return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
+    // A refused move (wrong workspace, a folder into itself...) is the person's to fix, not a server fault.
+    const refused = error?.name === "MoveError" && Number(error.status) >= 400 && Number(error.status) < 500;
+    return NextResponse.json({ error: String(error.message || error) }, { status: refused ? Number(error.status) : 500 });
   }
 }

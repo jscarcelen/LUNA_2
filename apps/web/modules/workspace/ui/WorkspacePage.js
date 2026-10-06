@@ -34,6 +34,7 @@ export function WorkspacePage(props) {
       onRemoveSubject={props.onRemoveSubject}
       onCreateFolder={props.onCreateFolder}
       onMoveFolder={props.onMoveFolder}
+      onMoveDocuments={props.onMoveDocuments}
       onRenameFolder={props.onRenameFolder}
       onRemoveFolder={props.onRemoveFolder}
       onUpdateDocumentMeta={props.onUpdateDocumentMeta}

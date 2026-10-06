@@ -7,7 +7,9 @@ import { ResourceDetail } from "../../resources/ResourceDetail";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
 import { isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "../../resources/resource";
 import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
-import { branchOf, documentsOf, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
+import { branchOf, documentsOf, folderNode, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
+import { blockedTargets, destinationFolderId, documentMoveMessage, folderMoveMessage, undoGroups } from "../moveModel";
+import { MoveDialog } from "./MoveDialog";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
@@ -110,6 +112,7 @@ export function WorkspaceBrowser({
   onRemoveSubject,
   onCreateFolder,
   onMoveFolder,
+  onMoveDocuments,
   onRenameFolder,
   onRemoveFolder,
   onUpdateDocumentMeta,
@@ -144,6 +147,8 @@ export function WorkspaceBrowser({
   const [planningRow, setPlanningRow] = useState(null);
   const [preview, setPreview] = useState(null);
   const [formatFor, setFormatFor] = useState("");
+  const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
+  const [undo, setUndo] = useState(null); // { text, run }: offered while `text` is still what the status line says
   const fileRef = useRef(null);
   const folderRef = useRef(null);
   // dragRef tracks { type: "file"|"folder", id: string } for the current drag.
@@ -223,40 +228,91 @@ export function WorkspaceBrowser({
   }
 
   /* ---------------------------------------------------------------- documents */
-  function move(ids, targetNodeId) {
-    const target = targetNodeId ? parseNode(targetNodeId) : null;
-    let moved = 0;
-    let blocked = 0;
-    for (const id of ids) {
-      const document = allDocuments.find((item) => item.id === id);
-      if (!document) continue;
-      if (target && target.subjectId && target.subjectId !== document.subjectId) { blocked += 1; continue; }
-      const folderIds = target && target.kind === "folder" ? [target.folderId] : [];
-      onUpdateDocumentMeta?.(id, { folderIds, tags: document.tags || [] }, document.subjectId);
-      moved += 1;
-    }
+  /*
+   * Moving, by drag and drop or from the "Move to…" menu. Documents and folders go to any topic or folder of
+   * the workspace; the server keeps ids stable, carries notes, attempts and chunks along and refuses what is not allowed.
+   */
+  const subjectsList = workspace?.subjects || [];
+  const sharedTopic = (subjectId) => subjectsList.find((entry) => entry.id === subjectId)?.name === SHARED_SUBJECT_NAME;
+  const dragFile = (document) => ({ type: "file", id: document.id, ids: selectedIds.includes(document.id) ? selectedIds : [document.id] });
+  const toggleSelected = (id) => setSelectedIds((list) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]));
+  const openAt = (...nodeIds) => setOpenNodes((prev) => new Set([...prev, ...nodeIds.filter(Boolean)]));
+  function offerUndo(text, run) { setStatus(text); setUndo({ text, run }); }
+  async function runUndo() {
+    const entry = undo;
+    setUndo(null);
+    if (entry) await entry.run();
+  }
+
+  async function move(ids, targetNodeId) {
+    const target = parseNode(targetNodeId);
+    if (!onMoveDocuments || !target.subjectId) return;
+    if (sharedTopic(target.subjectId)) { setStatus(`“${SHARED_SUBJECT_NAME}” is filled by the people you are connected to, so nothing can be moved into it.`); return; }
+    const documents = [...new Set(ids)].map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean);
+    const movable = documents.filter((document) => !isSharedDocument(document));
+    const readOnly = documents.length - movable.length;
     setSelectedIds([]);
-    setStatus(`${moved} item${moved === 1 ? "" : "s"} moved${blocked ? ` · ${blocked} left where they were (they belong to another top-level folder)` : ""}.`);
+    if (!movable.length) { setStatus(readOnly ? "Documents sent to you are read-only, so they cannot be moved." : ""); return; }
+
+    // One request per destination: dropped on another topic's top level, uploaded and generated material go to different folders of it.
+    const groups = new Map();
+    for (const document of movable) {
+      const folderId = destinationFolderId({ document, targetNodeId, subjects: subjectsList });
+      groups.set(folderId, [...(groups.get(folderId) || []), document.id]);
+    }
+    let moved = 0;
+    let failure = "";
+    const notes = [];
+    const previous = [];
+    for (const [folderId, groupIds] of groups) {
+      const result = await onMoveDocuments(groupIds, { targetSubjectId: target.subjectId, targetFolderId: folderId });
+      if (!result || result.error) { failure = result?.error || "The move did not go through."; break; }
+      moved += result.documents || 0;
+      notes.push(...(result.notes || []));
+      previous.push(...(result.previous || []));
+    }
+    const paths = [...new Set([...groups.keys()].map((folderId) => pathOf(folders, folderId ? folderNode(target.subjectId, folderId) : targetNodeId)))];
+    openAt(targetNodeId, ...[...groups.keys()].filter(Boolean).map((folderId) => folderNode(target.subjectId, folderId)));
+    if (failure) { setStatus(`${failure}${moved ? ` (${moved} item${moved === 1 ? " was" : "s were"} already moved.)` : ""}`); return; }
+    const text = documentMoveMessage({ moved, readOnly, path: paths.join(" and "), notes: [...new Set(notes)] });
+    if (!moved || !previous.length) { setStatus(text); return; }
+    offerUndo(text, async () => {
+      setStatus("Moving back…");
+      for (const group of undoGroups(previous)) {
+        const back = await onMoveDocuments(group.ids, { targetSubjectId: group.targetSubjectId, targetFolderIds: group.targetFolderIds });
+        if (!back || back.error) { setStatus(back?.error || "Could not move them back."); return; }
+      }
+      setStatus(`${moved} item${moved === 1 ? "" : "s"} moved back.`);
+    });
   }
 
   /**
-   * Move a folder (node id) into a target folder (node id).
-   * Subjects cannot be moved into subfolders — they are always top-level.
-   * A folder cannot be dropped into itself or one of its own descendants.
+   * Move a folder (node id) under another folder, or to the top of any topic (node id), with everything in it.
+   * A topic is always top-level. A folder cannot be dropped into itself or one of its own descendants.
    */
-  function moveFolder(draggedNodeId, targetNodeId) {
+  async function moveFolder(draggedNodeId, targetNodeId) {
     const dragged = parseNode(draggedNodeId);
     const target = parseNode(targetNodeId);
-    if (dragged.kind === "subject") { setStatus("Top-level folders cannot be nested inside another folder."); return; }
+    if (!onMoveFolder || !target.subjectId) return;
+    if (dragged.kind === "subject") { setStatus("A topic stays at the top level. Move the folders or documents inside it instead."); return; }
     if (draggedNodeId === targetNodeId) return; // same folder
     // Prevent dropping into a descendant (would create a cycle).
-    const branch = branchOf(folders, draggedNodeId);
-    if (branch.has(targetNodeId)) { setStatus("A folder cannot be moved inside one of its own subfolders."); return; }
-    // Determine the raw parent folder id the API expects.
-    // If target is the subject root, clear parentFolderId; otherwise use its folderId.
-    const newParentFolderId = target.kind === "folder" ? target.folderId : "";
-    onMoveFolder?.(dragged.folderId, newParentFolderId);
-    setStatus("Folder moved.");
+    if (branchOf(folders, draggedNodeId).has(targetNodeId)) { setStatus("A folder cannot be moved inside one of its own subfolders."); return; }
+    if (sharedTopic(target.subjectId)) { setStatus(`“${SHARED_SUBJECT_NAME}” is filled by the people you are connected to, so nothing can be moved into it.`); return; }
+    const result = await onMoveFolder(dragged.folderId, target.kind === "folder" ? target.folderId : "", { targetSubjectId: target.subjectId });
+    if (!result || result.error) { setStatus(result?.error || "The folder could not be moved."); return; }
+    // A study plan's folder keeps its place under "Study plans", wherever it was dropped.
+    const redirected = Boolean(result.parentFolderId) && result.parentFolderId !== target.folderId;
+    const path = redirected ? `${result.subjectName} / Generated material / Study plans` : pathOf(folders, targetNodeId);
+    const movedNode = folderNode(result.subjectId, result.folderId);
+    openAt(targetNodeId, movedNode);
+    if (nodeId === draggedNodeId) setNodeId(movedNode);
+    if (result.unchanged) { setStatus(folderMoveMessage({ result, path })); return; }
+    offerUndo(folderMoveMessage({ result, path }), async () => {
+      setStatus("Moving back…");
+      const back = await onMoveFolder(result.folderId, result.previous.parentFolderId, { targetSubjectId: result.previous.subjectId, nextName: result.previous.name });
+      setStatus(!back || back.error ? back?.error || "Could not move it back." : `“${result.previous.name}” moved back.`);
+    });
   }
 
   function copyHere(ids) {
@@ -478,6 +534,7 @@ export function WorkspaceBrowser({
             ...(locked ? [] : [
             onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
             row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
+            onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? `Move ${selectedIds.length} selected to…` : "Move to…", icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
             { label: "Tags", icon: "🏷", onSelect: () => editTags(document) },
             { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } },
             { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); } }
@@ -596,7 +653,21 @@ export function WorkspaceBrowser({
           ) : null}
         </div>
 
-        {status ? <p className="mb-3 text-xs text-[var(--accent-ink)]">{status}{isWorking ? " …" : ""}</p> : null}
+        {status ? (
+          <p className="mb-3 text-xs text-[var(--accent-ink)]" role="status">
+            {status}{isWorking ? " …" : ""}
+            {undo && undo.text === status && !isWorking ? <button type="button" className="ml-2 font-semibold underline" onClick={runUndo}>Undo</button> : null}
+          </p>
+        ) : null}
+
+        {selectedIds.length && onMoveDocuments ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--accent-soft)]/40 px-3 py-2 text-xs text-ink">
+            <span className="font-semibold">{selectedIds.length} selected</span>
+            <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds })}>Move to…</button>
+            <button type="button" className={ghostBtn} onClick={() => setSelectedIds([])}>Clear</button>
+            <span className="text-soft-ink">Or drag any selected item onto a folder.</span>
+          </div>
+        ) : null}
 
         {reviewing ? (
           <div className="grid gap-1">
@@ -653,7 +724,7 @@ export function WorkspaceBrowser({
                       const drag = dragRef.current;
                       if (!drag) return;
                       dragRef.current = null;
-                      if (drag.type === "file") { move([drag.id], folder.id); }
+                      if (drag.type === "file") { move(drag.ids || [drag.id], folder.id); }
                       else if (drag.type === "folder") { moveFolder(drag.id, folder.id); }
                     }}>
                     {/* Folder header — draggable so folders can be nested */}
@@ -666,7 +737,21 @@ export function WorkspaceBrowser({
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
-                      <span className={`flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100${(workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name === SHARED_SUBJECT_NAME ? " hidden" : ""}`} onClick={(e) => e.stopPropagation()}>
+                      {/* On a phone there is no hover: the same actions, and "Move to…", live in the ⋯ menu. */}
+                      {!sharedTopic(folder.subjectId) ? (
+                        <span className={folder.isSubject || !onMoveFolder ? "sm:hidden" : ""} onClick={(e) => e.stopPropagation()}>
+                        <RowMenu
+                          label={`Actions for ${folder.name}`}
+                          items={[
+                            (onCreateFolder || onCreateSubject) ? { label: "New subfolder", icon: "＋", className: "sm:hidden", onSelect: () => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
+                            { label: "Rename", icon: "✎", className: "sm:hidden", onSelect: () => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
+                            onMoveFolder && !folder.isSubject ? { label: "Move to…", icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
+                            { label: "Delete", icon: "🗑", danger: true, className: "sm:hidden", onSelect: () => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); } }
+                          ]}
+                        />
+                        </span>
+                      ) : null}
+                      <span className={`shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 ${sharedTopic(folder.subjectId) ? "hidden" : "hidden sm:flex"}`} onClick={(e) => e.stopPropagation()}>
                         {(onCreateFolder || onCreateSubject) ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
                         <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button>
                         <button type="button" title="Delete" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-[rgba(255,59,48,0.1)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); }}>🗑</button>
@@ -689,10 +774,13 @@ export function WorkspaceBrowser({
                         {docs.map((document) => (
                           <div key={document.id}
                             draggable
-                            onDragStart={(e) => { e.stopPropagation(); dragRef.current = { type: "file", id: document.id }; }}
+                            onDragStart={(e) => { e.stopPropagation(); dragRef.current = dragFile(document); }}
                             onDragEnd={() => { dragRef.current = null; }}
                             className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}
                             style={{ paddingLeft: paddingLeft + 20 }}>
+                            {onMoveDocuments && !isSharedDocument(document) ? (
+                              <input type="checkbox" aria-label={`Select “${document.name}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
+                            ) : null}
                             <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                             <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
                               <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
@@ -716,7 +804,7 @@ export function WorkspaceBrowser({
                 // Documents with no folder structure — flat list
                 return visible.map((document) => (
                   <div key={document.id} draggable
-                    onDragStart={() => { dragRef.current = { type: "file", id: document.id }; }}
+                    onDragStart={() => { dragRef.current = dragFile(document); }}
                     onDragEnd={() => { dragRef.current = null; }}
                     className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]">
                     <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
@@ -752,6 +840,27 @@ export function WorkspaceBrowser({
           onStatus={setStatus}
         />
       ) : null}
+
+      {movePicker ? (() => {
+        const moving = movePicker.folderNodeId ? folders.find((entry) => entry.id === movePicker.folderNodeId) : null;
+        const count = (movePicker.documentIds || []).length;
+        const hidden = new Set(subjectsList.filter((entry) => entry.name === SHARED_SUBJECT_NAME).map((entry) => entry.id));
+        return (
+          <MoveDialog
+            title={moving ? `Move “${moving.name}”` : count === 1 ? `Move “${allDocuments.find((entry) => entry.id === movePicker.documentIds[0])?.name || "this item"}”` : `Move ${count} items`}
+            subtitle={moving ? "With everything inside it. Pick a topic to put it at the top of that topic, or a folder." : "Pick a topic to put it at the top of that topic, or a folder inside any topic."}
+            folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
+            disabledIds={moving ? blockedTargets(folders, moving.id) : []}
+            onCancel={() => setMovePicker(null)}
+            onPick={(targetNodeId) => {
+              const picked = movePicker;
+              setMovePicker(null);
+              if (picked.folderNodeId) moveFolder(picked.folderNodeId, targetNodeId);
+              else move(picked.documentIds, targetNodeId);
+            }}
+          />
+        );
+      })() : null}
 
       {planningRow ? (
         <AddToPlanDialog

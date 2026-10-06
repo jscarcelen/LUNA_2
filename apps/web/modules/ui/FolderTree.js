@@ -178,19 +178,23 @@ export function FolderTree({
 /**
  * Pick one folder from the same tree the workspace shows — collapsible, nothing else (no rename,
  * delete or drag). `selectedId` "" is "Unfiled". Used where a document is filed: saving a resource.
+ * `disabledIds` greys folders that cannot be chosen (a folder being moved and its own subfolders); a folder entry
+ * with `isSubject` is drawn as a topic (the workspace's move picker lists topics as the roots of the tree).
  */
-export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeight = 220, hideUnfiled = false }) {
+export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeight = 220, hideUnfiled = false, disabledIds = [] }) {
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
+  const disabled = useMemo(() => new Set(disabledIds), [disabledIds]);
   const [collapsed, setCollapsed] = useState({});
   const row = (node) => {
     const isOpen = !collapsed[node.id];
     const isSelected = selectedId === node.id;
+    const blocked = disabled.has(node.id);
     return (
       <div key={node.id}>
-        <div className={`flex min-w-0 items-center gap-1 rounded-lg py-1 pr-2 text-sm transition ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} style={{ paddingLeft: 4 + node.depth * 16 }}>
+        <div className={`flex min-w-0 items-center gap-1 rounded-lg py-1 pr-2 text-sm transition ${blocked ? "opacity-40" : ""} ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} style={{ paddingLeft: 4 + node.depth * 16 }}>
           <button type="button" className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`} onClick={() => setCollapsed((current) => ({ ...current, [node.id]: isOpen }))} aria-label={isOpen ? `Collapse ${node.name}` : `Expand ${node.name}`} aria-expanded={isOpen}>{isOpen ? "▾" : "▸"}</button>
-          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={() => onSelect?.(node.id)} aria-pressed={isSelected}>
-            <span aria-hidden>📁</span>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed" disabled={blocked} title={blocked ? "A folder cannot go inside itself" : undefined} onClick={() => onSelect?.(node.id)} aria-pressed={isSelected}>
+            <span aria-hidden>{node.isSubject ? "🗂" : "📁"}</span>
             <span className="truncate font-medium">{node.name}</span>
             {isSelected ? <span className="ml-auto shrink-0 text-xs font-bold" aria-hidden>✓</span> : null}
           </button>

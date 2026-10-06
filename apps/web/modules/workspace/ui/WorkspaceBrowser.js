@@ -518,10 +518,10 @@ export function WorkspaceBrowser({
     const locked = isSharedDocument(document) || Boolean(sharedWithMe);
     return (
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
-        {/* On a phone Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
-        <button type="button" className={`${ghostBtn} hidden sm:inline-flex`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
-        <button type="button" className={`${ghostBtn} hidden sm:inline-flex`} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
-        <span className="relative hidden sm:block">
+        {/* On a phone (max-sm: beats the inline-flex inside ghostBtn, which a plain "hidden" does not) Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
+        <button type="button" className={`${ghostBtn} max-sm:hidden`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
+        <button type="button" className={`${ghostBtn} max-sm:hidden`} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
+        <span className="relative max-sm:hidden">
           <button type="button" className={ghostBtn} title="Download in any format" aria-label="Download" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
           {formatFor === document.id ? (
             <span className="absolute right-0 top-full z-30 mt-1 grid w-44 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]" onMouseLeave={() => setFormatFor("")}>
@@ -802,7 +802,7 @@ export function WorkspaceBrowser({
                             {onMoveDocuments && !isSharedDocument(document) ? (
                               <input type="checkbox" aria-label={`Select “${document.name}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
                             ) : null}
-                            <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
+                            <span className="shrink-0 text-sm max-sm:hidden" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                             <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
                               <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
                               {meta(document)}

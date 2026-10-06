@@ -5634,20 +5634,23 @@ body {
   }
 
   .page-content {
-    padding: 14px 14px calc(84px + env(safe-area-inset-bottom));
+    padding: 14px 14px calc(100px + env(safe-area-inset-bottom));
   }
 
-  /* The tab bar. */
+  /* The tab bar: a floating rounded bar like a native tab bar — solid, no blur. */
   .bottom-tabs {
     position: fixed;
-    inset: auto 0 0 0;
+    inset: auto 10px max(10px, env(safe-area-inset-bottom)) 10px;
     /* Under dialogs and sheets (z-50), which must be able to cover it, and under the top bar. */
     z-index: 30;
     display: flex;
     align-items: stretch;
-    padding: 6px 6px max(6px, env(safe-area-inset-bottom));
+    gap: 2px;
+    padding: 6px;
     background: #fff;
-    border-top: 1px solid var(--line);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.14), 0 1px 3px rgba(0, 0, 0, 0.06);
   }
 
   .bottom-tab {
@@ -5657,19 +5660,22 @@ body {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    min-height: 52px;
-    padding: 4px 2px;
+    gap: 3px;
+    min-height: 56px;
+    padding: 6px 2px 5px;
     border: 0;
-    border-radius: 12px;
+    border-radius: 22px;
     background: none;
-    color: var(--soft-ink);
+    color: #8e8e93;
     font: inherit;
     cursor: pointer;
-    transition: color 0.18s ease, background 0.18s ease;
+    transition: color 180ms var(--ease, ease), background 180ms var(--ease, ease), transform 180ms var(--ease, ease);
   }
 
   .bottom-tab-icon {
+    display: grid;
+    place-items: center;
+    height: 26px;
     font-size: 21px;
     line-height: 1;
   }
@@ -5679,17 +5685,18 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
+    letter-spacing: 0.005em;
   }
 
   .bottom-tab.on {
     color: var(--accent);
-    background: var(--accent-soft, rgba(0, 113, 227, 0.08));
+    background: var(--accent-soft, rgba(0, 113, 227, 0.1));
   }
 
   .bottom-tab:active {
-    transform: scale(0.96);
+    transform: scale(0.94);
   }
 
   /* iOS zooms into any field under 16px. */

@@ -1290,8 +1290,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
             {[["plans", "Plans"], ["calendar", "Calendar"], ...(examDates.length ? [["exams", `Exam dates (${examDates.filter((entry) => !entry.dismissedAt).length})`]] : [])].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
           </div>
-          <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>
-          <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan</button>
+          <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>
+          <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan (manual)</button>
         </div>
       </div>
 

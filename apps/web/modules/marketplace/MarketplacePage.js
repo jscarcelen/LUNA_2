@@ -123,7 +123,13 @@ export function MarketplacePage({
             <button type="button" className={primaryBtn} onClick={() => setSelling(true)}>＋ Sell something</button>
           </div>
         </div>
-        <div className="flex flex-wrap gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
+        <label className="flex items-center gap-2 sm:hidden">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Show</span>
+          <select className="min-w-0 flex-1 rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm font-semibold text-ink" value={kind} onChange={(event) => setKind(event.target.value)} aria-label="Type of listing">
+            {KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.icon} {entry.label}</option>)}
+          </select>
+        </label>
+        <div className="hidden flex-wrap gap-1 rounded-xl bg-[var(--surface-soft)] p-1 sm:flex">
           {KINDS.map((entry) => (
             <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${kind === entry.id ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>
               <span className="mr-1" aria-hidden>{entry.icon}</span>{entry.label}

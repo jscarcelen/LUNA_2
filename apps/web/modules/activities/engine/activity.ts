@@ -7,6 +7,8 @@
 import type { FieldDef } from "../../template-studio/engine/types";
 import { deriveData } from "../../template-studio/engine/derive";
 import { renderMath } from "../../template-studio/engine/latex";
+import { causeFor, gradeLocally, scoreOf } from "../grading.js";
+import { isQuantitative } from "../quantitative.js";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
@@ -76,7 +78,27 @@ export interface Attempt {
    * given with certainty is a misconception to correct; a wrong answer given with a shrug is a gap
    * to teach. Blank when the activity did not ask.
    */
-  results: { id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string; correct: boolean | null; given: string; expected: string; ms?: number; confidence?: string }[];
+  results: AttemptResult[];
+}
+
+/**
+ * One answered question. `correct` is true only for a fully right answer; a written answer that is
+ * "close" has `correct: false`, `verdict: "close"` and a partial `score`. For written answers the grader
+ * also stores `feedback`, `errorCause` ("knowledge" | "analytical" | "accuracy") and `graded` ("ai" |
+ * "local"), and the performance engine prefers them to re-guessing.
+ */
+export interface AttemptResult {
+  id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string;
+  correct: boolean | null; given: string; expected: string; ms?: number; confidence?: string;
+  verdict?: "correct" | "close" | "incorrect";
+  /** Credit 0..1: 1 correct, partial for close, 0 wrong. */
+  score?: number;
+  feedback?: string;
+  errorCause?: "knowledge" | "analytical" | "accuracy" | null;
+  graded?: "ai" | "local";
+  makesSense?: boolean;
+  /** Does solving the question need maths? (decides analytical vs knowledge) */
+  quantitative?: boolean;
 }
 
 type Row = Record<string, unknown>;
@@ -180,12 +202,19 @@ export function hasAnswerableContent(fields: FieldDef[], data: Row): boolean {
   return buildActivity(fields, data).questions.length > 0;
 }
 
-/** Checks the student's answers. Flashcards are self-assessed (given = "known" | "unknown"). */
+/**
+ * Checks the student's answers, instantly and without a model. Flashcards are self-assessed
+ * (given = "known" | "unknown"). Written answers get the local comparison (`grading.js`): exact, number
+ * within tolerance, or the key words — with a verdict ("correct" | "close" | "incorrect") and a score
+ * (partial credit for "close"). The player then sends the written answers that need judging to
+ * `/api/activities/grade` and merges the result with `applyGrades`.
+ */
 export function gradeActivity(activity: Activity, answers: Record<string, unknown>, startedAt?: number, durations: Record<string, number> = {}, confidence: Record<string, string> = {}): Attempt {
   const results: Attempt["results"] = activity.questions.map((question) => {
     const given = answers[question.id];
     let correct: boolean | null = null;
     let expected = "";
+    let written: ReturnType<typeof gradeLocally> | null = null;
     if (question.kind === "tiles") {
       // given = tile index per slot, row-major. Correct when every slot holds the tile that was there in the solved grid.
       const placed = Array.isArray(given) ? (given as (number | null)[]) : [];
@@ -201,19 +230,23 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
     } else if (question.kind === "flashcard") {
       correct = given === "known" ? true : given === "unknown" ? false : null;
       expected = question.back || "";
-    } else if (question.kind === "number") {
-      const a = Number(String(question.answer).replace(",", "."));
-      const b = Number(String(given ?? "").replace(",", "."));
-      correct = Number.isFinite(a) && Number.isFinite(b) ? Math.abs(a - b) < 1e-9 : norm(given) === norm(question.answer);
+    } else if (question.kind === "number" || question.kind === "text") {
       expected = String(question.answer);
+      written = gradeLocally({ given: text(given), expected });
+      correct = written.verdict === "correct";
     } else {
       correct = given === undefined || given === "" ? false : norm(given) === norm(question.answer);
       expected = String(question.answer);
     }
-    return { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, ms: durations[question.id] || 0, confidence: confidence[question.id] || "", correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
+    const quantitative = isQuantitative({ prompt: question.prompt, expected, skill: question.skill, kind: question.kind });
+    const base = { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, ms: durations[question.id] || 0, confidence: confidence[question.id] || "", correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
+    if (correct === null) return base;
+    // Every graded answer carries its verdict and credit, so the performance engine reads one shape.
+    if (!written) return { ...base, verdict: correct ? "correct" as const : "incorrect" as const, score: correct ? 1 : 0, quantitative };
+    return { ...base, verdict: written.verdict, score: written.score, feedback: written.feedback, errorCause: causeFor({ verdict: written.verdict, quantitative, blank: Boolean(written.blank) }), makesSense: written.makesSense, quantitative, graded: "local" as const };
   });
   const graded = results.filter((r) => r.correct !== null);
-  return { activityId: activity.id, activityTitle: activity.title, at: new Date().toISOString(), score: graded.filter((r) => r.correct).length, total: graded.length, durationMs: startedAt ? Date.now() - startedAt : undefined, durations, results };
+  return { activityId: activity.id, activityTitle: activity.title, at: new Date().toISOString(), ...scoreOf(results), total: graded.length, durationMs: startedAt ? Date.now() - startedAt : undefined, durations, results };
 }
 
 /* ---------------------------------------------------------------- source citations */

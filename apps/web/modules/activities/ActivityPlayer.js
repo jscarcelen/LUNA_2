@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
+import { applyGrades, needsModel } from "./grading.js";
+import { chargeRun } from "../credits/credits";
 import { FlashcardDeck } from "./FlashcardDeck";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -34,6 +36,47 @@ function lookStyle(look) {
   return { "--accent": look.accent.main, "--accent-soft": look.accent.tint, "--accent-ink": `color-mix(in srgb, ${look.accent.main} 65%, #000)` };
 }
 
+/** How a written answer was marked: the verdict, what it earned, and the sentence that says why. */
+const VERDICT_CHIP = {
+  correct: ["Correct", "bg-[rgba(52,199,89,0.14)] text-[#1d7a44]"],
+  close: ["Almost", "bg-[rgba(255,159,10,0.16)] text-[#8a4a00]"],
+  incorrect: ["Not quite", "bg-[rgba(255,59,48,0.12)] text-[#b30031]"]
+};
+
+function MarkNote({ result }) {
+  if (!result.graded || !result.verdict) return null;
+  const [label, tone] = VERDICT_CHIP[result.verdict] || VERDICT_CHIP.incorrect;
+  const credit = result.verdict === "close" ? ` · ${Math.round((Number(result.score) || 0) * 100)}% credit` : "";
+  return (
+    <div className="mt-2" role="note">
+      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>{label}{credit}</span>
+      {result.feedback ? <p className="m-0 mt-1.5 text-sm text-ink">{result.feedback}</p> : null}
+      {result.makesSense === false && result.given ? <p className="m-0 mt-1 text-xs text-soft-ink">This does not read as an answer to the question.</p> : null}
+    </div>
+  );
+}
+
+/** Sends the written answers that need judging to the grader in ONE call; resolves to { [questionId]: grade }. */
+async function gradeWritten(activity, questions, answers, signal) {
+  const items = questions.map((question) => ({
+    id: question.id,
+    question: question.prompt,
+    expectedAnswer: String(question.answer ?? ""),
+    givenAnswer: String(answers[question.id] ?? ""),
+    context: [activity.title, question.group, question.source?.extract].filter(Boolean).join(" · ").slice(0, 600),
+    skill: question.skill || "",
+    topic: question.topic || ""
+  }));
+  const response = await fetch("/api/activities/grade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), signal });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data?.error || "The checker could not be reached.");
+  const grades = {};
+  for (const row of data.results || []) grades[row.id] = row;
+  // Pay for it like any other model call; it is a few hundred tokens.
+  if (data.usage?.total_tokens) chargeRun({ agentName: "Answer check", usage: data.usage, model: data.model || "" });
+  return { grades, note: data.note || "" };
+}
+
 /** Where the answer can be traced: document, place in it, the exact words, and a link to that passage. */
 function SourceNote({ source }) {
   const url = source.documentId ? `/source?d=${encodeURIComponent(source.documentId)}&c=${source.chunkIndex || 1}&q=${encodeURIComponent(String(source.extract || "").slice(0, 200))}` : "";
@@ -55,6 +98,11 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
   const [lastId, setLastId] = useState("");
   const [confidence, setConfidence] = useState({});
   const [attempt, setAttempt] = useState(null);
+  // Written answers are read by Luna before the result is shown: true while that call is out.
+  const [checking, setChecking] = useState(false);
+  const [gradingNote, setGradingNote] = useState("");
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const [flipped, setFlipped] = useState({});
   const [pickedTile, setPickedTile] = useState(null);
   const [startedAt] = useState(() => Date.now());
@@ -83,11 +131,36 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
   }, [answered, attempt, lastId]);
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
-  function check() {
-    const graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence);
-    setAttempt(graded);
+  /**
+   * Checking marks everything at once and keeps the window open: the learner stays on this page and
+   * reads the result. Choice, true/false, matching and numbers are marked on the spot; the written
+   * answers that need judging go to the grader in ONE call. If that fails the local marking stands
+   * (and says so) — the player is never blocked on the model. The attempt is handed to `onSubmit`
+   * once, with the final marks, and the player never closes itself.
+   */
+  async function check() {
+    if (checking || attempt) return;
+    let graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence);
+    const written = activity.questions.filter((question) => needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer }));
+    if (written.length) {
+      setChecking(true);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+      try {
+        const { grades, note } = await gradeWritten(activity, written, answers, controller.signal);
+        graded = applyGrades(graded, grades);
+        if (note && mounted.current) setGradingNote(note);
+        else if (!Object.keys(grades).length && mounted.current) setGradingNote("Luna could not check the written answers, so they were marked by comparing words.");
+      } catch {
+        if (mounted.current) setGradingNote("Luna could not check the written answers, so they were marked by comparing words.");
+      } finally {
+        clearTimeout(timer);
+        if (mounted.current) setChecking(false);
+      }
+    }
+    if (mounted.current) setAttempt(graded);
     if (typeof onSubmit === "function") onSubmit(graded);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (mounted.current) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return (
@@ -99,8 +172,9 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
         </div>
         {attempt ? (
           <div className="mt-4 rounded-2xl bg-[var(--accent-soft)] p-4">
-            <p className="m-0 text-3xl font-bold text-ink">{attempt.score} / {attempt.total}</p>
-            <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}</p>
+            <p className="m-0 text-3xl font-bold text-ink">{Number.isInteger(attempt.score) ? attempt.score : attempt.score.toFixed(1)} / {attempt.total}</p>
+            <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}{attempt.results.some((r) => r.verdict === "close") ? " Answers that were almost right earn part of a point." : ""}</p>
+            {gradingNote ? <p className="m-0 mt-1 text-xs text-soft-ink">{gradingNote}</p> : null}
             {(() => {
               // Where certainty and correctness disagree is the most useful thing on this screen.
               const sureWrong = attempt.results.filter((row) => row.confidence === "high" && row.correct === false).length;
@@ -124,8 +198,8 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
 
       {activity.questions.map((q, index) => {
         const result = resultById[q.id];
-        const tone = !result ? "" : result.correct ? "border-[rgba(52,199,89,0.5)] bg-[rgba(52,199,89,0.06)]" : result.correct === false ? "border-[rgba(255,59,48,0.45)] bg-[rgba(255,59,48,0.05)]" : "";
-        const locked = Boolean(attempt);
+        const tone = !result ? "" : result.correct ? "border-[rgba(52,199,89,0.5)] bg-[rgba(52,199,89,0.06)]" : result.verdict === "close" ? "border-[rgba(255,159,10,0.55)] bg-[rgba(255,159,10,0.06)]" : result.correct === false ? "border-[rgba(255,59,48,0.45)] bg-[rgba(255,59,48,0.05)]" : "";
+        const locked = Boolean(attempt) || checking;
         return (
           <article key={q.id} className={`${card} border-2 p-5 ${tone}`}>
             <div className="flex items-start gap-3">
@@ -264,7 +338,8 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
                     {result.correct === true && result.confidence === "low" ? " — but you got it right. Come back to it once more and it will stick." : ""}
                   </p>
                 ) : null}
-                {result && result.correct === false && q.kind !== "match" ? <p className="m-0 mt-2 text-sm text-[var(--color-danger)]">Correct answer: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
+                {result ? <MarkNote result={result} /> : null}
+                {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? "Expected answer" : "Correct answer"}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
                 {result && q.source?.extract ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 text-xs text-soft-ink">{q.explanation}</p> : null}
@@ -274,7 +349,12 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
         );
       })}
 
-      {!attempt ? <div className="flex justify-end"><button type="button" className={primaryBtn} disabled={!activity.questions.length} onClick={check}>Check my answers</button></div> : null}
+      {!attempt ? (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {checking ? <p className="m-0 flex items-center gap-2 text-sm text-soft-ink" role="status" aria-live="polite"><span className="inline-block size-3.5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />Luna is checking your written answers…</p> : null}
+          <button type="button" className={primaryBtn} disabled={!activity.questions.length || checking} onClick={check}>{checking ? "Checking…" : "Check my answers"}</button>
+        </div>
+      ) : null}
       {!activity.questions.length ? <p className={`${card} p-5 text-sm text-soft-ink`}>This document has nothing to answer — it is a reading document. Export it instead.</p> : null}
     </section>
   );

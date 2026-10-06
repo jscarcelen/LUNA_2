@@ -305,6 +305,16 @@ what do they struggle with, why, and what should happen next.** There is one und
   that survives a delay (retention) and decays when nothing has been asked for a long time.
 - **Errors carry a taxonomy** — conceptual, procedural, calculation, misread the question,
   application, knowledge gap, careless, incomplete — because "you got six wrong" helps nobody.
+  They are grouped into exactly three kinds (founder, 2026-10-05): **Analytical** = the learner went
+  wrong in a mathematical / analytical *process* (calculation, applying a formula or procedure, a
+  multi-step derivation, interpreting numbers or data) — only possible in a question that needs maths;
+  **Topic knowledge** (conceptual) = everything else that is wrong because the idea, definition, fact or
+  relationship is not known or is confused — every wrong answer to a question that needs no maths;
+  **Accuracy** = something close to what was expected but not exact (a slip, wrong detail, unit, sign,
+  rounding, spelling, incomplete but on the right track, misread, or blank on a topic otherwise
+  mastered). A wrong answer to a non-maths question is never "analytical". **Open answers are read by
+  an AI model**, which judges whether what was written makes sense and matches the expected answer
+  (correct / close / incorrect, partial credit for close, one-sentence feedback).
 - **Student**: overall mastery, topics mastered, topics to improve, accuracy, retention; the topic
   mastery map as the centrepiece; why answers are wrong; mastery over time; and what to work on
   next. Practice and streaks stay at the bottom: the screen must never push "do more" over "learn
@@ -610,6 +620,7 @@ Set de guardrails
 In study plan, when there are multiple uploaded reference materials, the first step is to create a master document with all the information of all documents. It would be nice to include how it traces back to each original document. Then, whenever making a reference from a generated material (e.g., quiz) to the source, it will refer to this consolidated document, which will make it easier. Hence, you need to make a pre-built agent in the agent tab that is called something like 'Summary notes consolidator', allows selecting the different documents from the workspaces, the language, and generates an exhaustive structured document with all the information. It is key to make sure that all the information is there, but many times the documents have overlapping information, that should only appear once — my point is that it is consolidated and comprehensive, not just a stack of all documents one after the other, because then it is useless. Include formulas, tables, image descriptions, etc.
 
 ## Appendix B — Change log of this document
+- 2026-10-05 — Error classification refined: Analytical only for maths/analytical process errors, Topic knowledge for every other wrong answer, Accuracy for close-but-not-exact; open answers are marked by an AI model (verdict, score, "makes sense", feedback) instead of string matching.
 - 2026-10-04 — Added §5.1o: Ask Luna beside the material (plan documents + reference documents + what the user is doing, hint-not-answer, no attempts recorded) and the very simple Home (greeting, four most urgent plan cards, next steps).
 - 2026-10-04 — Added §5.1p: the master document of a study plan and the Summary Notes Consolidator agent.
 - 2026-10-04 — Accounts (see docs/ACCOUNTS.md): sign in with email next to the unchanged demo; teacher↔student and parent↔student connections that need both sides to accept (also requested at sign-up by email); teachers/parents assign activities and study plans and share read-only files that land under "Shared documents / <sender>"; a parent can follow several children's performance. Founder: "Same between parent and students and vice versa."

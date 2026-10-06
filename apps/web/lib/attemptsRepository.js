@@ -67,6 +67,9 @@ export async function saveAttempt(attempt, context = {}) {
   // 3. Insert per-question results with persisted error classification
   const resultRows = attempt.results.map((r) => {
     const errorType = r.correct === false
+      // The fine cause (one of the eight the mastery engine counts), chosen inside the group the
+      // grader or the rules decided: the stored `errorCause`, a "close" verdict, or whether the
+      // question needs maths (analytical) or not (knowledge).
       ? classifyError({
           kind:       r.kind,
           correct:    r.correct,
@@ -75,6 +78,10 @@ export async function saveAttempt(attempt, context = {}) {
           given:      r.given,
           expected:   r.expected,
           skill:      r.skill,
+          prompt:     r.prompt,
+          verdict:    r.verdict,
+          errorCause: r.errorCause,
+          quantitative: r.quantitative,
         })
       : null;
 

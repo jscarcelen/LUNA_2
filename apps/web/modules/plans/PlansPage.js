@@ -20,6 +20,9 @@ import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./fo
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
 import { isAssignedDocument, isSharedDocument, senderNameOf } from "../accounts/shared";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
+import { UpdatePlanDialog } from "./UpdatePlanDialog";
+import { UpdateDialog } from "../resources/UpdateDialog";
+import { canUpdateResource } from "../resources/update";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -316,6 +319,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
   const [revising, setRevising] = useState(null); // { plan, newUploadedIds } while the re-plan preview is open
+  const [updatingPlan, setUpdatingPlan] = useState(null); // plan row whose "Update this plan…" dialog is open
+  const [updatingResource, setUpdatingResource] = useState(null); // { document, resource } whose "Update…" dialog is open
   const [rebuildPreview, setRebuildPreview] = useState(null); // { newConcepts, newPrereqs, prevConcepts, prevPrereqs }
 
   // Knowledge graph + student model state
@@ -518,7 +523,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
    * files the result in the workspace as a resource (and an activity when it has questions), and
    * points the step at it with its due date kept.
    */
-  async function build(row) {
+  async function build(row, report) {
     const pending = (row.plan.items || []).filter((item) => item.generate && !item.resourceId);
     if (!pending.length) { setStatus("Every step of this plan already has its material."); return; }
     setBuilding(row.document.id);
@@ -537,10 +542,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
         onSaveGeneratedQuizDocument,
         onUpdateGeneratedDocument,
-        onProgress: ({ phase, index, total, title, detail }) => setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`)
+        onProgress: (event) => { const { phase, index, total, title, detail } = event; setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`); report?.(event); }
       });
       await save(result.plan, row.document.id);
       setStatus(`${result.masterBuilt ? "Master document built from your documents · " : ""}${result.created} resource${result.created === 1 ? "" : "s"} generated and filed in your workspace${result.failures.length ? ` · ${result.failures.length} could not be built (${result.failures[0].message})` : ""}.`);
+      return result;
     } catch (error) {
       setStatus(String(error.message || error));
     } finally {
@@ -614,6 +620,37 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     save({ ...row.plan, items: row.plan.items.map((item) => (item.id === itemId ? { ...item, dueDate: date } : item)) }, planId);
   }
 
+  /** "Update this plan…" (words → proposed changes → apply → build the new steps) and "Update…" on a step's resource. */
+  const updateDialogs = (
+    <>
+      {updatingPlan ? (
+        <UpdatePlanDialog
+          row={updatingPlan}
+          documents={workspaceDocuments}
+          attempts={attempts}
+          workspaceId={selectedWorkspaceId}
+          conceptMap={open && open.document.id === updatingPlan.document.id && graphConcepts.length ? graphConcepts : null}
+          onApply={(nextPlan) => save(nextPlan, updatingPlan.document.id)}
+          onBuild={(nextPlan, report) => build({ document: updatingPlan.document, plan: nextPlan }, report)}
+          onDone={setStatus}
+          onCancel={() => setUpdatingPlan(null)}
+        />
+      ) : null}
+      {updatingResource ? (
+        <UpdateDialog
+          document={updatingResource.document}
+          resource={updatingResource.resource}
+          workspace={workspaces.find((w) => w.id === selectedWorkspaceId) || null}
+          fallbackSubjectId={selectedSubjectId}
+          onClose={() => setUpdatingResource(null)}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+          onDone={(message) => { setStatus(message); setPlaying(null); setReading(null); }}
+        />
+      ) : null}
+    </>
+  );
+
   if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className="m-0 text-sm text-soft-ink">Choose a folder in your workspace first.</p></section>;
 
   /* ---------------------------------------------------------------- one plan */
@@ -666,6 +703,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Agents in scope: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none — studying the material only"}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
+              {!isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>✎ Update this plan…</button> : null}
               {plan.items.some((item) => item.generate && !item.resourceId) ? (
                 <button type="button" className={primaryBtn} disabled={building === open.document.id} onClick={() => build(open)}>
                   {building === open.document.id ? "Building…" : `✦ Build the ${plan.items.filter((item) => item.generate && !item.resourceId).length} missing resources`}
@@ -907,6 +945,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             ) : (
                               <button type="button" className={primaryBtn} disabled title={item.generate ? "Not generated yet — build the plan's material first" : "Nothing is attached to this step yet"}>Open</button>
                             )}
+                            {itemResource && canUpdateResource(itemResource) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdatingResource({ document: itemResourceDoc, resource: itemResource })}>✦ Update…</button> : null}
                             <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
                           </div>
                         );
@@ -1144,9 +1183,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             }}
           />
         ) : null}
+        {updateDialogs}
         {playing ? (
           <ReaderView
               resource={playing.resource}
+              onUpdate={playing.resource && canUpdateResource(playing.resource) ? () => setUpdatingResource({ document: playing.resourceDocument, resource: playing.resource }) : undefined}
               activity={playing.activity}
               chat={{ documentId: playing.documentId, planId: playing.planDocumentId }}
               highlights={playing.resource?.highlights || []}
@@ -1176,6 +1217,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {reading ? (
           <ReaderView
             resource={reading.resource}
+            onUpdate={reading.document && canUpdateResource(reading.resource) ? () => setUpdatingResource({ document: reading.document, resource: reading.resource }) : undefined}
             chat={{ documentId: reading.document?.id, planId: open.document.id }}
             highlights={reading.resource?.highlights || []}
             onSaveHighlights={(list) => saveHighlights(reading.document, reading.resource, list)}
@@ -1244,6 +1286,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 shareLabel={role === "teacher" || role === "parent" ? "Assign…" : "Share…"}
                 onShare={onShareDocument && !isSharedDocument(document) ? () => onShareDocument(document) : undefined}
                 onBuild={build}
+                onUpdate={isSharedDocument(document) ? undefined : setUpdatingPlan}
                 onOpen={setOpenId}
                 onDelete={onRemoveDocument && !isSharedDocument(document) ? setDeletingPlan : undefined}
               />
@@ -1254,6 +1297,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       )}
 
       {creating ? <CreateDialog draft={draft} setDraft={setDraft} busy={busy} plans={plans} onCancel={() => setCreating(false)} onCreate={async () => { const plan = buildPlan(draft); const saved = await save(plan); await fileNewPlan(plan, saved?.id || saved?.documentId || ""); setCreating(false); setDraft({ name: "", examDate: "", colour: PLAN_COLOURS[0], note: "", parentPlanId: "" }); }} /> : null}
+      {updateDialogs}
       {deletingPlan ? <DeletePlanDialog planRow={deletingPlan} documents={documents} folders={folders} busy={busy} onCancel={() => setDeletingPlan(null)} onConfirm={(opts) => deletePlan(deletingPlan, opts)} /> : null}
 
       {generating ? (

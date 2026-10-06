@@ -28,7 +28,7 @@ export function Ring({ ratio, colour, size = 56 }) {
  * the Build and Delete controls only appear when their handlers are given. `subjectName` adds a
  * small line above the title for views that mix several subjects.
  */
-export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", sharedLabel = "", shareLabel = "Share…", onShare, onBuild, onOpen, onDelete }) {
+export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", sharedLabel = "", shareLabel = "Share…", onShare, onBuild, onUpdate, onOpen, onDelete }) {
   const pendingBuilds = plan.items.filter((item) => item.generate && !item.resourceId).length;
   return (
     <article className={`${card} flex flex-col gap-3 p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
@@ -68,6 +68,7 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
         ) : null}
         <div className="flex items-center gap-1.5">
           <button type="button" className={`${primaryBtn} flex-1`} onClick={() => onOpen?.(document.id)}>Open plan</button>
+          {onUpdate ? <button type="button" className={ghostBtn} title="Say what to change in this plan" onClick={() => onUpdate({ document, plan })}>✎ Update…</button> : null}
           {onShare ? <button type="button" className={ghostBtn} onClick={onShare}>{shareLabel}</button> : null}
           {onDelete ? (
             <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => onDelete({ document, plan })}>🗑</button>

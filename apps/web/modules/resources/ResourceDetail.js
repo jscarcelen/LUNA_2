@@ -7,6 +7,7 @@ import { resourceBlocks } from "./look";
 import { ReaderView } from "../reader/ReaderView";
 import { SKILLS } from "../activities/engine/activity";
 import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
+import { VersionsPanel } from "./VersionsPanel";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -20,7 +21,8 @@ const TABS = [
   ["concepts", "What it teaches"],
   ["questions", "Questions & sources"],
   ["export", "Downloads"],
-  ["results", "Results"]
+  ["results", "Results"],
+  ["versions", "Versions"]
 ];
 
 /**
@@ -36,6 +38,9 @@ export function ResourceDetail({
   onClose,
   onPlay,
   onRegenerate,
+  onUpdate,
+  onRestoreVersion,
+  notices = [],
   onDelete,
   onClassify,
   onBulkClassify,
@@ -95,7 +100,7 @@ export function ResourceDetail({
 
   return (
     <div className="tw-scope fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-      {reading ? <ReaderView resource={row.resource} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onClose={() => setReading(false)} /> : null}
+      {reading ? <ReaderView resource={row.resource} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onUpdate={onUpdate ? () => onUpdate(row) : undefined} onClose={() => setReading(false)} /> : null}
       <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
           <div className="min-w-0">
@@ -107,9 +112,11 @@ export function ResourceDetail({
               {(row.resource.meta.sourceNames || []).length ? ` · from ${row.resource.meta.sourceNames.join(", ")}` : ""}
             </p>
             {stats?.times ? <p className="m-0 mt-1 text-xs text-soft-ink">Done {stats.times}× · best {Math.round(stats.best * 100)}% · {stats.errors} mistakes recorded</p> : null}
+            {notices.map((notice) => <p key={notice} className="m-0 mt-1 text-xs font-semibold text-[var(--color-warn)]">{notice}</p>)}
           </div>
           <div className="flex flex-wrap gap-2">
             {resourceBlocks(row.resource) || row.resource.activity?.questions?.length ? <button type="button" className={primaryBtn} onClick={() => setReading(true)}>{row.resource.activity?.questions?.length ? "Open HTML view" : "Read"}</button> : null}
+            {onUpdate ? <button type="button" className={ghostBtn} onClick={() => onUpdate(row)}>✦ Update…</button> : null}
             {onRegenerate ? <button type="button" className={ghostBtn} onClick={() => onRegenerate(row)}>Regenerate / edit</button> : null}
             {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${row.resource.name}"?`)) { onDelete(row); onClose?.(); } }}>Delete</button> : null}
             <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
@@ -117,7 +124,7 @@ export function ResourceDetail({
         </header>
 
         <div className="flex flex-wrap gap-1 self-start rounded-xl bg-[var(--surface-soft)] p-1">
-          {TABS.filter(([value]) => value !== "style" || resourceBlocks(row.resource)).map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
+          {TABS.filter(([value]) => (value !== "style" || resourceBlocks(row.resource)) && (value !== "versions" || (row.resource.versions || []).length)).map(([value, text]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}
         </div>
 
         {tab === "do" ? (
@@ -208,6 +215,8 @@ export function ResourceDetail({
         ) : null}
 
         {tab === "export" ? <section className={`${card} p-5`}><p className={kicker}>Every view of its template</p>{!template && resourceBlocks(row.resource) ? <p className="m-0 mt-2 text-sm text-soft-ink">Preview and export this resource from the <button type="button" className="font-semibold text-[var(--accent)]" onClick={() => setTab("style")}>Format &amp; colour</button> tab.</p> : null}<div className="mt-3"><ResourceExports resource={row.resource} template={template} onStatus={onStatus} /></div></section> : null}
+
+        {tab === "versions" ? <section className={`${card} p-5`}><VersionsPanel resource={row.resource} onRestore={(id) => onRestoreVersion?.(row, id)} /></section> : null}
 
         {tab === "results" ? (
           <section className={`${card} p-5`}>

@@ -6,6 +6,9 @@ import { FolderPicker } from "../ui/FolderTree";
 import { branchOf, foldersOf, parseNode, pathOf, subjectNode } from "../workspace/ui/folderModel";
 import { SaveResourceDialog } from "../resources/SaveResourceDialog";
 import { ReaderView } from "../reader/ReaderView";
+import { UpdateDialog } from "../resources/UpdateDialog";
+import { parseResource } from "../resources/resource";
+import { canUpdateResource } from "../resources/update";
 import { chargeRun, readCredits } from "../credits/credits";
 import { planChoicesOf, saveResourceFlow } from "../resources/saveFlow";
 import { agentFromAction, documentFromAction, runProposedAgent } from "./actions";
@@ -52,6 +55,7 @@ export function ChatPage({ toolContext = {} }) {
   const [actions, setActions] = useState({}); // id → { phase, resource, ... }
   const [reading, setReading] = useState(null);
   const [saving, setSaving] = useState(null); // { id, resource, kind }
+  const [updating, setUpdating] = useState(null); // { actionId, document, resource }: "Update…" on a result card
   const threadRef = useRef(null);
   const fileRef = useRef(null);
   const abortRef = useRef(null);
@@ -186,6 +190,14 @@ export function ChatPage({ toolContext = {} }) {
     }
   }
 
+  /** "Update…" on a result card: a saved one is updated in the workspace, one not saved yet is replaced in the card. */
+  function startUpdate(action) {
+    const state = actions[action.id] || {};
+    const document = state.saved?.id ? (workspace?.subjects || []).flatMap((entry) => entry.documents || []).find((entry) => entry.id === state.saved.id) || null : null;
+    const resource = (document && parseResource(document)) || state.resource;
+    if (resource) setUpdating({ actionId: action.id, document: document && parseResource(document) ? document : null, resource });
+  }
+
   function openDocumentCard(action) {
     const resource = documentFromAction(action, { subjectName: subject?.name || "" });
     setAction(action.id, { phase: "done", resource, summary: `${action.blocks.length} blocks` });
@@ -286,7 +298,7 @@ export function ChatPage({ toolContext = {} }) {
                       ) : null}
                       <SourceList messageId={message.id} sources={message.sources} />
                       {(message.actions || []).map((action) => (
-                        <ActionCard key={action.id} action={action} state={actions[action.id] || {}} subject={subject} onRun={() => runAgent(action)} onPreview={() => setReading({ resource: actions[action.id]?.resource || openDocumentCard(action), document: null })} onSave={() => setSaving({ id: action.id, resource: actions[action.id]?.resource || openDocumentCard(action) })} onSaveAgent={() => saveAgent(action)} onOpenPage={onOpenPage} />
+                        <ActionCard key={action.id} action={action} state={actions[action.id] || {}} subject={subject} onRun={() => runAgent(action)} onPreview={() => setReading({ resource: actions[action.id]?.resource || openDocumentCard(action), document: null })} onSave={() => setSaving({ id: action.id, resource: actions[action.id]?.resource || openDocumentCard(action) })} onSaveAgent={() => saveAgent(action)} onUpdate={() => startUpdate(action)} onOpenPage={onOpenPage} />
                       ))}
                       {message.usage ? <p className="m-0 mt-2 text-[10px] text-soft-ink">{fmt(message.usage.totalTokens)} lunas used</p> : null}
                     </>
@@ -338,6 +350,19 @@ export function ChatPage({ toolContext = {} }) {
         <p className="m-0 mt-1.5 text-center text-[10px] text-soft-ink">Answers come from your material and Luna’s own guide. It can be wrong — check the references.</p>
       </div>
 
+      {updating ? (
+        <UpdateDialog
+          document={updating.document}
+          resource={updating.resource}
+          workspace={workspace}
+          fallbackSubjectId={selectedSubjectId}
+          onClose={() => setUpdating(null)}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+          onReplaceUnsaved={(resource) => setAction(updating.actionId, { resource })}
+          onDone={(message) => setAction(updating.actionId, { summary: message })}
+        />
+      ) : null}
       {reading ? <ReaderView resource={reading.resource} notice="Preview — save it to keep it and your highlights." onClose={() => setReading(null)} /> : null}
       {saving ? (
         <SaveResourceDialog
@@ -364,7 +389,7 @@ export function ChatPage({ toolContext = {} }) {
 
 /* ─────────────────────────────────────────────── the cards the assistant proposes */
 
-function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAgent, onOpenPage }) {
+function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAgent, onUpdate, onOpenPage }) {
   if (action.type === "run_agent") {
     return (
       <div className={`${cardBox} mt-3`}>
@@ -381,7 +406,7 @@ function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAg
           </div>
         ) : null}
         {state.phase === "running" ? <p className="m-0 mt-3 text-sm text-soft-ink"><span className="mr-2 inline-block size-2 animate-pulse rounded-full bg-[var(--accent)]" />Running the agent…</p> : null}
-        {state.phase === "done" ? <ResultRow state={state} onPreview={onPreview} onSave={onSave} onOpenPage={onOpenPage} /> : null}
+        {state.phase === "done" ? <ResultRow state={state} onPreview={onPreview} onSave={onSave} onUpdate={onUpdate} onOpenPage={onOpenPage} /> : null}
       </div>
     );
   }
@@ -391,7 +416,7 @@ function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAg
         <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Document</p>
         <p className="m-0 mt-1 text-base font-bold text-ink">{action.title}</p>
         <p className="m-0 text-xs text-soft-ink">{action.blocks.length} blocks · laid out with the default document template</p>
-        <ResultRow state={{ phase: "done", ...state }} onPreview={onPreview} onSave={onSave} onOpenPage={onOpenPage} />
+        <ResultRow state={{ phase: "done", ...state }} onPreview={onPreview} onSave={onSave} onUpdate={onUpdate} onOpenPage={onOpenPage} />
       </div>
     );
   }
@@ -426,12 +451,13 @@ function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAg
   return null;
 }
 
-function ResultRow({ state, onPreview, onSave, onOpenPage }) {
+function ResultRow({ state, onPreview, onSave, onUpdate, onOpenPage }) {
   return (
     <div className="mt-3 grid gap-2">
       {state.summary ? <p className="m-0 text-xs text-soft-ink">Ready · {state.summary}</p> : null}
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={ghostBtn} onClick={onPreview}>Preview</button>
+        {onUpdate && state.resource && canUpdateResource(state.resource) ? <button type="button" className={ghostBtn} onClick={onUpdate}>✦ Update…</button> : null}
         {state.saved ? (
           <>
             <span className="text-xs font-semibold text-[#1f7a3a]">✓ Saved “{state.saved.name}”{state.saved.isActivity ? " · in Activities" : ""}{state.saved.addedTo ? ` · added to ${state.saved.addedTo}` : ""}</span>

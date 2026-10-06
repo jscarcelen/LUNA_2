@@ -5,6 +5,8 @@ import JSZip from "jszip";
 import { RowMenu } from "../../ui/RowMenu";
 import { ResourceDetail } from "../../resources/ResourceDetail";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
+import { UpdateDialog } from "../../resources/UpdateDialog";
+import { canUpdateResource, restoreVersion, staleSources } from "../../resources/update";
 import { isFavourite, parseResource, resourceDifficulty, resourceStats, resourceTags } from "../../resources/resource";
 import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools/agent-builder/previewHtml";
 import { branchOf, documentsOf, folderNode, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
@@ -146,6 +148,7 @@ export function WorkspaceBrowser({
   const [openId, setOpenId] = useState("");
   const [playing, setPlaying] = useState(null);
   const [planningRow, setPlanningRow] = useState(null);
+  const [updatingRow, setUpdatingRow] = useState(null); // { document, resource }: the "Update…" dialog
   const [preview, setPreview] = useState(null);
   const [formatFor, setFormatFor] = useState("");
   const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
@@ -533,6 +536,7 @@ export function WorkspaceBrowser({
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : null,
+            row && canUpdateResource(row.resource) ? { label: "Update…", icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
             ...(locked ? [] : [
             onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
             row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
@@ -844,6 +848,9 @@ export function WorkspaceBrowser({
           onClose={() => setOpenId("")}
           onPlay={(row) => { setOpenId(""); setPlaying(row); }}
           onRegenerate={onRegenerateResource ? (row) => onRegenerateResource(row.document.id) : undefined}
+          onUpdate={canUpdateResource(openRow.resource) ? setUpdatingRow : undefined}
+          onRestoreVersion={(row, versionId) => updateResource(row, (resource) => restoreVersion(resource, versionId))}
+          notices={staleSources(openRow.resource, rawDocuments).map((source) => `Based on an older version of “${source.name}” (updated ${new Date(source.updatedAt).toLocaleDateString()}).`)}
           onDelete={(row) => removeDocuments([row.document.id])}
           onClassify={classify}
           onBulkClassify={bulkClassify}
@@ -876,6 +883,19 @@ export function WorkspaceBrowser({
         );
       })() : null}
 
+      {updatingRow ? (
+        <UpdateDialog
+          document={updatingRow.document}
+          resource={updatingRow.resource}
+          workspace={workspace}
+          fallbackSubjectId={subjectsList.find((entry) => !isReservedSubjectName(entry.name))?.id || ""}
+          onClose={() => setUpdatingRow(null)}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+          onDone={(message) => { setStatus(message); setPlaying(null); }}
+        />
+      ) : null}
+
       {planningRow ? (
         <AddToPlanDialog
           documents={rawDocuments}
@@ -897,6 +917,7 @@ export function WorkspaceBrowser({
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
+          onUpdate={canUpdateResource(playing.resource) ? () => setUpdatingRow(playing) : undefined}
           onClose={() => setPlaying(null)}
         />
       ) : null}

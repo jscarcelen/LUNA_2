@@ -77,8 +77,7 @@ Until the email provider exists, accounts still work but nothing is mailed; the 
 5. [ ] **Exam dates**: teacher → My students → **Exam dates** → **＋ Send an exam date** (title, date, subject, notes; choose the group; optionally "Also share a study plan"). Student: Home shows **Dates from my teachers** under the plan cards, Study plans has an **Exam dates** tab, the bell has the line. **Plan for it** opens "Plan it for me" with the date locked ("Ready by" greyed, "Set by …"); on an existing plan use "Tie this plan to a teacher's exam date". Teacher → Exam dates → **Edit** → change the date: the student's plan deadline moves, the bell/email say so. **Who has planned** lists "Plan made" per student; **Show progress** adds the % done. **Cancel**: the student's plan keeps the date as an own, editable deadline ("… cancelled this exam date").
 6. [ ] Email: with SMTP/Resend configured, a group assign / exam date sends **one email per student**, after the response (a slow mailer never delays the dialog); without a mailer nothing is sent and nothing breaks.
 
-## Migrations still to apply (in order, each safe to run twice)
-1. [ ] `supabase/migrations/202610060001_network_sharing_grants.sql` — live sharing, peer connections
-2. [ ] `supabase/migrations/202610070001_groups_exam_dates.sql` — student groups and exam dates
-3. [ ] `supabase/migrations/202610080001_feedback_items.sql` — the beta feedback tool (Feedback button + `/feedback-admin` board; key `LUNA_FEEDBACK_ADMIN_KEY` is already set in Vercel and in `apps/web/.env.local`)
-(and, if you have not: `202610050001_account_verification_phone_tokens.sql`, `202610030001_feature_requests.sql`). Until applied, those screens say "setup needed"; everything else works.
+## Migrations
+All applied and checked against the live database on 2026-10-06 (every table they create answers): `202610030001` feature requests,
+`202610050001` verification / phone / tokens, `202610060001` network sharing grants, `202610070001` groups and exam dates,
+`202610080001` beta feedback tool. Nothing is pending.

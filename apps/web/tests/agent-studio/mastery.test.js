@@ -82,8 +82,11 @@ describe("error taxonomy", () => {
     expect(classifyError({ given: "adds them", expected: "multiplies them" }, { topicAccuracy: 0.3, repeats: 3 })).toBe("conceptual");
     // Nothing written, on a topic that is mostly wrong: a prerequisite is missing.
     expect(classifyError({ given: "", expected: "0.75" }, { topicAccuracy: 0.2, repeats: 2 })).toBe("gap");
-    // A single miss on a topic they know: careless.
-    expect(classifyError({ given: "north", expected: "south" }, { topicAccuracy: 0.9, repeats: 1 })).toBe("careless");
+    // A wrong answer to a question that needs no maths is a knowledge gap, however strong the topic is:
+    // only a close answer, or a blank on a strong topic, is an accuracy slip.
+    expect(classifyError({ given: "north", expected: "south" }, { topicAccuracy: 0.9, repeats: 1 })).toBe("conceptual");
+    expect(groupOf(classifyError({ given: "north", expected: "south" }, { topicAccuracy: 0.9, repeats: 1 }))).toBe("knowledge");
+    expect(classifyError({ given: "", expected: "south" }, { topicAccuracy: 0.9, repeats: 1 })).toBe("incomplete");
   });
 
   it("turns the mistakes into shares that can be acted on", () => {
@@ -114,10 +117,11 @@ describe("error taxonomy", () => {
 
 describe("what certainty says about a mistake", () => {
   it("treats sure-and-wrong as a misconception, not a slip", () => {
-    // Same wrong answer, same strong topic — only the learner's certainty differs.
-    const slip = classifyError({ given: "cats breathe through gills", expected: "lungs", confidence: "" }, { topicAccuracy: 0.8 });
+    // Same wrong answer, same strong topic: a non-maths question is a knowledge gap either way; being
+    // sure of it makes it a misconception (conceptual) rather than a gap in what is known at all.
+    const unsure = classifyError({ given: "cats breathe through gills", expected: "lungs", confidence: "" }, { topicAccuracy: 0.8 });
     const misconception = classifyError({ given: "cats breathe through gills", expected: "lungs", confidence: "high" }, { topicAccuracy: 0.8 });
-    expect(slip).toBe("careless");
+    expect(groupOf(unsure)).toBe("knowledge");
     expect(misconception).toBe("conceptual");
   });
 

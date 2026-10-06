@@ -63,6 +63,7 @@ const SRC = {
   iterate: "apps/web/app/api/ai-tools/agent-builder/iterate/route.js",
   improve: "apps/web/app/api/ai-tools/agent-builder/improve/route.js",
   coach: "apps/web/app/api/performance/coach/route.js",
+  grade: "apps/web/modules/activities/gradeBatch.js",
   chat: "apps/web/modules/chat/engine.js"
 };
 
@@ -550,7 +551,7 @@ export const REQUESTS = [
   /* ============================================================ 4 · TRACK */
   {
     id: "F1", stage: "track", name: "Performance coach", status: "on-demand",
-    purpose: "Reads the learner's mastery, mistake types and stuck questions and says what to do next, in three voices (student, parent, teacher).",
+    purpose: "Reads the learner's mastery, mistake types (topic knowledge / analytical / accuracy) and stuck questions and says what to do next, in three voices (student, parent, teacher).",
     why: "Measurements alone don't tell people what to do; this turns them into the top 5 next actions.",
     position: "On the Performance page, when the user asks the coach to read the results.",
     trigger: "Performance → Coach",
@@ -566,6 +567,25 @@ export const REQUESTS = [
       { label: "System prompt", file: SRC.coach, re: /const SYSTEM = `([\s\S]*?)`;/ },
       { label: "User message (evidence)", file: SRC.coach, re: /(const evidence = \[[\s\S]*?\]\.join\("\\n"\);)/ }
     ]
+  },
+  {
+    id: "F2", stage: "track", name: "Mark written answers", status: "live",
+    purpose: "Reads the open (written) answers of one attempt and decides, by meaning and not by wording, whether each is correct, close or incorrect, whether it makes sense, and writes one or two sentences of feedback in the learner's language. It also says whether the question needs maths, which decides the error cause: close → accuracy, wrong + maths → analytical, wrong + no maths → topic knowledge.",
+    why: "String matching marks a right answer in other words as wrong and cannot tell a slip from a misunderstanding. Reading the answer is the only way to give fair marks, partial credit and the right kind of mistake.",
+    position: "When the learner presses \"Check my answers\" on an interactive resource that has written answers: all of them go in one call and the player shows \"Luna is checking your written answers…\" until it returns.",
+    trigger: "Activity → Check my answers (only if a written answer is not blank, not identical to the expected one and not a plain number)",
+    file: SRC.grade, anchor: /export async function gradeAnswers/,
+    model: "gpt-4o", modelEnv: "LUNA_GRADE_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.1, maxTokens: "400 + 260 per answer (≤ 4,000)", format: "JSON schema (strict)", streaming: false },
+    input: "The question, optional context (title, section, the passage it came from), the expected answer and the learner's answer, for up to 20 written answers of one attempt per call.",
+    output: "Per answer: verdict (correct / close / incorrect), score 0–1, makesSense, quantitative, errorCause (knowledge / analytical / accuracy, re-derived server-side from the verdict and the quantitative flag), a short reason and the feedback sentence.",
+    fallbacks: "No key, a failed call or a blank/identical/numeric answer: marked locally (exact match, numbers within tolerance, key-word overlap) and flagged graded: local. The learner is never blocked.",
+    tokens: { basis: "estimated", typical: { in: 1500, out: 800 }, scale: null },
+    seconds: { typical: 6, note: "estimate" },
+    prompts: [
+      { label: "System prompt", file: SRC.grade, re: /const GRADE_SYSTEM = `([\s\S]*?)`;/ },
+      { label: "User message", file: SRC.grade, re: /(export function buildGradeMessage[\s\S]*?\n\}\n)/ }
+    ]
   }
 ];
 
@@ -576,8 +596,8 @@ export const FREE_STEPS = [
   { name: "Markdown / HTML / text import", note: "Parsed locally.", cost: "$0 AI" },
   { name: "Semantic chunking & ranking", note: "Chunks follow headings and topic shifts (lexical cohesion), keep page numbers and the heading where they start, and never leave a three-line subsection on its own; keyword/heading scoring then picks the best chunks within a 48,000-character budget.", cost: "compute only" },
   { name: "Template rendering", note: "One layout engine renders HTML, PDF, DOCX and PPTX on the server.", cost: "compute only" },
-  { name: "Grading & activities", note: "Answers are checked in the browser/server with rules, not a model.", cost: "$0 AI" },
-  { name: "Mastery & error classification", note: "Rule-based engines (mastery, retention, patterns, priority).", cost: "$0 AI" },
+  { name: "Grading & activities", note: "Multiple choice, true/false, matching, puzzles and plain-number answers are checked with rules, not a model. Written answers that are blank, identical to the expected one or a plain number are settled the same way; the rest go to request F2.", cost: "$0 AI" },
+  { name: "Mastery & error classification", note: "Rule-based engines (mastery with partial credit for close answers, retention, patterns, priority). A wrong answer is analytical only if the question needs maths, topic knowledge otherwise, accuracy when it was close.", cost: "$0 AI" },
   { name: "Plan 'update from performance'", note: "Rule-based replan detector (route /api/plans/replan).", cost: "$0 AI" },
   { name: "Token & cost estimate before a run", note: "Counted locally from the prompt (≈ 4 characters per token).", cost: "$0 AI" }
 ];
@@ -682,7 +702,7 @@ export const NODES = [
   { id: "tpl", col: 8, lane: 1, label: "Template Studio engine", sub: "HTML · PDF · DOCX · PPTX", phase: "agents" },
   { id: "design", col: 8, lane: 2, label: "AI template design", sub: "optional", reqs: ["T1", "T2", "T3", "T4"], phase: "design" },
   { id: "res", col: 9, lane: 3, label: "Resources", sub: "quiz · flashcards · summary", phase: "agents" },
-  { id: "doit", col: 9, lane: 0, label: "Do it on LUNA", sub: "answer · export", phase: "track" },
+  { id: "doit", col: 9, lane: 0, label: "Do it on LUNA", sub: "answer · AI marks written answers", reqs: ["F2"], phase: "track" },
   { id: "perf", col: 10, lane: 1, label: "Mastery engine", sub: "rules, no AI", phase: "track" },
   { id: "coach", col: 11, lane: 2, label: "AI coach", sub: "GPT-4o", reqs: ["F1"], phase: "track" },
   { id: "attempts", col: 10, lane: 3, label: "Attempts · mastery", sub: "per concept", phase: "track" },
@@ -742,6 +762,8 @@ export const PERFORMANCE_METRICS = [
   { name: "Exam readiness", q: "Am I on track?", note: "Estimated minutes to finish an exam, plan progress.", roles: "student · parent", ai: false },
   { name: "Difficulty profile", q: "Do I fail the hard ones or the easy ones?", note: "Accuracy by difficulty level.", roles: "student · teacher", ai: false },
   { name: "Plan re-plan trigger", q: "Does the plan still fit?", note: "Rule-based detector proposes an update from performance.", roles: "student", ai: false },
+  { name: "Written answers marked by AI", q: "Did what I wrote make sense and match the answer?", note: "Open answers are read by meaning: correct, close (partial credit) or incorrect, with a sentence of feedback; close counts as an accuracy mistake.", roles: "all", ai: true, req: "F2" },
+  { name: "Why answers are wrong", q: "Is it the topic, the maths, or a slip?", note: "Topic knowledge (no maths needed), analytical (the maths process went wrong), accuracy (close but not exact, or blank on a known topic).", roles: "all", ai: false },
   { name: "Coach (AI)", q: "What should I do next?", note: "Reads all of the above and writes 2–5 concrete actions and a message for student, parent and teacher.", roles: "all", ai: true, req: "F1" }
 ];
 

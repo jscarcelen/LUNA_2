@@ -10,7 +10,12 @@
  * over several sittings, and still right after a delay, is. Mastery therefore blends recent
  * accuracy with how hard the questions were, how much evidence there is (coverage), whether the
  * knowledge survived a gap (retention), and how fresh the evidence is.
+ *
+ * A written answer that was "close" (essentially right, not exact) counts for part of a correct one
+ * (its score, 0.5 unless the grader said more precisely) instead of nothing: partial credit is what
+ * keeps a nearly-right answer from reading as "does not know it".
  */
+import { creditOf } from "../activities/grading.js";
 
 const DIFFICULTY_WEIGHT = { easy: 0.8, medium: 1, hard: 1.25 };
 
@@ -49,6 +54,17 @@ export function buildEvidence(attempts = [], { subjectOf = () => "", conceptsOf 
         topic,
         concepts,
         correct: result.correct === true,
+        // How the answer was graded: "correct" | "close" | "incorrect", its credit 0..1, the grader's note and cause.
+        // (empty for attempts saved before answers were graded: the error classifier then re-reads them)
+        verdict: result.verdict || "",
+        score: result.score !== null && result.score !== undefined && result.score !== "" && Number.isFinite(Number(result.score)) ? Number(result.score) : undefined,
+        feedback: result.feedback || "",
+        errorCause: result.errorCause || "",
+        graded: result.graded || "",
+        kind: result.kind || "",
+        skill: result.skill || "",
+        quantitative: typeof result.quantitative === "boolean" ? result.quantitative : undefined,
+        confidence: result.confidence || "",
         difficulty: String(result.difficulty || "").toLowerCase() || "medium",
         ms: Number(result.ms) || 0,
         at,
@@ -78,11 +94,11 @@ export function masteryOf(rows = []) {
   if (!rows.length) return { mastery: 0, accuracy: 0, recentAccuracy: 0, coverage: 0, retention: null, trend: 0, questions: 0 };
   const ordered = [...rows].sort((a, b) => a.time - b.time);
   const questions = ordered.length;
-  const accuracy = mean(ordered.map((row) => (row.correct ? 1 : 0)));
+  const accuracy = mean(ordered.map(creditOf));
   const recent = ordered.slice(-Math.max(4, Math.ceil(questions * 0.4)));
-  const recentAccuracy = mean(recent.map((row) => (row.correct ? 1 : 0)));
+  const recentAccuracy = mean(recent.map(creditOf));
   const earlier = ordered.slice(0, Math.max(1, ordered.length - recent.length));
-  const trend = earlier.length ? recentAccuracy - mean(earlier.map((row) => (row.correct ? 1 : 0))) : 0;
+  const trend = earlier.length ? recentAccuracy - mean(earlier.map(creditOf)) : 0;
 
   const difficulty = mean(ordered.map((row) => DIFFICULTY_WEIGHT[row.difficulty] ?? 1));
   // Coverage: ten answered questions is "enough evidence"; below that, mastery is capped.
@@ -90,7 +106,7 @@ export function masteryOf(rows = []) {
   // Retention: answers given at least a week after the first sighting of the topic.
   const first = ordered[0].time;
   const delayed = ordered.filter((row) => row.time - first >= 7 * day);
-  const retention = delayed.length >= 2 ? mean(delayed.map((row) => (row.correct ? 1 : 0))) : null;
+  const retention = delayed.length >= 2 ? mean(delayed.map(creditOf)) : null;
   const lastAt = ordered[ordered.length - 1].at;
   const ageDays = lastAt ? Math.max(0, (Date.now() - new Date(lastAt).getTime()) / day) : 0;
   const freshness = clamp(1 - Math.max(0, ageDays - 21) / 120, 0.75, 1);

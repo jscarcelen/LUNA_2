@@ -6,6 +6,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { MathMLToLaTeX } from "mathml-to-latex";
+import { pdfToHtml } from "./pdfRender.js";
 import { pptxToHtml } from "./pptxRender.js";
 import { extractXlsx } from "./spreadsheetExtraction.js";
 
@@ -1762,10 +1763,18 @@ export async function extractTextFromUploadedFile(file, options = {}) {
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     let pdfText = "";
+    let pdfRenderHtml = "";
     const pdfIssues = [];
     try {
       const parsed = await parser.getText();
       pdfText = String(parsed?.text || "").trim();
+      try {
+        const rendered = await pdfToHtml(parser);
+        pdfRenderHtml = rendered.html;
+        if (rendered.skipped) pdfIssues.push("some-pdf-images-not-embedded");
+      } catch {
+        pdfIssues.push("pdf-images-not-embedded");
+      }
     } finally {
       await parser.destroy();
     }
@@ -1798,6 +1807,7 @@ export async function extractTextFromUploadedFile(file, options = {}) {
       sourcePreview: pdfText,
       sourceMimeType: mimeType || "application/pdf",
       sourceContentBase64: String(file?.contentBase64 || ""),
+      sourceRenderHtml: pdfRenderHtml,
       method: "pdf",
       issues: pdfIssues,
       minConfidence

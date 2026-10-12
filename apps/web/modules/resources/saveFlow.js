@@ -23,7 +23,7 @@ export async function saveResourceFlow({ resource, form, fallbackSubjectId, plan
   const tags = ["resource", ...(isActivity ? ["activity"] : []), ...(isActivity && form.dueDate ? [`due:${form.dueDate}`] : []), ...(form.favourite ? ["favourite"] : []), ...(form.difficulty ? [`difficulty:${form.difficulty}`] : []), ...(form.tags || [])];
   const where = filingTargetFor(form.folderId, fallbackSubjectId);
   const content = JSON.stringify(payload, null, 2);
-  const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta?.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
+  const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, autoFile: !form.planId, tags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta?.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
   let addedTo = "";
   const chosen = form.planId ? planChoices.find((choice) => choice.id === form.planId) : null;
   if (chosen && saved?.id && typeof onUpdateGeneratedDocument === "function") {

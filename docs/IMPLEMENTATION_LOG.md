@@ -1215,3 +1215,12 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Concept states are read for the session owner (`ownerUserIdForFresh`) and filtered to the requested workspace; the client's
   localStorage `learnerId` ("anonymous" for most browsers) no longer decides whose rows are returned.
 - Copy: the chat panel's broken "does not count as an attempt" sentence, and "All childs" → "All children" (`modules/accounts/nouns.js`).
+
+## 2026-10-12 — Beta feedback batch (d15aa3ce, 207dd7a5, 5ffbe57a, f03f48bd, f0c53813, 2f46075a)
+- d15aa3ce: a deadline has an optional `covers` text (Details button on each deadline in the plan). `buildPlanUpdatePayload` sends it, and rule 8 "Coverage" in the plan-update prompt schedules that material before that date (JSON schema unchanged).
+- 207dd7a5: "i" info popovers (`METRIC_INFO.studentModel` / `planProgress`) on the Student model and the plan progress ring.
+- 5ffbe57a: Sub-plans card removed from the plan page (data support kept).
+- f03f48bd: `autoFile` on saves from Save-resource / run page / targeted practice (not in a plan, no folder chosen) files into "Generated material / Resources not in study plans" (`AppShell.handleSaveGeneratedQuizDocument`).
+- f0c53813: folders get a checkbox; the selection bar handles files and folders together: Move to… and Delete (nested picks collapse to the outer folder).
+- 2f46075a: saving Account settings now updates the account in `AppShell` (`onAccountChange`), so Home's greeting and the menu show the new name at once.
+- Needs `npm run dashboard:publish` locally (the plan-update prompt changed).

@@ -865,7 +865,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       // A consolidation is a master document: tagged so later agents can read it instead of the originals.
       const allTags = ["resource", ...(output?.consolidation ? [MASTER_TAG] : []), ...(isActivity ? ["activity"] : []), ...(isActivity && dueDate ? [`due:${dueDate}`] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
       const where = filingTarget(folderId);
-      const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
+      const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, autoFile: !planId, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
       progress(chosenPlanId(planId) ? 65 : 85, chosenPlanId(planId) ? "Adding it to your plan" : "Finishing");
       // Into a study plan: one more step, pointing at the resource just saved.
       let addedTo = "";

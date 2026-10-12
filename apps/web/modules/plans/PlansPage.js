@@ -20,6 +20,7 @@ import { DocumentReader } from "../reader/DocumentReader";
 import { masterOriginals, originalDownloader } from "../reader/downloadOriginal";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./folders";
+import { InfoDot, METRIC_INFO } from "../performance/dashboard/parts.js";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
 import { isAssignedDocument, isSharedDocument, senderNameOf } from "../accounts/shared";
 import { buildConceptForest, capConceptTree } from "./conceptTree.js";
@@ -328,6 +329,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [replanResult, setReplanResult] = useState(null);
   const [replanning, setReplanning] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [coversOpen, setCoversOpen] = useState(() => new Set()); // deadline ids whose "what does this cover?" box is open
   const [materialPickerOpen, setMaterialPickerOpen] = useState(false);
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
   const [revising, setRevising] = useState(null); // { plan, newUploadedIds } while the re-plan preview is open
@@ -755,7 +757,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   {building === open.document.id ? "Building…" : `✦ Build the ${plan.items.filter((item) => item.generate && !item.resourceId).length} missing resources`}
                 </button>
               ) : null}
-              <Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} />
+              <span className="inline-flex items-center gap-1"><Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} /><InfoDot info={METRIC_INFO.planProgress} label="plan progress" /></span>
               {progress.average ? <div><p className={kicker}>Average</p><p className="m-0 text-xl font-bold text-ink">{Math.round(progress.average * 100)}%</p></div> : null}
               {progress.late.length ? <div><p className={kicker}>Late</p><p className="m-0 text-xl font-bold text-[var(--color-danger)]">{progress.late.length}</p></div> : null}
 
@@ -842,6 +844,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   ) : (
                     <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" aria-label="Remove this deadline" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
                   )}
+                  <button type="button" className="text-[11px] font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={coversOpen.has(deadline.id)} onClick={() => setCoversOpen((current) => { const next = new Set(current); if (next.has(deadline.id)) next.delete(deadline.id); else next.add(deadline.id); return next; })}>{coversOpen.has(deadline.id) ? "Hide details" : deadline.covers ? "Details ·" : "Details"}</button>
+                  {coversOpen.has(deadline.id) ? (
+                    <label className="grid basis-full gap-1 text-[11px] font-semibold text-soft-ink">What does this deadline cover?
+                      <textarea className="rounded-lg border border-ink/12 px-2 py-1 text-xs font-normal text-ink disabled:bg-transparent" rows={2} disabled={origin.locked} maxLength={600} placeholder="e.g. Chapters 1–4: balance sheet and double entry. Leave empty if it covers everything." value={deadline.covers || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, covers: event.target.value } : entry)) }))} />
+                      <span className="font-normal">Luna plans the study for this material before this date when it updates the plan.</span>
+                    </label>
+                  ) : deadline.covers ? <span className="basis-full truncate text-[11px] text-soft-ink">Covers: {deadline.covers}</span> : null}
                   {deadline.cancelledFrom ? <span className="basis-full text-[11px] text-soft-ink">{deadline.cancelledFrom} cancelled this exam date. The date stays as your own deadline: change or remove it as you like.</span> : null}
                 </div>
               );
@@ -1046,34 +1055,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
-          <p className={kicker}>Student model</p>
+          <p className={`${kicker} flex items-center gap-1.5`}>Student model<InfoDot info={METRIC_INFO.studentModel} label="the student model" /></p>
           <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept, ordered by concept map hierarchy. Updated live after each activity.</p>
           <ConceptMasteryList concepts={graphConcepts} prerequisites={graphPrereqs} masteryByConceptId={masteryByConceptId} />
-        </section>
-
-        {/* ── Sub-plans ── */}
-        <section className={`${card} p-5`}>
-          <p className={kicker}>Sub-plans</p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Break a big exam into the topics it is made of; the parent shows their combined progress.</p>
-          <div className="mt-2 grid gap-1.5">
-            {children.map((row) => {
-              const childProgress = planProgress(row.plan, attempts);
-              return (
-                <button key={row.document.id} type="button" className="flex items-center gap-2 rounded-xl border border-ink/10 px-3 py-2 text-left hover:bg-[var(--surface-soft)]" onClick={() => setOpenId(row.document.id)}>
-                  <span className="size-2.5 shrink-0 rounded-full" style={{ background: row.plan.colour }} />
-                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{row.plan.name}</span><span className="block text-[11px] text-soft-ink">{childProgress.done}/{childProgress.total} steps{childProgress.deadline ? ` · ${dueLabel(childProgress.deadline.date)}` : ""}</span></span>
-                  <span className="text-xs font-bold text-soft-ink">{Math.round(childProgress.ratio * 100)}%</span>
-                </button>
-              );
-            })}
-            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { setDraft({ name: "", examDate: "", colour: plan.colour, note: "", parentPlanId: open.document.id }); setCreating(true); }}>＋ New sub-plan</button>
-            {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).length ? (
-              <select className="rounded-lg border border-ink/12 bg-white px-2 py-1 text-xs" value="" onChange={(event) => { const row = plans.find((item) => item.document.id === event.target.value); if (row) save({ ...row.plan, parentPlanId: open.document.id }, row.document.id); }}>
-                <option value="">Move an existing plan under this one…</option>
-                {plans.filter((row) => row.document.id !== open.document.id && !row.plan.parentPlanId).map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
-              </select>
-            ) : null}
-          </div>
         </section>
 
         {/* ── Concept map — full width, last ── */}

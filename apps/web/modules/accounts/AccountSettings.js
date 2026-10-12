@@ -25,8 +25,10 @@ function Section({ title, children }) {
  * (one per account, not verified by SMS yet) and the password. Phone and password changes ask for the
  * current password. Changing the password ends every other session.
  */
-export function AccountSettings({ account, onClose }) {
-  const [current, setCurrent] = useState(account);
+export function AccountSettings({ account, onClose, onAccountChange }) {
+  const [current, setCurrentLocal] = useState(account);
+  // Tell the app shell too, so the name on Home / the menu changes the moment it is saved.
+  const setCurrent = (next) => { setCurrentLocal(next); if (next) onAccountChange?.(next); };
   const [resend, setResend] = useState({ busy: false, message: null });
   const [phone, setPhone] = useState(account.phone || "");
   const [phonePassword, setPhonePassword] = useState("");

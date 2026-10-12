@@ -40,7 +40,10 @@ const WORKSPACES_API = "/api/workspaces-supabase";
  * connections) and the logged-in account for the real platform (/platform: the role and name come from
  * the account, there is no role switcher, and Connections / My students are in the menu).
  */
-export function AppShell({ account = null, initialPage = "" }) {
+export function AppShell({ account: accountProp = null, initialPage = "" }) {
+  // Saved profile changes (name, age…) replace the server-rendered account so every screen shows them at once.
+  const [accountOverride, setAccountOverride] = useState(null);
+  const account = accountOverride || accountProp;
   const [role, setRole] = useState(account?.role || "student");
   // `initialPage` comes from a link such as /platform?page=connections (the notification emails); only a section
   // that exists for this account's role is honoured.
@@ -887,10 +890,20 @@ export function AppShell({ account = null, initialPage = "" }) {
 
   async function handleSaveGeneratedQuizDocument(payload, subjectId) {
     if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return null;
+    let folderIds = Array.isArray(payload?.folderIds) ? payload.folderIds : [];
+    // Generated material that is not filed anywhere and does not belong to a study plan goes to
+    // "Generated material / Resources not in study plans" by itself, instead of floating at the top of the topic.
+    if (payload?.autoFile && !folderIds.length) {
+      try {
+        const subject = (workspaces.find((entry) => entry.id === selectedWorkspaceId)?.subjects || []).find((entry) => entry.id === (subjectId || selectedSubjectId));
+        const structure = await ensureSubjectStructure({ folders: (subject?.folders || []).map((folder) => ({ ...folder })), subjectId: subjectId || selectedSubjectId, onCreateFolder: handleCreateFolder });
+        if (structure.looseId) folderIds = [structure.looseId];
+      } catch { /* filing is a convenience: the document is still saved at the top of the topic */ }
+    }
     const result = await runWorkspaceAction("saveGeneratedQuizDocument", {
       workspaceId: selectedWorkspaceId,
       subjectId: subjectId || selectedSubjectId,
-      folderIds: Array.isArray(payload?.folderIds) ? payload.folderIds : [],
+      folderIds,
       tags: Array.isArray(payload?.tags) ? payload.tags : [],
       file: payload?.file || {},
       downloads: payload?.downloads || {}
@@ -947,7 +960,7 @@ export function AppShell({ account = null, initialPage = "" }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onOpenPage={setPage} />
+        <TopBar title={title} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (

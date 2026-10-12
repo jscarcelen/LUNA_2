@@ -385,7 +385,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       meta: { agentName: refresher ? "Skill refresher" : "Targeted practice", subjectName: subject?.name || "", questionCount: activity.questions.length }
     });
     const content = JSON.stringify(payload, null, 2);
-    const saved = await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["resource", "activity", ...(topic ? [`topic:${topic}`] : [])], file: { name: `${name}.resource.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } }, selectedSubjectId);
+    const saved = await onSaveGeneratedQuizDocument({ folderIds: [], autoFile: true, tags: ["resource", "activity", ...(topic ? [`topic:${topic}`] : [])], file: { name: `${name}.resource.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } }, selectedSubjectId);
     return saved?.id || "";
   }
   async function keepPractice() {

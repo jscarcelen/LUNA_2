@@ -286,3 +286,16 @@ describe("POST /api/plans/update", () => {
     expect(sent.body.messages[1].content).toContain("(locked: set by someone else)");
   });
 });
+
+describe("what a deadline covers", () => {
+  it("travels with the deadline into the update request", async () => {
+    // @ts-ignore - plain JS modules
+    const { newDeadline } = await import("../../modules/plans/plan.js");
+    // @ts-ignore - plain JS modules
+    const { buildPlanUpdatePayload } = await import("../../modules/plans/updatePlan.js");
+    const midterm = (newDeadline as any)("Midterm", "2026-11-10", "exam", "  Chapters 1–4: balance sheet  ");
+    expect(midterm.covers).toBe("Chapters 1–4: balance sheet");
+    const payload = (buildPlanUpdatePayload as any)({ plan: { name: "Accounting", items: [], deadlines: [midterm] }, instruction: "go", doneIds: new Set(), today: "2026-10-12", window: { horizon: "2026-11-10" } });
+    expect(payload.deadlines[0].covers).toBe("Chapters 1–4: balance sheet");
+  });
+});

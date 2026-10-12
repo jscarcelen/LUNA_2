@@ -14,7 +14,7 @@ const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).sl
  * Top bar: where you are on the left, who you are on the right. The account cluster holds the
  * credit balance, the storage left and the profile (which is also where the role is switched).
  */
-export function TopBar({ title, page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, account = null, storage = { usedGb: 2.4, totalGb: 10 } }) {
+export function TopBar({ title, page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 } }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // In the real platform the profile is the logged-in account: its role is fixed, so there is no role switch, and it can log out.
@@ -64,7 +64,7 @@ export function TopBar({ title, page = "dashboard", role = "student", onRoleChan
         </div>
       </div>
     </header>
-    {account && settingsOpen ? <AccountSettings account={account} onClose={() => setSettingsOpen(false)} /> : null}
+    {account && settingsOpen ? <AccountSettings account={account} onAccountChange={onAccountChange} onClose={() => setSettingsOpen(false)} /> : null}
     </>
   );
 }

@@ -152,6 +152,7 @@ export function WorkspaceBrowser({
   const [planFilter, setPlanFilter] = useState("");
   const [openNodes, setOpenNodes] = useState(new Set());
   const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedFolderIds, setSelectedFolderIds] = useState([]); // folder node ids chosen with the checkbox next to a folder
   const [status, setStatus] = useState("");
   const [openId, setOpenId] = useState("");
   const [playing, setPlaying] = useState(null);
@@ -251,6 +252,28 @@ export function WorkspaceBrowser({
   const subjectsList = workspace?.subjects || [];
   const sharedTopic = (subjectId) => isReservedSubjectName(subjectsList.find((entry) => entry.id === subjectId)?.name);
   const dragFile = (document) => ({ type: "file", id: document.id, ids: selectedIds.includes(document.id) ? selectedIds : [document.id] });
+  const toggleFolderSelected = (id) => setSelectedFolderIds((list) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]));
+  const clearSelection = () => { setSelectedIds([]); setSelectedFolderIds([]); };
+  /** The chosen folders without any that sit inside another chosen folder (that one carries them along). */
+  const topSelectedFolders = () => selectedFolderIds.filter((id) => !selectedFolderIds.some((other) => other !== id && branchOf(folders, other).includes(id)));
+  async function moveSelected(targetNodeId) {
+    const docIds = selectedIds;
+    const folderIds = topSelectedFolders();
+    setSelectedFolderIds([]);
+    if (docIds.length) await move(docIds, targetNodeId);
+    for (const folderNodeId of folderIds) await moveFolder(folderNodeId, targetNodeId);
+  }
+  async function deleteSelected() {
+    const folderIds = topSelectedFolders();
+    const docs = selectedIds.map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean).filter((document) => !isSharedDocument(document) && !sharedInfoOf(document));
+    const parts = [docs.length ? `${docs.length} file${docs.length === 1 ? "" : "s"}` : "", folderIds.length ? `${folderIds.length} folder${folderIds.length === 1 ? "" : "s"} with everything inside` : ""].filter(Boolean);
+    if (!parts.length) { setStatus("Documents sent or shared with you are read-only, so they cannot be deleted."); return; }
+    if (!window.confirm(`Delete ${parts.join(" and ")}? This cannot be undone.`)) return;
+    if (docs.length) removeDocuments(docs.map((document) => document.id));
+    for (const folderNodeId of folderIds) await removeFolder(folderNodeId);
+    clearSelection();
+    setStatus(`Deleted ${parts.join(" and ")}.`);
+  }
   const toggleSelected = (id) => setSelectedIds((list) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]));
   const openAt = (...nodeIds) => setOpenNodes((prev) => new Set([...prev, ...nodeIds.filter(Boolean)]));
   function offerUndo(text, run) { setStatus(text); setUndo({ text, run }); }
@@ -736,7 +759,7 @@ export function WorkspaceBrowser({
           </p>
         ) : null}
 
-        {selectedIds.length ? (() => {
+        {selectedIds.length || selectedFolderIds.length ? (() => {
           // What can be done with the chosen material, right where it is: no need to find the right tool first.
           const picked = selectedIds.map((id) => rawDocuments.find((document) => document.id === id)).filter(Boolean);
           const material = picked.filter((document) => document.sourceType !== "generated");
@@ -745,7 +768,7 @@ export function WorkspaceBrowser({
           const singleRow = single ? rowsByDocumentId.get(single.id) : null;
           return (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--accent-soft)]/40 px-3 py-2 text-xs text-ink">
-              <span className="font-semibold">{selectedIds.length} selected</span>
+              <span className="font-semibold">{selectedIds.length + selectedFolderIds.length} selected{selectedFolderIds.length ? ` (${selectedFolderIds.length} folder${selectedFolderIds.length === 1 ? "" : "s"})` : ""}</span>
               {materialIds.length && onMakeFrom ? (
                 <>
                   <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>Make a quiz</button>
@@ -758,9 +781,10 @@ export function WorkspaceBrowser({
               {materialIds.length && onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => onPlanFrom(materialIds)}>Plan it</button> : null}
               {single && !materialIds.length ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
               {single && materialIds.length && !onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
-              <button type="button" className={ghostBtn} onClick={() => askLuna({ documentIds: picked.map((document) => document.id), text: picked.length === 1 ? `Help me study “${picked[0].name}”.` : "Help me study these documents." })}>Ask Luna</button>
-              {onMoveDocuments ? <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds })}>Move to…</button> : null}
-              <button type="button" className={ghostBtn} onClick={() => setSelectedIds([])}>Clear</button>
+              {picked.length ? <button type="button" className={ghostBtn} onClick={() => askLuna({ documentIds: picked.map((document) => document.id), text: picked.length === 1 ? `Help me study “${picked[0].name}”.` : "Help me study these documents." })}>Ask Luna</button> : null}
+              {onMoveDocuments || onMoveFolder ? <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds, folderNodeIds: topSelectedFolders() })}>Move to…</button> : null}
+              <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} disabled={isWorking} onClick={deleteSelected}>Delete</button>
+              <button type="button" className={ghostBtn} onClick={clearSelection}>Clear</button>
             </div>
           );
         })() : null}
@@ -830,6 +854,9 @@ export function WorkspaceBrowser({
                       onDragEnd={() => { dragRef.current = null; }}
                       className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
                       <button type="button" className="w-4 shrink-0 text-center text-[10px] text-soft-ink" onClick={() => toggleNode(folder.id)}>{isOpen ? "▾" : "▸"}</button>
+                      {!folder.isSubject && !folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
+                        <input type="checkbox" aria-label={`Select folder “${folder.name}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length || selectedFolderIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedFolderIds.includes(folder.id)} onChange={() => toggleFolderSelected(folder.id)} onClick={(event) => event.stopPropagation()} />
+                      ) : null}
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
@@ -970,20 +997,22 @@ export function WorkspaceBrowser({
       <UploadProgress progress={uploadProgress} onClose={() => setUploadProgress(null)} />
 
       {movePicker ? (() => {
-        const moving = movePicker.folderNodeId ? folders.find((entry) => entry.id === movePicker.folderNodeId) : null;
-        const count = (movePicker.documentIds || []).length;
+        const movingIds = movePicker.folderNodeIds || (movePicker.folderNodeId ? [movePicker.folderNodeId] : []);
+        const moving = movingIds.length === 1 && !(movePicker.documentIds || []).length ? folders.find((entry) => entry.id === movingIds[0]) : null;
+        const count = (movePicker.documentIds || []).length + (moving ? 0 : movingIds.length);
         const hidden = new Set(subjectsList.filter((entry) => isReservedSubjectName(entry.name)).map((entry) => entry.id));
         return (
           <MoveDialog
             title={moving ? `Move “${moving.name}”` : count === 1 ? `Move “${allDocuments.find((entry) => entry.id === movePicker.documentIds[0])?.name || "this item"}”` : `Move ${count} items`}
             subtitle={moving ? "With everything inside it. Pick a topic to put it at the top of that topic, or a folder." : "Pick a topic to put it at the top of that topic, or a folder inside any topic."}
             folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
-            disabledIds={moving ? blockedTargets(folders, moving.id) : []}
+            disabledIds={movingIds.flatMap((id) => blockedTargets(folders, id))}
             onCancel={() => setMovePicker(null)}
             onPick={(targetNodeId) => {
               const picked = movePicker;
               setMovePicker(null);
-              if (picked.folderNodeId) moveFolder(picked.folderNodeId, targetNodeId);
+              if (picked.folderNodeIds) moveSelected(targetNodeId);
+              else if (picked.folderNodeId) moveFolder(picked.folderNodeId, targetNodeId);
               else move(picked.documentIds, targetNodeId);
             }}
           />

@@ -102,7 +102,8 @@ export function buildPlan({ name, examDate = "", deadlines = [], startDate = "",
 }
 
 /** A deadline the plan's owner sets (`setBy.kind === "self"`); deadlines a teacher or parent sets carry their own `setBy` (see deadlines.js). */
-export const newDeadline = (title, date, kind = "exam") => ({ id: id("dl"), title: String(title || "Deadline").trim(), date, kind, setBy: selfSetBy() });
+/** `covers` (optional, free text) says what content the deadline tests, e.g. "Chapters 1–4: balance sheet and double entry". */
+export const newDeadline = (title, date, kind = "exam", covers = "") => ({ id: id("dl"), title: String(title || "Deadline").trim(), date, kind, covers: String(covers || "").trim(), setBy: selfSetBy() });
 
 /** A goal is what has to be achieved — optionally the concepts that make it up. */
 export const newGoal = (title, targetScore = 0.8) => ({ id: id("goal"), title: String(title || "").trim(), targetScore, note: "", concepts: [], resourceIds: [], deadlineId: "" });

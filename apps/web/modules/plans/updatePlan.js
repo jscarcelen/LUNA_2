@@ -108,7 +108,7 @@ export function buildPlanUpdatePayload({ plan, instruction, doneIds, minutesPerW
     maxMinutesPerDay: Number(minutesPerDay) > 0 ? normaliseMaxPerDay(minutesPerDay) : (Number(plan.minutesPerDay) > 0 ? normaliseMaxPerDay(plan.minutesPerDay) : 0),
     ...(plan.instructions ? { instructions: plan.instructions } : {}),
     ...(plan.formatNotes ? { formatNotes: plan.formatNotes } : {}),
-    deadlines: list.map((deadline) => ({ id: deadline.id, title: deadline.title, date: deadline.date || "", kind: deadline.kind || "", locked: isImposedDeadline(deadline) })),
+    deadlines: list.map((deadline) => ({ id: deadline.id, title: deadline.title, date: deadline.date || "", kind: deadline.kind || "", covers: String(deadline.covers || "").trim().slice(0, 600), locked: isImposedDeadline(deadline) })),
     kinds: allowedGenerateKeys(plan),
     ...(scoped ? { agents: plan.agentScope } : {}),
     steps: (plan.items || []).map((item) => ({ ...describeStep(item, doneIds.has(item.id)), goal: goalTitle(item.goalId) })),

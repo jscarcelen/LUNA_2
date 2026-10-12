@@ -45,6 +45,22 @@ export const METRIC_INFO = {
       "retention = improved topics ÷ measured topics"
     ]
   },
+  studentModel: {
+    meaning: "How well you know each concept in this plan, from the questions you answered on it. Concepts are listed the way the concept map orders them: a concept sits under the one it builds on.",
+    formula: [
+      "concept mastery = how often you answered that concept's questions correctly, weighing difficulty, recency and how many questions you have answered",
+      "it updates after every activity you finish; grey = no answers yet",
+      "red < 40%, orange 40–70%, green ≥ 70%"
+    ]
+  },
+  planProgress: {
+    meaning: "How far through this plan you are. A step counts as done when you tick it or finish its activity.",
+    formula: [
+      "progress = steps done ÷ all steps (sub-plans included)",
+      "average = mean of your best score on each activity you have finished",
+      "late = steps not done whose due date has passed"
+    ]
+  },
   topicAccuracy: {
     meaning: "For each topic, the share of your answers that were right, next to the mastery Luna estimates from them.",
     formula: "topic accuracy = correct answers ÷ answers attempted on that topic"

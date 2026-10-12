@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 // @ts-ignore - plain JS module
-import { capDailyMinutes, normaliseMaxPerDay } from "../../modules/plans/dailyCap.js";
+import { capDailyMinutes as capDailyMinutesJs, normaliseMaxPerDay } from "../../modules/plans/dailyCap.js";
+
+// The JS module's inferred types are too narrow for these fixtures; the tests check behaviour, not types.
+const capDailyMinutes = capDailyMinutesJs as (items: any[], options: any) => any;
 
 const total = (items: any[], date: string) => items.filter((item) => item.dueDate === date).reduce((sum, item) => sum + item.minutes, 0);
 

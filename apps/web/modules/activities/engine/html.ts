@@ -1,4 +1,5 @@
 import type { Activity } from "./activity";
+import { renderMath } from "../../template-studio/engine/latex";
 
 const esc = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
@@ -19,7 +20,8 @@ export function renderActivityHtml(activity: Activity): string {
     else body = `<input class="txt" name="${esc(question.id)}" placeholder="${question.kind === "number" ? "Your result" : "Your answer"}">`;
     return `<section class="q" id="q-${esc(question.id)}">${head}${body}<div class="fb"></div></section>`;
   }).join("");
-  const data = JSON.stringify(activity).replace(/</g, "\\u003c");
+  // The standalone file has no typesetter: formulas in the worked steps are shown in readable symbols.
+  const data = JSON.stringify({ ...activity, questions: activity.questions.map((question) => (question.steps?.length ? { ...question, steps: question.steps.map(renderMath) } : question)) }).replace(/</g, "\\u003c");
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(activity.title)}</title>
 <style>
 body{margin:0;background:#f5f5f7;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f}
@@ -32,7 +34,7 @@ h1{margin:0;font-size:26px}.sub{color:#6e6e73;margin:6px 0 0}
 .txt{margin-top:12px;width:100%;max-width:360px;border:1px solid rgba(0,0,0,.15);border-radius:12px;padding:10px 12px;font-size:14px}
 .pairs{display:grid;gap:8px;margin-top:12px}.pair{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:8px 12px}select{border:1px solid rgba(0,0,0,.15);border-radius:10px;padding:8px}
 .card{margin-top:12px;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:22px;text-align:center;font-weight:600;font-size:18px;background:#f5f5f7;cursor:pointer}.card .back{display:none}.card.on .front{display:none}.card.on .back{display:inline}
-.fb{margin-top:8px;font-size:14px}.q.ok{border-color:rgba(52,199,89,.6);background:rgba(52,199,89,.05)}.q.bad{border-color:rgba(255,59,48,.5);background:rgba(255,59,48,.04)}.q.bad .fb{color:#d70015}
+.fb{margin-top:8px;font-size:14px;white-space:pre-line}.steps{margin-top:8px;background:#f5f5f7;border-radius:12px;padding:10px 14px}.steps p{margin:4px 0;font-size:14px}.q.ok{border-color:rgba(52,199,89,.6);background:rgba(52,199,89,.05)}.q.bad{border-color:rgba(255,59,48,.5);background:rgba(255,59,48,.04)}.q.bad .fb{color:#d70015}
 .btn{display:inline-block;border:0;border-radius:999px;background:#0071e3;color:#fff;font-weight:600;padding:12px 22px;font-size:15px;cursor:pointer}
 .score{font-size:30px;font-weight:700;margin-top:12px}
 </style></head><body><div class="wrap">
@@ -49,6 +51,7 @@ else if(q.kind==="number"){const r=el.querySelector("input.txt");const a=Number(
 else{const r=el.querySelector("input:checked")||el.querySelector("input.txt");given=r?r.value:"";ok=norm(given)===norm(q.answer);}
 if(ok!==null){total++;if(ok)score++;}el.classList.toggle("ok",ok===true);el.classList.toggle("bad",ok===false);
 el.querySelector(".fb").textContent=ok===false?("Correct answer: "+(q.kind==="match"?Object.entries(q.answer).map(([l,r])=>l+" → "+r).join(" · "):q.answer)+(q.explanation?" — "+q.explanation:"")):"";
+if(q.steps&&q.steps.length){const d=document.createElement("div");d.className="steps";q.steps.forEach(t=>{const p=document.createElement("p");p.textContent=t;d.appendChild(p)});el.appendChild(d);}
 el.querySelectorAll("input,select").forEach(i=>i.disabled=true);}
 document.getElementById("score").innerHTML='<div class="score">'+score+' / '+total+'</div>';document.getElementById("check").style.display="none";window.scrollTo({top:0,behavior:"smooth"});};
 </script></body></html>`;

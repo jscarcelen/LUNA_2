@@ -9,9 +9,14 @@ describe("a problem-set item becomes a question with its worked answer", () => {
     const [question] = activity.questions;
     expect(question.kind).toBe("number");
     expect(question.answer).toBe("480");
-    expect(question.explanation).toContain("Step by step:");
+    expect(question.steps).toEqual(["1. Revenue = price × quantity.", "2. 12 × 40 = 480."]); // one string per step, LaTeX kept raw
+    expect(question.explanation).not.toContain("Step by step");
     expect(question.explanation).toContain("Unit: $");
     expect(question.explanation).toContain("Key math concepts: basic arithmetic; percentages and ratios");
+  });
+  it("splits a one-line numbered solution into steps and keeps its formulas as LaTeX", () => {
+    const activity = buildActivity(fields, { items: [{ question: "Solve 2x+3=11.", type: "numeric", answer: "4", worked_solution: "Step 1: $2x = 11 - 3 = 8$ Step 2: $x = \\frac{8}{2} = 4$" }] });
+    expect(activity.questions[0].steps).toEqual(["Step 1: $2x = 11 - 3 = 8$", "Step 2: $x = \\frac{8}{2} = 4$"]);
   });
   it("keeps true / false and multiple choice working", () => {
     const activity = buildActivity(fields, { items: [

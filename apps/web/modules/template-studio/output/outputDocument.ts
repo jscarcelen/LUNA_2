@@ -158,8 +158,12 @@ export function itemsToBlocks(items: unknown): FlatBlock[] | null {
   if (rows.every((row) => get(row, "front") !== undefined && get(row, "back") !== undefined)) {
     return rows.map((row) => ({ type: "flashcard", front: text(get(row, "front")), back: text(get(row, "back")), hint: text(get(row, "hint")) }));
   }
-  if (!rows.every((row) => get(row, "question") !== undefined)) return null;
-  return rows.map((row, index) => {
+  // A row that only carries the document's own fields (title, suitability note…) is not a question: it must not
+  // turn the whole output into an automatic one-view A4 layout.
+  const isMeta = (row: Record<string, unknown>) => Object.keys(row).every((key) => /^(title|subtitle|suitability)$/i.test(key) || key.startsWith("_"));
+  const asked = rows.filter((row) => !isMeta(row));
+  if (!asked.length || !asked.every((row) => get(row, "question") !== undefined)) return null;
+  return asked.map((row, index) => {
     const cited = (row as Record<string, unknown>)._sourceResolved || undefined;
     const question = text(get(row, "question"));
     const options = (Array.isArray(get(row, "options")) ? (get(row, "options") as unknown[]) : []).map(text);
@@ -168,14 +172,25 @@ export function itemsToBlocks(items: unknown): FlatBlock[] | null {
     const explanation = text(get(row, "explanation"));
     const points = get(row, "points");
     const number = index + 1;
+    // Problem sets: the unit belongs to the answer, and the worked steps are what an answer key is for.
+    const units = text(get(row, "units", "unit")).trim();
+    const solution = text(get(row, "workedsolution", "worked_solution", "solution", "steps")).trim();
+    const withUnits = (value: string) => (units && value && !value.toLowerCase().includes(units.toLowerCase()) ? `${value} ${units}` : value);
     if (/true|false|verdad|v_f|vf/.test(kind) || (options.length === 2 && /^(true|verdadero|cierto|vrai|wahr)/i.test(options[0] || ""))) {
-      return { type: "question_tf", number, statement: question, is_true: isTrue(answer, options), explanation, points, __cited: cited };
+      return { type: "question_tf", number, statement: question, is_true: isTrue(answer, options), solution, explanation, points, __cited: cited };
     }
     if (/short|open|abiert|corta|free/.test(kind) || !options.length) {
-      return { type: "question_open", number, question, answer_guide: answer, explanation, points, __cited: cited };
+      return { type: "question_open", number, question, answer_guide: withUnits(answer), solution, explanation, points, __cited: cited };
     }
-    const answerIndex = Math.max(0, options.findIndex((option) => option.trim().toLowerCase() === answer.trim().toLowerCase()));
-    return { type: "question_mc", number, question, options, answer_index: answerIndex, explanation, points, __cited: cited };
+    const wanted = answer.trim().toLowerCase();
+    const digits = (value: string) => value.replace(/[^0-9.,-]/g, "").replace(/,/g, ".");
+    // The answer is the option's text, its letter ("B", "b)") or a number that is the option without its unit.
+    const letterIndex = /^[a-h][.)]?$/i.test(wanted) ? wanted.charCodeAt(0) - 97 : -1;
+    const found = options.findIndex((option) => option.trim().toLowerCase() === wanted) >= 0
+      ? options.findIndex((option) => option.trim().toLowerCase() === wanted)
+      : letterIndex >= 0 && letterIndex < options.length ? letterIndex : options.findIndex((option) => wanted && (option.trim().toLowerCase().startsWith(wanted) || (digits(option) !== "" && digits(option) === digits(wanted))));
+    const answerIndex = Math.max(0, found);
+    return { type: "question_mc", number, question, options, answer_index: answerIndex, solution, explanation, points, __cited: cited };
   });
 }
 
@@ -185,11 +200,11 @@ export function blocksToActivityItems(blocks: FlatBlock[]): Record<string, unkno
   for (const block of blocks) {
     if (block.type === "question_mc") {
       const options = (Array.isArray(block.options) ? block.options : []).map(text);
-      items.push({ question: text(block.question), type: "multiple-choice", options, answer: options[Number(block.answer_index) || 0] ?? "", explanation: text(block.explanation) });
+      items.push({ question: text(block.question), type: "multiple-choice", options, answer: options[Number(block.answer_index) || 0] ?? "", explanation: text(block.explanation), worked_solution: text(block.solution) });
     } else if (block.type === "question_tf") {
-      items.push({ question: text(block.statement), type: "true-false", options: ["True", "False"], answer: block.is_true ? "True" : "False", explanation: text(block.explanation) });
+      items.push({ question: text(block.statement), type: "true-false", options: ["True", "False"], answer: block.is_true ? "True" : "False", explanation: text(block.explanation), worked_solution: text(block.solution) });
     } else if (block.type === "question_open") {
-      items.push({ question: text(block.question), type: "short-answer", options: [], answer: text(block.answer_guide), explanation: text(block.explanation) });
+      items.push({ question: text(block.question), type: "short-answer", options: [], answer: text(block.answer_guide), explanation: text(block.explanation), worked_solution: text(block.solution) });
     } else if (block.type === "question_fill") {
       items.push({ question: text(block.sentence).replace(/_{2,}/g, "____"), type: "short-answer", options: [], answer: text(block.answer), explanation: "" });
     } else if (block.type === "question_match") {
@@ -321,10 +336,12 @@ const RUNS: Record<string, RunSpec> = {
           const index = Math.max(0, Number(block.answer_index) || 0);
           const explanation = text(block.explanation).trim();
           const answer = options.length ? `${letter(index)} · ${options[index] ?? ""}` : "";
+          const solution = text(block.solution).trim();
           return {
             question: text(block.question),
             options,
-            answer: explanation && answer.length + explanation.length < 150 ? `${answer} — ${explanation}` : answer,
+            // The key shows the worked steps (each on its own line) when there are any, else a short explanation.
+            answer: solution ? `${answer}\n${solution}` : explanation && answer.length + explanation.length < 150 ? `${answer} — ${explanation}` : answer,
             points: hasValue(block.points) ? Number(block.points) : "",
             ...sourceOf(block)
           };
@@ -336,7 +353,7 @@ const RUNS: Record<string, RunSpec> = {
   "block-open-question": {
     merge: true,
     build: (blocks) => ({
-      data: { questions: blocks.map((block) => ({ question: text(block.question), points: hasValue(block.points) ? Number(block.points) : "", answer: text(block.answer_guide), ...sourceOf(block) })) },
+      data: { questions: blocks.map((block) => ({ question: text(block.question), points: hasValue(block.points) ? Number(block.points) : "", answer: [text(block.answer_guide), text(block.solution).trim()].filter(Boolean).join("\n"), ...sourceOf(block) })) },
       autoOff: off("points", !blocks.some((block) => hasValue(block.points)))
     })
   },

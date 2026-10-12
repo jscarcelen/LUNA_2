@@ -40,6 +40,8 @@ export interface ActivityQuestion {
   answer: string | Record<string, string>;
   /** Extra info shown after checking (explanation, model answer…). */
   explanation?: string;
+  /** A worked solution, one string per step, LaTeX kept raw so the player can typeset it. */
+  steps?: string[];
   difficulty?: string;
   topic?: string;
   /** What the question tests — one of SKILLS, or a category the creator typed. */
@@ -103,6 +105,14 @@ export interface AttemptResult {
 
 type Row = Record<string, unknown>;
 
+/** A worked solution ("1. … 2. …", "Step 1: …", or one step per line) as one string per step, formulas untouched. */
+export function splitSteps(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value.map((entry) => String(entry ?? "")).join("\n") : String(value ?? "");
+  const lines = raw.split(/\r?\n+/).map((line) => line.trim()).filter(Boolean);
+  const parts = lines.length > 1 ? lines : raw.trim().split(/\s+(?=(?:Step\s*\d+[.):]?|\d+[.)])\s)/i).map((part) => part.trim()).filter(Boolean);
+  return parts;
+}
+
 const slug = (name: string) => String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
 // Questions carry formulas as LaTeX; the player and the exported HTML show plain text, so the
 // maths is converted as the activity is built — answers are compared on the converted form too.
@@ -145,10 +155,10 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     const units = text(pick(item, "units", "unit"));
     const explanation = [
       text(pick(item, "explanation", "hint")),
-      text(pick(item, "worked_solution")) && `Step by step:\n${text(pick(item, "worked_solution"))}`,
       units && `Unit: ${units}`,
       text(pick(item, "math_concepts")) && `Key math concepts: ${text(pick(item, "math_concepts"))}`
     ].filter(Boolean).join("\n\n");
+    const steps = splitSteps(pick(item, "worked_solution"));
     const difficulty = text(pick(item, "difficulty", "level"));
     const topic = text(pick(item, "topic", "subject_area"));
     const skill = text(pick(item, "skill", "category", "tests", "question_type", "competence"));
@@ -170,11 +180,11 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       // The answer may be the option text or its letter/index.
       const letter = norm(answer);
       const byLetter = /^[a-z]$/.test(letter) ? opts[letter.charCodeAt(0) - 97] : /^\d+$/.test(letter) ? opts[Number(letter) - 1] : undefined;
-      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, difficulty, topic, skill, source });
+      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, steps, difficulty, topic, skill, source });
       return;
     }
     if (pick(item, "statement") !== undefined || typeof answer === "boolean" || ["true", "false"].includes(norm(answer))) {
-      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, difficulty, topic, skill, source });
+      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, steps, difficulty, topic, skill, source });
       return;
     }
     if (pick(item, "front") !== undefined && pick(item, "back") !== undefined) {
@@ -183,7 +193,7 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     }
     if (answer === undefined) return;
     const numeric = typeof answer === "number" || (/^-?\d+([.,]\d+)?$/.test(text(answer).trim()) && (pick(item, "problem") !== undefined || /numeric|number/.test(norm(pick(item, "type", "question_type")))));
-    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, difficulty, topic, skill, source });
+    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, steps, difficulty, topic, skill, source });
   });
 }
 

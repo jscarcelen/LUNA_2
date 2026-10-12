@@ -5,6 +5,7 @@ import { gradeActivity } from "./engine/activity";
 import { applyGrades, needsModel } from "./grading.js";
 import { chargeRun } from "../credits/credits";
 import { FlashcardDeck } from "./FlashcardDeck";
+import { renderInline } from "../reader/markdown";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -339,10 +340,16 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
                   </p>
                 ) : null}
                 {result ? <MarkNote result={result} /> : null}
+                {result && Array.isArray(q.steps) && q.steps.length ? (
+                  <div className="mt-2 grid gap-1.5 rounded-xl bg-[var(--surface-soft)] p-3">
+                    <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Step by step</p>
+                    {q.steps.map((step, stepIndex) => <p key={stepIndex} className="m-0 text-sm text-ink" dangerouslySetInnerHTML={{ __html: renderInline(step) }} />)}
+                  </div>
+                ) : null}
                 {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? "Expected answer" : "Correct answer"}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
                 {result && q.source?.extract ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
-                {result && result.correct && q.explanation ? <p className="m-0 mt-2 text-xs text-soft-ink">{q.explanation}</p> : null}
+                {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink">{q.explanation}</p> : null}
               </div>
             </div>
           </article>

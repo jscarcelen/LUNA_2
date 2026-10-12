@@ -588,8 +588,9 @@ export function WorkspaceBrowser({
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             !row && onMakeFrom ? { label: "Make a quiz", icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("vocabulary-flashcards", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("summary-consolidator", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Make a problem set", icon: "∑", onSelect: () => onMakeFrom("math-problem-set", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("concept-flashcards", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("document-summarizer", [document.id]) } : null,
             row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow({ document, resource: { name: document.name } }) },
             { label: "Ask Luna", icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: `Help me study “${document.name}”.` }) },
             row && canUpdateResource(row.resource) ? { label: "Update…", icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
@@ -748,8 +749,9 @@ export function WorkspaceBrowser({
               {materialIds.length && onMakeFrom ? (
                 <>
                   <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>Make a quiz</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("vocabulary-flashcards", materialIds)}>Flashcards</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("summary-consolidator", materialIds)}>Summarise</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("concept-flashcards", materialIds)}>Flashcards</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("math-problem-set", materialIds)}>Problem set</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("document-summarizer", materialIds)}>Summarise</button>
                 </>
               ) : null}
               {materialIds.length && onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => onPlanFrom(materialIds)}>Plan it</button> : null}

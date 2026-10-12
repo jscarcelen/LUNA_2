@@ -12,8 +12,9 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 /** What can be made in one go: the tool that makes it, and a sentence on what comes out. */
 export const QUICK_MAKES = [
   { id: "quiz-generator", title: "A quiz", text: "Questions with answers, to test what you know.", icon: "✎" },
-  { id: "vocabulary-flashcards", title: "Flashcards", text: "Cards to flip and learn the key terms.", icon: "▭" },
-  { id: "summary-consolidator", title: "A summary", text: "Your notes merged into one clear document.", icon: "☰" }
+  { id: "math-problem-set", title: "A problem set", text: "Problems that use the formulas in your material, with worked answers.", icon: "∑" },
+  { id: "concept-flashcards", title: "Flashcards", text: "Each key concept on a card, with its definition.", icon: "▭" },
+  { id: "document-summarizer", title: "A summary", text: "One or two pages with the key messages and what to remember.", icon: "☰" }
 ];
 
 /** `ai-tool:quiz-generator?docs=a,b`: the page that opens a tool with material already chosen. */
@@ -52,7 +53,7 @@ export function CreatePage({ role = "student", workspaces = [], selectedWorkspac
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="What to make">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="What to make">
           {QUICK_MAKES.map((entry) => {
             const on = entry.id === kind;
             return (

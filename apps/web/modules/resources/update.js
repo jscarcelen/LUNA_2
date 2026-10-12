@@ -15,6 +15,9 @@
  * only part that talks to the network, and takes `fetchImpl` so tests can fake it.
  */
 import { QUIZ_AGENT } from "../ai-tools/tools/quiz-generator/quizAgent";
+import { MATH_AGENT } from "../ai-tools/tools/math-problem-set/mathAgent";
+import { CONCEPT_FLASHCARDS_AGENT } from "../ai-tools/tools/concept-flashcards/conceptAgent";
+import { DOCUMENT_SUMMARIZER_AGENT } from "../ai-tools/tools/document-summarizer/summarizerAgent";
 import { CONSOLIDATOR_AGENT } from "../ai-tools/tools/summary-consolidator/consolidatorAgent";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
@@ -42,7 +45,11 @@ export const BUILTIN_AGENTS = [
   { id: "quiz", kind: "quiz", label: "Quiz Generator", agent: QUIZ_AGENT },
   { id: "flashcards", kind: "flashcards", label: STEP_RECIPES.flashcards.agent.name, agent: STEP_RECIPES.flashcards.agent },
   { id: "summary", kind: "summary", label: STEP_RECIPES.summary.agent.name, agent: STEP_RECIPES.summary.agent },
-  { id: "consolidator", kind: "master", label: CONSOLIDATOR_AGENT.name, agent: CONSOLIDATOR_AGENT }
+  { id: "consolidator", kind: "master", label: CONSOLIDATOR_AGENT.name, agent: CONSOLIDATOR_AGENT },
+  // Found by name when an item they made is updated; listed after the ones above, which stay the fallback of their kind.
+  { id: "math", kind: "quiz", label: MATH_AGENT.name, agent: MATH_AGENT },
+  { id: "concept-flashcards", kind: "flashcards", label: CONCEPT_FLASHCARDS_AGENT.name, agent: CONCEPT_FLASHCARDS_AGENT },
+  { id: "document-summarizer", kind: "summary", label: DOCUMENT_SUMMARIZER_AGENT.name, agent: DOCUMENT_SUMMARIZER_AGENT }
 ];
 
 /** The same quick suggestions as Iterate, then the ones that fit the kind of resource. */

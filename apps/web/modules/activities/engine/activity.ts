@@ -141,7 +141,14 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     const prompt = text(pick(item, "question", "sentence", "statement", "problem", "prompt", "front", "word", "left", "text"));
     const options = pick(item, "options", "choices");
     const answer = pick(item, "answer", "correct", "solution", "right", "back", "translation");
-    const explanation = text(pick(item, "explanation", "hint"));
+    // A worked answer (step-by-step solution, the formulas and maths it used, the unit) is shown with the explanation.
+    const units = text(pick(item, "units", "unit"));
+    const explanation = [
+      text(pick(item, "explanation", "hint")),
+      text(pick(item, "worked_solution")) && `Step by step:\n${text(pick(item, "worked_solution"))}`,
+      units && `Unit: ${units}`,
+      text(pick(item, "math_concepts")) && `Key math concepts: ${text(pick(item, "math_concepts"))}`
+    ].filter(Boolean).join("\n\n");
     const difficulty = text(pick(item, "difficulty", "level"));
     const topic = text(pick(item, "topic", "subject_area"));
     const skill = text(pick(item, "skill", "category", "tests", "question_type", "competence"));
@@ -175,7 +182,7 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       return;
     }
     if (answer === undefined) return;
-    const numeric = typeof answer === "number" || (/^-?\d+([.,]\d+)?$/.test(text(answer).trim()) && pick(item, "problem") !== undefined);
+    const numeric = typeof answer === "number" || (/^-?\d+([.,]\d+)?$/.test(text(answer).trim()) && (pick(item, "problem") !== undefined || /numeric|number/.test(norm(pick(item, "type", "question_type")))));
     out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, difficulty, topic, skill, source });
   });
 }

@@ -595,6 +595,9 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const data = await generation.generate(runConfig);
       chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
       setOutput(data);
+      // An agent that finds the material unsuitable (a problem set from a history text) says so and suggests another tool.
+      const note = String(data?.data?.suitability || "").trim();
+      if (note && !(data?.items || []).length) setStatusMessage(note);
     } catch {
       // The hook exposes the error state to the preview pane.
     }

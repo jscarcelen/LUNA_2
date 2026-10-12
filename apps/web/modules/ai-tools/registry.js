@@ -4,11 +4,17 @@ import { agentBuilderTool } from "./tools/agent-builder";
 import { templateBuilderTool } from "./tools/template-builder";
 import { vocabularyFlashcardsTool } from "./tools/vocabulary-flashcards";
 import { summaryConsolidatorTool } from "./tools/summary-consolidator";
+import { mathProblemSetTool } from "./tools/math-problem-set";
+import { conceptFlashcardsTool } from "./tools/concept-flashcards";
+import { documentSummarizerTool } from "./tools/document-summarizer";
 import { validateAiToolManifest } from "../core";
 
 const toolCandidates = [
   quizGeneratorTool,
+  mathProblemSetTool,
+  conceptFlashcardsTool,
   vocabularyFlashcardsTool,
+  documentSummarizerTool,
   summaryConsolidatorTool,
   agentBuilderTool,
   templateBuilderTool,

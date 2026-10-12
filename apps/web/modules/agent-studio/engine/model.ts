@@ -96,6 +96,92 @@ export function createVocabularyFlashcardsSpec(): AgentSpec {
 }
 
 /**
+ * Concept flashcards: the key concepts or terms of a document and their definitions, as front / back pairs in the
+ * language the runner chooses. (Vocabulary Flashcards is different: it pairs words between two languages.)
+ */
+export function createConceptFlashcardsSpec(): AgentSpec {
+  const spec = createAgentSpec("Concept Flashcards");
+  spec.purpose = { headline: "Concept and definition flashcards", description: "Finds the key concepts and terms in your material and turns each into a card: the concept on the front, its definition on the back.", category: "Study" };
+  spec.instructions = {
+    core: `<role>
+You make concept flashcards from the learner's material so that they can learn its key ideas by recalling each definition.
+</role>
+
+<rules>
+1. SELECT. Choose the concepts, terms, laws, formulas and named ideas a student must be able to define to understand and be examined on this material. Prefer the ones the material defines or stresses (headings, bold or repeated terms, worked definitions) over passing mentions. Cover the whole material in the order it teaches it, so the set is balanced and no section is skipped.
+2. FRONT. The front is the concept alone: a term or a short name (at most six words), such as "Opportunity cost" or "Net present value". It never contains the definition and never a full question.
+3. BACK. The back is the definition in one to three plain sentences taken from the material's own meaning. Define what it is, then, when the material gives it, say what it is for or how it is calculated (formulas in LaTeX). The back never starts with the term itself, so the card is not circular.
+4. ONE IDEA PER CARD. If two terms are only different names for the same thing, make one card and mention the other name on the back. Never repeat a concept.
+5. SOURCE. Use only the reference material; never add outside facts.
+6. CHECK BEFORE WRITING. Reread each card: the front names one concept, the back defines it correctly and completely according to the material, and nothing on the back is a guess.
+7. LANGUAGE AND COUNT. Write both sides in the requested language, keeping formulas, symbols and proper names as they are. Return exactly the requested number of cards (if the material has fewer distinct concepts, return as many as it supports and no filler).
+</rules>`,
+    style: "Plain, precise language a student can learn from. No sentences on the front.",
+    constraints: ["Return exactly the requested number of cards.", "Front: the concept only. Back: its definition."]
+  };
+  const count = createInput("Number of cards", "number", { description: "How many cards to create (max 30 per set — keeps each set focused and usable in one study session)", default: 20, min: 1, max: 30 });
+  const language = createInput("Language", "language", { default: "English", description: "The language of both sides of every card." });
+  const focus = createInput("Focus (optional)", "text", { required: false, description: "A chapter or topic to take the concepts from. Leave empty to cover everything." });
+  spec.inputs = [count, language, focus];
+  spec.contextSlots = [createSlot("user_material", "Documents to take the concepts from", { description: "The concepts and their definitions come from this material.", required: true, multiple: true, usage: "source" })];
+  const front = createField("Front", "text", { description: "The concept or term alone, at most six words", required: true });
+  const back = createField("Back", "text", { description: "Its definition in one to three plain sentences", required: true });
+  const topic = createField("Topic", "text", { description: "The section or topic of the material the concept belongs to", required: false });
+  const cards = createCollection("Flashcards", [front, back, topic]);
+  spec.outputSchema = [titleField("A short, specific title for this set, written for its content, e.g. 'Microeconomics · Key concepts'. Never the name of the tool."), cards];
+  spec.validationRules = [{ type: "required_fields" }, { type: "count_matches_input", arrayFieldId: cards.id, inputId: count.id }, { type: "no_duplicates", arrayFieldId: cards.id, byFieldId: front.id }];
+  spec.examples = [{ id: createId("ex"), source: "pasted", inputs: { [count.id]: 2, [language.id]: "English" }, output: { title: "Microeconomics · Key concepts", items: [{ front: "Opportunity cost", back: "The value of the next best alternative given up when a choice is made.", topic: "Scarcity and choice" }, { front: "Price elasticity of demand", back: "How much the quantity demanded changes when the price changes: the percentage change in quantity divided by the percentage change in price.", topic: "Demand" }] }, note: "Concept alone on the front; a definition that does not repeat the term on the back." }];
+  spec.model = { model: "gpt-4o", creativity: "low" };
+  return spec;
+}
+
+/**
+ * The document summarizer: one or more documents become ONE structured document of one or two pages, written the
+ * way a consultant would write it, so a student can read it and know what the material is about, what to focus
+ * on and what to remember. A single model call (the documents' best-matching passages), unlike the Summary Notes
+ * Consolidator, which keeps everything.
+ */
+export function createDocumentSummarySpec(): AgentSpec {
+  const spec = createAgentSpec("Document Summarizer");
+  spec.purpose = { headline: "A one-to-two page summary of your documents", description: "Reads any document or documents and writes ONE structured summary of one or two pages: the key messages, formulas, concepts and takeaways, as clear and direct as a consultant's briefing.", category: "Study" };
+  spec.instructions = {
+    core: `<role>
+You write the briefing a student reads instead of the documents: one structured document that says what the material is about, what matters, what to remember and what to focus on. Write it the way a good consultant writes for a busy client: clear, direct, nothing that does not earn its place.
+</role>
+
+<structure>
+Write, in this order, using the available blocks:
+1. document_header: a specific title.
+2. callout (info): "The big picture" in two or three sentences: what this material is about and why it matters.
+3. section_header + bullet_list: "Key messages": the three to six conclusions the material wants the reader to take away, each one a full short sentence that states the message, not the topic.
+4. section_header + heading + paragraph / bullet_list: "Key concepts": each concept in one line with a plain definition, grouped under short headings when there are many.
+5. section_header + paragraph: "Key formulas": only when the material has formulas. Each formula in LaTeX with a one-line meaning of its symbols and when to use it. Leave this section out when there are none.
+6. section_header + bullet_list: "What to remember": facts, rules, numbers, dates or distinctions that are likely to be examined.
+7. callout (tip): "Where to focus": the two or three ideas that are hardest or most important, and why.
+</structure>
+
+<rules>
+1. LENGTH IS A LIMIT. The result fits the requested length (one page is about 400 words, two pages about 800). Cut detail, never the key messages. A reader must finish it in a few minutes.
+2. SOURCE. Use only the reference material; never add outside facts. When several documents are given, merge them by theme and write each idea once.
+3. EASY TO READ. Short sentences, plain words, active voice; define a technical term the first time it appears. Prefer a concrete number or example from the material to a general statement.
+4. PRIORITISE. Put what matters most first inside each section. Leave out history of the author, structure of the chapters and anything that does not help the student understand or remember the content.
+5. CHECK BEFORE WRITING. Confirm that every formula and number matches the material, that the title says what is in this material, and that the document stays within the requested length.
+6. LANGUAGE. Write in the requested language, keeping formulas, symbols and proper names as they are. If a focus is given, give it the most room and keep everything else brief.
+</rules>`,
+    style: "Consultant-style: direct, structured, plain language.",
+    constraints: ["One to two pages in total.", "Key messages are full sentences that state the message."]
+  };
+  const length = createInput("Length", "choice", { options: ["1 page", "2 pages"], default: "1 page", description: "How long the summary may be: one page is about 400 words, two pages about 800." });
+  const language = createInput("Language", "language", { default: "English", description: "The language the summary is written in." });
+  const focus = createInput("Focus (optional)", "text", { required: false, description: "A topic to give the most room. Everything else stays brief." });
+  spec.inputs = [length, language, focus];
+  spec.contextSlots = [createSlot("user_material", "Documents to summarise", { description: "One or several documents; they are merged into a single summary.", required: true, multiple: true, usage: "source" })];
+  spec.output = { selectedBlocks: ["document_header", "section_header", "heading", "paragraph", "bullet_list", "callout"].map((blockId) => ({ blockId, formatId: "", color: "blue" })) };
+  spec.model = { model: "gpt-4o", creativity: "low" };
+  return spec;
+}
+
+/**
  * Merges several documents (from any subject or folder) into ONE exhaustive set of notes organised by
  * topic, with overlapping information written once and every statement tagged with the original
  * document and page/section it came from. Runs through its own multi-pass pipeline

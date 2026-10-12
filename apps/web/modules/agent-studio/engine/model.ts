@@ -182,6 +182,55 @@ Write, in this order, using the available blocks:
 }
 
 /**
+ * The formula sheet: one or more documents become a detailed reference of EVERY key formula in them: the formula in
+ * LaTeX, what each variable means (with units), the logic behind it (why it has that shape) and when to use it.
+ * A single model call over the documents' best-matching passages, written as blocks so it reads and exports like
+ * the Document Summarizer. Material without formulas gets one short note saying so, never invented formulas.
+ */
+export function createFormulaSheetSpec(): AgentSpec {
+  const spec = createAgentSpec("Formula Sheet");
+  spec.purpose = { headline: "Every key formula in your documents, explained", description: "Reads any document or documents and writes a detailed formula sheet: each key formula, what every variable means, the logic behind it and when to use it.", category: "Study" };
+  spec.instructions = {
+    core: `<role>
+You write the formula sheet a student keeps next to the notes: every key formula of the material, each one explained well enough that the student can recall it, understand why it looks the way it does, and know when to use it.
+</role>
+
+<structure>
+Write, in this order, using the available blocks:
+1. document_header: a specific title.
+2. callout (info): one or two sentences saying what the formulas in this material are for.
+3. For each group of related formulas (by topic, in the order the material teaches them): a section_header with the topic, then for EACH formula:
+   a. heading: the formula's name (for example "Price elasticity of demand").
+   b. paragraph: the formula in LaTeX, exactly as the material states it.
+   c. bullet_list "Where": one bullet per variable or symbol: the symbol, what it means and its unit when the material gives one.
+   d. paragraph "The logic": two to four sentences on why the formula has this shape: what each part does and how it is derived or reasoned in the material, in plain words.
+   e. paragraph "Use it when": the kind of problem it solves, and one thing students commonly get wrong with it when the material hints at it.
+4. callout (tip) "How the formulas connect": only when formulas build on each other; say how in a few lines.
+</structure>
+
+<rules>
+1. EVERY KEY FORMULA. Include each formula, equation, identity and rule of calculation the material states or uses, including the ones in worked examples, and leave out none that a student could be examined on. Never invent a formula, a variable or a unit that the material does not support.
+2. EXACT. Copy each formula as the material writes it; do not simplify, rename symbols or change the form. When the material gives two equivalent forms, give both and say they are equivalent.
+3. EVERY VARIABLE. Explain every symbol that appears in the formula, including constants and subscripts, in a short phrase a student can understand.
+4. LOGIC, NOT RESTATEMENT. "The logic" explains why the formula works (what is being compared, summed or balanced), not only what it computes. Use the material's own reasoning; when it gives none, say what the formula measures in plain words and do not guess a derivation.
+5. NO FORMULAS. If the material contains no formulas, write the header and one callout saying that no formulas were found, and nothing else.
+6. SOURCE. Use only the reference material; never add outside facts. When several documents are given, merge them by topic and write each formula once.
+7. CHECK BEFORE WRITING. Confirm that every formula matches the material symbol by symbol, that every variable is explained, and that no formula of the material is missing.
+8. LANGUAGE. Write in the requested language, keeping formulas, symbols and proper names as they are. If a focus is given, put it first and give it the most detail.
+</rules>`,
+    style: "Precise and plain: a reference a student can scan and still understand.",
+    constraints: ["Every formula is copied exactly from the material.", "Every variable is explained.", "Never invent a formula."]
+  };
+  const language = createInput("Language", "language", { default: "English", description: "The language the formula sheet is written in." });
+  const focus = createInput("Focus (optional)", "text", { required: false, description: "A chapter or topic whose formulas come first and in the most detail." });
+  spec.inputs = [language, focus];
+  spec.contextSlots = [createSlot("user_material", "Documents with the formulas", { description: "One or several documents; their formulas are merged into a single sheet.", required: true, multiple: true, usage: "source" })];
+  spec.output = { selectedBlocks: ["document_header", "section_header", "heading", "paragraph", "bullet_list", "callout"].map((blockId) => ({ blockId, formatId: "", color: "blue" })) };
+  spec.model = { model: "gpt-4o", creativity: "low" };
+  return spec;
+}
+
+/**
  * Merges several documents (from any subject or folder) into ONE exhaustive set of notes organised by
  * topic, with overlapping information written once and every statement tagged with the original
  * document and page/section it came from. Runs through its own multi-pass pipeline

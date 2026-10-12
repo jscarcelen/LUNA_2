@@ -11,8 +11,13 @@ import { createVocabularyFlashcardsSpec } from "../agent-studio/engine/model";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { attachSources, buildActivity } from "../activities/engine/activity";
 import { buildResource, RESOURCE_TAG, trimSources } from "../resources/resource";
-import { isCustomKey } from "./agents";
+import { isCustomKey, isSummaryKey } from "./agents";
 import { CONSOLIDATOR_AGENT } from "../ai-tools/tools/summary-consolidator/consolidatorAgent";
+import { MATH_AGENT } from "../ai-tools/tools/math-problem-set/mathAgent";
+import { LEVEL_AGENT } from "../ai-tools/tools/level-test/levelAgent";
+import { CONCEPT_FLASHCARDS_AGENT } from "../ai-tools/tools/concept-flashcards/conceptAgent";
+import { DOCUMENT_SUMMARIZER_AGENT } from "../ai-tools/tools/document-summarizer/summarizerAgent";
+import { FORMULA_SHEET_AGENT } from "../ai-tools/tools/formula-sheet/formulaAgent";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
 import { MASTER_TAG } from "../ai-tools/pipeline/masterDocument";
 import { findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, stepSourceIds, uploadedMaterialIds } from "./master";
@@ -66,6 +71,12 @@ export const STEP_RECIPES = {
   worksheet: { agent: QUIZ_AGENT, label: "Worksheet", answers: { "q-count": 8, "q-difficulty": "Mixed", "q-types": ["Short answer"] } },
   flashcards: { agent: FLASHCARDS_AGENT, label: "Flashcards", answers: {} },
   summary: { agent: SUMMARY_AGENT, label: "Summary", answers: {} },
+  // The other built-in agents of the Create tab. Anything not preset takes the agent's own default.
+  math: { agent: MATH_AGENT, label: "Problem set", answers: { "m-count": 6, "m-types": ["Number with units", "Multiple choice"], "m-concept": "Medium", "m-math": "Medium" } },
+  "concept-flashcards": { agent: CONCEPT_FLASHCARDS_AGENT, label: "Concept flashcards", answers: {} },
+  "document-summarizer": { agent: DOCUMENT_SUMMARIZER_AGENT, label: "Document summary", answers: {} },
+  formulas: { agent: FORMULA_SHEET_AGENT, label: "Formula sheet", answers: {} },
+  "level-test": { agent: LEVEL_AGENT, label: "Level test", answers: {} },
   // Not a step the planner schedules: the first thing built for a plan with 2+ uploaded documents.
   // Streams (it takes minutes) and reads every document in full. Language "" = the documents' own.
   master: {
@@ -178,7 +189,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
     if (!lastAnswers.length) lastAnswers = answers; // the first call's choices; a narrower follow-up call must not replace them
     const config = {
       name: agent.name,
-      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? (step.generate === "summary" ? summaryScopeInstruction(focus) : coverageInstruction(focus, perConcept)) : ""}`,
+      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length && step.generate !== "level-test" ? (isSummaryKey(step.generate) ? summaryScopeInstruction(focus) : coverageInstruction(focus, perConcept)) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
       // The consolidator is recognised by its spec (`pipeline: "consolidate"`).
       ...(recipe.streams ? { spec: agent.spec } : {}),
@@ -195,7 +206,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
         inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
       } : {}),
       // No topic filter: the chosen documents may sit in any topic of the workspace (a document moved after the plan was made).
-      scope: { workspaceId, subjectId: sourceDocumentIds.length ? "" : subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: recipe.streams || step.generate === "summary" ? [] : styleDocumentIds }
+      scope: { workspaceId, subjectId: sourceDocumentIds.length ? "" : subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: recipe.streams || isSummaryKey(step.generate) ? [] : styleDocumentIds }
     };
     // A long run (the master document) streams its progress; the others are one quick request.
     if (recipe.streams) {
@@ -219,7 +230,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
   // Check the promise: every concept of the step needs at least one question. Whatever is still
   // missing is asked for in a second, narrower call and merged in.
   let coverage = null;
-  if (concepts.length && !recipe.custom && !data.isBlockOutput && step.generate !== "summary") {
+  if (concepts.length && !recipe.custom && !data.isBlockOutput && !isSummaryKey(step.generate) && step.generate !== "level-test") {
     const covered = conceptsTested(Array.isArray(data.items) ? data.items : [], concepts);
     const missing = concepts.filter((concept) => !covered.has(concept));
     if (missing.length && missing.length <= 12) {

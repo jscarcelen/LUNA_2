@@ -13,7 +13,7 @@ describe("the new built-in agents", () => {
   it("are registered, and every quick-make id is a registered tool", () => {
     const registry = read("registry.js");
     const registered = new Set([
-      ...["quiz-generator/index.js", "math-problem-set/index.js", "level-test/index.js", "concept-flashcards/index.js", "vocabulary-flashcards/index.js", "document-summarizer/index.js", "summary-consolidator/index.js", "agent-builder/index.js", "template-builder/index.js", "chatbot/index.js"].flatMap((file) => toolIds(read(`tools/${file}`)))
+      ...["quiz-generator/index.js", "math-problem-set/index.js", "level-test/index.js", "concept-flashcards/index.js", "vocabulary-flashcards/index.js", "document-summarizer/index.js", "formula-sheet/index.js", "summary-consolidator/index.js", "agent-builder/index.js", "template-builder/index.js", "chatbot/index.js"].flatMap((file) => toolIds(read(`tools/${file}`)))
     ]);
     for (const id of ["math-problem-set", "level-test", "concept-flashcards", "document-summarizer"]) expect(registry, id).toContain(`${id.split("-").map((part, index) => (index ? part[0].toUpperCase() + part.slice(1) : part)).join("")}Tool`);
     const quick = [...read("ui/CreatePage.js").matchAll(/\{ id: "([a-z-]+)", title:/g)].map((match) => match[1]);

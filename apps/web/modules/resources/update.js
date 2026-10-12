@@ -19,6 +19,7 @@ import { MATH_AGENT } from "../ai-tools/tools/math-problem-set/mathAgent";
 import { LEVEL_AGENT } from "../ai-tools/tools/level-test/levelAgent";
 import { CONCEPT_FLASHCARDS_AGENT } from "../ai-tools/tools/concept-flashcards/conceptAgent";
 import { DOCUMENT_SUMMARIZER_AGENT } from "../ai-tools/tools/document-summarizer/summarizerAgent";
+import { FORMULA_SHEET_AGENT } from "../ai-tools/tools/formula-sheet/formulaAgent";
 import { CONSOLIDATOR_AGENT } from "../ai-tools/tools/summary-consolidator/consolidatorAgent";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
@@ -51,7 +52,8 @@ export const BUILTIN_AGENTS = [
   { id: "math", kind: "quiz", label: MATH_AGENT.name, agent: MATH_AGENT },
   { id: "level-test", kind: "quiz", label: LEVEL_AGENT.name, agent: LEVEL_AGENT },
   { id: "concept-flashcards", kind: "flashcards", label: CONCEPT_FLASHCARDS_AGENT.name, agent: CONCEPT_FLASHCARDS_AGENT },
-  { id: "document-summarizer", kind: "summary", label: DOCUMENT_SUMMARIZER_AGENT.name, agent: DOCUMENT_SUMMARIZER_AGENT }
+  { id: "document-summarizer", kind: "summary", label: DOCUMENT_SUMMARIZER_AGENT.name, agent: DOCUMENT_SUMMARIZER_AGENT },
+  { id: "formulas", kind: "summary", label: FORMULA_SHEET_AGENT.name, agent: FORMULA_SHEET_AGENT }
 ];
 
 /** The same quick suggestions as Iterate, then the ones that fit the kind of resource. */

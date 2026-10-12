@@ -10,12 +10,21 @@
  * for a saved agent.
  */
 
-// Only the agents of the AI agents tab: the two built-in ones, then whatever the learner built or bought.
+// The built-in agents of the Create tab (the Summary Notes Consolidator is not here: the plan builds its master document itself), then whatever the learner built or bought.
 export const BUILTIN_PLAN_AGENTS = [
   { id: "quiz", label: "Quiz Generator", purpose: "Questions to answer — multiple choice, true/false and short answer — plus practice exams and worksheets.", makes: ["quiz", "exam", "worksheet"] },
   { id: "flashcards", label: "Vocabulary Flashcards", purpose: "Front/back cards for memorising terms, definitions and ideas.", makes: ["flashcards"] },
-  { id: "summary", label: "Topic Summary", purpose: "A 1–2 page summary of a group of topics with the key ideas, messages and formulas, read before the original notes to set the scene.", makes: ["summary"] }
+  { id: "summary", label: "Topic Summary", purpose: "A 1–2 page summary of a group of topics with the key ideas, messages and formulas, read before the original notes to set the scene.", makes: ["summary"] },
+  // The rest of the built-in agents of the Create tab, so the plan can use every one of them.
+  { id: "math", label: "Math Problem Set", purpose: "Problems that use the formulas in the material, with fully worked step-by-step answers.", makes: ["math"] },
+  { id: "concept-flashcards", label: "Concept Flashcards", purpose: "The key concepts of the material, each on a card with its definition.", makes: ["concept-flashcards"] },
+  { id: "document-summarizer", label: "Document Summarizer", purpose: "One or two pages with the key messages, concepts, formulas and what to remember, written like a consultant's briefing.", makes: ["document-summarizer"] },
+  { id: "formulas", label: "Formula Sheet", purpose: "Every key formula of the material with what each variable means, the logic behind it and when to use it.", makes: ["formulas"] },
+  { id: "level-test", label: "Level Test", purpose: "A short diagnostic test of the foundations the material builds on, to find out where to start.", makes: ["level-test"] }
 ];
+
+/** Keys whose output is read, not answered: a summary-like document, scoped by topics rather than tested per concept. */
+export const isSummaryKey = (key) => ["summary", "document-summarizer", "formulas"].includes(String(key || ""));
 
 export const DEFAULT_PLAN_AGENT_IDS = ["quiz", "flashcards", "summary"];
 
@@ -57,7 +66,7 @@ export function generateLabel(key, scope) {
   if (!key) return "";
   const agent = (scope || []).find((entry) => (entry.makes || []).includes(key));
   if (isCustomKey(key)) return agent?.label || "agent";
-  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary" })[key] || key;
+  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary", math: "problem set", "concept-flashcards": "concept flashcards", "document-summarizer": "document summary", formulas: "formula sheet", "level-test": "level test" })[key] || key;
 }
 
 /** Text for the planner prompt: which agents exist and what each can make. */

@@ -8,12 +8,14 @@
  * Pure functions, shared by the planner route, the re-planner and the plan page.
  */
 
+import { isSummaryKey } from "./agents.js";
+
 const key = (name) => String(name || "").trim().toLowerCase().replace(/\s+/g, " ");
 
 export const conceptNames = (conceptMap = []) => [...new Set((conceptMap || []).map((concept) => String(concept?.name || concept || "").trim()).filter(Boolean))];
 
 /** A step that puts questions in front of the learner: something Luna generates, or an activity already built. */
-export const isTestingStep = (item) => Boolean(item && ((item.generate && item.generate !== "summary") || item.resourceId) && item.kind !== "read" && item.kind !== "review") || item?.kind === "exam";
+export const isTestingStep = (item) => Boolean(item && ((item.generate && !isSummaryKey(item.generate)) || item.resourceId) && item.kind !== "read" && item.kind !== "review") || item?.kind === "exam";
 const isExamStep = (item) => item?.kind === "exam" || item?.generate === "exam";
 const isReadStep = (item) => item?.kind === "read";
 

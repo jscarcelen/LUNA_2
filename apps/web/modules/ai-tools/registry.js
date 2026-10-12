@@ -7,6 +7,7 @@ import { summaryConsolidatorTool } from "./tools/summary-consolidator";
 import { mathProblemSetTool } from "./tools/math-problem-set";
 import { conceptFlashcardsTool } from "./tools/concept-flashcards";
 import { documentSummarizerTool } from "./tools/document-summarizer";
+import { formulaSheetTool } from "./tools/formula-sheet";
 import { levelTestTool } from "./tools/level-test";
 import { validateAiToolManifest } from "../core";
 
@@ -17,6 +18,7 @@ const toolCandidates = [
   conceptFlashcardsTool,
   vocabularyFlashcardsTool,
   documentSummarizerTool,
+  formulaSheetTool,
   summaryConsolidatorTool,
   agentBuilderTool,
   templateBuilderTool,

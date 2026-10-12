@@ -15,7 +15,8 @@ export const QUICK_MAKES = [
   { id: "math-problem-set", title: "A problem set", text: "Problems that use the formulas in your material, with worked answers.", icon: "∑" },
   { id: "level-test", title: "A level test", text: "A short test of the foundations, to find out where to start.", icon: "◎" },
   { id: "concept-flashcards", title: "Flashcards", text: "Each key concept on a card, with its definition.", icon: "▭" },
-  { id: "document-summarizer", title: "A summary", text: "One or two pages with the key messages and what to remember.", icon: "☰" }
+  { id: "document-summarizer", title: "A summary", text: "One or two pages with the key messages and what to remember.", icon: "☰" },
+  { id: "formula-sheet", title: "A formula sheet", text: "Every key formula, what each variable means and the logic behind it.", icon: "ƒ" }
 ];
 
 /** `ai-tool:quiz-generator?docs=a,b`: the page that opens a tool with material already chosen. */

@@ -496,23 +496,24 @@ export const REQUESTS = [
     ]
   },
   {
-    id: "A13", stage: "agents", name: "Built-in agent recipes (problem set, concept flashcards, summarizer)", status: "live",
-    purpose: "The three built-in agents added from beta feedback. Each is an ordinary agent run through A1 (or A2 for the summarizer): this card shows the recipe each one adds to that call, word for word.",
+    id: "A13", stage: "agents", name: "Built-in agent recipes (problem set, concept flashcards, summarizer, formula sheet)", status: "live",
+    purpose: "The built-in agents added from beta feedback (problem set, concept flashcards, summarizer, formula sheet). Each is an ordinary agent run through A1 (or A2 for the summarizer): this card shows the recipe each one adds to that call, word for word.",
     why: "Many subjects run on formulas (a problem set tests them), students learn by recalling definitions (concept flashcards), and nobody wants to read 40 pages (a one-to-two page summary).",
-    position: "Create → Make → Math Problem Set, Concept Flashcards or Document Summarizer → Generate (also the Quick make cards and the buttons on selected documents in Courses).",
+    position: "Create → Make → Math Problem Set, Concept Flashcards, Document Summarizer or Formula Sheet → Generate (also the Quick make cards and the buttons on selected documents in Courses).",
     trigger: "Create → Make → pick one → Generate (streamed)",
     file: "apps/web/modules/ai-tools/tools/math-problem-set/mathAgent.js", anchor: /export const MATH_AGENT/,
     model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro; the runner can upgrade to Max = gpt-4.1)", provider: "OpenAI · chat/completions (streaming)",
     params: { temperature: "0.2 (low creativity)", maxTokens: 6000, format: "JSON schema (strict): the agent's output fields (problem set, flashcards) or the selected document blocks (summarizer)", streaming: true },
     input: "As A1: the recipe below as the agent instructions, the runner's answers (count, types, concept and math difficulty, language, length, focus) and the best-matching passages of the chosen documents.",
-    output: "Problem set: problems with answer type, answer, unit, step-by-step solution and key math concepts (or an empty list and a suitability note). Flashcards: front (concept) / back (definition) pairs. Summarizer: a one-to-two page document of blocks.",
+    output: "Problem set: problems with answer type, answer, unit, step-by-step solution and key math concepts (or an empty list and a suitability note). Flashcards: front (concept) / back (definition) pairs. Summarizer: a one-to-two page document of blocks. Formula Sheet: a document of blocks with every key formula, its variables, the logic behind it and when to use it.",
     fallbacks: "As A1: one retry at temperature 0.2, then a local heuristic generator.",
     tokens: { basis: "estimated", scale: { unit: "1,000 characters of material", label: "k chars of material", fixedIn: 1500, inPer: 294, outPer: 0, units: 12, outPerItem: 260, items: 8 } },
     seconds: { typical: 15, note: "estimate; the problem set writes long worked solutions" },
     prompts: [
       { label: "Math Problem Set · recipe", file: "apps/web/modules/ai-tools/tools/math-problem-set/mathAgent.js", re: /instructions: `([\s\S]*?)`,\n  outputExample/ },
       { label: "Concept Flashcards · recipe", file: "apps/web/modules/agent-studio/engine/model.ts", re: /core: `(<role>\nYou make concept flashcards[\s\S]*?)`,\n    style/ },
-      { label: "Document Summarizer · recipe", file: "apps/web/modules/agent-studio/engine/model.ts", re: /core: `(<role>\nYou write the briefing[\s\S]*?)`,\n    style/ }
+      { label: "Document Summarizer · recipe", file: "apps/web/modules/agent-studio/engine/model.ts", re: /core: `(<role>\nYou write the briefing[\s\S]*?)`,\n    style/ },
+      { label: "Formula Sheet · recipe", file: "apps/web/modules/agent-studio/engine/model.ts", re: /core: `(<role>\nYou write the formula sheet[\s\S]*?)`,\n    style/ }
     ]
   },
   {

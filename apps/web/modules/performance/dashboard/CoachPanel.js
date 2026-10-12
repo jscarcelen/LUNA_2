@@ -10,10 +10,11 @@ const KIND_LABEL = {
   "spaced-recall": "Come back to it",
   "exam-technique": "Exam technique",
   deadline: "Due soon",
-  habit: "Habit"
+  habit: "Habit",
+  "skill-primer": "Refresh a skill"
 };
 
-const cacheKey = (signature) => `luna.performance.coach.v3.${signature}`;
+const cacheKey = (signature) => `luna.performance.coach.v4.${signature}`;
 
 /**
  * Luna's read of the results.
@@ -24,9 +25,9 @@ const cacheKey = (signature) => `luna.performance.coach.v3.${signature}`;
  * The read is cached against the evidence it was made from, so it is not re-bought on every render
  * and it visibly goes stale when the evidence moves.
  */
-export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, onPractise, onSchedule, practiseLabel = "Do it now", autoRead = false }) {
+export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, skillDiagnosis = null, onPractise, onSchedule, practiseLabel = "Do it now", autoRead = false }) {
   const [state, setState] = useState({ status: "idle", read: null, error: "" });
-  const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
+  const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${(skillDiagnosis?.weakSkills || []).map((skill) => `${skill.id}:${Math.round((skill.acc || 0) * 100)}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
   const digest = hash(signature);
 
   useEffect(() => {
@@ -43,7 +44,7 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
       const response = await fetch("/api/performance/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, learner, topics, errorTypes, stuck, plan })
+        body: JSON.stringify({ role, learner, topics, errorTypes, stuck, plan, skills: skillDigest(skillDiagnosis) })
       });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload.error || "Could not read the results.");
@@ -52,7 +53,7 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
     } catch (error) {
       setState({ status: "idle", read: null, error: error.message });
     }
-  }, [role, learner, topics, errorTypes, stuck, plan, digest]);
+  }, [role, learner, topics, errorTypes, stuck, plan, skillDiagnosis, digest]);
 
   // The Home reads by itself the first time it sees a given state of the evidence (the read is cached against it).
   const triedRef = useRef("");
@@ -122,6 +123,16 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
       )}
     </div>
   );
+}
+
+/** What the coach is told about skills: the weak ones (and the topics they hold back) and each topic's verdict. */
+function skillDigest(diagnosis) {
+  if (!diagnosis || !diagnosis.rows) return null;
+  return {
+    headline: diagnosis.headline,
+    weakSkills: (diagnosis.weakSkills || []).slice(0, 5).map((skill) => ({ id: skill.id, label: skill.label, accuracy: skill.acc, accuracyWithout: skill.accWithout, asked: skill.asked, lifts: skill.lifts.slice(0, 4) })),
+    topics: (diagnosis.topics || []).filter((topic) => topic.verdict !== "ok").slice(0, 8).map((topic) => ({ topic: topic.topic, verdict: topic.verdict, skills: topic.skills, reason: topic.reason }))
+  };
 }
 
 /** A short, stable key for one state of the evidence. */

@@ -9,6 +9,10 @@ import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { attentionFlags, buildEvidence, byLearner, classTopicCoverage, classTopicMatrix, learnerSubjectMatrix, errorRecovery, masteryOverTime, nextActions, overallMastery, statusOf, topicMastery } from "./mastery";
 import { analyseErrors } from "./errors";
+import { diagnoseSkills } from "./skillDiagnosis";
+import { refresherFor } from "../skills/taxonomy";
+import { buildActivity } from "../activities/engine/activity";
+import { SkillMap } from "./dashboard/SkillMap";
 import { coverageOf, targetsFor } from "./targets";
 import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
 import { panelById } from "./dashboard/registry";
@@ -245,6 +249,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     );
   }
 
+  const diagnosis = useMemo(() => diagnoseSkills(attempts), [attempts]);
+
   const context = {
     role, learner, profileName, subject, evidence, topics, overall, errors, actions, retention, trendChange,
     weeks: measured.length, subjects, flagged, matrix, coverage: classCoverage, across, stats,
@@ -254,6 +260,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     concepts: useMemo(() => byConcept(attempts, resourceByDocumentId), [attempts, resourceByDocumentId]),
     stuck: useMemo(() => repeatedMistakes(attempts), [attempts]),
     skills: useMemo(() => bySkill(attempts), [attempts]),
+    diagnosis,
+    onPrimer: (skill) => practise({ kind: "skill-primer", skill: skill.id, topic: (skill.lifts && skill.lifts[0]) || "", title: `Refresh: ${skill.label}`, why: skill.lifts?.length ? `${skill.label} is holding back ${skill.lifts.join(", ")}.` : `${skill.label} is your weakest skill.`, effort: "30 minutes" }),
     difficulties: useMemo(() => byDifficulty(attempts), [attempts]),
     times: useMemo(() => timeByKind(attempts), [attempts]),
     examMinutes: estimateExamMinutes(attempts, 20),
@@ -293,9 +301,10 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     setGeneratingPractice(true);
     setPracticeError("");
     try {
+      const refresher = action.skill ? refresherFor(action.skill) : null;
       const config = {
-        name: "Targeted practice",
-        instructions: `Generate ${count} practice questions focusing on: ${topic || "the student's weak areas"}. Error context: ${action.why || ""}. Make questions clear and specific. Always provide the correct answer and a brief explanation.`,
+        name: refresher ? `Skill refresher: ${refresher.label}` : "Targeted practice",
+        instructions: refresher ? skillRefresherPrompt(refresher, { topic, count, why: action.why }) : `Generate ${count} practice questions focusing on: ${topic || "the student's weak areas"}. Error context: ${action.why || ""}. Make questions clear and specific. Always provide the correct answer and a brief explanation.`,
         knowledgeText: topic ? `Focus topic: ${topic}` : "",
         questionAnswers: [
           { question: "How many questions?", answer: String(count) },
@@ -306,7 +315,15 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         model: "gpt-4o",
         creativity: "low",
         template: {
-          fields: [
+          fields: refresher ? [
+            { name: "primer", label: "Quick refresher", type: "string", repeatScope: "once", description: "The refresher the learner reads first: 6 to 10 short lines, one rule or step per line, each with a tiny worked example. Formulas in LaTeX between $ signs." },
+            { name: "question", label: "Question", type: "string", repeatScope: "per-output" },
+            { name: "type", label: "Answer type", type: "string", repeatScope: "per-output", description: "numeric or multiple-choice." },
+            { name: "options", label: "Options", type: "array", repeatScope: "per-output", description: "4 options for multiple choice, empty for numeric." },
+            { name: "answer", label: "Answer", type: "string", repeatScope: "per-output", description: "Numeric: the number only. Multiple choice: the exact text of the correct option." },
+            { name: "worked_solution", label: "Step-by-step solution", type: "string", repeatScope: "per-output", description: "Numbered steps naming the rule used in each. Formulas in LaTeX." },
+            { name: "requires_skills", label: "Skills needed", type: "array", repeatScope: "per-output", description: `["${refresher.id}"]` }
+          ] : [
             { name: "question", label: "Question", type: "string", repeatScope: "per-output" },
             { name: "options", label: "Options", type: "array", repeatScope: "per-output" },
             { name: "answer", label: "Answer", type: "string", repeatScope: "per-output" },
@@ -320,22 +337,14 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       if (!response.ok) throw new Error(data.error || "Could not generate practice.");
       const items = Array.isArray(data.items) ? data.items : [];
       if (!items.length) throw new Error("No questions were generated — try adding material to this subject first.");
+      // The same engine as every other activity: written, numeric and choice answers are graded, and each answer carries its skills.
+      const built = buildActivity([{ id: "items", name: "items", type: "array", children: [] }], { items }, { title: action.title || (refresher ? `Refresh: ${refresher.label}` : topic ? `Practice: ${topic}` : "Targeted practice") });
+      const primer = String(data?.data?.primer || "").trim();
       const activity = {
-        id: `coach_${Date.now()}`,
-        title: action.title || (topic ? `Practice: ${topic}` : "Targeted practice"),
+        ...built,
         subtitle: action.why || "",
-        questions: items.map((item, index) => {
-          const opts = Array.isArray(item.options) ? item.options : [];
-          return {
-            id: `q_${index}`,
-            text: String(item.question || item.text || `Question ${index + 1}`),
-            type: opts.length ? "multiple_choice" : "short_answer",
-            options: opts.map((opt, oi) => ({ id: `o_${oi}`, text: String(opt) })),
-            answer: String(item.answer || ""),
-            explanation: String(item.explanation || ""),
-            topic, skill: topic
-          };
-        })
+        intro: primer || undefined,
+        questions: built.questions.map((question) => ({ ...question, topic: question.topic || topic, skills: refresher ? [refresher.id] : question.skills }))
       };
       setPractising({ activity });
     } catch (error) {
@@ -392,6 +401,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <Kpi label="Retention" value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? "Shows once you re-practise a topic you got wrong" : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved`} info={METRIC_INFO.retention} />
         <Kpi label="On track for the exam?" value={track.label} tone={trackTone} hint={track.detail} info={{ meaning: "Whether the steps of your most active study plan are being done on time.", formula: "On track = no late steps and the plan's date has not passed  ·  Behind = at least one late step, or the date passed with steps left" }} />
       </div>
+      {evidence.length && diagnosis.rows && (diagnosis.weakSkills.length || diagnosis.topics.some((topic) => topic.verdict !== "ok")) ? (
+        <div className={`${card} grid gap-3 p-5`}>
+          <p className={kicker}>Topic or skill?</p>
+          <SkillMap diagnosis={diagnosis} compact onPrimer={context.onPrimer} />
+        </div>
+      ) : null}
       {evidence.length ? (
         <div className={`${card} grid gap-3 p-5`}>
           <p className={`${kicker} flex items-center gap-1.5`}>Work on these next</p>
@@ -589,4 +604,27 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       ) : null}
     </section>
   );
+}
+
+
+/** The prompt for a skill refresher: a short primer, then a drill that exercises only that skill. */
+function skillRefresherPrompt(refresher, { topic, count, why }) {
+  return `<task>
+Write a refresher on ONE skill, then a drill on it. The skill is "${refresher.label}": ${refresher.focus}.${refresher.prerequisites.length ? ` A learner who is weak here may be missing the basics, so start the refresher from: ${refresher.prerequisites.join(", ")}.` : ""}
+</task>
+
+<context>
+${topic ? `The learner meets this skill in "${topic}". Use that subject's notation and the flavour of its examples, but teach the skill itself, not the topic.` : "Use plain, subject-neutral examples."}${why ? ` Why this was chosen: ${why}` : ""}
+</context>
+
+<output>
+1. "primer": 6 to 10 short lines, one rule or step per line, each followed by a tiny worked example. Formulas in LaTeX between $ signs.
+2. ${count} drill questions, from easy to harder, that exercise ONLY this skill. Every question has all the numbers it needs, one checkable answer ("numeric": the number only, or "multiple-choice": 4 options), a numbered "worked_solution" naming the rule used in each step, and requires_skills ["${refresher.id}"].
+</output>
+
+<rules>
+- Every question needs the skill and little else, because the drill must tell whether the skill is fixed, not whether the topic is known.
+- Never reuse a situation or a number set, because repeats train memory instead of the skill.
+- Solve each question yourself before writing it, and check that a multiple-choice answer is exactly one of the options.
+</rules>`;
 }

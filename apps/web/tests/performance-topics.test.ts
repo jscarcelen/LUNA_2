@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { VIEW_VERSION, defaultView, readViews } from "../modules/performance/views.js";
 
 describe("performance default view", () => {
-  it("shows where things stand, Luna's read, topic by topic and why answers are wrong — all full width, in that order", () => {
+  it("shows where things stand, topic or skill, Luna's read, topic by topic and why answers are wrong — all full width, in that order", () => {
     const view = defaultView("student");
-    expect(view.panels.map((panel: { id: string }) => panel.id)).toEqual(["headline", "coach", "mastery-map", "error-breakdown"]);
+    expect(view.panels.map((panel: { id: string }) => panel.id)).toEqual(["headline", "skill-map", "coach", "mastery-map", "error-breakdown"]);
     expect(view.panels.every((panel: { size: string }) => panel.size === "full")).toBe(true);
     expect(view.panels.some((panel: { id: string }) => ["mastery-trend", "plan-progress"].includes(panel.id))).toBe(false);
   });

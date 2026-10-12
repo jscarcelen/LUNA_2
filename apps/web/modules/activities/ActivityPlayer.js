@@ -168,7 +168,14 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
     <section className="tw-scope mx-auto grid max-w-3xl gap-3" style={lookStyle(look)}>
       <header className={`${card} p-5`} style={look?.accent ? { borderTop: "6px solid var(--accent)" } : undefined}>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div><h3 className="m-0 text-2xl font-bold tracking-tight text-ink">{activity.title}</h3>{activity.subtitle ? <p className="m-0 mt-1 text-sm text-soft-ink">{activity.subtitle}</p> : null}</div>
+          <div><h3 className="m-0 text-2xl font-bold tracking-tight text-ink">{activity.title}</h3>{activity.subtitle ? <p className="m-0 mt-1 text-sm text-soft-ink">{activity.subtitle}</p> : null}
+            {activity.intro ? (
+              <details className="mt-3 rounded-xl bg-[var(--surface-soft)] p-3" open>
+                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Quick refresher</summary>
+                <div className="mt-2 grid gap-1.5">{String(activity.intro).split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line, lineIndex) => <p key={lineIndex} className="m-0 text-sm text-ink" dangerouslySetInnerHTML={{ __html: renderInline(line) }} />)}</div>
+              </details>
+            ) : null}
+          </div>
           {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? "Done" : "Leave"}</button> : null}
         </div>
         {attempt ? (

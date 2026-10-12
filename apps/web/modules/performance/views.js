@@ -10,7 +10,7 @@
  */
 
 const KEY = "luna.performance.views";
-export const VIEW_VERSION = 2;
+export const VIEW_VERSION = 3;
 
 /** How a panel can read. Not every panel offers every mode; the registry says which. */
 export const MODES = [
@@ -32,17 +32,17 @@ const DEFAULTS = {
   student: {
     name: "How I am doing",
     trackBy: "plan",
-    panels: ["headline", "coach", "mastery-map", "error-breakdown"]
+    panels: ["headline", "skill-map", "coach", "mastery-map", "error-breakdown"]
   },
   parent: {
     name: "How my child is doing",
     trackBy: "plan",
-    panels: ["parent-summary", "coach", "mastery-map", "error-breakdown", "habit"]
+    panels: ["parent-summary", "skill-map", "coach", "mastery-map", "error-breakdown", "habit"]
   },
   teacher: {
     name: "How the class is doing",
     trackBy: "plan",
-    panels: ["headline", "coach", "class-heatmap", "attention", "error-breakdown", "class-topics"]
+    panels: ["headline", "skill-map", "coach", "class-heatmap", "attention", "error-breakdown", "class-topics"]
   }
 };
 
@@ -68,7 +68,7 @@ export function readViews(role = "student") {
   try {
     const stored = JSON.parse(window.localStorage.getItem(`${KEY}.${role}`) || "[]");
     const mine = Array.isArray(stored) ? stored.filter((view) => view && view.id && Array.isArray(view.panels)) : [];
-    // The built-in view was rearranged in version 2 (full-width panels, plan topics); an older saved copy of it is replaced.
+    // The built-in view was rearranged in version 2 (full-width panels, plan topics) and 3 (Topic or skill?); an older saved copy of it is replaced.
     const overridden = mine.find((view) => view.id === base.id && view.version === VIEW_VERSION);
     return [overridden || base, ...mine.filter((view) => view.id !== base.id)];
   } catch {

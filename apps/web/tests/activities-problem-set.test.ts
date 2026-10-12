@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildActivity } from "../modules/activities/engine/activity";
+import { buildActivity, gradeActivity } from "../modules/activities/engine/activity";
 
 const fields: any[] = [{ id: "i", name: "items", type: "array", children: [] }];
 
@@ -26,3 +26,24 @@ describe("a problem-set item becomes a question with its worked answer", () => {
     expect(activity.questions.map((question) => question.kind)).toEqual(["choice", "choice"]);
   });
 });
+
+describe("questions carry the skills they need into the attempt", () => {
+  const rows = [
+    { question: "Differentiate 3x^2 and give f'(2).", type: "numeric", answer: "12", requires_skills: ["Derivatives", "made-up-skill"], units: "" },
+    { question: "Find the derivative of x^3 at x = 2.", type: "numeric", answer: "12" },
+    { question: "What does GDP stand for?", type: "short-answer", answer: "Gross domestic product" }
+  ];
+  it("normalises declared tags, infers missing ones, and tags pure recall with none", () => {
+    const [declared, inferred, recall] = buildActivity(fields, { items: rows }).questions;
+    expect(declared.skills).toEqual(["derivatives"]);
+    expect(inferred.skills).toContain("derivatives");
+    expect(recall.skills).not.toContain("derivatives");
+  });
+  it("copies the skills onto every answered question", () => {
+    const activity = buildActivity(fields, { items: rows });
+    const attempt = (gradeActivity as any)(activity, Object.fromEntries(activity.questions.map((question: any) => [question.id, "0"])), {}) as any;
+    expect(attempt.results[0].skills).toEqual(["derivatives"]);
+    expect(attempt.results[0].correct).toBe(false);
+  });
+});
+

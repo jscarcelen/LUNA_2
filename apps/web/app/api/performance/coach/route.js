@@ -18,11 +18,12 @@ const SCHEMA = {
           title: { type: "string", description: "The action in under 8 words, as an instruction ('Re-read the mitosis notes, then 10 questions')." },
           why: { type: "string", description: "One sentence: which evidence makes this the right next move." },
           topic: { type: "string", description: "The topic it addresses, exactly as given in the evidence, or an empty string." },
-          kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit", "deadline"] },
+          kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit", "deadline", "skill-primer"] },
           effort: { type: "string", enum: ["10 minutes", "30 minutes", "an hour", "a few sessions"] },
+          skill: { type: "string", description: "For kind 'skill-primer': the id of the weak skill to refresh, copied exactly from the 'Skills' evidence. Otherwise an empty string." },
           planStep: { type: "string", description: "If this action is a plan step that already exists and is not done, that step's title copied exactly from the 'Plan steps still to do' list. Empty string when the action is something new that is not in the plan yet." }
         },
-        required: ["title", "why", "topic", "kind", "effort", "planStep"]
+        required: ["title", "why", "topic", "kind", "effort", "skill", "planStep"]
       }
     },
     messages: {
@@ -56,6 +57,12 @@ How to choose the five actions (they must be a mixture, not five versions of the
 4. One to bring back a topic that was strong and is slipping, if there is one.
 5. Fill the rest from the evidence.
 Order them by what helps most, weighing how close a deadline is.
+
+Topic or skill:
+- The <evidence> block can include "Skills": which transferable skills (derivatives, algebra, reading comprehension…) are weak, which topics they hold back, and for each weak topic whether the diagnosis is a skill gap, a topic gap, both, or unclear.
+- A skill gap needs a refresher on the skill, not more of the topic: use kind "skill-primer" with that skill's id in "skill" and the topic it holds back in "topic", because more practice on a topic cannot fix a missing skill underneath it. A topic gap needs kind "reteach" on the topic. When it is both, give the skill action first.
+- When a skill holds back several topics, one skill-primer action covers them all; do not repeat it per topic. Copy skill ids and topic names exactly.
+- When the evidence has no Skills block, or says "unclear", do not invent a skill.
 
 Existing versus new actions:
 - An action is existing when it is one of the "Plan steps still to do" (the activity is already created and sits in the plan, not done): copy that step's title exactly into planStep. Luna shows it with its due date and a "do it now" button only.
@@ -96,6 +103,11 @@ export async function POST(request) {
       `Learner: ${learner}. This is read by a ${role}.`,
       plan ? `Study plan being tracked: “${plan.name}”${plan.deadline ? `, next deadline ${plan.deadline}` : ""}${plan.done !== undefined ? `, ${plan.done} of ${plan.total} steps done` : ""}${plan.late ? `, ${plan.late} steps late` : ""}.` : "No study plan is being tracked.",
       ...(Array.isArray(plan?.upcoming) && plan.upcoming.length ? ["Plan steps still to do, soonest first (title · due · kind):", ...plan.upcoming.slice(0, 8).map((step) => `- ${String(step.title).slice(0, 120)} · ${step.dueDate || "no date"} · ${step.kind || ""}`)] : []),
+      ...(body?.skills && (body.skills.weakSkills?.length || body.skills.topics?.length)
+        ? ["", "Skills (a weak skill is one where the questions that need it go clearly worse than the ones that do not):",
+          ...(body.skills.weakSkills || []).slice(0, 5).map((skill) => `- WEAK SKILL ${skill.id} (${skill.label}): ${Math.round((skill.accuracy || 0) * 100)}% right when needed${skill.accuracyWithout === null || skill.accuracyWithout === undefined ? "" : ` vs ${Math.round(skill.accuracyWithout * 100)}% when not`}, ${skill.asked} questions; holds back: ${(skill.lifts || []).join(", ") || "no single topic"}`),
+          ...(body.skills.topics || []).slice(0, 8).map((topic) => `- Diagnosis for ${topic.topic}: ${topic.verdict}${(topic.skills || []).length ? ` (${topic.skills.join(", ")})` : ""} — ${String(topic.reason || "").slice(0, 160)}`)]
+        : []),
       "",
       "Mastery per topic (mastery% · accuracy% · recent% · questions asked · retention% · trend in points):",
       ...topics.map((topic) => `- ${topic.topic}: ${topic.mastery}% · acc ${Math.round((topic.accuracy || 0) * 100)}% · recent ${Math.round((topic.recentAccuracy || 0) * 100)}% · ${topic.questions} q · retention ${topic.retention === null || topic.retention === undefined ? "n/a" : `${Math.round(topic.retention * 100)}%`} · trend ${Math.round((topic.trend || 0) * 100)}`),
@@ -129,7 +141,10 @@ export async function POST(request) {
       actions: (Array.isArray(parsed.actions) ? parsed.actions.slice(0, 5) : []).map((action) => {
         // Existing = the model named a real, not-yet-done plan step; the due date comes from the plan, never from the model.
         const step = (Array.isArray(plan?.upcoming) ? plan.upcoming : []).find((entry) => String(entry.title).trim().toLowerCase() === String(action.planStep || "").trim().toLowerCase());
-        return { ...action, planStep: step ? String(step.title) : "", dueDate: step?.dueDate || "" };
+        // A skill id the evidence did not name is dropped, so a made-up skill never becomes a button.
+        const known = new Set((Array.isArray(body?.skills?.weakSkills) ? body.skills.weakSkills : []).map((skill) => String(skill.id)));
+        const skill = action.kind === "skill-primer" && known.has(String(action.skill)) ? String(action.skill) : "";
+        return { ...action, kind: action.kind === "skill-primer" && !skill ? "practise" : action.kind, skill, planStep: step ? String(step.title) : "", dueDate: step?.dueDate || "" };
       }),
       messages: parsed.messages || { student: "", parent: "", teacher: "" },
       readAt: new Date().toISOString()

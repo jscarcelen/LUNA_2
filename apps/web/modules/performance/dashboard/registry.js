@@ -7,6 +7,7 @@ import { DeadlineOrigin } from "../../plans/DeadlineBadge";
 import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, METRIC_INFO, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
 import { CoachPanel } from "./CoachPanel";
 import { PlanTopics } from "./PlanTopics";
+import { SkillMap } from "./SkillMap";
 
 /**
  * Every panel the performance screen can show.
@@ -50,6 +51,15 @@ export const PANELS = [
       ))
   },
   {
+    id: "skill-map",
+    title: "Topic or skill?",
+    blurb: "Topics against the skills answering them needs: tells a topic gap from a skill gap, and what each needs.",
+    roles: ALL,
+    size: "full",
+    modes: ["value"],
+    render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: `Re-teach ${topic.topic}`, why: topic.reason, effort: "30 minutes" })} />
+  },
+  {
     id: "coach",
     title: "Luna's read",
     blurb: "The model reads the mistakes and the plan's deadlines and gives the five best next actions.",
@@ -62,6 +72,7 @@ export const PANELS = [
         learner={ctx.learner || ctx.profileName}
         topics={ctx.topics}
         errorTypes={ctx.errors.types}
+        skillDiagnosis={ctx.diagnosis}
         stuck={ctx.stuck}
         plan={ctx.planSummary}
         onPractise={(action) => ctx.onPractise?.(action)}

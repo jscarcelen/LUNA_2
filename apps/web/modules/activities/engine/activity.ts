@@ -7,6 +7,8 @@
 import type { FieldDef } from "../../template-studio/engine/types";
 import { deriveData } from "../../template-studio/engine/derive";
 import { renderMath } from "../../template-studio/engine/latex";
+// @ts-ignore - plain JS module
+import { skillsForQuestion } from "../../skills/taxonomy.js";
 import { causeFor, gradeLocally, scoreOf } from "../grading.js";
 import { isQuantitative } from "../quantitative.js";
 
@@ -46,6 +48,8 @@ export interface ActivityQuestion {
   topic?: string;
   /** What the question tests — one of SKILLS, or a category the creator typed. */
   skill?: string;
+  /** The transferable skills (taxonomy ids) answering it needs, e.g. ["derivatives", "percentages"]. Tagged at generation, inferred when missing. */
+  skills?: string[];
   /** Where the answer can be found in the material. */
   source?: ActivitySource;
   /** Flashcard back side. */
@@ -59,6 +63,8 @@ export interface Activity {
   id: string;
   title: string;
   subtitle?: string;
+  /** A short refresher read before the questions (a skill primer): paragraphs, formulas as LaTeX. */
+  intro?: string;
   questions: ActivityQuestion[];
   meta: { templateId?: string; agentId?: string; agentName?: string; createdAt: string };
 }
@@ -90,7 +96,7 @@ export interface Attempt {
  * "local"), and the performance engine prefers them to re-guessing.
  */
 export interface AttemptResult {
-  id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string;
+  id: string; kind: QuestionKind; prompt: string; group?: string; topic?: string; difficulty?: string; skill?: string; skills?: string[];
   correct: boolean | null; given: string; expected: string; ms?: number; confidence?: string;
   verdict?: "correct" | "close" | "incorrect";
   /** Credit 0..1: 1 correct, partial for close, 0 wrong. */
@@ -159,6 +165,8 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       text(pick(item, "math_concepts")) && `Key math concepts: ${text(pick(item, "math_concepts"))}`
     ].filter(Boolean).join("\n\n");
     const steps = splitSteps(pick(item, "worked_solution"));
+    const stepText = steps.join(" ");
+    const skills: string[] = skillsForQuestion({ skills: pick(item, "requires_skills", "required_skills", "skills"), prompt, answer: text(answer), explanation, steps: stepText });
     const difficulty = text(pick(item, "difficulty", "level"));
     const topic = text(pick(item, "topic", "subject_area"));
     const skill = text(pick(item, "skill", "category", "tests", "question_type", "competence"));
@@ -180,11 +188,11 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       // The answer may be the option text or its letter/index.
       const letter = norm(answer);
       const byLetter = /^[a-z]$/.test(letter) ? opts[letter.charCodeAt(0) - 97] : /^\d+$/.test(letter) ? opts[Number(letter) - 1] : undefined;
-      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, steps, difficulty, topic, skill, source });
+      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, steps, difficulty, topic, skill, skills, source });
       return;
     }
     if (pick(item, "statement") !== undefined || typeof answer === "boolean" || ["true", "false"].includes(norm(answer))) {
-      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, steps, difficulty, topic, skill, source });
+      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, steps, difficulty, topic, skill, skills, source });
       return;
     }
     if (pick(item, "front") !== undefined && pick(item, "back") !== undefined) {
@@ -193,7 +201,7 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     }
     if (answer === undefined) return;
     const numeric = typeof answer === "number" || (/^-?\d+([.,]\d+)?$/.test(text(answer).trim()) && (pick(item, "problem") !== undefined || /numeric|number/.test(norm(pick(item, "type", "question_type")))));
-    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, steps, difficulty, topic, skill, source });
+    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, steps, difficulty, topic, skill, skills, source });
   });
 }
 
@@ -256,7 +264,7 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
       expected = String(question.answer);
     }
     const quantitative = isQuantitative({ prompt: question.prompt, expected, skill: question.skill, kind: question.kind });
-    const base = { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, ms: durations[question.id] || 0, confidence: confidence[question.id] || "", correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
+    const base = { id: question.id, kind: question.kind, prompt: question.prompt, group: question.group, topic: question.topic, difficulty: question.difficulty, skill: question.skill, skills: question.skills, ms: durations[question.id] || 0, confidence: confidence[question.id] || "", correct, given: Array.isArray(given) ? given.join(",") : typeof given === "object" && given ? Object.entries(given as Record<string, string>).map(([l, r]) => `${l} → ${r}`).join(" · ") : text(given), expected };
     if (correct === null) return base;
     // Every graded answer carries its verdict and credit, so the performance engine reads one shape.
     if (!written) return { ...base, verdict: correct ? "correct" as const : "incorrect" as const, score: correct ? 1 : 0, quantitative };

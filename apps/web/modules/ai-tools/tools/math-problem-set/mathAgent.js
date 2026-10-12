@@ -1,3 +1,4 @@
+import { skillTaggingRule } from "../../../skills/taxonomy.js";
 /**
  * The Math Problem Set as a built-in agent: it reads the documents the runner picks, finds the formulas and
  * quantitative ideas in them, and writes a PROBLEM SET (not a recall quiz): every problem needs thinking, with a
@@ -34,7 +35,9 @@ First decide whether the reference material can support a problem set. It can wh
 7. KEY MATHS. "math_concepts" lists the maths skills the solution needs, as short names separated by semicolons, chosen from the usual skills (basic arithmetic; percentages and ratios; algebra and rearranging; logarithms and exponentials; basic statistics; derivatives; integration; limits; graph interpretation; basic geometry; systems of equations; optimisation) and extended when needed.
 8. CHECK BEFORE WRITING. Solve every problem yourself from its own wording. Confirm that the unit is right, that the multiple-choice answer is exactly one of the options, that no other option is also correct, and that the number in "answer" matches the worked solution. Fix any problem that fails.
 9. COUNT AND LANGUAGE. Return exactly the requested number of problems, unless the material is unsuitable. Write in the requested language; keep formulas, symbols and units as they are. "explanation" is one sentence stating the concept the problem tests. "topic" is a short tag from the material's own headings. "difficulty" is the concept difficulty (easy, medium or hard) and "math_level" the math difficulty.
-</rules>`,
+</rules>
+
+${skillTaggingRule()}`,
   outputExample: "",
   questions: [
     { id: "m-count", text: "How many problems?", type: "number", required: true },
@@ -59,7 +62,8 @@ First decide whether the reference material can support a problem set. It can wh
       { name: "explanation", label: "Concept tested", type: "string", repeatScope: "per-output", description: "One sentence naming the concept or formula the problem tests and why it matters." },
       { name: "topic", label: "Topic", type: "string", repeatScope: "per-output", description: "Short topic tag taken from the material." },
       { name: "difficulty", label: "Concept difficulty", type: "string", repeatScope: "per-output", description: "easy, medium or hard." },
-      { name: "math_level", label: "Math difficulty", type: "string", repeatScope: "per-output", description: "easy, medium or hard." }
+      { name: "math_level", label: "Math difficulty", type: "string", repeatScope: "per-output", description: "easy, medium or hard." },
+      { name: "requires_skills", label: "Skills needed", type: "array", repeatScope: "per-output", description: "1 to 3 skill ids the solution needs (see <skill_tags>), most specific first." }
     ]
   },
   model: "gpt-4o",
@@ -69,6 +73,6 @@ First decide whether the reference material can support a problem set. It can wh
     templateId: "",
     fieldTypeByName: { question: "heading3", options: "bullet_list", answer: "standalone_text", worked_solution: "paragraph", math_concepts: "paragraph", explanation: "paragraph", topic: "paragraph", difficulty: "paragraph", math_level: "paragraph", units: "paragraph", type: "paragraph", suitability: "paragraph" },
     fieldMappingByTemplateField: {},
-    customization: { brand: { title: "Problem set", numbered: true, showDividers: true }, hiddenFields: ["type", "difficulty", "math_level", "units", "suitability"], fieldOrder: ["question", "options", "answer", "worked_solution", "math_concepts", "explanation", "topic"] }
+    customization: { brand: { title: "Problem set", numbered: true, showDividers: true }, hiddenFields: ["type", "difficulty", "math_level", "units", "suitability", "requires_skills"], fieldOrder: ["question", "options", "answer", "worked_solution", "math_concepts", "explanation", "topic"] }
   }
 };

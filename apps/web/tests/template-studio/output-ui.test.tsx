@@ -17,7 +17,7 @@ const plan = planOutput({
 describe("output designer UI", () => {
   it("lists every component with its Template Studio family and colours", () => {
     const html = renderToString(createElement(OutputStylePanel, { plan, styles: {}, onStylesChange: () => undefined, savedTemplates: [{ id: "t1", name: "My exam look" }] }));
-    for (const text of ["Exam header", "Multiple choice", "True / false", "Footer", "One color for all", "Apply a saved template", "Choose a template…", "Blue", "Graphite"]) expect(html).toContain(text);
+    for (const text of ["Exam header", "Multiple choice", "True / false", "Footer", "One color for all", "Base selection on template", "Choose a template…", "Blue", "Graphite"]) expect(html).toContain(text);
     expect(html).not.toContain("Output fields");
   });
 

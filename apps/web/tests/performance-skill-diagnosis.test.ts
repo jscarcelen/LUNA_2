@@ -82,3 +82,35 @@ describe("topic or skill?", () => {
     expect(d.skills.find((s: any) => s.id === "derivatives").weak).toBe(true);
   });
 });
+
+describe("language-learning and humanities skills", () => {
+  it("tags the building blocks of a language and of a history question", () => {
+    expect(infer({ prompt: "Make this sentence negative: She likes tea." })).toContain("negatives");
+    expect(infer({ prompt: "Turn this sentence into a question: He is at home." })).toContain("question-forms");
+    expect(infer({ prompt: "Conjugate the verb 'avoir' in the present tense." })).toContain("verb-tenses");
+    expect(infer({ prompt: "Which came first, the printing press or the French Revolution?" })).toContain("chronology");
+    expect(infer({ prompt: "What were the main causes of the First World War?" })).toContain("cause-effect");
+    expect(normaliseSkillIds(["Vocabulary", "forming questions", "causes and consequences"])).toEqual(["vocabulary", "question-forms", "cause-effect"]);
+  });
+  it("teaches negatives only after sentence building, which needs words and grammar first", () => {
+    expect((refresherFor as any)("negatives").prerequisites).toEqual(["Vocabulary", "Grammar forms", "Building sentences"]);
+  });
+});
+
+describe("when the grader names the failing skill", () => {
+  it("blames that skill only, so a question tagged with two does not make both look weak", () => {
+    const tagged = (correct: boolean, failedSkill?: string) => ({ ...answer("Micro", ["derivatives", "algebra"], correct), failedSkill });
+    const results = [
+      ...Array.from({ length: 6 }, (_, i) => tagged(i === 0, i === 0 ? undefined : "algebra")),   // five wrong, all blamed on algebra
+      ...Array.from({ length: 4 }, () => answer("Micro", [], true))
+    ];
+    const d = diagnose([attempt(results)]);
+    expect(d.weakSkills.map((s: any) => s.id)).toEqual(["algebra"]);
+    expect(d.skills.find((s: any) => s.id === "derivatives").weak).toBe(false);
+  });
+  it("counts a blamed skill the question was not tagged with", () => {
+    const results = [...Array.from({ length: 5 }, () => ({ ...answer("Law", [], false), failedSkill: "reading" })), ...Array.from({ length: 4 }, () => answer("Law", [], true))];
+    expect(diagnose([attempt(results)]).weakSkills.map((s: any) => s.id)).toEqual(["reading"]);
+  });
+});
+

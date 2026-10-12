@@ -253,6 +253,7 @@ export function AppShell({ account = null, initialPage = "" }) {
           selectedWorkspaceId={selectedWorkspaceId}
           selectedSubjectId={selectedSubjectId}
           onSaveGeneratedQuizDocument={handleSaveGeneratedQuizDocument}
+          onUpdateGeneratedDocument={handleUpdateGeneratedDocument}
           onRemoveDocument={handleRemoveDocument}
           onOpenPage={(target) => setPage(target)}
           onSelectSubject={handleSelectSubject}

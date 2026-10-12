@@ -12,7 +12,11 @@ import { analyseErrors } from "./errors";
 import { diagnoseSkills } from "./skillDiagnosis";
 import { refresherFor } from "../skills/taxonomy";
 import { buildActivity } from "../activities/engine/activity";
+import { buildResource } from "../resources/resource";
+import { insertPrerequisite } from "../plans/prerequisite";
 import { SkillMap } from "./dashboard/SkillMap";
+import { LevelReport } from "./dashboard/LevelReport";
+import { latestLevelReports } from "./levelTest";
 import { coverageOf, targetsFor } from "./targets";
 import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
 import { panelById } from "./dashboard/registry";
@@ -38,7 +42,7 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -61,6 +65,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const [practising, setPractising] = useState(null);
   const [generatingPractice, setGeneratingPractice] = useState(false);
   const [practiceError, setPracticeError] = useState("");
+  const [practiceSaved, setPracticeSaved] = useState({ documentId: "", planName: "", status: "", busy: false, planId: "" });
 
   useEffect(() => { setLearners(readLearners()); }, []);
   useEffect(() => {
@@ -250,6 +255,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   }
 
   const diagnosis = useMemo(() => diagnoseSkills(attempts), [attempts]);
+  // Level tests are taken before a plan exists and whatever the date range: only the learner narrows them down.
+  const levelReports = useMemo(() => latestLevelReports(all.filter((attempt) => {
+    if (isOwn ? false : learner && attempt.learner !== learner) return false;
+    if (isOwn && attempt.learner && profileName && attempt.learner !== profileName) return false;
+    return true;
+  })), [all, isOwn, learner, profileName]);
 
   const context = {
     role, learner, profileName, subject, evidence, topics, overall, errors, actions, retention, trendChange,
@@ -261,6 +272,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     stuck: useMemo(() => repeatedMistakes(attempts), [attempts]),
     skills: useMemo(() => bySkill(attempts), [attempts]),
     diagnosis,
+    levelReports,
+    onBuildFoundation: (report, component) => practise({ kind: "reteach", topic: component.name, title: `Build the foundation: ${component.name}`, why: `${component.right} of ${component.asked} right in the level test of ${report.title}.`, effort: "30 minutes", skill: component.skill && component.status === "start" ? component.skill : "" }),
     onPrimer: (skill) => practise({ kind: "skill-primer", skill: skill.id, topic: (skill.lifts && skill.lifts[0]) || "", title: `Refresh: ${skill.label}`, why: skill.lifts?.length ? `${skill.label} is holding back ${skill.lifts.join(", ")}.` : `${skill.label} is your weakest skill.`, effort: "30 minutes" }),
     difficulties: useMemo(() => byDifficulty(attempts), [attempts]),
     times: useMemo(() => timeByKind(attempts), [attempts]),
@@ -346,11 +359,53 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         intro: primer || undefined,
         questions: built.questions.map((question) => ({ ...question, topic: question.topic || topic, skills: refresher ? [refresher.id] : question.skills }))
       };
-      setPractising({ activity });
+      setPracticeSaved({ documentId: "", planName: "", status: "", busy: false, planId: "" });
+      setPractising({ activity, refresher: refresher ? { id: refresher.id, label: refresher.label } : null, topic, why: action.why || "" });
     } catch (error) {
       setPracticeError(String(error.message || error));
     } finally {
       setGeneratingPractice(false);
+    }
+  }
+
+  /** Saves the practice the learner is looking at as a resource in the workspace (activity mode, so it can be redone and tracked). */
+  async function savePractice() {
+    if (!onSaveGeneratedQuizDocument || !practising || practiceSaved.documentId) return practiceSaved.documentId;
+    const { activity, topic, refresher } = practising;
+    const name = activity.title;
+    const payload = buildResource({
+      name, activity,
+      data: { items: activity.questions.map((question) => ({ question: question.prompt, answer: question.answer, options: question.options, explanation: question.explanation, topic: question.topic, requires_skills: question.skills })), ...(activity.intro ? { primer: activity.intro } : {}) },
+      request: {},
+      meta: { agentName: refresher ? "Skill refresher" : "Targeted practice", subjectName: subject?.name || "", questionCount: activity.questions.length }
+    });
+    const content = JSON.stringify(payload, null, 2);
+    const saved = await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["resource", "activity", ...(topic ? [`topic:${topic}`] : [])], file: { name: `${name}.resource.json`, content, preview: `${activity.questions.length} questions`, sizeBytes: content.length } }, selectedSubjectId);
+    return saved?.id || "";
+  }
+  async function keepPractice() {
+    setPracticeSaved((current) => ({ ...current, busy: true, status: "" }));
+    try {
+      const documentId = await savePractice();
+      setPracticeSaved((current) => ({ ...current, busy: false, documentId: documentId || current.documentId, status: "Saved to your workspace." }));
+    } catch (error) {
+      setPracticeSaved((current) => ({ ...current, busy: false, status: String(error.message || error) }));
+    }
+  }
+  /** A refresher goes into the plan before the step it prepares for (a plain practice is just one more step at the end). */
+  async function planPractice() {
+    const choice = plans.find((row) => row.document.id === (practiceSaved.planId || activePlan?.document.id || plans[0]?.document.id));
+    if (!choice || typeof onUpdateGeneratedDocument !== "function") return;
+    setPracticeSaved((current) => ({ ...current, busy: true, status: "" }));
+    try {
+      const documentId = practiceSaved.documentId || await savePractice();
+      const { activity, topic, refresher } = practising;
+      const { plan: next, before } = insertPrerequisite(choice.plan, { resourceId: documentId, title: activity.title, topic, skillLabel: refresher?.label || "", minutes: 20 });
+      const planContent = JSON.stringify(next, null, 2);
+      await onUpdateGeneratedDocument(choice.document.id, { file: { name: choice.document.name, content: planContent, preview: choice.document.preview, sizeBytes: planContent.length } }, selectedSubjectId);
+      setPracticeSaved((current) => ({ ...current, busy: false, documentId, planName: choice.plan.name, status: before ? `Added to “${choice.plan.name}”, before “${before}”.` : `Added to “${choice.plan.name}”.` }));
+    } catch (error) {
+      setPracticeSaved((current) => ({ ...current, busy: false, status: String(error.message || error) }));
     }
   }
 
@@ -401,6 +456,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <Kpi label="Retention" value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? "Shows once you re-practise a topic you got wrong" : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved`} info={METRIC_INFO.retention} />
         <Kpi label="On track for the exam?" value={track.label} tone={trackTone} hint={track.detail} info={{ meaning: "Whether the steps of your most active study plan are being done on time.", formula: "On track = no late steps and the plan's date has not passed  ·  Behind = at least one late step, or the date passed with steps left" }} />
       </div>
+      {levelReports.length ? (
+        <div className={`${card} grid gap-3 p-5`}>
+          <p className={kicker}>Where you start</p>
+          <LevelReport reports={levelReports} compact onBuild={context.onBuildFoundation} />
+        </div>
+      ) : null}
       {evidence.length && diagnosis.rows && (diagnosis.weakSkills.length || diagnosis.topics.some((topic) => topic.verdict !== "ok")) ? (
         <div className={`${card} grid gap-3 p-5`}>
           <p className={kicker}>Topic or skill?</p>
@@ -589,11 +650,28 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       ) : null}
       {practising ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
+          {onSaveGeneratedQuizDocument ? (
+            <div className={`${card} mx-auto mb-3 flex max-w-3xl flex-wrap items-center gap-2 p-3`}>
+              <span className="min-w-0 flex-1 text-xs font-semibold text-soft-ink">{practising.refresher ? `Skill refresher · ${practising.refresher.label}` : "Practice"}</span>
+              <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.documentId)} onClick={keepPractice}>{practiceSaved.documentId ? "Saved" : "Save it"}</button>
+              {plans.length && typeof onUpdateGeneratedDocument === "function" ? (
+                <>
+                  {plans.length > 1 ? (
+                    <select aria-label="Study plan" className="rounded-full border border-ink/15 bg-white px-2 py-1 text-xs" value={practiceSaved.planId || activePlan?.document.id || plans[0].document.id} onChange={(event) => setPracticeSaved((current) => ({ ...current, planId: event.target.value }))}>
+                      {plans.map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
+                    </select>
+                  ) : null}
+                  <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.planName)} onClick={planPractice}>{practising.refresher ? "Add to my plan, before the topic" : "Add to my plan"}</button>
+                </>
+              ) : null}
+              {practiceSaved.status ? <span className="basis-full text-xs text-accent">{practiceSaved.status}</span> : null}
+            </div>
+          ) : null}
           <ActivityPlayer
             activity={practising.activity}
             onSubmit={async (attempt) => {
               if (onSaveGeneratedQuizDocument) {
-                const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: "", activityId: attempt.activityId || "", learner: profileName || "", attempt }, null, 2);
+                const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: practiceSaved.documentId || "", activityId: attempt.activityId || "", learner: profileName || "", attempt }, null, 2);
                 await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Practice"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }).catch(() => {});
               }
               setPractising(null);

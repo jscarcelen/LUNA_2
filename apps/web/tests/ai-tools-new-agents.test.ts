@@ -13,9 +13,9 @@ describe("the new built-in agents", () => {
   it("are registered, and every quick-make id is a registered tool", () => {
     const registry = read("registry.js");
     const registered = new Set([
-      ...["quiz-generator/index.js", "math-problem-set/index.js", "concept-flashcards/index.js", "vocabulary-flashcards/index.js", "document-summarizer/index.js", "summary-consolidator/index.js", "agent-builder/index.js", "template-builder/index.js", "chatbot/index.js"].flatMap((file) => toolIds(read(`tools/${file}`)))
+      ...["quiz-generator/index.js", "math-problem-set/index.js", "level-test/index.js", "concept-flashcards/index.js", "vocabulary-flashcards/index.js", "document-summarizer/index.js", "summary-consolidator/index.js", "agent-builder/index.js", "template-builder/index.js", "chatbot/index.js"].flatMap((file) => toolIds(read(`tools/${file}`)))
     ]);
-    for (const id of ["math-problem-set", "concept-flashcards", "document-summarizer"]) expect(registry, id).toContain(`${id.split("-").map((part, index) => (index ? part[0].toUpperCase() + part.slice(1) : part)).join("")}Tool`);
+    for (const id of ["math-problem-set", "level-test", "concept-flashcards", "document-summarizer"]) expect(registry, id).toContain(`${id.split("-").map((part, index) => (index ? part[0].toUpperCase() + part.slice(1) : part)).join("")}Tool`);
     const quick = [...read("ui/CreatePage.js").matchAll(/\{ id: "([a-z-]+)", title:/g)].map((match) => match[1]);
     expect(quick.length).toBeGreaterThanOrEqual(4);
     for (const id of quick) expect(registered.has(id), id).toBe(true);
@@ -38,5 +38,16 @@ describe("the new built-in agents", () => {
     expect(DOCUMENT_SUMMARIZER_AGENT.questions.find((question: any) => question.text === "Length")?.options).toEqual(["1 page", "2 pages"]);
     expect(JSON.stringify(DOCUMENT_SUMMARIZER_AGENT.outputJsonSchema)).toContain("bullet_list");
     expect(DOCUMENT_SUMMARIZER_AGENT.instructions).toMatch(/consultant/i);
+  });
+});
+
+describe("the skill list in a prompt does not make an agent look like flashcards", () => {
+  it("keeps the 30-item flashcard cap away from quizzes, problem sets and level tests", async () => {
+    const { looksLikeFlashcards } = (await import("../modules/ai-tools/pipeline/agentBuilder.js")) as any;
+    const { QUIZ_AGENT } = (await import("../modules/ai-tools/tools/quiz-generator/quizAgent.js")) as any;
+    const { MATH_AGENT } = (await import("../modules/ai-tools/tools/math-problem-set/mathAgent.js")) as any;
+    const { LEVEL_AGENT } = (await import("../modules/ai-tools/tools/level-test/levelAgent.js")) as any;
+    for (const agent of [QUIZ_AGENT, MATH_AGENT, LEVEL_AGENT]) expect(looksLikeFlashcards({ name: agent.name, instructions: agent.instructions, template: agent.template })).toBe(false);
+    expect(looksLikeFlashcards({ name: "Vocabulary flashcards", instructions: "x", template: { fields: [] } })).toBe(true);
   });
 });

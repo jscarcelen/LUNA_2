@@ -13,6 +13,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 export const QUICK_MAKES = [
   { id: "quiz-generator", title: "A quiz", text: "Questions with answers, to test what you know.", icon: "✎" },
   { id: "math-problem-set", title: "A problem set", text: "Problems that use the formulas in your material, with worked answers.", icon: "∑" },
+  { id: "level-test", title: "A level test", text: "A short test of the foundations, to find out where to start.", icon: "◎" },
   { id: "concept-flashcards", title: "Flashcards", text: "Each key concept on a card, with its definition.", icon: "▭" },
   { id: "document-summarizer", title: "A summary", text: "One or two pages with the key messages and what to remember.", icon: "☰" }
 ];
@@ -53,7 +54,7 @@ export function CreatePage({ role = "student", workspaces = [], selectedWorkspac
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="radiogroup" aria-label="What to make">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label="What to make">
           {QUICK_MAKES.map((entry) => {
             const on = entry.id === kind;
             return (

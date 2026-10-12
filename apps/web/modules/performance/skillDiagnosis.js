@@ -31,7 +31,11 @@ export function diagnosisRows(attempts = []) {
       // Older attempts: the old flat tag, then what the question's own words say.
       if (!skills.length && result.skill) { const legacy = toSkillId(result.skill); if (legacy) skills = [legacy]; }
       if (!skills.length) skills = skillsForQuestion({ prompt: result.prompt, answer: result.expected });
-      rows.push({ topic: String(result.topic || result.group || "Other"), skills, correct: result.correct === true, prompt: String(result.prompt || ""), at: attempt.at || "" });
+      // When the grader read the learner's working and named the skill that failed, the mistake belongs to that skill alone.
+      const failed = result.correct === false ? toSkillId(result.failedSkill) : null;
+      const blame = failed ? [failed] : [];
+      if (failed && !skills.includes(failed)) skills = [...skills, failed];
+      rows.push({ topic: String(result.topic || result.group || "Other"), skills, blame, correct: result.correct === true, prompt: String(result.prompt || ""), at: attempt.at || "" });
     }
   }
   return rows;
@@ -47,10 +51,11 @@ export function skillStats(rows, thresholds = THRESHOLDS) {
   return ids.map((id) => {
     const withSkill = rows.filter((row) => row.skills.includes(id));
     const without = rows.filter((row) => !row.skills.includes(id));
-    const acc = accuracyOf(withSkill);
+    // A wrong answer counts against a skill unless the grader blamed a different one.
+    const wrong = withSkill.filter((row) => !row.correct && (!row.blame?.length || row.blame.includes(id)));
+    const acc = withSkill.length ? 1 - wrong.length / withSkill.length : null;
     const accWithout = without.length >= thresholds.minClean ? accuracyOf(without) : null;
     const weak = withSkill.length >= thresholds.minSkill && acc < thresholds.weak && (accWithout === null || acc <= accWithout - thresholds.gap);
-    const wrong = withSkill.filter((row) => !row.correct);
     const skill = skillById(id);
     return {
       id, label: skillLabel(id), family: skill?.family || "", asked: withSkill.length, wrong: wrong.length, acc, accWithout, weak,
@@ -74,9 +79,9 @@ export function diagnoseTopics(rows, skills = skillStats(rows), thresholds = THR
     const base = { topic, asked: own.length, wrong: wrong.length, acc, verdict: "ok", skills: [], skillShare: 0, cleanAcc: null, reason: "" };
     if (own.length < thresholds.minTopic) return { ...base, verdict: wrong.length ? "unclear" : "ok", reason: wrong.length ? `Only ${own.length} answer${own.length === 1 ? "" : "s"} so far, not enough to say whether it is the topic or a skill.` : "" };
     if (acc >= thresholds.weak) return base;
-    const onWeak = wrong.filter((row) => row.skills.some((id) => weakIds.has(id)));
+    const onWeak = wrong.filter((row) => (row.blame?.length ? row.blame : row.skills).some((id) => weakIds.has(id)));
     const skillShare = wrong.length ? onWeak.length / wrong.length : 0;
-    const involved = [...weakIds].map((id) => ({ id, n: wrong.filter((row) => row.skills.includes(id)).length })).filter((entry) => entry.n > 0).sort((a, b) => b.n - a.n).map((entry) => entry.id);
+    const involved = [...weakIds].map((id) => ({ id, n: wrong.filter((row) => (row.blame?.length ? row.blame : row.skills).includes(id)).length })).filter((entry) => entry.n > 0).sort((a, b) => b.n - a.n).map((entry) => entry.id);
     const clean = own.filter((row) => !row.skills.some((id) => weakIds.has(id)));
     const cleanAcc = clean.length >= thresholds.minClean ? accuracyOf(clean) : null;
     const lead = skillLabel(involved[0] || "").toLowerCase();

@@ -7,11 +7,13 @@ import { summaryConsolidatorTool } from "./tools/summary-consolidator";
 import { mathProblemSetTool } from "./tools/math-problem-set";
 import { conceptFlashcardsTool } from "./tools/concept-flashcards";
 import { documentSummarizerTool } from "./tools/document-summarizer";
+import { levelTestTool } from "./tools/level-test";
 import { validateAiToolManifest } from "../core";
 
 const toolCandidates = [
   quizGeneratorTool,
   mathProblemSetTool,
+  levelTestTool,
   conceptFlashcardsTool,
   vocabularyFlashcardsTool,
   documentSummarizerTool,

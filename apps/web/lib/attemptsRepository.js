@@ -100,10 +100,18 @@ export async function saveAttempt(attempt, context = {}) {
       confidence:     r.confidence || null,
       error_type:     errorType,
       error_severity: errorType ? 0.7 : null, // simplified; could be refined later
+      // Migration 202610120002: the skills the question needs, the one blamed for a mistake, and whether working came with it.
+      skills:         Array.isArray(r.skills) ? r.skills.map(String).slice(0, 6) : [],
+      failed_skill:   r.correct === false && r.failedSkill ? String(r.failedSkill).slice(0, 60) : null,
+      has_work:       Boolean(r.work && (r.work.text || r.work.hasImage)),
     };
   });
 
-  const { error: resultsErr } = await supabase.from("attempt_results").insert(resultRows);
+  let { error: resultsErr } = await supabase.from("attempt_results").insert(resultRows);
+  // The skill columns arrive with a migration; until it is applied, save the results without them rather than lose the attempt.
+  if (resultsErr && /skills|failed_skill|has_work/i.test(String(resultsErr.message))) {
+    ({ error: resultsErr } = await supabase.from("attempt_results").insert(resultRows.map(({ skills, failed_skill, has_work, ...rest }) => rest)));
+  }
   if (resultsErr) {
     console.warn("[attemptsRepository] Failed to insert attempt_results:", resultsErr.message);
   }

@@ -8,6 +8,7 @@ import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, METRIC_INFO, MasteryTrend
 import { CoachPanel } from "./CoachPanel";
 import { PlanTopics } from "./PlanTopics";
 import { SkillMap } from "./SkillMap";
+import { LevelReport } from "./LevelReport";
 
 /**
  * Every panel the performance screen can show.
@@ -58,6 +59,15 @@ export const PANELS = [
     size: "full",
     modes: ["value"],
     render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: `Re-teach ${topic.topic}`, why: topic.reason, effort: "30 minutes" })} />
+  },
+  {
+    id: "level-tests",
+    title: "Where you start",
+    blurb: "The latest level test of each document: which foundations are solid and where to begin.",
+    roles: ALL,
+    size: "full",
+    modes: ["value"],
+    render: (ctx) => <LevelReport reports={ctx.levelReports} onBuild={ctx.onBuildFoundation} onSkill={ctx.onPrimer} />
   },
   {
     id: "coach",

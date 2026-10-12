@@ -588,6 +588,7 @@ export function WorkspaceBrowser({
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             !row && onMakeFrom ? { label: "Make a quiz", icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Make a level test", icon: "◎", onSelect: () => onMakeFrom("level-test", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Make a problem set", icon: "∑", onSelect: () => onMakeFrom("math-problem-set", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("concept-flashcards", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("document-summarizer", [document.id]) } : null,
@@ -749,6 +750,7 @@ export function WorkspaceBrowser({
                 <>
                   <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>Make a quiz</button>
                   <button type="button" className={ghostBtn} onClick={() => onMakeFrom("concept-flashcards", materialIds)}>Flashcards</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("level-test", materialIds)}>Level test</button>
                   <button type="button" className={ghostBtn} onClick={() => onMakeFrom("math-problem-set", materialIds)}>Problem set</button>
                   <button type="button" className={ghostBtn} onClick={() => onMakeFrom("document-summarizer", materialIds)}>Summarise</button>
                 </>

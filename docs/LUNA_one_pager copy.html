@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Luna — one pager</title>
+<style>
+  :root{--bg:#f5f5f7;--paper:#fff;--ink:#1d1d1f;--soft:#6e6e73;--line:rgba(0,0,0,.08);--accent:#0071e3;--accent-soft:#e8f2fd;--teal:#1fb5a0;--green:#34c759;--warn:#ff9f0a;--danger:#d70015;--shadow:0 1px 2px rgba(0,0,0,.04),0 10px 30px rgba(0,0,0,.07)}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;line-height:1.4;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1120px;margin:0 auto;padding:32px 24px 40px}
+  h1,h2,h3,p{margin:0}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow)}
+  .k{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+  /* header */
+  .hero{display:grid;grid-template-columns:1.25fr 1fr;gap:20px;align-items:stretch}
+  .hero-l{padding:32px;background:linear-gradient(135deg,#fff 0%,#eaf3ff 100%)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;letter-spacing:-.02em;margin-bottom:22px}
+  h1{font-size:40px;line-height:1.05;letter-spacing:-.035em;font-weight:800}
+  h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--teal));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{margin-top:14px;font-size:16px;color:var(--soft);max-width:520px}
+  .hero-r{padding:24px;display:grid;gap:12px;align-content:center;background:#0b2a4a;color:#fff;border:none}
+  .pain{display:flex;gap:12px;align-items:flex-start;background:rgba(255,255,255,.08);border-radius:14px;padding:12px 14px}
+  .pain b{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:var(--accent);font-size:13px}
+  .pain p{font-size:14px}.pain strong{display:block;font-size:15px}
+  .hero-r .k{color:#8ec5ff}
+  /* flow */
+  .section{margin-top:20px}
+  .flow{padding:22px 24px}
+  .flow h2,.shots h2,.diff h2,.roles h2{font-size:20px;letter-spacing:-.02em;margin:4px 0 16px}
+  .steps{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;position:relative}
+  .step{position:relative;background:var(--bg);border-radius:16px;padding:14px 12px 14px}
+  .step i{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-style:normal;font-weight:700;font-size:13px;margin-bottom:8px}
+  .step strong{display:block;font-size:14px}.step span{font-size:12px;color:var(--soft)}
+  .step:not(:last-child)::after{content:"→";position:absolute;right:-10px;top:50%;transform:translateY(-50%);z-index:2;color:var(--accent);font-weight:800;background:#fff;border-radius:50%;width:18px;height:18px;display:grid;place-items:center;font-size:12px;line-height:1}
+  .loop{margin-top:12px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
+  .loop::before{content:"";flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 12px);opacity:.5}
+  .loop::after{content:"";flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--accent) 0 6px,transparent 6px 12px);opacity:.5}
+  .loop b{color:var(--accent);white-space:nowrap}
+  /* screenshots */
+  .shots{padding:22px 24px}
+  .shotgrid{display:grid;grid-template-columns:1.35fr 1fr;gap:16px}
+  .cap{font-size:12px;color:var(--soft);margin-top:8px}
+  .cap b{color:var(--ink)}
+  .win{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:0 8px 24px rgba(0,0,0,.08)}
+  .bar{display:flex;gap:6px;align-items:center;padding:8px 12px;background:#fff;border-bottom:1px solid var(--line)}
+  .bar span{width:9px;height:9px;border-radius:50%;background:#ddd}.bar small{margin-left:8px;font-size:11px;color:var(--soft);font-weight:600}
+  .run{display:grid;grid-template-columns:.9fr 1.3fr;gap:10px;padding:12px}
+  .pane{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
+  .pane .t{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);margin-bottom:6px}
+  .ta{height:34px;border:1px solid var(--line);border-radius:8px;font-size:10px;color:var(--soft);padding:6px 8px}
+  .chips{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}
+  .chip{font-size:9px;border:1px solid var(--line);border-radius:99px;padding:2px 7px;color:var(--soft);font-weight:600}
+  .btn{display:block;text-align:center;background:var(--accent);color:#fff;border-radius:99px;padding:7px;font-size:11px;font-weight:700}
+  .btn.g{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .sw{display:flex;gap:5px;margin-top:6px}.sw i{width:14px;height:14px;border-radius:50%;display:block}
+  .tabs{display:inline-flex;background:rgba(0,0,0,.06);border-radius:99px;padding:2px;margin-bottom:8px}
+  .tabs b{font-size:9px;padding:3px 10px;border-radius:99px;color:var(--soft)}.tabs b.on{background:#1d1d1f;color:#fff}
+  .q{border:1px solid var(--line);border-radius:10px;padding:9px 10px;margin-bottom:7px;font-size:11px}
+  .q strong{display:block;margin-bottom:5px;font-size:11.5px}
+  .opt{display:flex;gap:6px;align-items:center;font-size:10.5px;padding:3px 6px;border-radius:7px;border:1px solid var(--line);margin-top:3px}
+  .opt.ok{background:#e9f9ee;border-color:#9fdcb0}
+  .steps-box{background:var(--bg);border-radius:8px;padding:6px 8px;margin-top:6px;font-size:10px;color:var(--soft)}
+  .math{font-family:"Times New Roman",serif;font-style:italic;color:var(--ink)}
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 12px 4px}
+  .kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:9px}
+  .kpi small{display:block;font-size:9px;color:var(--soft);font-weight:600}.kpi b{font-size:22px;letter-spacing:-.03em}
+  .kpi.up b{color:var(--green)}.kpi.mid b{color:var(--warn)}
+  .coach{margin:8px 12px 12px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px}
+  .coach p.h{font-size:11.5px;font-weight:700;margin-bottom:6px}
+  .act{border:1px solid var(--line);border-radius:10px;padding:7px 9px;margin-top:6px;font-size:10.5px}
+  .act .m{font-size:8.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);margin-top:2px}
+  .act .b{display:flex;gap:4px;margin-top:5px}
+  .act .b span{font-size:9px;font-weight:700;border:1px solid var(--line);border-radius:99px;padding:2px 8px}
+  .tag{float:right;font-size:8.5px;font-weight:700;color:var(--soft)}
+  .bars{padding:0 12px 4px;display:grid;gap:5px}
+  .br{display:grid;grid-template-columns:70px 1fr 28px;gap:6px;align-items:center;font-size:10px;color:var(--soft)}
+  .br div{height:7px;border-radius:99px;background:rgba(0,0,0,.07);overflow:hidden}.br div i{display:block;height:100%;border-radius:99px}
+  /* roles */
+  .roles{padding:22px 24px}
+  .rolegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .role{border-radius:16px;padding:16px;background:var(--bg)}
+  .role .ic{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
+  .role p{font-size:13.5px;margin-top:6px}.role strong{font-size:16px;display:block;margin-top:4px}
+  /* diff */
+  .diff{padding:22px 24px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft)}
+  th.l{color:var(--accent)}
+  td.l{background:var(--accent-soft);font-weight:600}
+  td.n{color:var(--soft)}
+  .y{color:var(--green);font-weight:800}.x{color:var(--danger);font-weight:800}
+  /* bottom */
+  .bottom{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  .biz{padding:20px 24px}.biz h2{font-size:18px;margin:4px 0 10px;letter-spacing:-.02em}
+  .biz ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:13.5px}
+  .biz li{display:flex;gap:10px}.biz li b{color:var(--accent)}
+  .ask{padding:20px 24px;background:linear-gradient(135deg,#0071e3,#1fb5a0);color:#fff;border:none}
+  .ask .k{color:#d7f0ff}.ask h2{font-size:22px;letter-spacing:-.03em;margin:6px 0 8px;line-height:1.15}
+  .ask p{font-size:14px;opacity:.95}
+  .foot{margin-top:14px;text-align:center;font-size:11px;color:var(--soft)}
+  @media (max-width:900px){.hero,.shotgrid,.bottom{grid-template-columns:1fr}.steps{grid-template-columns:1fr 1fr}.step::after{display:none}.rolegrid{grid-template-columns:1fr}h1{font-size:32px}.run{grid-template-columns:1fr}}
+  @media print{body{background:#fff}.wrap{padding:0;max-width:none;zoom:.62}.card{box-shadow:none}@page{size:A4 portrait;margin:8mm}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 1. Hero + problem -->
+  <section class="hero">
+    <div class="card hero-l">
+      <div class="brand">
+        <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1a7cf0"/><stop offset="1" stop-color="#2fd1b2"/></linearGradient></defs><path d="M20 3a13 13 0 1 0 9 22A11 11 0 0 1 20 3z" fill="url(#g)"/></svg>
+        Luna
+      </div>
+      <h1>AI can make practice.<br><em>Luna knows what to practice next.</em></h1>
+      <p class="sub">Luna turns any course material into quizzes, problem sets and flashcards, then tracks every answer to find <b>why</b> each student struggles, and tells students, parents and teachers exactly what to do next.</p>
+    </div>
+    <div class="card hero-r">
+      <span class="k">The problem</span>
+      <div class="pain"><b>1</b><p><strong>No one knows <em>why</em> a student struggles.</strong>A 70% hides whether it is a topic gap, a missing core skill like algebra, or carelessness.</p></div>
+      <div class="pain"><b>2</b><p><strong>Material never becomes practice.</strong>Notes and past exams sit in files; making good practice takes hours.</p></div>
+      <div class="pain"><b>3</b><p><strong>Generic AI forgets.</strong>Chatbots generate content, but do not track results or decide the next step.</p></div>
+    </div>
+  </section>
+
+  <!-- 2. Flow -->
+  <section class="card flow section">
+    <span class="k">How it works</span>
+    <h2>A closed loop: material in, next step out</h2>
+    <div class="steps">
+      <div class="step"><i>1</i><strong>Upload</strong><span>Notes, books, past exams, handwriting, formulas, charts</span></div>
+      <div class="step"><i>2</i><strong>Generate</strong><span>Built-in or custom AI agents: quiz, problem set, flashcards, summary</span></div>
+      <div class="step"><i>3</i><strong>Practice</strong><span>Answer inside Luna, or export PDF / Word / slides</span></div>
+      <div class="step"><i>4</i><strong>Measure</strong><span>Every attempt scored by topic, skill and type of mistake</span></div>
+      <div class="step"><i>5</i><strong>Next step</strong><span>Luna's read: what to fix, already in plan vs. new to create</span></div>
+    </div>
+    <div class="loop"><b>↺ Results feed the next activity and update the study plan</b></div>
+  </section>
+
+  <!-- 3. Product -->
+  <section class="card shots section">
+    <span class="k">The product</span>
+    <h2>Make it. Practice it. Understand it.</h2>
+    <div class="shotgrid">
+      <div>
+        <div class="win">
+          <div class="bar"><span></span><span></span><span></span><small>Math Problem Set · Result</small></div>
+          <div class="run">
+            <div style="display:grid;gap:8px;align-content:start">
+              <div class="pane"><div class="t">Iterate</div><div class="ta">e.g. make it harder · focus on elasticity</div><div class="chips"><span class="chip">Make it shorter</span><span class="chip">Add examples</span></div><div class="btn" style="background:#fff;color:var(--accent);border:1px solid var(--accent)">Apply to the result</div></div>
+              <div class="btn">Save and export</div>
+              <div class="pane"><div class="t">Look</div><div style="font-size:9.5px;color:var(--soft)">Colour</div><div class="sw"><i style="background:#0071e3"></i><i style="background:#1fb5a0"></i><i style="background:#af52de"></i><i style="background:#ff9f0a"></i></div><div class="btn g" style="margin-top:8px;font-size:10px">Advanced options</div></div>
+            </div>
+            <div class="pane">
+              <div class="tabs"><b class="on">Interactive</b><b>Document</b></div>
+              <div class="q"><strong>1. A firm sells 40 units at $12. Revenue? (dollars)</strong><div class="opt">Your answer: <b>480</b></div>
+                <div class="steps-box"><b>Step by step</b><br>1. Revenue = price × quantity<br>2. <span class="math">R = 12 × 40 = 480</span></div></div>
+              <div class="q"><strong>2. Price after a 10% rise from $50?</strong><div class="opt">$45</div><div class="opt ok">✓ $55</div><div class="opt">$60</div></div>
+            </div>
+          </div>
+        </div>
+        <p class="cap"><b>Generate → edit → save.</b> Same result as an interactive activity and a printable document in A4, Letter or 16:9 slides, with an answer key.</p>
+      </div>
+
+      <div>
+        <div class="win">
+          <div class="bar"><span></span><span></span><span></span><small>Progress</small></div>
+          <div class="kpis">
+            <div class="kpi up"><small>Accuracy</small><b>78%</b></div>
+            <div class="kpi mid"><small>Retention</small><b>54%</b></div>
+            <div class="kpi"><small>On track</small><b style="color:var(--accent);font-size:15px;line-height:2">Yes</b></div>
+          </div>
+          <div class="bars">
+            <div class="br">Osmosis<div><i style="width:82%;background:var(--green)"></i></div>82%</div>
+            <div class="br">Algebra<div><i style="width:41%;background:var(--danger)"></i></div>41%</div>
+            <div class="br">Elasticity<div><i style="width:63%;background:var(--warn)"></i></div>63%</div>
+          </div>
+          <div class="coach">
+            <p class="h">Luna's read: the weak spot is algebra, not economics.</p>
+            <div class="act"><b>Rearranging formulas</b><span class="tag">due Fri</span><div class="m">Already in your plan</div><div class="b"><span>Do it now</span></div></div>
+            <div class="act"><b>10 algebra warm-ups</b><div class="m">New · not in a plan yet</div><div class="b"><span>Create it</span><span>Add to a plan</span></div></div>
+          </div>
+        </div>
+        <p class="cap"><b>Why, not just how much.</b> Topic gaps are separated from transversal skills, with a clear next action.</p>
+      </div>
+    </div>
+    <p class="cap" style="margin-top:10px">Illustrative interface mockups of Luna's screens. Numbers shown are sample values.</p>
+  </section>
+
+  <!-- 4. Roles -->
+  <section class="card roles section">
+    <span class="k">One platform, three roles</span>
+    <h2>Everyone sees what they need to act</h2>
+    <div class="rolegrid">
+      <div class="role" style="background:#eaf3ff"><span class="ic" style="color:var(--accent)">Students</span><strong>Know what to fix</strong><p>Weak topics, repeated mistakes and the skill behind them, with practice ready to start.</p></div>
+      <div class="role" style="background:#e5f7f3"><span class="ic" style="color:var(--teal)">Teachers</span><strong>See every class</strong><p>Topic and skill performance per student and group; send targeted resources straight from the view.</p></div>
+      <div class="role" style="background:#e9f9ee"><span class="ic" style="color:#1f9d45">Parents</span><strong>Know how to help</strong><p>Progress, study efficiency and which topics or skills need support at home.</p></div>
+    </div>
+  </section>
+
+  <!-- 5. Differentiation -->
+  <section class="card diff section">
+    <span class="k">Why Luna wins</span>
+    <h2>Generic AI generates. Luna closes the loop.</h2>
+    <table>
+      <tr><th></th><th class="l">Luna</th><th>Generic AI chat</th><th>Quiz / flashcard apps</th></tr>
+      <tr><td>Works from the student's own material</td><td class="l"><span class="y">✓</span> incl. handwriting, formulas, charts</td><td class="n">Pasted text, no structure</td><td class="n">Mostly pre-made content</td></tr>
+      <tr><td>Finds <em>why</em> answers are wrong</td><td class="l"><span class="y">✓</span> topic vs. transversal skill</td><td class="n"><span class="x">✗</span></td><td class="n">Score only</td></tr>
+      <tr><td>Decides the next activity and updates the plan</td><td class="l"><span class="y">✓</span></td><td class="n"><span class="x">✗</span> no memory of results</td><td class="n"><span class="x">✗</span></td></tr>
+      <tr><td>Teachers and parents in the loop</td><td class="l"><span class="y">✓</span> dashboards + assignments</td><td class="n"><span class="x">✗</span></td><td class="n">Limited</td></tr>
+      <tr><td>Customizable agents, no prompt writing</td><td class="l"><span class="y">✓</span> 4-step builder + marketplace</td><td class="n">Prompt engineering needed</td><td class="n"><span class="x">✗</span></td></tr>
+    </table>
+  </section>
+
+  <!-- 6. Model + close -->
+  <section class="bottom section">
+    <div class="card biz">
+      <span class="k">Business model</span>
+      <h2>Two engines</h2>
+      <ul>
+        <li><b>●</b><span><strong>Subscriptions &amp; usage (Lunas):</strong> students, teachers and families pay for generation and tracking.</span></li>
+        <li><b>●</b><span><strong>Agent marketplace:</strong> teachers build and sell agents and templates, a content flywheel with us as the platform.</span></li>
+        <li><b>●</b><span><strong>Data advantage:</strong> every attempt teaches Luna how each student studies best, which generic tools cannot see.</span></li>
+      </ul>
+    </div>
+    <div class="card ask">
+      <span class="k">In one line</span>
+      <h2>Luna turns any course material into practice, measures how each student learns, and says what to do next.</h2>
+      <p>Built for students, teachers and parents. The loop is the product.</p>
+    </div>
+  </section>
+
+  <p class="foot">Luna · Investor one-pager · October 2026</p>
+</div>
+</body>
+</html>

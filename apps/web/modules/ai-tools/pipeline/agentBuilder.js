@@ -36,8 +36,10 @@ export const FLASHCARD_MAX_ITEMS = 30;
  * Returns true when the generation looks like a flashcard/card set based on the agent name,
  * instructions, or field names — used to apply FLASHCARD_MAX_ITEMS automatically.
  */
-function looksLikeFlashcards(config) {
-  const text = `${config.name || ""} ${config.instructions || ""} ${(config.template?.fields || []).map((f) => f.name).join(" ")}`.toLowerCase();
+export function looksLikeFlashcards(config) {
+  // The list of skill ids a prompt shows the model ("terminology and vocabulary"…) is not a sign that the agent makes flashcards.
+  const instructions = String(config.instructions || "").replace(/<skill_tags>[\s\S]*?<\/skill_tags>/g, " ");
+  const text = `${config.name || ""} ${instructions} ${(config.template?.fields || []).map((f) => f.name).join(" ")}`.toLowerCase();
   return /flashcard|flash card|\bcard\b|\bcards\b|vocabulary|vocab/.test(text);
 }
 const FIELD_TYPES = ["string", "number", "boolean", "array"];

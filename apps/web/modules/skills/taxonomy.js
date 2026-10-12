@@ -21,7 +21,9 @@ export const SKILL_FAMILIES = [
   { id: "quant", label: "Quantitative", blurb: "Numbers, algebra and calculus used to answer a question." },
   { id: "reasoning", label: "Reasoning", blurb: "Combining ideas and steps to reach an answer." },
   { id: "language", label: "Language", blurb: "Reading carefully and using the right words." },
-  { id: "detail", label: "Attention to detail", blurb: "Slips: units, signs, rounding, misreading, incomplete answers." }
+  { id: "detail", label: "Attention to detail", blurb: "Slips: units, signs, rounding, misreading, incomplete answers." },
+  { id: "langlearn", label: "Language learning", blurb: "The building blocks of a language: words, sentences, negatives, questions, tenses." },
+  { id: "humanities", label: "Humanities", blurb: "Placing events in time, causes and consequences, weighing sources." }
 ];
 
 /** @type {{ id: string; label: string; family: string; focus: string; match?: RegExp[]; prereq?: string[] }[]} */
@@ -51,6 +53,19 @@ export const SKILLS = [
   { id: "terminology", label: "Terminology and vocabulary", family: "language", focus: "knowing and using the subject's key terms precisely", match: [/\b(define|definition|what does .{1,30} mean|term for|vocabulary)\b/i] },
   { id: "writing", label: "Written expression", family: "language", focus: "stating an answer completely and clearly in a sentence or two", match: [/\b(in one sentence|in your own words|briefly explain|write a)\b/i] },
 
+  { id: "vocabulary", label: "Vocabulary", family: "langlearn", focus: "knowing words and phrases and what they mean in the other language", match: [/\b(vocabulary|translate|how do you say|what does .{1,30} mean in|word for)\b/i] },
+  { id: "grammar-forms", label: "Grammar forms", family: "langlearn", focus: "agreement, articles, prepositions, gender and plurals", match: [/\b(article|preposition|gender|plural|agreement|pronoun|singular)\b/i] },
+  { id: "sentence-building", label: "Building sentences", family: "langlearn", focus: "word order and putting words together into a complete, correct sentence", match: [/\b(word order|put the words|form a sentence|complete the sentence|build a sentence|rearrange the words)\b/i], prereq: ["vocabulary", "grammar-forms"] },
+  { id: "negatives", label: "Negatives", family: "langlearn", focus: "turning a sentence into its negative and using negative words correctly", match: [/\b(negative|negation|negate|make .{1,30} negative)\b/i], prereq: ["sentence-building"] },
+  { id: "question-forms", label: "Forming questions", family: "langlearn", focus: "asking questions: question words, inversion and auxiliary verbs", match: [/\b(form(ing)? a question|make .{1,30} a question|question word|interrogative|ask a question|turn .{1,30} into a question)\b/i], prereq: ["sentence-building"] },
+  { id: "verb-tenses", label: "Verbs and tenses", family: "langlearn", focus: "conjugating verbs and choosing the right tense", match: [/\b(tense|conjugat|past simple|present perfect|present simple|future|irregular verb|verb form|imperfect|subjunctive)\b/i], prereq: ["grammar-forms"] },
+  { id: "spelling", label: "Spelling and punctuation", family: "langlearn", focus: "spelling, accents, capital letters and punctuation", match: [/\b(spell|spelling|accent|punctuation|capital letter|apostrophe)\b/i] },
+
+  { id: "chronology", label: "Chronology", family: "humanities", focus: "placing events, people and periods in order and in their century", match: [/\b(chronolog|timeline|which came first|in what year|in which year|century|decade|era)\b/i] },
+  { id: "cause-effect", label: "Causes and consequences", family: "humanities", focus: "explaining why something happened and what followed from it", match: [/\b(causes?|consequences?|led to|resulted in|why did|reasons? for)\b/i], prereq: ["chronology"] },
+  { id: "sources", label: "Sources and evidence", family: "humanities", focus: "reading a source, judging its reliability and using it as evidence", match: [/\b(primary source|secondary source|historian|bias(ed)?|reliab|evidence|source A|source B)\b/i] },
+  { id: "comparison", label: "Comparing and contrasting", family: "humanities", focus: "setting two cases side by side and naming what they share and where they differ", match: [/\b(compare|contrast|similarit|differences? between|in common)\b/i] },
+
   { id: "attention", label: "Attention to detail", family: "detail", focus: "reading the whole question, checking signs and units, and answering every part", match: [] },
   { id: "time-pressure", label: "Working under time pressure", family: "detail", focus: "pacing and keeping accuracy when the clock is short", match: [] }
 ];
@@ -64,7 +79,7 @@ const FAMILY_BY_ID = new Map(SKILL_FAMILIES.map((family) => [family.id, family])
  */
 export const LEGACY_SKILL_MAP = {
   calculation: "arithmetic", "problem solving": "multi-step", application: "applying", analysis: "data-interpretation",
-  comprehension: "reading", vocabulary: "terminology", concept: null, definition: null, recall: null
+  comprehension: "reading", vocabulary: "vocabulary", concept: null, definition: null, recall: null
 };
 
 export const skillById = (id) => BY_ID.get(String(id || "")) || null;
@@ -93,7 +108,7 @@ export function toSkillId(value) {
     [/integra/, "integration"], [/limit/, "limits"], [/optimi|lagrang/, "optimisation"], [/matri/, "matrices"], [/vector/, "vectors"],
     [/probab/, "probability"], [/statistic/, "statistics"], [/geometr|trigon/, "geometry"], [/unit|rounding/, "units-rounding"],
     [/multi.?step|problem.?solving/, "multi-step"], [/appl(y|ication)/, "applying"], [/interpret|data/, "data-interpretation"],
-    [/logic|argument|proof/, "logic"], [/read|comprehension/, "reading"], [/terminolog|vocab/, "terminology"], [/writ|express/, "writing"],
+    [/logic|argument|proof/, "logic"], [/read|comprehension/, "reading"], [/terminolog/, "terminology"], [/vocab/, "vocabulary"], [/grammar|agreement|article|preposition/, "grammar-forms"], [/sentence/, "sentence-building"], [/negativ/, "negatives"], [/question.?form|forming questions/, "question-forms"], [/tense|conjugat|verb/, "verb-tenses"], [/spell|punctuat/, "spelling"], [/chronolog|timeline/, "chronology"], [/cause|consequence/, "cause-effect"], [/source|evidence/, "sources"], [/compar|contrast/, "comparison"], [/writ|express/, "writing"],
     [/attention|detail|careless/, "attention"], [/time/, "time-pressure"]
   ];
   for (const [pattern, id] of aliases) if (pattern.test(lowered)) return id;

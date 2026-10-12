@@ -75,7 +75,6 @@ export function DemoTab() {
           <span className="lp-eyebrow">Guided tour</span>
           <h1 className="lp-h1 lp-h1-sm">Follow one study journey, <span className="lp-grad">step by step.</span></h1>
           <p className="lp-lead">Upload your documents and Luna builds the plan, writes the practice and shows you what to work on, for students, teachers and parents in one place. Pick a step, or <a href="/app">open the live demo</a> and click around yourself.</p>
-          <p className="lp-caption">Screens shown with demo data.</p>
         </div>
       </section>
 

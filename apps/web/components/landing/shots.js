@@ -10,7 +10,7 @@ const P = { w: 390, h: 844 };
 
 export const SHOTS = {
   home: { ...D, alt: "Luna home: study plans, next steps from Luna and your top actions" },
-  workspaces: { ...D, alt: "Workspaces: folders and every uploaded document and generated resource" },
+  workspaces: { ...D, alt: "Workspaces: your documents and generated resources, organised the way you choose" },
   reader: { ...D, alt: "Luna reader: a document with headings, formulas and highlighted notes" },
   plans: { ...D, alt: "Study plans: what is due next and every plan's progress" },
   calendar: { ...D, alt: "Study plan calendar with the work spread over the weeks before the exam" },

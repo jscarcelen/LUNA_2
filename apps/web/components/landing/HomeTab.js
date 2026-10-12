@@ -8,7 +8,7 @@ import { PromoVideo } from "./PromoVideo.js";
 
 const SLIDES = [
   { shot: "home", title: "Your week at a glance", text: "Plans, what is due next and Luna's read of what to work on." },
-  { shot: "workspaces", title: "All your material, organised", text: "Your own structure of subjects and folders, for every document and everything generated from it." },
+  { shot: "workspaces", title: "All your material, organised", text: "A structured repository of uploaded and generated materials, all in one place, and shareable across accounts." },
   { shot: "reader", title: "Notes you can read and mark up", text: "Headings, formulas and figures kept intact, with highlights and notes alongside." },
   { shot: "reader-notes", title: "Select, colour, note", text: "Select a sentence, paint it a colour and add a note that stays with the text." },
   { shot: "plans", title: "A study plan with deadlines", text: "What has to be achieved, by when, and the activities that get you there." },
@@ -70,7 +70,6 @@ export function HomeTab({ onSignUp }) {
           </div>
           <PhoneFrame className="lp-hero-phone lp-hero-phone-r"><Shot name="m-performance" eager /></PhoneFrame>
         </div>
-        <p className="lp-caption">Real screens from the running app, with demo data.</p>
       </section>
 
       {/* ------------------------------------------------------------------ promo video */}
@@ -81,7 +80,7 @@ export function HomeTab({ onSignUp }) {
         <div className="lp-wrap">
           <Reveal className="lp-head">
             <span className="lp-eyebrow">Inside Luna</span>
-            <h2 className="lp-h2">Everything in one place, as it really looks.</h2>
+            <h2 className="lp-h2">The AI educational ecosystem. Everyone in one place.</h2>
             <p className="lp-sub">Swipe through the product: from the first upload to the performance view.</p>
           </Reveal>
         </div>

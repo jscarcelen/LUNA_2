@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TOUR_EVENT, TOUR_KEY, TOUR_STEPS } from "./pageHelp";
+import { TOUR_EVENT, TOUR_KEY, TOUR_STEPS } from "./helpContent";
 
 /**
  * A four-step tour of the four sections. It opens once for a new browser (remembered in localStorage), and again

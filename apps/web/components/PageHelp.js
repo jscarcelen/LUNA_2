@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TOUR_EVENT, helpFor } from "./pageHelp";
+import { TOUR_EVENT, helpFor } from "./helpContent";
 
 /** The "?" button beside the page title: what this page is for, the one thing to try, and the tour. */
 export function PageHelp({ page }) {

@@ -293,7 +293,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, startDocumentIds = [], startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -1422,6 +1422,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           attempts={attempts}
           examDates={examDates}
           initialExam={pickedExam}
+          initialMaterialIds={startDocumentIds}
           onCancel={() => setGenerating(false)}
           onDone={(message, info) => { setGenerating(false); setStatus(message); if (info && info.built === false) fileNewPlan(info.plan, info.savedId); }}
           onSavePlan={(plan) => save(plan)}

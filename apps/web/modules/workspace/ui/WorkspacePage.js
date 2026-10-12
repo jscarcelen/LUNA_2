@@ -50,6 +50,8 @@ export function WorkspacePage(props) {
       onReprocessDocument={props.onReprocessDocument}
       onOpenClassicTools={() => setClassic(true)}
       onShareDocument={props.onShareDocument}
+      onMakeFrom={props.onMakeFrom}
+      onPlanFrom={props.onPlanFrom}
       focusDocumentId={props.focusDocumentId}
       onSelectFolder={props.onSelectFolder}
     />

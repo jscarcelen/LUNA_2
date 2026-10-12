@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { appName } from "./data";
 import { LunaLogo } from "./brand/LunaLogo.js";
+import { sectionOf } from "./navModel";
 
 /**
  * The navigation rail: the Luna mark and the sections of the app, collapsible to icons.
@@ -23,7 +24,7 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
       return next;
     });
   }
-  const isCurrent = (item) => page === item.key || (item.match ? String(page).startsWith(item.match) : false);
+  const isCurrent = (item) => (item.section ? item.section === sectionOf(page) : false) || page === item.key || (item.match ? String(page).startsWith(item.match) : false);
 
   return (
     <aside className={`side-nav nav-rail${collapsed ? " nav-rail-collapsed" : ""}`}>

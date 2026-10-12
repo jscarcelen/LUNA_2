@@ -97,7 +97,7 @@ function FolderNode({ node, depth = 0, documents, picked, onToggle, resourceByDo
  * work out between now and the date — more time on what the learner keeps getting wrong, the last
  * stretch left for review. The result is an ordinary plan, so every step can be moved afterwards.
  */
-export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], workspaceId = "", examDates = [], initialExam = null, onCancel, onDone, onSavePlan, onBuild }) {
+export function GeneratePlanDialog({ documents = [], agents = [], folders = [], resources = [], attempts = [], workspaceId = "", examDates = [], initialExam = null, initialMaterialIds = [], onCancel, onDone, onSavePlan, onBuild }) {
   // "Use a teacher's exam date": the plan is ready by that date, which is locked and follows the teacher's changes.
   const [exam, setExam] = useState(initialExam);
   const [name, setName] = useState(initialExam?.title || "");
@@ -111,7 +111,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   // Example exams, worksheets or flashcards whose format the built material copies (the agents' "style" documents).
   const [formatDocIds, setFormatDocIds] = useState([]);
   const [agentIds, setAgentIds] = useState(DEFAULT_PLAN_AGENT_IDS);
-  const [picked, setPicked] = useState([]);
+  const [picked, setPicked] = useState(initialMaterialIds);
   const [busy, setBusy] = useState(false);
   const [buildNow, setBuildNow] = useState(true);
   const [error, setError] = useState("");

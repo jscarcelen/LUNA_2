@@ -5,7 +5,9 @@ import { SideNav } from "./SideNav";
 import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
-import { navByRole, pageTitles, platformNavExtras, roleProfiles } from "./data";
+import { roleProfiles } from "./data";
+import { PAGE_TITLES, isPageAllowed, navFor, sectionOf, tabKeyOf, tabsFor } from "./navModel";
+import { SectionTabs } from "./SectionTabs";
 import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
 import { PlatformNotice } from "../modules/accounts/PlatformNotice";
@@ -19,7 +21,7 @@ import { MarketplacePage } from "../modules/marketplace/MarketplacePage";
 import { ActivitiesPage } from "../modules/activities/ActivitiesPage";
 import { PerformancePage } from "../modules/performance/PerformancePage";
 import { PlansPage } from "../modules/plans/PlansPage";
-import { AIToolsHubPage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
+import { CreatePage, quickMakePage, AIToolRuntimePage, RunAgentPage, findAiToolById } from "../modules/ai-tools";
 import { BuilderView, RevenueView } from "./views";
 import { UiCritic } from "../modules/ui/UiCritic";
 import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
@@ -42,7 +44,8 @@ export function AppShell({ account = null, initialPage = "" }) {
   // that exists for this account's role is honoured.
   const [page, setPageState] = useState(() => {
     const start = defaultPage[account?.role || "student"];
-    const known = account ? [...(navByRole[account.role] || []), ...(platformNavExtras[account.role] || [])].some((item) => item.key === initialPage) : false;
+    // Old section names (`ai-tools`, `workspaces`…) still open: the model says which role may see what.
+    const known = account ? isPageAllowed(initialPage, account.role, true) : false;
     return known ? initialPage : start;
   });
   const [shareTarget, setShareTarget] = useState(null);
@@ -124,6 +127,8 @@ export function AppShell({ account = null, initialPage = "" }) {
   const currentAiToolId = page.startsWith("ai-tool:") ? page.replace("ai-tool:", "").split("?")[0] : "";
   const currentAiTool = currentAiToolId ? findAiToolById(currentAiToolId) : null;
   const currentCustomAgentId = page.startsWith("custom-agent:") ? page.replace("custom-agent:", "").split("?")[0] : "";
+  // "ai-tool:quiz-generator?docs=a,b" opens a tool with that material already chosen (Quick make, "Make a quiz" on a document).
+  const presetDocumentIds = page.includes("?docs=") ? decodeURIComponent(page.split("?docs=")[1] || "").split(",").map((id) => id.trim()).filter(Boolean) : [];
   const resumeResourceDocumentId = page.includes("?resource=") ? page.split("?resource=")[1] : "";
   const editAgentDocumentId = page.startsWith("agent-edit:") ? page.replace("agent-edit:", "") : "";
   // Template Studio is reachable as its own section ("templates?open=…") and, for older links, as a tool.
@@ -135,9 +140,12 @@ export function AppShell({ account = null, initialPage = "" }) {
   const openPlanId = planParams?.get("open") || "";
   const startGenerating = Boolean(planParams?.get("generate"));
   const startExamDateId = planParams?.get("exam") || "";
+  const startDocumentIds = (planParams?.get("docs") || "").split(",").map((id) => id.trim()).filter(Boolean);
   const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
-  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (pageTitles[page.split("?")[0]] || "LUNA")));
-  const navItems = [...(navByRole[role] || []), ...(account ? (platformNavExtras[role] || []) : [])];
+  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (PAGE_TITLES[page.split("?")[0]] || "LUNA")));
+  const navItems = navFor(role);
+  const section = sectionOf(page);
+  const sectionTabs = tabsFor(section, role, Boolean(account));
 
   useEffect(() => {
     loadWorkspaces();
@@ -283,7 +291,7 @@ export function AppShell({ account = null, initialPage = "" }) {
             const resourceDocument = (workspaces.flatMap((w) => w.subjects || []).flatMap((s) => s.documents || [])).find((d) => d.id === documentId);
             let agentId = "";
             try { agentId = JSON.parse(String(resourceDocument?.content || "{}"))?.meta?.agentId || ""; } catch { agentId = ""; }
-            setPage(agentId ? `custom-agent:${agentId}?resource=${documentId}` : "ai-tools");
+            setPage(agentId ? `custom-agent:${agentId}?resource=${documentId}` : "create");
           }}
           onSelectFolder={(node) => { if (node?.subjectId && node.subjectId !== selectedSubjectId) setSelectedSubjectId(node.subjectId); }}
           role={role}
@@ -322,6 +330,8 @@ export function AppShell({ account = null, initialPage = "" }) {
           onReviewDocumentExtraction={handleReviewDocumentExtraction}
           onReprocessDocument={handleReprocessDocument}
           onShareDocument={account ? openShare : undefined}
+          onMakeFrom={(toolId, documentIds) => setPage(quickMakePage(toolId, documentIds))}
+          onPlanFrom={(documentIds) => setPage(`plans?generate=1&docs=${documentIds.map(encodeURIComponent).join(",")}`)}
         />
       );
     }
@@ -345,6 +355,7 @@ export function AppShell({ account = null, initialPage = "" }) {
           onSelectSubject={handleSelectSubject}
           openPlanId={openPlanId}
           startGenerating={startGenerating}
+          startDocumentIds={startDocumentIds}
           startExamDateId={startExamDateId}
           examDates={examDates}
           onDismissExamDate={dismissExamDate}
@@ -375,9 +386,10 @@ export function AppShell({ account = null, initialPage = "" }) {
         />
       );
     }
-    if (page === "ai-tools") {
+    if (page === "ai-tools" || page === "create") {
       return (
-        <AIToolsHubPage
+        <CreatePage
+          role={role}
           onOpenTool={(toolId) => setPage(`ai-tool:${toolId}`)}
           onOpenCustomAgent={(documentId) => setPage(`custom-agent:${documentId}`)}
           onEditAgent={(documentId) => setPage(`agent-edit:${documentId}`)}
@@ -393,10 +405,11 @@ export function AppShell({ account = null, initialPage = "" }) {
       const activeTool = currentAiTool || editorTool;
       const ToolComponent = activeTool.component;
       return (
-        <AIToolRuntimePage title={activeTool.name} description={activeTool.description} onBack={() => setPage("ai-tools")}>
+        <AIToolRuntimePage title={activeTool.name} description={activeTool.description} onBack={() => setPage("create")}>
           <ToolComponent
             toolContext={{
               editAgentDocumentId,
+              presetDocumentIds,
               openTemplateId,
               workspaces,
               selectedWorkspaceId,
@@ -418,7 +431,7 @@ export function AppShell({ account = null, initialPage = "" }) {
     }
     if (currentCustomAgentId) {
       return (
-        <AIToolRuntimePage title="Run Agent" description="Generate output with your saved agent." onBack={() => setPage("ai-tools")}>
+        <AIToolRuntimePage title="Run Agent" description="Generate output with your saved agent." onBack={() => setPage("create")}>
           <RunAgentPage
             agentDocumentId={currentCustomAgentId}
             toolContext={{
@@ -430,6 +443,7 @@ export function AppShell({ account = null, initialPage = "" }) {
               onListDocumentBlockTemplates: handleListDocumentBlockTemplates,
               onCreateFolder: handleCreateFolder,
               resumeResourceDocumentId,
+              presetDocumentIds,
               onOpenPage: (target) => setPage(target),
               onOpenTool: (toolId) => setPage(`ai-tool:${toolId}`)
             }}
@@ -939,6 +953,7 @@ export function AppShell({ account = null, initialPage = "" }) {
             </div>
           ) : null}
           <AskLunaProvider value={askLunaValue}>
+            <SectionTabs tabs={sectionTabs} active={tabKeyOf(page)} onChange={(next) => setPage(next)} />
             {content}
             <GlobalAskLuna title={title} hidden={readerClaims > 0} />
           </AskLunaProvider>

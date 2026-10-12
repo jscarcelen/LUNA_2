@@ -68,8 +68,8 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
 }
 
 /**
- * AI agents hub: create an agent, open the chatbot (tutor, builder and Luna guide), and underneath
- * the gallery of the agents you own (built-in, created, bought). Templates have their own section.
+ * "My tools": the gallery of the agents you own (built-in, created, bought). Making something quickly, building an
+ * agent and the chatbot live above it, in CreatePage.
  */
 export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onDeleteAgent, workspaces = [], selectedWorkspaceId, selectedSubjectId }) {
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId) || null;
@@ -88,21 +88,10 @@ export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onD
 
   return (
     <section className="tw-scope grid gap-4">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <div className={`${card} flex items-center justify-between gap-4 p-5`}>
-          <div><p className={kicker}>Content generator</p><h4 className="m-0 mt-1 text-lg font-bold text-ink">Agent Studio</h4><p className="m-0 mt-1 text-sm text-soft-ink">Build an agent recipe: what it creates, what people customise, what it reads, what it returns.</p></div>
-          <button type="button" className={primaryBtn} onClick={() => onOpenTool("agent-builder")}>Create agent</button>
-        </div>
-        <div className={`${card} flex items-center justify-between gap-4 p-5`}>
-          <div><p className={kicker}>Assistant</p><h4 className="m-0 mt-1 text-lg font-bold text-ink">Chatbot</h4><p className="m-0 mt-1 text-sm text-soft-ink">Your AI tutor, agent builder and Luna question answerer: ask about your material, have it run agents or write documents, and turn a routine into an agent.</p></div>
-          <button type="button" className={primaryBtn} onClick={() => onOpenTool("chatbot")}>Open chatbot</button>
-        </div>
-      </div>
-
       <div className="grid items-start gap-3">
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div><p className={kicker}>My agents</p><p className="m-0 text-xs text-soft-ink">{customAgents.length + builtInAgents.length} available</p></div>
+            <div><p className={kicker}>My tools</p><p className="m-0 text-xs text-soft-ink">{customAgents.length + builtInAgents.length} available</p></div>
             <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["all", "All"], ["mine", "Created by me"], ["bought", "Bought"]].map(([value, text]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${filter === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -114,7 +103,7 @@ export function AIToolsHubPage({ onOpenTool, onOpenCustomAgent, onEditAgent, onD
               </article>
             )) : null}
             {visibleAgents.map((document) => <AgentCard key={document.id} document={document} onOpen={onOpenCustomAgent} onEdit={onEditAgent} onDelete={onDeleteAgent} />)}
-            {!visibleAgents.length && filter === "bought" ? <p className="m-0 text-sm text-soft-ink">Nothing bought yet — browse the Marketplace.</p> : null}
+            {!visibleAgents.length && filter === "bought" ? <p className="m-0 text-sm text-soft-ink">Nothing bought yet. Open “Browse tools” to find some.</p> : null}
           </div>
         </section>
       </div>

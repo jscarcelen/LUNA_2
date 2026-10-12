@@ -14,6 +14,7 @@ import { branchOf, documentsOf, folderNode, foldersOf, parseNode, pathOf, subjec
 import { blockedTargets, destinationFolderId, documentMoveMessage, folderMoveMessage, undoGroups } from "../moveModel";
 import { MoveDialog } from "./MoveDialog";
 import { UploadProgress } from "./UploadProgress";
+import { askLuna } from "../../chat/GlobalAskLuna";
 import { planUploadBatches, tooLargeMessage } from "../uploadPlan";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
@@ -134,6 +135,8 @@ export function WorkspaceBrowser({
   onReviewDocument,
   onReprocessDocument,
   onShareDocument,
+  onMakeFrom,
+  onPlanFrom,
   onOpenClassicTools,
   focusDocumentId = "",
   onSelectFolder
@@ -583,7 +586,11 @@ export function WorkspaceBrowser({
             ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => ({ label: `Download · ${label}`, icon: "⤓", className: "sm:hidden", onSelect: () => downloadOne(document, value) })),
             reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
             reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
-            row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : null,
+            !row && onMakeFrom ? { label: "Make a quiz", icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("vocabulary-flashcards", [document.id]) } : null,
+            !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("summary-consolidator", [document.id]) } : null,
+            row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow({ document, resource: { name: document.name } }) },
+            { label: "Ask Luna", icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: `Help me study “${document.name}”.` }) },
             row && canUpdateResource(row.resource) ? { label: "Update…", icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
             ...(locked ? [] : [
             onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
@@ -716,14 +723,32 @@ export function WorkspaceBrowser({
           </p>
         ) : null}
 
-        {selectedIds.length && onMoveDocuments ? (
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--accent-soft)]/40 px-3 py-2 text-xs text-ink">
-            <span className="font-semibold">{selectedIds.length} selected</span>
-            <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds })}>Move to…</button>
-            <button type="button" className={ghostBtn} onClick={() => setSelectedIds([])}>Clear</button>
-            <span className="text-soft-ink">Or drag any selected item onto a folder.</span>
-          </div>
-        ) : null}
+        {selectedIds.length ? (() => {
+          // What can be done with the chosen material, right where it is: no need to find the right tool first.
+          const picked = selectedIds.map((id) => rawDocuments.find((document) => document.id === id)).filter(Boolean);
+          const material = picked.filter((document) => document.sourceType !== "generated");
+          const materialIds = material.map((document) => document.id);
+          const single = picked.length === 1 ? picked[0] : null;
+          const singleRow = single ? rowsByDocumentId.get(single.id) : null;
+          return (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--accent-soft)]/40 px-3 py-2 text-xs text-ink">
+              <span className="font-semibold">{selectedIds.length} selected</span>
+              {materialIds.length && onMakeFrom ? (
+                <>
+                  <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>Make a quiz</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("vocabulary-flashcards", materialIds)}>Flashcards</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("summary-consolidator", materialIds)}>Summarise</button>
+                </>
+              ) : null}
+              {materialIds.length && onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => onPlanFrom(materialIds)}>Plan it</button> : null}
+              {single && !materialIds.length ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
+              {single && materialIds.length && !onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
+              <button type="button" className={ghostBtn} onClick={() => askLuna({ documentIds: picked.map((document) => document.id), text: picked.length === 1 ? `Help me study “${picked[0].name}”.` : "Help me study these documents." })}>Ask Luna</button>
+              {onMoveDocuments ? <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds })}>Move to…</button> : null}
+              <button type="button" className={ghostBtn} onClick={() => setSelectedIds([])}>Clear</button>
+            </div>
+          );
+        })() : null}
 
         {reviewing ? (
           <div className="grid gap-1">

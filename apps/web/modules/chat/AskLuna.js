@@ -36,7 +36,7 @@ const SUGGESTIONS = {
  *          "floating" a floating card (an in-place view), a bottom sheet on a phone
  *   open / onOpenChange   controlled by the host, so it can keep the notes panel and this one apart
  */
-export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material" }) {
+export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material", prefill = null }) {
   const { workspaces, selectedWorkspaceId, selectedSubjectId, claim } = useAskLunaWorkspace();
   // A reader's own Ask Luna button replaces the page-level one (never two buttons for the same corner).
   useEffect(() => (mode === "page" ? undefined : claim?.()), [mode, claim]);
@@ -59,6 +59,8 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
 
   useEffect(() => { threadRef.current?.scrollTo({ top: threadRef.current.scrollHeight, behavior: "smooth" }); }, [messages, open]);
   useEffect(() => { if (open) inputRef.current?.focus(); }, [open]);
+  // A page can open the chat with a question already typed (the person still decides to send it).
+  useEffect(() => { if (prefill?.text) setInput(prefill.text); }, [prefill]);
   useEffect(() => () => abortRef.current?.abort(), []);
 
   async function send(text, { confirmed = false, reuse = null } = {}) {

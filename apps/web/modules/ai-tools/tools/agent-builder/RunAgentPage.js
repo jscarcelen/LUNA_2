@@ -575,6 +575,17 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     setFlowStep(2);
   }, [resume, agentConfig, resumeDocument]);
 
+  // Material chosen before the tool opened (Quick make, "Make a quiz" on a document): start with it picked.
+  const presetIds = toolContext?.presetDocumentIds;
+  const presetAppliedRef = useRef(false);
+  useEffect(() => {
+    if (presetAppliedRef.current || !agentConfig || !Array.isArray(presetIds) || !presetIds.length) return;
+    presetAppliedRef.current = true;
+    setKnowledgeMode("workspace");
+    setReferenceDocumentIds(presetIds);
+    setFlowStep(2);
+  }, [agentConfig, presetIds]);
+
   async function handleGenerate() {
     if (!runConfig || generation.isGenerating) return;
     setStatusMessage("");

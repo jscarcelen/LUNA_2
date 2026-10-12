@@ -88,6 +88,51 @@ function initialOutputStyles(agent, key) {
   return { ...legacy, ...(saved || {}) };
 }
 
+/**
+ * Simple HTML render of typed blocks. Used as a fallback when Template Studio cannot build the
+ * document (e.g. missing component, empty plan, render-API failure).
+ */
+function renderBlocksAsHtml(blocks = [], title = "") {
+  const escape = (s) => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const parts = [];
+  if (title) parts.push(`<h1 style="font-family:system-ui,sans-serif;font-size:22px;font-weight:700;color:#1d1d1f;margin:0 0 24px">${escape(title)}</h1>`);
+  for (const block of blocks) {
+    if (!block) continue;
+    const type = String(block.type || "");
+    if (type === "heading") {
+      const tag = `h${Math.min(4, Math.max(1, Number(block.level) || 2))}`;
+      const size = ["28px", "22px", "18px", "15px"][Math.min(3, (Number(block.level) || 2) - 1)];
+      parts.push(`<${tag} style="font-family:system-ui,sans-serif;font-size:${size};font-weight:700;color:#1d1d1f;margin:24px 0 8px">${escape(block.text)}</${tag}>`);
+    } else if (type === "paragraph") {
+      parts.push(`<p style="font-family:system-ui,sans-serif;font-size:15px;color:#1d1d1f;line-height:1.6;margin:0 0 12px">${escape(block.text)}</p>`);
+    } else if (type === "bullet_list") {
+      const items = Array.isArray(block.items) ? block.items : [];
+      if (block.title) parts.push(`<p style="font-family:system-ui,sans-serif;font-size:13px;font-weight:600;color:#6e6e73;margin:12px 0 4px;text-transform:uppercase;letter-spacing:.04em">${escape(block.title)}</p>`);
+      parts.push(`<ul style="font-family:system-ui,sans-serif;font-size:15px;color:#1d1d1f;line-height:1.6;margin:0 0 12px;padding-left:20px">${items.map((item) => `<li style="margin-bottom:4px">${escape(item)}</li>`).join("")}</ul>`);
+    } else if (type === "divider") {
+      parts.push(`<hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0"/>`);
+    } else if (type === "section_header") {
+      parts.push(`<h2 style="font-family:system-ui,sans-serif;font-size:18px;font-weight:700;color:#1d1d1f;margin:28px 0 4px">${escape(block.title)}</h2>`);
+      if (block.intro) parts.push(`<p style="font-family:system-ui,sans-serif;font-size:13px;color:#6e6e73;margin:0 0 12px">${escape(block.intro)}</p>`);
+    } else if (type === "document_header" || type === "exam_header") {
+      parts.push(`<h1 style="font-family:system-ui,sans-serif;font-size:24px;font-weight:700;color:#1d1d1f;margin:0 0 4px">${escape(block.title)}</h1>`);
+      if (block.subtitle) parts.push(`<p style="font-family:system-ui,sans-serif;font-size:14px;color:#6e6e73;margin:0 0 16px">${escape(block.subtitle)}</p>`);
+    } else if (type === "callout") {
+      parts.push(`<div style="font-family:system-ui,sans-serif;font-size:14px;color:#1d1d1f;background:#f5f5f7;border-left:3px solid #0071e3;padding:12px 16px;border-radius:8px;margin:12px 0">${escape(block.text)}</div>`);
+    } else if (type === "question_mc") {
+      const options = Array.isArray(block.options) ? block.options : [];
+      parts.push(`<div style="font-family:system-ui,sans-serif;margin:16px 0"><p style="font-size:14px;font-weight:600;color:#1d1d1f;margin:0 0 8px">${block.number ? `${block.number}. ` : ""}${escape(block.question)}</p>${options.map((opt, i) => `<p style="font-size:13px;color:#1d1d1f;margin:4px 0;padding-left:16px">${"ABCD"[i]}) ${escape(opt)}</p>`).join("")}</div>`);
+    } else if (type === "question_open") {
+      parts.push(`<div style="font-family:system-ui,sans-serif;margin:16px 0"><p style="font-size:14px;font-weight:600;color:#1d1d1f;margin:0 0 8px">${block.number ? `${block.number}. ` : ""}${escape(block.question)}</p><div style="border-bottom:1px solid #ccc;height:40px;margin-top:8px"></div></div>`);
+    } else if (type === "question_tf") {
+      parts.push(`<div style="font-family:system-ui,sans-serif;margin:12px 0"><p style="font-size:14px;color:#1d1d1f;margin:0">${block.number ? `${block.number}. ` : ""}${escape(block.statement)} <strong style="color:#6e6e73">T / F</strong></p></div>`);
+    } else if (type === "flashcard") {
+      parts.push(`<div style="font-family:system-ui,sans-serif;border:1px solid #e5e5e5;border-radius:12px;padding:16px;margin:8px 0"><p style="font-size:15px;font-weight:600;color:#1d1d1f;margin:0 0 4px">${escape(block.front)}</p><p style="font-size:14px;color:#6e6e73;margin:0">${escape(block.back)}</p></div>`);
+    }
+  }
+  return `<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff;padding:40px;max-width:720px;margin:0 auto}</style></head><body>${parts.join("\n")}</body></html>`;
+}
+
 /** Plain-text reading of typed blocks, for the Raw tab and the saved document's preview. */
 function blocksToText(blocks = []) {
   return blocks.map((block) => {
@@ -692,8 +737,16 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   }, [output, activity, outputBlocks, outputStyles, agentConfig?.name, selectedSubject?.name]);
 
   async function renderFinalHtml(forPrint) {
-    if (!doc) throw new Error("There is nothing to export yet.");
-    return { html: await renderOutputHtml(doc, selection, forPrint), textContent: rawText };
+    // Preferred path: Template Studio rendered document
+    if (doc) {
+      return { html: await renderOutputHtml(doc, selection, forPrint), textContent: rawText };
+    }
+    // Fallback: if blocks exist render a simple HTML page so the export is never empty
+    if (outputBlocks && outputBlocks.length > 0) {
+      const fallbackHtml = renderBlocksAsHtml(outputBlocks, agentConfig?.name || "Generated document");
+      return { html: fallbackHtml, textContent: rawText };
+    }
+    throw new Error("There is nothing to export yet.");
   }
 
   function handleDownloadInteractive() {
@@ -1052,7 +1105,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             <section className={cardClass}>
               <p className={kicker}>Download</p>
               <div className="mt-3">
-                <OutputDownloads doc={doc} filename={agentConfig.name || "output"} onError={setStatusMessage} interactiveKind={activity && activity.questions.length ? "activity" : "document"} onInteractiveHtml={activity && activity.questions.length ? handleDownloadInteractive : handleDownloadHtml} />
+                <OutputDownloads doc={doc} filename={agentConfig.name || "output"} onError={setStatusMessage} interactiveKind={activity && activity.questions.length ? "activity" : "document"} onInteractiveHtml={activity && activity.questions.length ? handleDownloadInteractive : handleDownloadHtml} hasContent={Boolean(doc) || (outputBlocks && outputBlocks.length > 0)} />
               </div>
             </section>
             <button type="button" className={ghostBtn} onClick={() => setFlowStep(2)}>← Back to output</button>

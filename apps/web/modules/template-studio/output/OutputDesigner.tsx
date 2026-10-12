@@ -180,10 +180,10 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
             </div>
           ) : null}
           <div className="flex flex-wrap items-center gap-2 border-t border-ink/8 pt-3">
-            <span className="basis-full text-[12px] font-semibold text-soft-ink sm:basis-auto">Apply a saved template:</span>
+            <span className="basis-full text-[12px] font-semibold text-soft-ink sm:basis-auto">Base selection on template:</span>
             <TemplatePicker templates={savedTemplates} value={templateId} loading={templatesLoading} onChange={(id) => { setTemplateId(id); setNote(""); }} />
-            <button type="button" className={ghostBtn} disabled={!templateId} onClick={applyTemplate}>Apply</button>
-            {Object.keys(styles).length ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { onStylesChange({}); setNote("Back to Template Studio's default look."); }}>Reset</button> : null}
+            <button type="button" className={ghostBtn} disabled={!templateId} onClick={applyTemplate}>Apply template</button>
+            {Object.keys(styles).length ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { onStylesChange({}); setNote("Back to Template Studio's default look."); }}>Reset styles</button> : null}
           </div>
           {note ? <p className="m-0 text-xs text-[var(--accent-ink)]">{note}</p> : null}
           <div className="flex items-center gap-3 text-xs">
@@ -383,6 +383,11 @@ export interface OutputDownloadsProps {
   onInteractiveHtml?: () => void;
   interactiveKind?: "activity" | "document";
   onError?: (message: string) => void;
+  /**
+   * When true the component shows the HTML download button even if `doc` is null — used when
+   * block output exists but the Template Studio document could not be built (fallback export).
+   */
+  hasContent?: boolean;
 }
 
 /**
@@ -390,11 +395,24 @@ export interface OutputDownloadsProps {
  * each as its own PDF — or take the interactive HTML, which works anywhere but is not connected to
  * Luna, so nothing done in it is tracked.
  */
-export function OutputDownloads({ doc, filename, onInteractiveHtml, interactiveKind = "activity", onError }: OutputDownloadsProps) {
+export function OutputDownloads({ doc, filename, onInteractiveHtml, interactiveKind = "activity", onError, hasContent }: OutputDownloadsProps) {
   const [picked, setPicked] = useState<Set<string>>(new Set(["0:0"]));
   const [busy, setBusy] = useState("");
   const key = (layoutIndex: number, viewIndex: number) => `${layoutIndex}:${viewIndex}`;
-  if (!doc) return <p className="m-0 text-sm text-soft-ink">Generate something first — then choose what to download.</p>;
+  if (!doc) {
+    if (!hasContent) return <p className="m-0 text-sm text-soft-ink">Generate something first — then choose what to download.</p>;
+    // Blocks exist but Template Studio couldn't build a styled document — offer HTML only.
+    return (
+      <div className="grid gap-3">
+        <p className="m-0 text-[11px] text-soft-ink">PDF export is available after selecting a format in the Output step. You can download the HTML version right now.</p>
+        {onInteractiveHtml ? (
+          <button type="button" className={ghostBtn} onClick={onInteractiveHtml}>Download the HTML</button>
+        ) : (
+          <p className="m-0 text-sm text-soft-ink">Go back to the Output step to pick a format.</p>
+        )}
+      </div>
+    );
+  }
   const total = doc.layouts.length * doc.views.length;
   const toggle = (id: string) => setPicked((current) => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 

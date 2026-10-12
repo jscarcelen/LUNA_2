@@ -12,6 +12,8 @@ import { OutputSchemaBuilder } from "./steps/OutputSchemaBuilder";
 import { OutputComposer as LegacyOutputComposer } from "./steps/OutputComposer";
 // @ts-ignore plain JS module — no types needed
 import { OutputComposer as BlockOutputComposer } from "../ai-tools/blocks/OutputComposer.js";
+// @ts-ignore plain JS module — no types needed
+import { BLOCKS } from "../ai-tools/blocks/blockRegistry.js";
 import { TestStep } from "./test/TestStep";
 import { AdvancedEditor } from "./AdvancedEditor";
 import { ensureRefined } from "./engine/refine";
@@ -73,11 +75,19 @@ function PublishDialog({ initial, onCancel, onConfirm }: { initial: { price: num
 
 function Dashboard({ spec, lastRun, onStep, onPublish, published, onSave, dirty }: { spec: AgentSpec; lastRun: any; onStep: (step: Step) => void; onPublish: () => void; published: boolean; onSave: () => void; dirty: boolean }) {
   const fields = collectionFields(primaryCollection(spec));
+  const isBlockMode = (spec.output?.selectedBlocks?.length ?? 0) > 0;
+  const blockLabels = isBlockMode
+    ? spec.output!.selectedBlocks.map((b: { blockId: string }) => (BLOCKS as any)[b.blockId]?.label || b.blockId).join(", ")
+    : "";
+  const outputSummary = isBlockMode
+    ? (blockLabels || "No blocks selected")
+    : `${primaryCollection(spec)?.name || "Items"}[] — ${fields.map((f) => f.name).join(", ")}`;
+  const returnsSummary = isBlockMode ? blockLabels || "—" : fields.map((f: any) => f.name).join(", ");
   const cards: [Step, string, string][] = [
     [1, "What it creates", spec.purpose.headline || spec.name],
     [2, "Customize", spec.inputs.map((i) => i.name).join(" · ") || "Nothing to choose"],
     [3, "Material", spec.contextSlots.map((s) => `${s.name}${s.required ? " (required)" : ""}`).join(" · ") || "Own knowledge only"],
-    [4, "Output", `${primaryCollection(spec)?.name || "Items"}[] — ${fields.map((f) => f.name).join(", ")}`],
+    [4, "Output", outputSummary],
     [5, "Test & improve", lastRun ? `Last test: ${lastRun.checks.filter((c: any) => c.ok).length}/${lastRun.checks.length} checks · ${lastRun.output?.items?.length || 0} items` : "Not tested yet"]
   ];
   return (
@@ -89,7 +99,7 @@ function Dashboard({ spec, lastRun, onStep, onPublish, published, onSave, dirty 
           <p className="m-0 text-base font-bold text-ink">{spec.name}</p>
           <p className="m-0 text-xs text-soft-ink">Creates: {spec.purpose.headline || "—"}</p>
           <p className={`${kicker} mt-3`}>User chooses</p><p className="m-0 text-sm text-ink">{spec.inputs.map((i) => i.name).join(", ") || "—"}{spec.contextSlots.some((s) => s.kind === "user_material") ? ", source material" : ""}</p>
-          <p className={`${kicker} mt-3`}>Returns</p><p className="m-0 text-sm text-ink">{fields.map((f) => f.name).join(", ")}</p>
+          <p className={`${kicker} mt-3`}>Returns</p><p className="m-0 text-sm text-ink">{returnsSummary}</p>
         </div>
         <div className="mt-3 grid gap-2">
           <button type="button" className={`${primaryBtn} w-full`} onClick={onSave} disabled={!dirty}>{dirty ? "Save to my AI Tools" : "Saved to my AI Tools"}</button>

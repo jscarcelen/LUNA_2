@@ -138,7 +138,7 @@ export function WorkspaceBrowser({
   onShareDocument,
   onMakeFrom,
   onPlanFrom,
-  onOpenClassicTools,
+  // (classic tools button removed – feedback 85848751)
   focusDocumentId = "",
   onSelectFolder
 }) {
@@ -705,7 +705,6 @@ export function WorkspaceBrowser({
                   {[["original", "Original files"], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
-              {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
             </div>
           </details>
           <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />

@@ -601,6 +601,62 @@ function parseHeaderFooterRootXml(rootXml = "", rootPath = "region", state) {
   return blocks;
 }
 
+const IMAGE_MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+const MAX_IMAGE_BYTES = 1_500_000;
+const MAX_TOTAL_IMAGE_BYTES = 8_000_000;
+
+// Embeds the picture bytes of figure blocks as data: URIs so the preview shows the real image.
+async function embedDocxImages(zip, blocks = []) {
+  const relsXml = await zip.file("word/_rels/document.xml.rels")?.async("string");
+  if (!relsXml) return;
+  const targets = new Map();
+  for (const tag of relsXml.match(/<Relationship\b[^>]*>/gi) || []) {
+    const id = tag.match(/\bId="([^"]+)"/i)?.[1];
+    const target = tag.match(/\bTarget="([^"]+)"/i)?.[1];
+    if (id && target && /image/i.test(tag.match(/\bType="([^"]+)"/i)?.[1] || "") && !/TargetMode="External"/i.test(tag)) {
+      targets.set(id, target);
+    }
+  }
+  if (!targets.size) return;
+
+  const cache = new Map();
+  let total = 0;
+  const load = async (id) => {
+    if (cache.has(id)) return cache.get(id);
+    let uri = "";
+    const target = targets.get(id);
+    const ext = String(target || "").split(".").pop().toLowerCase();
+    if (target && IMAGE_MIME[ext]) {
+      const path = target.startsWith("/") ? target.slice(1) : `word/${target}`.replace(/\/[^/]+\/\.\.\//g, "/");
+      const entry = zip.file(path);
+      if (entry) {
+        const base64 = await entry.async("base64");
+        const bytes = Math.floor((base64.length * 3) / 4);
+        if (bytes <= MAX_IMAGE_BYTES && total + bytes <= MAX_TOTAL_IMAGE_BYTES) {
+          total += bytes;
+          uri = `data:${IMAGE_MIME[ext]};base64,${base64}`;
+        }
+      }
+    }
+    cache.set(id, uri);
+    return uri;
+  };
+
+  const walk = async (list) => {
+    for (const block of Array.isArray(list) ? list : []) {
+      if (!block || typeof block !== "object") continue;
+      if (block.type === "figure" && block.relationship_id) {
+        const uri = await load(block.relationship_id);
+        if (uri) block.image = uri;
+      }
+      for (const value of Object.values(block)) {
+        if (Array.isArray(value)) await walk(value);
+      }
+    }
+  };
+  await walk(blocks);
+}
+
 async function parseDocxToCanonicalData(file = {}) {
   const buffer = Buffer.from(String(file?.contentBase64 || ""), "base64");
   if (!buffer.length) {
@@ -652,6 +708,12 @@ async function parseDocxToCanonicalData(file = {}) {
     if (/^<w:sectPr\b/i.test(xml)) {
       blocks.push({ type: "section_break", source: "OOXML", confidence: 1, nodePath: `body/sectPr[${tableIndex + paragraphIndex + 1}]` });
     }
+  }
+
+  try {
+    await embedDocxImages(zip, blocks);
+  } catch {
+    // Images are best-effort; the text structure is already complete.
   }
 
   const footnotesXml = await zip.file("word/footnotes.xml")?.async("string");

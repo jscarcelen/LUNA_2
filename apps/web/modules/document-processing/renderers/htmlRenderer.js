@@ -28,6 +28,8 @@ function renderNode(node) {
     .map((child) => renderNode(child))
     .join("");
 
+  if (node.tag === "img") return `<img${attrs ? ` ${attrs}` : ""}>`;
+
   return attrs
     ? `<${node.tag} ${attrs}>${renderedChildren}</${node.tag}>`
     : `<${node.tag}>${renderedChildren}</${node.tag}>`;
@@ -143,6 +145,11 @@ function BlockRenderer({ block = {} }) {
   if (type === "callout") {
     return createNode("aside", { class: "cdm-callout" }, InlineContent({ children: block?.children || [] }));
   }
+  if (type === "figure" && typeof block?.image === "string" && block.image.startsWith("data:image/")) {
+    const alt = String(block?.alt_text || "").trim();
+    return createNode("figure", {}, [createNode("img", { src: block.image, alt: alt || String(block?.caption || "Figure"), style: "max-width:100%;height:auto" })]);
+  }
+
   if (type === "figure") {
     const children = [createNode("figcaption", {}, [String(block?.caption || "Figure")])];
     if (block?.alt_text) {

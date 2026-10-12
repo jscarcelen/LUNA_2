@@ -1195,3 +1195,8 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - **Skills, completed**: the taxonomy adds Language learning (vocabulary, grammar forms, building sentences, negatives, forming questions, verbs and tenses, spelling) and Humanities (chronology, causes and consequences, sources, comparing); the diagnosis blames a wrong answer on the skill the grader named (and counts a blamed skill the question was not tagged with); a refresher can be **saved** and **added to a plan before the step it prepares** (`plans/prerequisite.js insertPrerequisite`); migration `202610120002_attempt_result_skills.sql` adds `skills`, `failed_skill`, `has_work` to `attempt_results` (the repository retries without them until it is applied).
 - **Fixed**: the skill list in a prompt contained "vocabulary", which made the Quiz Generator and Math Problem Set look like flashcard agents and capped them at 30 items (`looksLikeFlashcards` now ignores the `<skill_tags>` block).
 - Not done: the standalone interactive HTML export has no working box; photos are not kept in saved attempts; per-skill tracking in the relational mastery engine still reads the old single `skill`.
+
+## 2026-10-12 — Embedded images in uploaded Word previews
+- `canonical/model.js` `embedDocxImages`: reads `word/_rels/document.xml.rels`, embeds png/jpg/gif/webp as `data:` URIs on figure blocks (1.5 MB each, 8 MB total cap; emf/wmf skipped).
+- `htmlRenderer.js`: figures with an image render `<img>`; text/markdown/RAG output is untouched (no base64 in chunks).
+- Test: `tests/document-processing/docx-embedded-images.test.ts`. Applies to newly uploaded documents (re-upload existing ones).

@@ -28,6 +28,7 @@ import { composeRefinementPrompt, describeResult } from "../../pipeline/iterateC
 import { LOOSE_FOLDER } from "../../../plans/folders";
 import { WorkspaceDocumentPicker } from "./WorkspaceDocumentPicker";
 import { MASTER_TAG } from "../../pipeline/masterDocument";
+import { SaveAndExportDialog, SaveProgressView } from "./SaveExportViews";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -157,14 +158,13 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
 
 const FLOW_STEPS = [
-  { id: 1, title: "Configure questions", text: "Material and a few choices" },
-  { id: 2, title: "Configure output", text: "Components, formats and colors" },
-  { id: 3, title: "Export", text: "Download, save or share" }
+  { id: 1, title: "Set up", text: "Material and a few choices" },
+  { id: 2, title: "Result", text: "Edit, preview, save and export" }
 ];
 
 function Stepper({ current, onSelect, unlocked }) {
   return (
-    <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-3">
+    <ol className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
       {FLOW_STEPS.map((step) => {
         const state = step.id === current ? "current" : step.id < current || unlocked >= step.id ? "done" : "locked";
         return (
@@ -291,6 +291,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [loadError, setLoadError] = useState("");
   const [flowStep, setFlowStep] = useState(1);
   const [howOpen, setHowOpen] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [savePhase, setSavePhase] = useState(null);
 
   const [knowledgeMode, setKnowledgeMode] = useState("workspace");
   const [referenceDocumentIds, setReferenceDocumentIds] = useState([]);
@@ -583,7 +585,6 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     presetAppliedRef.current = true;
     setKnowledgeMode("workspace");
     setReferenceDocumentIds(presetIds);
-    setFlowStep(2);
   }, [agentConfig, presetIds]);
 
   async function handleGenerate() {
@@ -595,6 +596,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const data = await generation.generate(runConfig);
       chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
       setOutput(data);
+      setHowOpen(false); // the description gets out of the way once there is a result to work on
       // An agent that finds the material unsuitable (a problem set from a history text) says so and suggests another tool.
       const note = String(data?.data?.suitability || "").trim();
       if (note && !(data?.items || []).length) setStatusMessage(note);
@@ -831,9 +833,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       outputStyles
     };
   }
+  const chosenPlanId = (planId) => Boolean(planId && planChoices.find((choice) => choice.id === planId));
   async function saveResource({ name, folderId, tags, difficulty, favourite, openAfter, addActivity, planId, dueDate }) {
     if (!onSaveGeneratedQuizDocument) return;
     setIsSavingDocument(true);
+    setSaveOpen(false);
+    const progress = (percent, label) => setSavePhase((current) => ({ ...(current || {}), status: "saving", percent, label, name }));
+    setSavePhase({ status: "saving", percent: 5, label: "Preparing", name });
     try {
       const sourceNames = referenceDocumentIds.map((id) => workspaceDocuments.find((document) => document.id === id)?.name).filter(Boolean);
       const payload = buildResource({
@@ -854,11 +860,13 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         }
       });
       const content = JSON.stringify(payload, null, 2);
+      progress(30, "Saving to your workspace");
       const isActivity = Boolean(activity && activity.questions.length && addActivity);
       // A consolidation is a master document: tagged so later agents can read it instead of the originals.
       const allTags = ["resource", ...(output?.consolidation ? [MASTER_TAG] : []), ...(isActivity ? ["activity"] : []), ...(isActivity && dueDate ? [`due:${dueDate}`] : []), ...(favourite ? ["favourite"] : []), ...(difficulty ? [`difficulty:${difficulty}`] : []), ...tags];
       const where = filingTarget(folderId);
       const saved = await onSaveGeneratedQuizDocument({ folderIds: where.folderIds, tags: allTags, file: { name: `${name}.resource.json`, content, preview: `${payload.meta.questionCount || 0} questions`, sizeBytes: content.length } }, where.subjectId);
+      progress(chosenPlanId(planId) ? 65 : 85, chosenPlanId(planId) ? "Adding it to your plan" : "Finishing");
       // Into a study plan: one more step, pointing at the resource just saved.
       let addedTo = "";
       const chosenPlan = planId ? planChoices.find((choice) => choice.id === planId) : null;
@@ -869,14 +877,17 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         await onUpdateGeneratedDocument(chosenPlan.document.id, { file: { name: chosenPlan.document.name, content: planContent, preview: chosenPlan.document.preview, sizeBytes: planContent.length } }, chosenPlan.subjectId);
         addedTo = chosenPlan.name;
       }
-      setSaveOpen(false);
       setStatusMessage(`Saved “${name}” to your workspace${isActivity ? " and to Practice" : ""}${addedTo ? ` and added to “${addedTo}”` : ""}.`);
       if (openAfter) {
+        setSavePhase(null);
         if (activity && activity.questions.length) setPlaying({ activity: payload.activity, documentId: saved?.id || "" });
         else setReaderOpen(true);
+      } else {
+        setSavePhase({ status: "done", percent: 100, name, addedTo, documentId: saved?.id || "", payloadActivity: activity && activity.questions.length ? payload.activity : null });
       }
     } catch (error) {
       setStatusMessage(String(error.message || error));
+      setSavePhase({ status: "error", percent: 0, name, error: String(error.message || error) });
     } finally {
       setIsSavingDocument(false);
     }
@@ -911,7 +922,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const materialOptional = Array.isArray(agentConfig.materialSlots) && (!agentConfig.materialSlots.length || agentConfig.materialSlots.every((slot) => !slot.required));
   const knowledgeReady = materialOptional || (knowledgeMode === "workspace" ? referenceDocumentIds.length > 0 : contextPromptDraft.trim().length > 0);
   const canGenerate = !generation.isGenerating && requiredUnanswered === 0 && knowledgeReady;
-  const unlockedStep = hasOutput ? 3 : 1;
+  const unlockedStep = hasOutput ? 2 : 1;
   const modelLabel = String(agentConfig.model || "").includes("4.1") ? "Luna 3 Max" : "Luna 3 Pro";
 
 
@@ -975,15 +986,22 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               <span className={chipClass}>{modelLabel}</span>
               {output?.model ? <span className={chipClass}>Last run: {output.model}</span> : null}
             </div>
-            <h3 className="m-0 text-[26px] font-bold tracking-tight text-ink">{agentConfig.name || "Untitled Agent"}</h3>
-            <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{oneLiner(agentConfig)}</p>
-            <details className="mt-2 group">
-              <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-ink)] hover:underline">Read more about this agent</summary>
-              <div className="mt-3 max-w-3xl rounded-2xl border border-ink/8 bg-[var(--surface-soft)] p-4">
-                {agentConfig.description && clean(agentConfig.description) !== oneLiner(agentConfig) ? <p className="m-0 mb-3 text-sm leading-relaxed text-ink">{agentConfig.description}</p> : null}
-                <AgentBrief prompt={agentConfig.instructions} />
-              </div>
-            </details>
+            <button type="button" onClick={toggleHow} aria-expanded={howOpen} className="flex items-center gap-2 text-left">
+              <h3 className="m-0 text-[26px] font-bold tracking-tight text-ink">{agentConfig.name || "Untitled Agent"}</h3>
+              <span className={`text-soft-ink transition-transform ${howOpen ? "rotate-180" : ""}`} aria-label={howOpen ? "Hide the description" : "Show the description"}>⌄</span>
+            </button>
+            {howOpen ? (
+              <>
+                <p className="m-0 mt-1.5 text-sm leading-relaxed text-soft-ink">{oneLiner(agentConfig)}</p>
+                <details className="mt-2 group">
+                  <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-ink)] hover:underline">Read more about this agent</summary>
+                  <div className="mt-3 max-w-3xl rounded-2xl border border-ink/8 bg-[var(--surface-soft)] p-4">
+                    {agentConfig.description && clean(agentConfig.description) !== oneLiner(agentConfig) ? <p className="m-0 mb-3 text-sm leading-relaxed text-ink">{agentConfig.description}</p> : null}
+                    <AgentBrief prompt={agentConfig.instructions} />
+                  </div>
+                </details>
+              </>
+            ) : null}
           </div>
           {resume ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-4 py-2.5">
@@ -1004,7 +1022,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       </header>
 
-      <HowItWorks agent={agentConfig} open={howOpen} onToggle={toggleHow} />
+      {howOpen ? <HowItWorks agent={agentConfig} open onToggle={toggleHow} /> : null}
 
       <Stepper current={flowStep} onSelect={setFlowStep} unlocked={unlockedStep} />
 
@@ -1073,12 +1091,17 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
 
-      {/* Step 2: configure output — components, format and colour (Template Studio's) */}
+      {/* Step 2: the result — editor on the left, preview on the right (Interactive first, then the Document) */}
       {flowStep === 2 ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)]">
           <div className="grid gap-3">
             {iterateCard}
+            <section className={cardClass}>
+              <button type="button" onClick={() => { persistAgent(); setExportOpen(true); }} disabled={!hasOutput || !doc} className={`${primaryBtn} w-full`}>Save and export</button>
+              {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
+            </section>
             <OutputStylePanel
+              simple
               plan={plan}
               styles={outputStyles}
               onStylesChange={updateOutputStyles}
@@ -1089,43 +1112,40 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
               onRefreshTemplates={loadTemplates}
               onOpenTemplateStudio={typeof onOpenTool === "function" ? () => onOpenTool("template-builder") : undefined}
               fileName={agentConfig?.name || ""}
+              advancedExtra={agentDocument ? (
+                <section className={cardClass}>
+                  <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button>
+                </section>
+              ) : null}
             />
-            <section className={cardClass}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {agentDocument ? <button type="button" onClick={handleSavePreset} disabled={isSavingPreset} className={ghostBtn}>{isSavingPreset ? "Saving…" : "Save as my default"}</button> : <span />}
-                <button type="button" onClick={() => { persistAgent(); setFlowStep(3); }} disabled={!hasOutput || !doc} className={primaryBtn}>Next: Export <span aria-hidden>→</span></button>
-              </div>
-              {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
-            </section>
           </div>
           <div className="lg:sticky lg:top-4">{previewPane}</div>
         </div>
       ) : null}
-
-      {/* Step 3: export */}
-      {flowStep === 3 ? (
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <div className="grid gap-3">
-            {iterateCard}
-            <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
-              <p className={kicker}>Save to your workspace</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">Pick where it is filed, and — if you want — add it straight to Practice or to a study plan, with an optional due date. From there you can open it, restyle it or download it any time.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" className={primaryBtn} disabled={!hasOutput} onClick={() => setSaveOpen(true)}>Save resource…</button>
-                <button type="button" className={ghostBtn} disabled={!hasOutput || !readerResource} onClick={() => setReaderOpen(true)}>Open the HTML view</button>
-              </div>
-              {statusMessage ? <p className="m-0 mt-2 text-xs text-accent">{statusMessage}</p> : null}
-            </section>
-            <section className={cardClass}>
-              <p className={kicker}>Download</p>
-              <div className="mt-3">
-                <OutputDownloads doc={doc} filename={agentConfig.name || "output"} onError={setStatusMessage} interactiveKind={activity && activity.questions.length ? "activity" : "document"} onInteractiveHtml={activity && activity.questions.length ? handleDownloadInteractive : handleDownloadHtml} hasContent={Boolean(doc) || (outputBlocks && outputBlocks.length > 0)} />
-              </div>
-            </section>
-            <button type="button" className={ghostBtn} onClick={() => setFlowStep(2)}>← Back to output</button>
-          </div>
-          <div className="lg:sticky lg:top-4">{previewPane}</div>
-        </div>
+      {exportOpen ? (
+        <SaveAndExportDialog
+          doc={doc}
+          filename={agentConfig.name || "output"}
+          onClose={() => setExportOpen(false)}
+          onError={setStatusMessage}
+          canSave={hasOutput && Boolean(onSaveGeneratedQuizDocument)}
+          onSave={() => { setExportOpen(false); setSaveOpen(true); }}
+          interactiveKind={activity && activity.questions.length ? "activity" : "document"}
+          onInteractiveHtml={activity && activity.questions.length ? handleDownloadInteractive : handleDownloadHtml}
+        />
+      ) : null}
+      {savePhase ? (
+        <SaveProgressView
+          state={savePhase}
+          canOpen={Boolean(savePhase.payloadActivity || hasOutput)}
+          onClose={() => setSavePhase(null)}
+          onOpen={() => {
+            if (savePhase.payloadActivity) setPlaying({ activity: savePhase.payloadActivity, documentId: savePhase.documentId || "" });
+            else setReaderOpen(true);
+            setSavePhase(null);
+          }}
+          onViewWorkspace={() => { const id = savePhase.documentId; setSavePhase(null); toolContext?.onOpenPage?.(id ? `workspaces?doc=${id}` : "workspaces"); }}
+        />
       ) : null}
       {readerOpen && readerResource ? (
         <ReaderView

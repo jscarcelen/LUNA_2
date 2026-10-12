@@ -24,7 +24,7 @@ describe("output designer UI", () => {
   it("shows the page-size x view matrix", () => {
     const doc = buildOutputDocument(plan, {});
     const html = renderToString(createElement(OutputPreviewPane, { doc, selection: { layoutIndex: 0, viewIndex: 0 }, onSelection: () => undefined, filename: "Quiz" }));
-    for (const text of ["Student view", "Answer key", "A4", "Letter", "Slides 16:9", "Preview"]) expect(html).toContain(text);
+    for (const text of ["Student view", "Answer key", "A4", "Letter", "Slides 16:9", "Document"]) expect(html).toContain(text);
     for (const text of ["Raw", "Data"]) expect(html).not.toContain(`>${text}<`);
   });
 

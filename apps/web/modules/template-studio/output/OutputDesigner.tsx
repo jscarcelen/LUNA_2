@@ -69,6 +69,10 @@ export interface OutputStylePanelProps {
   onOpenTemplateStudio?: () => void;
   /** The name the file is saved under, offered as the footer text. */
   fileName?: string;
+  /** Simple mode: colour, format and the written titles only; components and templates sit behind an "Advanced" button. */
+  simple?: boolean;
+  /** Extra controls shown inside "Advanced" in simple mode. */
+  advancedExtra?: ReactNode;
 }
 
 function ColorRow({ selected, onPick, compact = false }: { selected?: string; onPick: (id: string) => void; compact?: boolean }) {
@@ -84,12 +88,13 @@ function ColorRow({ selected, onPick, compact = false }: { selected?: string; on
   );
 }
 
-export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, onAutoAccentChange, savedTemplates = [], templatesLoading, onRefreshTemplates, onOpenTemplateStudio, fileName }: OutputStylePanelProps) {
+export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, onAutoAccentChange, savedTemplates = [], templatesLoading, onRefreshTemplates, onOpenTemplateStudio, fileName, simple = false, advancedExtra }: OutputStylePanelProps) {
   const allBlocks = useMemo(() => builtInBlocks(), []);
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   const [visualize, setVisualize] = useState<string | null>(null);
   const [templateId, setTemplateId] = useState("");
   const [note, setNote] = useState("");
+  const [advanced, setAdvanced] = useState(false);
 
   const keys = plan ? plan.components.map((component) => component.key) : [];
   const resolved = useMemo(() => Object.fromEntries(keys.map((key) => [key, resolveStyle(key, styles)])), [keys.join("|"), styles]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -161,7 +166,7 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
 
   const visualizeBlock = visualize ? resolved[visualize]?.block : null;
 
-  return (
+  const full = (
     <div className="grid gap-3">
       <div className={`${card} p-4`}>
         <p className={kicker}>Style the output</p>
@@ -236,6 +241,44 @@ export function OutputStylePanel({ plan, styles, onStylesChange, autoAccentId, o
       ) : null}
     </div>
   );
+
+  if (!simple) return full;
+
+  const titleKey = plan.components.find((component) => component.key === "block-header-exam" || component.key === "block-header-minimal")?.key;
+  const footerKey = plan.components.find((component) => component.key === "block-footer")?.key;
+  const field = (key: string, label: string, fallback: string) => (
+    <label className="grid gap-1 text-xs text-soft-ink">
+      <span className="font-semibold">{label}</span>
+      <input className={`${fieldBase} py-1.5 text-sm`} value={styles[key]?.text ?? fallback} onChange={(event) => set(key, { text: event.target.value })} />
+    </label>
+  );
+  return (
+    <div className="grid gap-3">
+      <div className={`${card} p-4`}>
+        <p className={kicker}>Look</p>
+        <div className="mt-3 grid gap-3">
+          <div className="grid gap-1.5">
+            <span className="text-[12px] font-semibold text-soft-ink">Colour</span>
+            <ColorRow onPick={applyColorToAll} compact />
+          </div>
+          {sharedFormats.length ? (
+            <div className="grid gap-1.5">
+              <span className="text-[12px] font-semibold text-soft-ink">Format</span>
+              <div className="flex flex-wrap gap-1.5">
+                {sharedFormats.map((name) => <button key={name} type="button" onClick={() => applyFormatToAll(name)} className="rounded-full border border-ink/15 px-3 py-1 text-[11px] font-semibold text-soft-ink transition hover:border-[var(--accent)]/50 hover:text-ink">{name}</button>)}
+              </div>
+            </div>
+          ) : null}
+          {titleKey && !styles[titleKey]?.hidden ? field(titleKey, "Title", plan.title) : null}
+          {footerKey && !styles[footerKey]?.hidden ? field(footerKey, "Footer", plan.footerText) : null}
+          <div className="border-t border-ink/8 pt-3">
+            <button type="button" aria-expanded={advanced} onClick={() => setAdvanced((value) => !value)} className="text-xs font-semibold text-[var(--accent-ink)] hover:underline">{advanced ? "Hide advanced options" : "Advanced options"}</button>
+          </div>
+        </div>
+      </div>
+      {advanced ? <>{full}{advancedExtra}</> : null}
+    </div>
+  );
 }
 
 /* ─── right: preview matrix ────────────────────────────────────────────────────────────── */
@@ -258,7 +301,9 @@ export interface OutputPreviewPaneProps {
 const MM_PX = 3.78;
 
 export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyHint, onError, interactive, onOpenSource }: OutputPreviewPaneProps) {
-  const [tab, setTab] = useState<"preview" | "interactive">("preview");
+  // The interactive version comes first when there is one (it is what is done on Luna); the document is the printable one.
+  const [chosenTab, setTab] = useState<"preview" | "interactive" | null>(null);
+  const tab: "preview" | "interactive" = chosenTab || (interactive ? "interactive" : "preview");
   const [html, setHtml] = useState("");
   const [rendering, setRendering] = useState(false);
   const [error, setError] = useState("");
@@ -318,7 +363,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
   return (
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-4 py-3">
-        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{tabButton("preview", "Preview")}{interactive ? tabButton("interactive", "Interactive") : null}</div>
+        <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{interactive ? tabButton("interactive", "Interactive") : null}{tabButton("preview", "Document")}</div>
       </div>
 
       {showMatrix && doc && tab === "preview" ? (

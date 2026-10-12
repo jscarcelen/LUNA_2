@@ -867,7 +867,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         addedTo = chosenPlan.name;
       }
       setSaveOpen(false);
-      setStatusMessage(`Saved “${name}” to your workspace${isActivity ? " and to Activities" : ""}${addedTo ? ` and added to “${addedTo}”` : ""}.`);
+      setStatusMessage(`Saved “${name}” to your workspace${isActivity ? " and to Practice" : ""}${addedTo ? ` and added to “${addedTo}”` : ""}.`);
       if (openAfter) {
         if (activity && activity.questions.length) setPlaying({ activity: payload.activity, documentId: saved?.id || "" });
         else setReaderOpen(true);
@@ -1106,7 +1106,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
             {iterateCard}
             <section className={`${cardClass} border-2 border-[var(--accent)]/30`}>
               <p className={kicker}>Save to your workspace</p>
-              <p className="m-0 mt-2 text-sm text-soft-ink">Pick where it is filed, and — if you want — add it straight to Activities or to a study plan, with an optional due date. From there you can open it, restyle it or download it any time.</p>
+              <p className="m-0 mt-2 text-sm text-soft-ink">Pick where it is filed, and — if you want — add it straight to Practice or to a study plan, with an optional due date. From there you can open it, restyle it or download it any time.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button type="button" className={primaryBtn} disabled={!hasOutput} onClick={() => setSaveOpen(true)}>Save resource…</button>
                 <button type="button" className={ghostBtn} disabled={!hasOutput || !readerResource} onClick={() => setReaderOpen(true)}>Open the HTML view</button>

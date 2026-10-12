@@ -6,31 +6,31 @@ export const LUNA_GUIDE = `
 LUNA — WHAT THE APP DOES TODAY
 Luna turns a learner's own material into a study plan, practice and results.
 
-Main areas (left sidebar): Home · Workspaces · Activities · Study plans · Performance · AI agents · Templates · Marketplace.
+Main areas (left sidebar; the bottom bar on a phone): Home · Study · Progress · Create. Study has three tabs: Courses (your material), Study plans, Practice. Progress shows how the learner is doing. Create has Make (quick make and your tools), Output styles (teachers and creators) and Browse tools. The ? next to a page title explains the page.
 
-WORKSPACES (sidebar → Workspaces)
+COURSES (Study → Courses)
 - A workspace holds subjects (the top-level folders); each subject has folders inside folders. Everything — uploaded material and everything Luna generates — lives in this one tree.
-- To find a document: Workspaces → choose the subject → open folders; generated resources sit in the same folders (they show a small activity/resource badge). Click a document to preview it; click a generated resource to open it (Read, Do it, Format & colour, Downloads).
-- To upload: Workspaces → Upload (or drag files into the chat). Supported: Word, PDF, PowerPoint, images and handwritten notes, text/Markdown. Luna reads every page: text, headings, formulas, tables and figures.
+- To find a document: Study → Courses → choose the subject → open folders; generated resources sit in the same folders (they show a small activity/resource badge). Click a document to preview it; click a generated resource to open it (Read, Do it, Format & colour, Downloads).
+- To upload: Study → Courses → Upload files (or drag files into the chat). Supported: Word, PDF, PowerPoint, images and handwritten notes, text/Markdown. Luna reads every page: text, headings, formulas, tables and figures.
 - Files can be filed in several folders without being copied.
 
-AI AGENTS (sidebar → AI agents)
+MAKE (Create → Make)
 - An agent is a recipe that turns material into something: a quiz, flashcards, a summary… Built in: Quiz Generator and Vocabulary Flashcards. Users can create their own (Create agent — four steps: what it does, what it reads, what the user chooses, which output blocks it may write), buy agents in the Marketplace, and edit them any time from the AI agents page.
-- To run an agent: AI agents → Run. Steps: 1 choose material and answer the agent's questions, 2 Configure output (pick the format and colour of each component, or apply a saved template; Interactive tab shows the HTML version), 3 Export (save, download).
+- To make something quickly: Create → Make → pick a quiz, flashcards or a summary, tick the material, Continue. Or tick documents in Courses and press Make a quiz. To run any agent: Create → Make → Run. Steps: 1 choose material and answer the agent's questions, 2 Configure output (pick the format and colour of each component, or apply a saved template; Interactive tab shows the HTML version), 3 Export (save, download).
 - After a result: "Iterate" lets you ask for a change in words ("focus more on cash flow"); Luna rewrites it.
 - Save: "Save resource…" files it in the workspace, and can also add it to Activities (to do on Luna, results tracked) and/or to a study plan, with an optional due date.
 - Download: PDF for any page size (A4, Letter, Slides) and view (Student view, Answer key), one file each; or the interactive HTML (it works anywhere, but results done outside Luna are NOT tracked).
 
-TEMPLATES (sidebar → Templates = Template Studio)
+OUTPUT STYLES (Create → Output styles = Template Studio)
 - A template is a selection of component formats (document structure, questions, worksheets, games/flashcards) and colours. Agents decide the order and count; the user decides only the look.
 - Components include: exam or document header, headings, paragraph, key points, callout, table, multiple choice, true/false, open answer, fill in the blanks, match, flashcards, footer.
 
-STUDY PLANS (sidebar → Study plans)
+STUDY PLANS (Study → Study plans)
 - "Plan it for me": pick material, a deadline, time per week and which agents may build practice. Luna schedules reading, activities, spaced repetition and a final review, makes sure every concept of the material is studied and tested, and builds the practice. Adding material re-plans only what is still to do.
 
 ACTIVITIES, PERFORMANCE
-- Activities lists everything to do on Luna (quizzes, exams, flashcard decks); every attempt, with how sure the learner was, is recorded.
-- Performance shows mastery per concept, mistakes by type, trends and what to do next.
+- Practice (Study → Practice) lists everything to do on Luna (quizzes, exams, flashcard decks); every attempt, with how sure the learner was, is recorded.
+- Progress shows accuracy, retention, whether the learner is on track for the exam, mastery per concept, mistakes by type, trends and what to do next.
 
 MARKETPLACE
 - Buy or sell agents, templates, resources and plans. Payment is paid in lunas.

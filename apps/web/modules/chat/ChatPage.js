@@ -434,14 +434,14 @@ function ActionCard({ action, state, subject, onRun, onPreview, onSave, onSaveAg
         <p className="m-0 mt-1 text-xs text-soft-ink">It can write: {action.outputBlocks.map((block) => block.replace(/_/g, " ")).join(" · ")}</p>
         {state.phase === "done" ? (
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-[#1f7a3a]">✓ Saved in AI agents</span>
+            <span className="text-xs font-semibold text-[#1f7a3a]">✓ Saved in My tools</span>
             {state.savedAgentId ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.(`agent-edit:${state.savedAgentId}`)}>Edit it</button> : null}
             {state.savedAgentId ? <button type="button" className={primaryBtn} onClick={() => onOpenPage?.(`custom-agent:${state.savedAgentId}`)}>Run it</button> : null}
           </div>
         ) : (
           <div className="mt-3 flex items-center gap-2">
             <button type="button" className={primaryBtn} disabled={state.phase === "running"} onClick={onSaveAgent}>{state.phase === "running" ? "Saving…" : "Save as an agent"}</button>
-            <span className="text-[11px] text-soft-ink">You can edit it any time from AI agents{subject ? "" : " (choose a subject first)"}.</span>
+            <span className="text-[11px] text-soft-ink">You can edit it any time from Create → My tools{subject ? "" : " (choose a subject first)"}.</span>
             {state.error ? <span className="text-xs text-[var(--color-danger)]">{state.error}</span> : null}
           </div>
         )}
@@ -460,7 +460,7 @@ function ResultRow({ state, onPreview, onSave, onUpdate, onOpenPage }) {
         {onUpdate && state.resource && canUpdateResource(state.resource) ? <button type="button" className={ghostBtn} onClick={onUpdate}>✦ Update…</button> : null}
         {state.saved ? (
           <>
-            <span className="text-xs font-semibold text-[#1f7a3a]">✓ Saved “{state.saved.name}”{state.saved.isActivity ? " · in Activities" : ""}{state.saved.addedTo ? ` · added to ${state.saved.addedTo}` : ""}</span>
+            <span className="text-xs font-semibold text-[#1f7a3a]">✓ Saved “{state.saved.name}”{state.saved.isActivity ? " · in Practice" : ""}{state.saved.addedTo ? ` · added to ${state.saved.addedTo}` : ""}</span>
             {state.saved.id ? <button type="button" className={primaryBtn} onClick={() => onOpenPage?.(`workspaces?doc=${state.saved.id}`)}>Open</button> : null}
           </>
         ) : <button type="button" className={primaryBtn} onClick={onSave}>Save to my workspace…</button>}

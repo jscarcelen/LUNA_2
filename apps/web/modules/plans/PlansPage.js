@@ -206,7 +206,7 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
         {/* Folder tree */}
         <div className="flex-1 overflow-y-auto p-3 grid gap-0.5">
           {!shown.length
-            ? <p className="m-0 p-2 text-xs text-soft-ink">{tab === "uploaded" ? "No uploaded documents in this workspace yet." : "No generated resources yet. Make some with the AI agents."}</p>
+            ? <p className="m-0 p-2 text-xs text-soft-ink">{tab === "uploaded" ? "No uploaded documents in this workspace yet." : "No generated resources yet. Make some in Create → Make."}</p>
             : (<>
                 {folderTree.map((node) => <FolderPickerNode key={node.id} node={node} docs={shown} picked={picked} onToggle={toggle} docLabel={docLabel} badgeOf={badgeOf} />)}
                 {unorganised.map((doc) => (

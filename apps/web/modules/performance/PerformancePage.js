@@ -13,7 +13,9 @@ import { coverageOf, targetsFor } from "./targets";
 import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
 import { panelById } from "./dashboard/registry";
 import { Customise } from "./dashboard/Customise";
-import { InfoDot, card, ghostBtn, kicker, percent } from "./dashboard/parts";
+import { InfoDot, Kpi, METRIC_INFO, NextActions, card, ghostBtn, kicker, percent } from "./dashboard/parts";
+import { onTrackStatus } from "./headline";
+import { EmptyState } from "../../components/EmptyState";
 import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 
@@ -377,9 +379,31 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
 
   const panels = visiblePanels(view).map((panel) => ({ panel, definition: panelById(panel.id) })).filter((entry) => entry.definition && entry.definition.roles.includes(role));
 
+  const track = onTrackStatus(context.planSummary);
+  const trackTone = { good: "text-[#2f9e5b]", warn: "text-[#b25e00]", bad: "text-[var(--color-danger)]", none: "text-soft-ink" }[track.tone];
+
   return (
     <section className="tw-scope grid gap-4">
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
+
+      {/* The short version: three numbers and what to work on. Everything else is under "See details". */}
+      <div className="grid gap-3 sm:grid-cols-3" aria-label="Summary">
+        <Kpi label="Accuracy" value={evidence.length ? percent(overall.accuracy) : "—"} hint={evidence.length ? `${overall.questions} questions answered` : "Answer a quiz to see this"} info={METRIC_INFO.accuracy} />
+        <Kpi label="Retention" value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? "Shows once you re-practise a topic you got wrong" : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved`} info={METRIC_INFO.retention} />
+        <Kpi label="On track for the exam?" value={track.label} tone={trackTone} hint={track.detail} info={{ meaning: "Whether the steps of your most active study plan are being done on time.", formula: "On track = no late steps and the plan's date has not passed  ·  Behind = at least one late step, or the date passed with steps left" }} />
+      </div>
+      {evidence.length ? (
+        <div className={`${card} grid gap-3 p-5`}>
+          <p className={`${kicker} flex items-center gap-1.5`}>Work on these next</p>
+          {actions.length ? <NextActions actions={actions} onOpen={(action) => practise(action)} /> : <p className="m-0 text-sm text-soft-ink">Nothing is lagging right now. Keep going with your plan.</p>}
+        </div>
+      ) : (
+        <EmptyState title="No results yet" text={trackBy === "plan" && plans.length === 0 ? "Progress fills in as you answer quizzes. Make a study plan, then do a first quiz." : "Progress fills in as you answer quizzes and flashcards."} action="Make a quiz" onAction={() => onOpenPage?.("create")} secondary={plans.length ? undefined : "Plan it for me"} onSecondary={() => onOpenPage?.("plans?generate=1")} />
+      )}
+
+      <details className="group" open={customising || undefined}>
+        <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>See details</summary>
+      <div className="mt-3 grid gap-4">
       {/* The views, as tabs: one dashboard per question you keep asking. */}
       <div className={`${card} grid gap-3 p-3`}>
         <div className="flex flex-wrap items-center gap-2">
@@ -490,7 +514,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       {tagTopics.length ? (
         <section className={`${card} p-5`}>
           <p className={kicker}>Topics</p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Topics come from <code>topic:Name</code> tags on materials, activities and plans. Tag a document in the Workspace tab to add it here.</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">Topics come from <code>topic:Name</code> tags on materials, activities and plans. Tag a document in Study → Courses to add it here.</p>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             {tagTopics.map((topic) => {
               const isSelected = selectedTagTopic === topic.name;
@@ -512,8 +536,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                     <div className="mt-2 flex flex-wrap gap-1">
                       {onOpenPage ? (
                         <>
-                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspace", { topicFilter: topic.name }); }}>Open in Workspace →</button>
-                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>Open in Activities →</button>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspaces", { topicFilter: topic.name }); }}>Open in Courses →</button>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>Open in Practice →</button>
                         </>
                       ) : null}
                     </div>
@@ -533,6 +557,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <button type="button" className={ghostBtn} onClick={() => { const blob = new Blob([JSON.stringify(exportView(view), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${view.name}.luna-view.json`; anchor.click(); URL.revokeObjectURL(url); }}>⤓ Save this view as a file</button>
         <span className="text-[11px] text-soft-ink">Mastery counts as {statusOf(70).label} at 70%. A view holds the arrangement only — never anybody's results.</span>
       </div>
+      </div>
+      </details>
       {generatingPractice ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
           <div className={`${card} max-w-sm p-6 text-center`}>

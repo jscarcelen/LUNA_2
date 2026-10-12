@@ -676,28 +676,39 @@ export function WorkspaceBrowser({
         ) : null}
 
         <div className="grid gap-1.5 border-t border-ink/8 pt-3">
-          {/* Create top-level folder */}
-          {onCreateSubject ? (
-            <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) onCreateSubject(name.trim()); }}>
-              ＋ New folder
+          {/* One main action; the rest is under "More". */}
+          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50" disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
+          {needsReview.length ? (
+            <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
+              <span aria-hidden>🛡</span><span>Needs a look</span>
+              <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span>
             </button>
           ) : null}
-          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
-          <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
-          <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
-            className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
-            <span aria-hidden>🛡</span><span>Review centre</span>
-            {needsReview.length ? <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span> : null}
-          </button>
-          <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download visible as
-            <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
-              <option value="">Choose a format…</option>
-              {[["original", "Original files"], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </label>
+          <details className="group">
+            <summary className="cursor-pointer list-none px-1 text-xs font-semibold text-soft-ink hover:text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>More</summary>
+            <div className="mt-1.5 grid gap-1.5">
+              {onCreateSubject ? (
+                <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ New folder</button>
+              ) : null}
+              <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
+              {!needsReview.length ? (
+                <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
+                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
+                  <span aria-hidden>🛡</span><span>Check extracted text</span>
+                </button>
+              ) : null}
+              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download visible as
+                <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
+                  <option value="">Choose a format…</option>
+                  {[["original", "Original files"], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </select>
+              </label>
+              {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
+            </div>
+          </details>
           <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
           <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
-          {onOpenClassicTools ? <button type="button" className="justify-self-start px-1 text-[11px] text-soft-ink hover:underline" onClick={onOpenClassicTools}>Extraction repair & tag colours…</button> : null}
         </div>
         </div>
       </aside>

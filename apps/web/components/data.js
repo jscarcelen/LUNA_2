@@ -1,68 +1,11 @@
 export const appName = "LUNA";
 
-export const navByRole = {
-  student: [
-    { key: "dashboard", label: "Home", icon: "⌂" },
-    { key: "workspaces", label: "Workspaces", icon: "🗂" },
-    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
-    { key: "activities", label: "Activities", icon: "✎" },
-    { key: "performance", label: "Performance", icon: "◴" },
-    { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
-    { key: "templates", label: "Templates", icon: "▦" },
-    { key: "marketplace", label: "Marketplace", icon: "⬡" }
-  ],
-  teacher: [
-    { key: "dashboard", label: "Classes", icon: "⌂" },
-    { key: "workspaces", label: "Workspaces", icon: "🗂" },
-    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
-    { key: "activities", label: "Activities", icon: "✎" },
-    { key: "performance", label: "Performance", icon: "◴" },
-    { key: "ai-tools", label: "AI agents", icon: "✦", match: "ai-tool:" },
-    { key: "templates", label: "Templates", icon: "▦" },
-    { key: "marketplace", label: "Marketplace", icon: "⬡" }
-  ],
-  parent: [
-    { key: "dashboard", label: "Children", icon: "⌂" },
-    { key: "workspaces", label: "Workspaces", icon: "🗂" },
-    { key: "plans", label: "Study plans", icon: "◷", match: "plans?" },
-    { key: "activities", label: "Activities", icon: "✎" },
-    { key: "performance", label: "Performance", icon: "◴" },
-    { key: "marketplace", label: "Marketplace", icon: "⬡" }
-  ]
-};
-
-/**
- * Pages that exist only in the real platform (/platform, a logged-in account). The demo (/app) never
- * shows them: AppShell adds these to navByRole only when it is given an account.
- */
-export const platformNavExtras = {
-  student: [{ key: "connections", label: "Connections", icon: "⇄" }],
-  teacher: [{ key: "students", label: "My students", icon: "☺" }, { key: "connections", label: "Connections", icon: "⇄" }],
-  parent: [{ key: "students", label: "My children", icon: "☺" }, { key: "connections", label: "Connections", icon: "⇄" }]
-};
+/* The navigation (sections, tabs, page titles) lives in navModel.js. */
 
 export const roleProfiles = {
   student: { name: "Maria G.", subtitle: "Student", initials: "MG" },
   teacher: { name: "Prof. Rivera", subtitle: "Teacher · Creator", initials: "PR" },
   parent: { name: "Elena G.", subtitle: "Parent of Maria & Tom", initials: "EG" }
-};
-
-export const pageTitles = {
-  dashboard: "Home",
-  workspaces: "Workspaces",
-  activities: "Activities",
-  performance: "Performance",
-  "ai-tools": "AI agents",
-  templates: "Templates",
-  plans: "Study plans",
-  "ai-tool-quiz": "Quiz Generator",
-  "ai-tool-tutor": "AI Tutor",
-  "ai-tool-chatbot": "Chatbot",
-  marketplace: "Agent Marketplace",
-  builder: "Agent Builder",
-  revenue: "Creator Revenue",
-  connections: "Connections",
-  students: "My students"
 };
 
 export const kpiCards = [

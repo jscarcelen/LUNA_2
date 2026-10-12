@@ -8,6 +8,7 @@ import { TopBar } from "./TopBar";
 import { roleProfiles } from "./data";
 import { PAGE_TITLES, isPageAllowed, navFor, sectionOf, tabKeyOf, tabsFor } from "./navModel";
 import { SectionTabs } from "./SectionTabs";
+import { friendlyMessage } from "./friendlyError";
 import { FirstRunTour } from "./FirstRunTour";
 import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
@@ -200,10 +201,10 @@ export function AppShell({ account = null, initialPage = "" }) {
         setStatusMessage("");
         return { ok: true, status: response.status, data };
       }
-      setStatusMessage(`Action failed (${action}): ${String(data.error || "Unknown error")}`);
+      setStatusMessage(friendlyMessage(data.error, response.status));
       return { ok: false, status: response.status, data };
     } catch (error) {
-      setStatusMessage(`Action failed (${action}): ${String(error.message || error)}`);
+      setStatusMessage(friendlyMessage(String(error.message || error), 0));
       return { ok: false, status: 500, data: { error: String(error.message || error) } };
     } finally {
       setIsWorking(false);

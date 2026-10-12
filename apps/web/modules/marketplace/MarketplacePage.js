@@ -114,14 +114,17 @@ export function MarketplacePage({
       <div className={`${card} grid gap-3 p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className={kicker}>Marketplace</p>
+            <p className={kicker}>Browse tools</p>
             <h3 className="m-0 mt-1 text-xl font-bold text-ink">{listings.length} thing{listings.length === 1 ? "" : "s"} for sale</h3>
-            <p className="m-0 mt-1 max-w-2xl text-sm text-soft-ink">Agents, templates, single components, ready-made resources and whole study plans — each from a store you can look up before you buy.</p>
+            <p className="m-0 mt-1 max-w-2xl text-sm text-soft-ink">Tools, ready-made study material and whole study plans made by other people. Add one and it appears in Make.</p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" className={ghostBtn} onClick={() => setStoreForm(true)}>{myStore ? "Edit my store" : "Open my store"}</button>
-            <button type="button" className={primaryBtn} onClick={() => setSelling(true)}>＋ Sell something</button>
-          </div>
+          {/* Selling is for people who make material for others: students browse and add, nothing more. */}
+          {role === "student" ? null : (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={ghostBtn} onClick={() => setStoreForm(true)}>{myStore ? "Edit my store" : "Open my store"}</button>
+              <button type="button" className={ghostBtn} onClick={() => setSelling(true)}>Sell something</button>
+            </div>
+          )}
         </div>
         <label className="flex items-center gap-2 sm:hidden">
           <span className="text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Show</span>

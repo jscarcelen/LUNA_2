@@ -213,7 +213,7 @@ export function ConnectionsPage({ account, onOpenPage }) {
                 </span>
                 {item.copyDocumentId && item.itemType !== "plan" && !COPY_WORD[item.itemType] ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.(`workspaces?doc=${item.copyDocumentId}`)}>Open</button> : null}
                 {item.itemType === "plan" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("plans")}>Study plans</button> : null}
-                {item.itemType === "agent" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("ai-tools")}>AI agents</button> : null}
+                {item.itemType === "agent" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("create")}>Open in Make</button> : null}
               </li>
             ))}
           </ul>

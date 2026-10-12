@@ -13,7 +13,7 @@ const KIND_LABEL = {
   habit: "Habit"
 };
 
-const cacheKey = (signature) => `luna.performance.coach.v2.${signature}`;
+const cacheKey = (signature) => `luna.performance.coach.v3.${signature}`;
 
 /**
  * Luna's read of the results.
@@ -81,12 +81,19 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
               <div key={`${action.title}-${index}`} className="rounded-xl border border-ink/10 p-3">
                 <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
                   <span className="min-w-0">{index + 1}. {action.title}</span>
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{KIND_LABEL[action.kind] || action.kind} · {action.effort}</span>
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{KIND_LABEL[action.kind] || action.kind} · {action.effort}{action.planStep && action.dueDate ? ` · due ${action.dueDate}` : ""}</span>
                 </p>
                 <p className="m-0 mt-1 text-[11px] text-soft-ink">{action.why}</p>
+                <p className="m-0 mt-1 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{action.planStep ? "Already in your plan" : "New · not in a plan yet"}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
-                  {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{practiseLabel}</button> : null}
-                  {onSchedule ? <button type="button" className={ghostBtn} onClick={() => onSchedule(action)}>Put it in a plan</button> : null}
+                  {action.planStep ? (
+                    onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{practiseLabel}</button> : null
+                  ) : (
+                    <>
+                      {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>Create it</button> : null}
+                      {onSchedule ? <button type="button" className={ghostBtn} onClick={() => onSchedule(action)}>Add to a plan</button> : null}
+                    </>
+                  )}
                 </div>
               </div>
             ))}

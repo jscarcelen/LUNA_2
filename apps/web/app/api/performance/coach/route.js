@@ -19,9 +19,10 @@ const SCHEMA = {
           why: { type: "string", description: "One sentence: which evidence makes this the right next move." },
           topic: { type: "string", description: "The topic it addresses, exactly as given in the evidence, or an empty string." },
           kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit", "deadline"] },
-          effort: { type: "string", enum: ["10 minutes", "30 minutes", "an hour", "a few sessions"] }
+          effort: { type: "string", enum: ["10 minutes", "30 minutes", "an hour", "a few sessions"] },
+          planStep: { type: "string", description: "If this action is a plan step that already exists and is not done, that step's title copied exactly from the 'Plan steps still to do' list. Empty string when the action is something new that is not in the plan yet." }
         },
-        required: ["title", "why", "topic", "kind", "effort"]
+        required: ["title", "why", "topic", "kind", "effort", "planStep"]
       }
     },
     messages: {
@@ -55,6 +56,11 @@ How to choose the five actions (they must be a mixture, not five versions of the
 4. One to bring back a topic that was strong and is slipping, if there is one.
 5. Fill the rest from the evidence.
 Order them by what helps most, weighing how close a deadline is.
+
+Existing versus new actions:
+- An action is existing when it is one of the "Plan steps still to do" (the activity is already created and sits in the plan, not done): copy that step's title exactly into planStep. Luna shows it with its due date and a "do it now" button only.
+- Every other action is new (a gap the plan does not cover yet): set planStep to an empty string. Luna offers to create it and add it to the plan, and it has no due date because it is in no plan yet.
+- Decide this from the plan list alone, because an invented step title would be shown as existing when it is not. Put kind "deadline" only on existing steps.
 
 Wording:
 - Pair any practice with a reason or a method (what to practise and why), because "do more questions" on its own does not tell the learner what to change.
@@ -120,7 +126,11 @@ export async function POST(request) {
     return NextResponse.json({
       headline: parsed.headline || "",
       diagnosis: parsed.diagnosis || "",
-      actions: Array.isArray(parsed.actions) ? parsed.actions.slice(0, 5) : [],
+      actions: (Array.isArray(parsed.actions) ? parsed.actions.slice(0, 5) : []).map((action) => {
+        // Existing = the model named a real, not-yet-done plan step; the due date comes from the plan, never from the model.
+        const step = (Array.isArray(plan?.upcoming) ? plan.upcoming : []).find((entry) => String(entry.title).trim().toLowerCase() === String(action.planStep || "").trim().toLowerCase());
+        return { ...action, planStep: step ? String(step.title) : "", dueDate: step?.dueDate || "" };
+      }),
       messages: parsed.messages || { student: "", parent: "", teacher: "" },
       readAt: new Date().toISOString()
     });

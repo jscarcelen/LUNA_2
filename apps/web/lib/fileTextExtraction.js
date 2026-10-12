@@ -6,6 +6,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { MathMLToLaTeX } from "mathml-to-latex";
+import { extractXlsx } from "./spreadsheetExtraction.js";
 
 const TEXT_EXTENSIONS = new Set([
   "txt",
@@ -34,6 +35,8 @@ const TEXT_EXTENSIONS = new Set([
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp", "gif", "bmp", "tif", "tiff", "heic", "heif"]);
 const LEGACY_WORD_EXTENSIONS = new Set(["doc"]);
 const LEGACY_POWERPOINT_EXTENSIONS = new Set(["ppt", "pps"]);
+const EXCEL_EXTENSIONS = new Set(["xlsx", "xlsm"]);
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const DEFAULT_OCR_LANGUAGES = String(process.env.OCR_LANGUAGES || "eng").trim() || "eng";
 const DEFAULT_OCR_MIN_CONFIDENCE = Math.max(0, Math.min(100, Number(process.env.OCR_MIN_CONFIDENCE || 55)));
@@ -1377,6 +1380,7 @@ function computeConfidence({ method, text = "", ocrConfidence = null }) {
   if (method === "pdf") methodBase = 0.88;
   if (method === "docx") methodBase = 0.9;
   if (method === "pptx") methodBase = 0.84;
+  if (method === "xlsx") methodBase = 0.9;
   if (method === "doc-legacy") methodBase = 0.7;
   if (method === "ppt-legacy") methodBase = 0.65;
   if (method === "ocr") methodBase = 0.58;
@@ -2029,6 +2033,29 @@ export async function extractTextFromUploadedFile(file, options = {}) {
       minConfidence,
       issues: legacyPptIssues
     });
+  }
+
+  if (EXCEL_EXTENSIONS.has(extension) || mimeType === XLSX_MIME) {
+    let sheet;
+    try {
+      sheet = await extractXlsx(buffer);
+    } catch (error) {
+      throw new Error(`"${name}" could not be read as an Excel workbook (${String(error?.message || error)}). Open it in Excel, save it again as .xlsx and upload it again.`);
+    }
+    return createExtractionResult({
+      text: sheet.text,
+      markdown: sheet.markdown,
+      sourcePreview: sheet.text,
+      sourceMimeType: mimeType || XLSX_MIME,
+      sourceContentBase64: String(file?.contentBase64 || ""),
+      method: "xlsx",
+      minConfidence,
+      issues: sheet.issues
+    });
+  }
+
+  if (extension === "xls" || mimeType === "application/vnd.ms-excel") {
+    throw new Error(`"${name}" is an old Excel format (.xls) that Luna cannot read yet. In Excel choose File → Save As → Excel Workbook (.xlsx) and upload that file.`);
   }
 
   if (IMAGE_EXTENSIONS.has(extension) || mimeType.startsWith("image/")) {

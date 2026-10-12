@@ -26,6 +26,7 @@ import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
 import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
+import { renameInResource } from "../modules/workspace/renameCascade";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -736,12 +737,23 @@ export function AppShell({ account = null, initialPage = "" }) {
 
   async function handleRenameDocument(documentId, nextName, subjectId) {
     if (!selectedWorkspaceId || !(subjectId || selectedSubjectId)) return;
-    await runWorkspaceAction("renameDocument", {
+    const before = workspaces.flatMap((workspace) => workspace.subjects || []).flatMap((subject) => subject.documents || []);
+    const previousName = before.find((entry) => entry.id === documentId)?.name || "";
+    const done = await runWorkspaceAction("renameDocument", {
       workspaceId: selectedWorkspaceId,
       subjectId: subjectId || selectedSubjectId,
       documentId,
       nextName
     });
+    if (!done) return;
+    // Generated material (master documents, study plans) keeps the document's name: carry the new one there too.
+    for (const subject of workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects || []) {
+      for (const candidate of subject.documents || []) {
+        if (candidate.sourceType !== "generated" || candidate.id === documentId) continue;
+        const content = renameInResource(String(candidate.content || ""), { id: documentId, from: previousName, to: nextName });
+        if (content) await handleUpdateGeneratedDocument(candidate.id, { file: { name: candidate.name, content, preview: candidate.preview, sizeBytes: content.length } }, subject.id);
+      }
+    }
   }
 
   async function handleRemoveDocument(documentId, subjectId) {

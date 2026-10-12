@@ -10,6 +10,7 @@ import { SubjectTabs } from "../ui/SubjectTabs";
 import { attentionFlags, buildEvidence, byLearner, classTopicCoverage, classTopicMatrix, learnerSubjectMatrix, errorRecovery, masteryOverTime, nextActions, overallMastery, statusOf, topicMastery } from "./mastery";
 import { analyseErrors } from "./errors";
 import { diagnoseSkills } from "./skillDiagnosis";
+import { skillOverview } from "./skillOverview";
 import { refresherFor } from "../skills/taxonomy";
 import { buildActivity } from "../activities/engine/activity";
 import { buildResource } from "../resources/resource";
@@ -96,7 +97,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const since = range ? Date.now() - range * 86400000 : 0;
   const activePlan = plans.find((row) => row.document.id === planId) || null;
   const planScoped = activePlan ? forPlan(all, activePlan.plan) : all;
-  const attempts = planScoped.filter((attempt) => {
+  const keepAttempt = (attempt) => {
     const at = new Date(attempt.at).getTime();
     if (since && at < since) return false;
     if (filters.from && at < new Date(`${filters.from}T00:00:00`).getTime()) return false;
@@ -104,7 +105,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     if (isOwn ? false : learner && attempt.learner !== learner) return false;
     if (isOwn && attempt.learner && profileName && attempt.learner !== profileName) return false;
     return true;
-  });
+  };
+  const attempts = planScoped.filter(keepAttempt);
 
   /* Topics: derived from topic:Name tags on documents. Each topic links to its materials,
      any plans that include those materials, and any activities tagged with the same topic. */
@@ -255,6 +257,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   }
 
   const diagnosis = useMemo(() => diagnoseSkills(attempts), [attempts]);
+  // The skills grid reads the whole workspace (every subject and study plan), under the same learner and date filters.
+  const overview = useMemo(() => skillOverview(workspaces.find((w) => w.id === selectedWorkspaceId), keepAttempt), [workspaces, selectedWorkspaceId, range, filters, learner, isOwn, profileName]);
   // Level tests are taken before a plan exists and whatever the date range: only the learner narrows them down.
   const levelReports = useMemo(() => latestLevelReports(all.filter((attempt) => {
     if (isOwn ? false : learner && attempt.learner !== learner) return false;
@@ -272,6 +276,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     stuck: useMemo(() => repeatedMistakes(attempts), [attempts]),
     skills: useMemo(() => bySkill(attempts), [attempts]),
     diagnosis,
+    overview,
     levelReports,
     onBuildFoundation: (report, component) => practise({ kind: "reteach", topic: component.name, title: `Build the foundation: ${component.name}`, why: `${component.right} of ${component.asked} right in the level test of ${report.title}.`, effort: "30 minutes", skill: component.skill && component.status === "start" ? component.skill : "" }),
     onPrimer: (skill) => practise({ kind: "skill-primer", skill: skill.id, topic: (skill.lifts && skill.lifts[0]) || "", title: `Refresh: ${skill.label}`, why: skill.lifts?.length ? `${skill.label} is holding back ${skill.lifts.join(", ")}.` : `${skill.label} is your weakest skill.`, effort: "30 minutes" }),

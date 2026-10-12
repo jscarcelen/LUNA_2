@@ -58,7 +58,7 @@ export const PANELS = [
     roles: ALL,
     size: "full",
     modes: ["value"],
-    render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: `Re-teach ${topic.topic}`, why: topic.reason, effort: "30 minutes" })} />
+    render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} overview={ctx.overview} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: `Re-teach ${topic.topic}`, why: topic.reason, effort: "30 minutes" })} />
   },
   {
     id: "level-tests",

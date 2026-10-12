@@ -1,7 +1,8 @@
 "use client";
 
 import { card, chip, ghostBtn, kicker } from "./parts";
-import { skillLabel, familyOf } from "../../skills/taxonomy.js";
+import { skillLabel } from "../../skills/taxonomy.js";
+import { SkillMatrix } from "./SkillMatrix";
 
 const VERDICT = {
   skill: { label: "Skill gap", tone: "bg-[#fff1e0] text-[#8a4a00]" },
@@ -10,23 +11,15 @@ const VERDICT = {
   unclear: { label: "Not enough yet", tone: "bg-[var(--surface-soft)] text-soft-ink" }
 };
 
-const cellStyle = (cell) => {
-  if (!cell) return { background: "var(--surface-soft)", color: "var(--soft-ink)" };
-  const colour = cell.acc >= 0.8 ? "#34c759" : cell.acc >= 0.6 ? "#ff9f0a" : "#ff3b30";
-  // Little evidence is drawn paler: one answer is not a pattern.
-  const alpha = cell.asked >= 4 ? "33" : cell.asked >= 2 ? "22" : "14";
-  return { background: `${colour}${alpha}`, color: cell.acc >= 0.8 ? "#1d7a44" : cell.acc >= 0.6 ? "#8a4a00" : "#a1000f" };
-};
-
 /**
- * Topic or skill? The grid of topics (content) against skills (what answering needs), the sentence it
- * adds up to, and what to do about each weak spot. A red column is a skill problem, a red row a topic problem.
+ * Topic or skill? The grid of workspaces and study plans (content) against skills (what answering needs), the
+ * sentence it adds up to, and what to do about each weak spot. A red column is a skill problem, a red row a topic or plan problem.
  */
-export function SkillMap({ diagnosis, onPrimer, onReteach, compact = false }) {
+export function SkillMap({ diagnosis, overview = null, onPrimer, onReteach, compact = false }) {
   if (!diagnosis || !diagnosis.rows) {
     return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Once a few questions are answered, Luna can tell whether a mistake is about the topic or about a skill underneath it.</p>;
   }
-  const { matrix, topics, weakSkills, headline } = diagnosis;
+  const { topics, weakSkills, headline } = diagnosis;
   const flagged = topics.filter((topic) => topic.verdict !== "ok");
 
   if (compact) {
@@ -47,36 +40,7 @@ export function SkillMap({ diagnosis, onPrimer, onReteach, compact = false }) {
     <div className="grid gap-4">
       <p className="m-0 text-[15px] font-semibold leading-snug text-ink">{headline}</p>
 
-      {matrix.topics.length && matrix.skills.length ? (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="text-left text-[10px] uppercase tracking-wider text-soft-ink">
-                <th className="sticky left-0 bg-white py-1.5 pr-3 font-semibold">Topic \ Skill</th>
-                {matrix.skills.map((id) => <th key={id} className="px-1 py-1.5 text-center font-semibold" title={familyOf(id)?.label}>{skillLabel(id)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {matrix.topics.map((topic) => (
-                <tr key={topic}>
-                  <td className="sticky left-0 max-w-44 truncate bg-white py-1 pr-3 text-xs font-semibold text-ink">{topic}</td>
-                  {matrix.skills.map((id) => {
-                    const cell = matrix.cells[`${topic}|${id}`];
-                    return (
-                      <td key={id} className="p-0.5">
-                        <div className="rounded-md px-1.5 py-1 text-center text-[11px] font-bold" style={cellStyle(cell)} title={cell ? `${topic} · ${skillLabel(id)}: ${cell.asked - cell.wrong} of ${cell.asked} right` : "No question needed this skill here"}>
-                          {cell ? `${Math.round(cell.acc * 100)}` : "·"}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="m-0 mt-1 text-[10px] text-soft-ink">Percent right. A weak column is a skill problem, a weak row a topic problem. Paler cells have fewer answers.</p>
-        </div>
-      ) : null}
+      {overview?.subjects?.length ? <SkillMatrix overview={overview} /> : null}
 
       {flagged.length ? (
         <div className="grid gap-2">

@@ -7,7 +7,7 @@ import { createContext, useContext } from "react";
  * page (plans, workspaces, activities, a run) can work out which documents to read without every
  * caller passing the workspace down.
  */
-const AskLunaContext = createContext({ workspaces: [], selectedWorkspaceId: "", selectedSubjectId: "" });
+const AskLunaContext = createContext({ workspaces: [], selectedWorkspaceId: "", selectedSubjectId: "", claim: () => () => {} });
 
 export const AskLunaProvider = AskLunaContext.Provider;
 export const useAskLunaWorkspace = () => useContext(AskLunaContext);

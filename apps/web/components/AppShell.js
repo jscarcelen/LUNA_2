@@ -24,6 +24,7 @@ import { BuilderView, RevenueView } from "./views";
 import { UiCritic } from "../modules/ui/UiCritic";
 import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
+import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -889,7 +890,10 @@ export function AppShell({ account = null, initialPage = "" }) {
   }, []);
 
   // "Ask Luna" next to any reader finds the workspace tree here.
-  const askLunaValue = useMemo(() => ({ workspaces, selectedWorkspaceId, selectedSubjectId }), [workspaces, selectedWorkspaceId, selectedSubjectId]);
+  // A reader that shows its own Ask Luna button "claims" the corner, and the page-level "Chat with Luna" steps aside.
+  const [readerClaims, setReaderClaims] = useState(0);
+  const claimAskLuna = useCallback(() => { setReaderClaims((count) => count + 1); return () => setReaderClaims((count) => count - 1); }, []);
+  const askLunaValue = useMemo(() => ({ workspaces, selectedWorkspaceId, selectedSubjectId, claim: claimAskLuna }), [workspaces, selectedWorkspaceId, selectedSubjectId, claimAskLuna]);
 
   function handleRoleChange(nextRole) {
     if (account) return; // a real account has one fixed role
@@ -917,7 +921,10 @@ export function AppShell({ account = null, initialPage = "" }) {
               <button type="button" className="rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold" onClick={() => setShareNotice("")}>OK</button>
             </div>
           ) : null}
-          <AskLunaProvider value={askLunaValue}>{content}</AskLunaProvider>
+          <AskLunaProvider value={askLunaValue}>
+            {content}
+            <GlobalAskLuna title={title} hidden={readerClaims > 0} />
+          </AskLunaProvider>
         </div>
       </main>
       <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />

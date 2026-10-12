@@ -3,12 +3,12 @@
  * (estimate, confirm, status, delta, sources, actions, usage, error, done) to `onEvent` as it arrives.
  * The full-page Assistant and the "Ask Luna" panel next to a piece of material both use it.
  */
-export async function streamChat({ messages, scope = {}, referencedDocumentIds = [], context = "", confirmed = false, signal, onEvent }) {
+export async function streamChat({ messages, scope = {}, referencedDocumentIds = [], context = "", mode = "", confirmed = false, signal, onEvent }) {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal,
-    body: JSON.stringify({ messages, scope, referencedDocumentIds, context, confirmed })
+    body: JSON.stringify({ messages, scope, referencedDocumentIds, context, mode, confirmed })
   });
   const reader = response.body.getReader();
   const decoder = new TextDecoder();

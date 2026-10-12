@@ -25,7 +25,7 @@ export async function POST(request) {
     async start(controller) {
       const emit = (event) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
       try {
-        await runChat({ messages: body.messages, scope: body.scope || {}, referencedDocumentIds: body.referencedDocumentIds || [], context: String(body.context || ""), confirmed: Boolean(body.confirmed), emit, recordRequest: (summary) => recordRequest(summary, ownerUserId) });
+        await runChat({ messages: body.messages, scope: body.scope || {}, referencedDocumentIds: body.referencedDocumentIds || [], context: String(body.context || ""), mode: body.mode === "page" ? "page" : "", confirmed: Boolean(body.confirmed), emit, recordRequest: (summary) => recordRequest(summary, ownerUserId) });
       } catch (error) {
         emit({ type: "error", error: String(error?.message || error) });
       } finally {

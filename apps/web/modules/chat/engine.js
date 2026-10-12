@@ -68,6 +68,33 @@ RULES
 Before you reply, check that you have not revealed an unchecked answer and that each claim about the material has a [P] citation.`;
 }
 
+/**
+ * The prompt of the "Chat with Luna" button that floats on every page. Unlike Ask Luna next to a quiz, it is an
+ * open conversation: it knows which page the user is on, answers about the user's material from passages with
+ * citations, answers about Luna from the guide, and may help with any other topic the learner wants to understand.
+ */
+export function buildPagePrompt(ctx) {
+  const docList = ctx.documents.slice(0, 40).map((document) => `- ${document.name} [${document.id}] (${document.sourceType === "generated" ? "generated" : "uploaded"}; ${document.subjectName})`).join("\n") || "(no documents)";
+  return `You are Luna's assistant, available as a chat button on every page. You help a learner, a parent or a teacher: understand what is on their screen, study their material, use Luna, or learn about any topic. Answer in the user's language. Be concise and warm; use Markdown (short paragraphs, bullet lists, **bold** for key terms).
+
+WHAT THE USER IS LOOKING AT RIGHT NOW
+${ctx.context}
+
+THEIR MATERIAL (${ctx.documents.length} documents available to search)
+${docList}
+
+RULES
+1. Questions about the CONTENT of the user's material: call search_material first (again with other words if the first search misses), answer from the passages and cite each claim as [P1], [P2]… (the numbers the tool returns). If the passages do not contain the answer, say so plainly, because an invented citation would mislead a learner who is studying for an exam.
+2. Questions about what is on the screen or about Luna itself (where is something, how do I run an agent, what are lunas…): answer from the page description above and the guide below, with a short numbered walkthrough naming the exact sidebar items and buttons. If the guide does not cover it, say you are not sure, because a wrong walkthrough sends the user to buttons that do not exist.
+3. Any other topic the user wants to learn about or discuss: answer from your own knowledge. Say once that it is not taken from their material when it could matter for their course, because their course may teach it differently, and do not attach [P] citations to it.
+4. Chatting here changes nothing: it records no attempt and no score, and it cannot run agents, generate files or edit anything. When the user wants new material, point them to the AI agents page or their study plan.
+5. Keep it short, under about 180 words unless they ask for more, because the chat sits in a narrow panel beside the page.
+
+Before you reply, check that every claim about the user's material carries a [P] citation from a tool result, and that nothing you say implies an action was carried out.
+
+${LUNA_GUIDE}`;
+}
+
 /** What a request will cost, estimated before anything is sent to the model. */
 export function estimateChat({ system, history, hasMaterial }) {
   const base = approxTokens(system) + history.reduce((sum, message) => sum + approxTokens(message.content), 0);
@@ -92,7 +119,7 @@ function trimHistory(messages) {
  * One turn of the conversation. `emit` receives events: estimate, confirm, status, delta, sources,
  * actions, usage, error, done. Nothing is sent to the model until the estimate is accepted when it is large.
  */
-export async function runChat({ messages, scope = {}, referencedDocumentIds = [], context = "", confirmed = false, emit, recordRequest }) {
+export async function runChat({ messages, scope = {}, referencedDocumentIds = [], context = "", mode = "", confirmed = false, emit, recordRequest }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) { emit({ type: "error", error: "The assistant needs an OpenAI key (OPENAI_API_KEY) to answer." }); return; }
 
@@ -104,7 +131,7 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
   // With a context line the chat is embedded next to some material: it reads only that, and cannot make or run anything.
   const embedded = cleanContext(context);
   const ctx = { scope, documents, referenced, agents: embedded ? [] : agentsInScope(tree, scope.workspaceId), passages: [], actions: [], question: lastUser, context: embedded, readableGenerated: new Set(scope.readableGeneratedIds || []), chunksFor: chunkCache(), recordRequest: recordRequest || (async () => {}) };
-  const system = embedded ? buildMaterialPrompt(ctx) : buildSystemPrompt(ctx);
+  const system = embedded ? (mode === "page" ? buildPagePrompt(ctx) : buildMaterialPrompt(ctx)) : buildSystemPrompt(ctx);
   const tools = embedded ? CHAT_TOOLS.filter((tool) => EMBEDDED_TOOLS.includes(tool.function.name)) : CHAT_TOOLS;
 
   const estimate = estimateChat({ system, history, hasMaterial: documents.some((document) => document.sourceType !== "generated") });

@@ -18,6 +18,7 @@ const fmt = (n) => Number(n || 0).toLocaleString("en-US");
 const SUGGESTIONS = {
   quiz: ["Give me a hint for the question I am on", "Which part of the material covers this quiz?", "Explain the idea behind this topic simply"],
   flashcards: ["Explain the card I am on with an example", "How do these terms connect to each other?", "Which part of the material covers these cards?"],
+  page: ["What am I looking at on this page?", "What should I do next?", "Explain a topic from my material"],
   document: ["Summarise the part I am reading", "Explain this part in simpler words", "What are the key points to remember?"],
   generated: ["Summarise this in five points", "Explain the hardest idea here simply", "Where in the material does this come from?"]
 };
@@ -35,8 +36,10 @@ const SUGGESTIONS = {
  *          "floating" a floating card (an in-place view), a bottom sheet on a phone
  *   open / onOpenChange   controlled by the host, so it can keep the notes panel and this one apart
  */
-export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "" }) {
-  const { workspaces, selectedWorkspaceId, selectedSubjectId } = useAskLunaWorkspace();
+export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material" }) {
+  const { workspaces, selectedWorkspaceId, selectedSubjectId, claim } = useAskLunaWorkspace();
+  // A reader's own Ask Luna button replaces the page-level one (never two buttons for the same corner).
+  useEffect(() => (mode === "page" ? undefined : claim?.()), [mode, claim]);
   const workspace = useMemo(() => workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null, [workspaces, selectedWorkspaceId]);
   const itemKey = JSON.stringify([item.documentId, item.planId, item.sourceDocumentIds, item.readSelf, item.subjectId]);
   const selection = useMemo(
@@ -45,6 +48,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
   );
   const context = useMemo(() => describeView({ ...view, planName: selection.plans[0]?.name || "", planDeadline: selection.plans[0]?.deadline || "" }), [view, selection]);
   const kind = SUGGESTIONS[view.kind] ? view.kind : "document";
+  const page = mode === "page";
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -77,6 +81,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
         scope: selection.scope,
         referencedDocumentIds: selection.referencedDocumentIds,
         context,
+        mode,
         confirmed,
         signal: controller.signal,
         onEvent: (event) => {
@@ -108,13 +113,13 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
   const panelClass = layout === "aside"
     ? "fixed inset-x-0 bottom-0 z-[61] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:static lg:z-auto lg:h-auto lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
     : "fixed inset-x-0 bottom-0 z-[46] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:inset-x-auto lg:bottom-4 lg:right-4 lg:top-20 lg:h-auto lg:w-96 lg:rounded-2xl lg:border lg:shadow-[0_16px_48px_rgba(0,0,0,0.2)]";
-  const launcherBase = layout === "aside" ? "fixed bottom-5 right-5 z-[5]" : "fixed bottom-5 right-5 z-[45]";
+  const launcherBase = launcherPosition || (layout === "aside" ? "fixed bottom-5 right-5 z-[5]" : "fixed bottom-5 right-5 z-[45]");
 
   return (
     <>
       {!open ? (
-        <button type="button" aria-label="Ask Luna about this material" onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
-          <span aria-hidden>✦</span> Ask Luna
+        <button type="button" aria-label={page ? "Chat with Luna" : "Ask Luna about this material"} onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
+          <span aria-hidden>✦</span> {page ? "Chat with Luna" : "Ask Luna"}
         </button>
       ) : null}
       {open ? (
@@ -138,11 +143,11 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
           <div ref={threadRef} onClick={jumpToCitation} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {!messages.length ? (
               <div className="grid gap-3 py-2">
-                <p className="m-0 text-sm text-soft-ink">{kind === "quiz" || kind === "flashcards" ? "Stuck? Ask for a hint or an explanation — I answer from your material and will not give away an answer you have not checked." : "Ask anything about what you are reading — I answer from your material and show where it came from."}</p>
+                <p className="m-0 text-sm text-soft-ink">{page ? "Ask about what is on your screen, your material, how Luna works, or anything else you want to learn." : kind === "quiz" || kind === "flashcards" ? "Stuck? Ask for a hint or an explanation — I answer from your material and will not give away an answer you have not checked." : "Ask anything about what you are reading — I answer from your material and show where it came from."}</p>
                 <div className="grid gap-2">
-                  {SUGGESTIONS[kind].map((suggestion) => <button key={suggestion} type="button" onClick={() => send(suggestion)} className="rounded-2xl border border-ink/10 bg-white px-3 py-2 text-left text-sm text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">{suggestion}</button>)}
+                  {SUGGESTIONS[page ? "page" : kind].map((suggestion) => <button key={suggestion} type="button" onClick={() => send(suggestion)} className="rounded-2xl border border-ink/10 bg-white px-3 py-2 text-left text-sm text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">{suggestion}</button>)}
                 </div>
-                <p className="m-0 text-[11px] text-soft-ink">Chatting here does not count as an attempt and does not change your results.</p>
+                <p className="m-0 text-[11px] text-soft-ink">{page ? "Chatting here does not change your plans or results." : "Chatting here does not count"} as an attempt and does not change your results.</p>
               </div>
             ) : (
               <div className="grid gap-5">

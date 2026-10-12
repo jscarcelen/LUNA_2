@@ -405,7 +405,7 @@ export const REQUESTS = [
     id: "A8", stage: "agents", name: "Assistant chat", status: "live",
     purpose: "The chatbot: answers about the learner's material with references, answers questions about Luna, and proposes cards (run an agent, write a document, create an agent) that do nothing until the user approves them. The same endpoint also powers \"Ask Luna\", the chat beside any quiz, summary or document, with a second, stricter prompt.",
     why: "One place to ask for anything instead of hunting through pages; it is also how Luna learns which requests it cannot do yet (they are recorded as feature requests).",
-    position: "Every message sent in AI agents → Chatbot, and every message sent in Ask Luna (the floating button in the reader and the interactive view). The model can call search tools first (a second call with the passages).",
+    position: "Every message sent in AI agents → Chatbot, every message sent in Ask Luna (the floating button in the reader and the interactive view), and every message sent in Chat with Luna (the floating button on every other page). The model can call search tools first (a second call with the passages).",
     trigger: "Chatbot → Send; Ask Luna → Send",
     file: SRC.chat, anchor: /export async function runChat\(/,
     model: "gpt-4o", modelEnv: "LUNA_CHAT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions (streaming, function calling)",
@@ -417,7 +417,8 @@ export const REQUESTS = [
     seconds: { typical: 6, note: "measured 3–9 s" },
     prompts: [
       { label: "System prompt", file: SRC.chat, re: /return `(You are Luna's assistant[\s\S]*?)\$\{LUNA_GUIDE\}`;/ },
-      { label: "System prompt — Ask Luna (chat beside a quiz, summary or document; answers only from the study plan's material, never reveals an unchecked answer)", file: SRC.chat, re: /return `(You are Luna's study helper[\s\S]*?)`;\n\}/ }
+      { label: "System prompt — Ask Luna (chat beside a quiz, summary or document; answers only from the study plan's material, never reveals an unchecked answer)", file: SRC.chat, re: /return `(You are Luna's study helper[\s\S]*?)`;\n\}/ },
+      { label: "System prompt — Chat with Luna (the button on every page; knows the page, cites the material, answers about Luna from the guide, and may help with any other topic)", file: SRC.chat, re: /return `(You are Luna's assistant, available as[\s\S]*?)\$\{LUNA_GUIDE\}`;/ }
     ]
   },
   {

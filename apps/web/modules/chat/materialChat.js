@@ -33,6 +33,7 @@ const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 /** @param {{ kind?: string, title?: string, agentName?: string, planName?: string, planDeadline?: string, progress?: any, section?: string, notesView?: boolean }} [view] */
 export function describeView({ kind = "document", title = "", agentName = "", planName = "", planDeadline = "", progress = null, section = "", notesView = false } = {}) {
   const name = quote(title || "Untitled");
+  if (kind === "page") return cleanContext(`On the ${name} page of Luna. The user may be asking about what is on this screen, about their material, or about anything else.`);
   const plan = planName ? ` It is part of the study plan ${quote(planName)}${planDeadline ? ` (next deadline ${planDeadline})` : ""}.` : "";
   if (kind === "quiz") {
     const noun = /\b(exam|mock|midterm|final)\b/i.test(title) ? "exam" : "quiz";

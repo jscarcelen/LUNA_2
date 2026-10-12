@@ -25,6 +25,7 @@ import { UiCritic } from "../modules/ui/UiCritic";
 import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
+import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -177,7 +178,11 @@ export function AppShell({ account = null, initialPage = "" }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, payload })
       });
-      const data = await response.json();
+      // The host answers some failures (a too-large request) in plain text: read the body as text first.
+      const raw = await response.text();
+      let data;
+      try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: uploadFailureMessage(response.status, raw) }; }
+      if (!response.ok && !data.error) data.error = uploadFailureMessage(response.status, raw);
       if (response.ok) {
         if (Array.isArray(data.workspaces)) {
           setWorkspaces(data.workspaces);

@@ -13,6 +13,8 @@ import { renderPlainOutputHtml, wrapPreviewDocument } from "../../ai-tools/tools
 import { branchOf, documentsOf, folderNode, foldersOf, parseNode, pathOf, subjectNode } from "./folderModel";
 import { blockedTargets, destinationFolderId, documentMoveMessage, folderMoveMessage, undoGroups } from "../moveModel";
 import { MoveDialog } from "./MoveDialog";
+import { UploadProgress } from "./UploadProgress";
+import { planUploadBatches, tooLargeMessage } from "../uploadPlan";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { masterOriginals, originalDownloader } from "../../reader/downloadOriginal";
@@ -155,6 +157,8 @@ export function WorkspaceBrowser({
   // Opened from a source tag in a generated document: where in the original to start reading.
   const [previewScroll, setPreviewScroll] = useState(null);
   const [formatFor, setFormatFor] = useState("");
+  const [uploadPicker, setUploadPicker] = useState(null); // { files }: choosing where an upload goes
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
   const [undo, setUndo] = useState(null); // { text, run }: offered while `text` is still what the status line says
   const fileRef = useRef(null);
@@ -406,29 +410,44 @@ export function WorkspaceBrowser({
     setStatus(`${added} file${added === 1 ? "" : "s"} downloaded.`);
   }
 
-  /** Uploading a folder recreates its subfolders, so a tree comes in as a tree. */
+  /**
+   * Choosing files or a folder first asks where they go (the folder selected in the workspace is pre-chosen and
+   * shown in grey); a topic with no folders yet gets one named on the spot.
+   */
   async function upload(fileList) {
     const files = [...fileList];
     if (!files.length || !onUpload) return;
-    let uploadSubjectId = currentSubjectId;
-    if (!uploadSubjectId) {
+    if (!currentSubjectId) {
       // No subjects exist yet — ask for one so the upload has a home.
       const name = window.prompt("Name the folder these files will go into:");
       if (!name?.trim()) { setStatus("Upload cancelled — create a folder first."); return; }
       const created = await onCreateSubject?.(name.trim());
-      uploadSubjectId = created?.id || workspace?.subjects?.[0]?.id || "";
-      if (!uploadSubjectId) { setStatus("Could not create folder — try again."); return; }
+      const subjectId = created?.id || workspace?.subjects?.[0]?.id || "";
+      if (!subjectId) { setStatus("Could not create folder — try again."); return; }
+      await runUpload(files, subjectNode(subjectId));
+      return;
     }
-    setStatus(`Uploading ${files.length} file${files.length === 1 ? "" : "s"}…`);
+    setUploadPicker({ files });
+  }
+
+  /** Uploading a folder recreates its subfolders under the destination, so a tree comes in as a tree. Sent in batches, with a progress panel. */
+  async function runUpload(files, targetNodeId) {
+    const target = parseNode(targetNodeId);
+    const uploadSubjectId = target.subjectId || currentSubjectId;
+    if (sharedTopic(uploadSubjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be uploaded into them."); return; }
+    const uploadedHome = subjectStructure((workspace?.subjects || []).find((entry) => entry.id === uploadSubjectId)?.folders || []).uploadedId;
+    const base = target.kind === "folder" ? target.folderId : (uploadedHome || "");
+    const destination = pathOf(folders, target.kind === "folder" ? targetNodeId : (uploadedHome ? folderNode(uploadSubjectId, uploadedHome) : targetNodeId));
+    const { batches: planned, tooLarge } = planUploadBatches(files);
+    const totalBytes = files.reduce((sum, file) => sum + Number(file.size || 0), 0);
+    const progress = { total: files.length, done: 0, doneBytes: 0, totalBytes, startedAt: Date.now(), now: Date.now(), current: "", destination, failures: tooLarge.map((file) => ({ name: file.name, reason: tooLargeMessage(file) })), finished: false };
+    const publish = () => setUploadProgress({ ...progress, failures: [...progress.failures], now: Date.now() });
+    publish();
+    const tick = setInterval(publish, 1000);
     try {
-      // With no folder chosen, uploads go to the topic's "Uploaded material" folder.
-      const uploadedHome = subjectStructure((workspace?.subjects || []).find((entry) => entry.id === uploadSubjectId)?.folders || []).uploadedId;
-      const base = current?.kind === "folder" ? current.folderId : (uploadedHome || "");
       const created = new Map();
-      const withFolders = [];
-      for (const file of files) {
-        const relative = String(file.webkitRelativePath || "");
-        const parts = relative.split("/").slice(0, -1);
+      const folderFor = async (file) => {
+        const parts = String(file.webkitRelativePath || "").split("/").slice(0, -1);
         let parentId = base;
         for (const part of parts) {
           const key = `${parentId}/${part}`;
@@ -438,19 +457,44 @@ export function WorkspaceBrowser({
           }
           parentId = created.get(key);
         }
-        withFolders.push({ file, folderId: parentId });
-      }
+        return parentId;
+      };
+      const folderOfFile = new Map();
+      for (const file of planned.flat()) folderOfFile.set(file, await folderFor(file));
+      // One request per destination folder, packed into size-limited batches.
       const byFolder = new Map();
-      for (const entry of withFolders) {
-        if (!byFolder.has(entry.folderId)) byFolder.set(entry.folderId, []);
-        byFolder.get(entry.folderId).push(entry.file);
-      }
-      for (const [folderId, group] of byFolder) {
+      for (const file of planned.flat()) byFolder.set(folderOfFile.get(file), [...(byFolder.get(folderOfFile.get(file)) || []), file]);
+      const send = async (group, folderId) => {
+        progress.current = group.length === 1 ? group[0].name : `${group[0].name} and ${group.length - 1} more`;
+        publish();
         await onUpload(group, { folderIds: folderId ? [folderId] : [], subjectId: uploadSubjectId });
+        progress.done += group.length;
+        progress.doneBytes += group.reduce((sum, file) => sum + Number(file.size || 0), 0);
+      };
+      for (const [folderId, group] of byFolder) {
+        for (const batch of planUploadBatches(group).batches) {
+          try {
+            await send(batch, folderId);
+          } catch (error) {
+            // One bad file should not sink its batch: retry the files one by one to find it.
+            if (batch.length === 1) progress.failures.push({ name: batch[0].name, reason: String(error?.message || error) });
+            else for (const file of batch) {
+              try { await send([file], folderId); } catch (single) { progress.failures.push({ name: file.name, reason: String(single?.message || single) }); }
+            }
+          }
+          publish();
+        }
       }
-      setStatus(`${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
+      setStatus(progress.failures.length ? `${progress.done} of ${files.length} files uploaded; ${progress.failures.length} could not be.` : `${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
     } catch (error) {
-      setStatus(String(error.message || error));
+      progress.failures.push({ name: "Upload", reason: String(error?.message || error) });
+      setStatus(String(error?.message || error));
+    } finally {
+      clearInterval(tick);
+      progress.finished = true;
+      progress.current = "";
+      publish();
+      if (!progress.failures.length) setTimeout(() => setUploadProgress((value) => (value && value.finished && !value.failures.length ? null : value)), 4000);
     }
   }
 
@@ -865,6 +909,25 @@ export function WorkspaceBrowser({
           onStatus={setStatus}
         />
       ) : null}
+
+      {uploadPicker ? (() => {
+        const hidden = new Set(subjectsList.filter((entry) => isReservedSubjectName(entry.name)).map((entry) => entry.id));
+        const count = uploadPicker.files.length;
+        const firstFolder = String(uploadPicker.files[0]?.webkitRelativePath || "").split("/")[0];
+        return (
+          <MoveDialog
+            title={firstFolder && count > 1 ? `Upload “${firstFolder}” (${count} files)` : `Upload ${count} file${count === 1 ? "" : "s"}`}
+            subtitle="Choose the folder everything goes into. A folder keeps its own subfolders."
+            folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
+            initialId={nodeId && !reviewing ? nodeId : ""}
+            confirmLabel="Upload here"
+            pathLabel="Upload to"
+            onCancel={() => setUploadPicker(null)}
+            onPick={(targetNodeId) => { const { files } = uploadPicker; setUploadPicker(null); runUpload(files, targetNodeId); }}
+          />
+        );
+      })() : null}
+      <UploadProgress progress={uploadProgress} onClose={() => setUploadProgress(null)} />
 
       {movePicker ? (() => {
         const moving = movePicker.folderNodeId ? folders.find((entry) => entry.id === movePicker.folderNodeId) : null;

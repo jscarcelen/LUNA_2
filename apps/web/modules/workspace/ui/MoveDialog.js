@@ -15,7 +15,7 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * @param {{ id: string, name: string, parentFolderId: string, isSubject?: boolean }[]} folders  nodes from foldersOf()
  * @param {string[]} disabledIds nodes that cannot be chosen (a folder being moved and what is inside it)
  */
-export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [], initialId = "", onPick, onCancel }) {
+export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [], initialId = "", confirmLabel = "Move here", pathLabel = "Move to", onPick, onCancel }) {
   const [picked, setPicked] = useState(initialId);
   const chosen = folders.find((folder) => folder.id === picked);
   return (
@@ -26,10 +26,10 @@ export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [
           {subtitle ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{subtitle}</p> : null}
         </div>
         <FolderPicker folders={folders} selectedId={picked} onSelect={setPicked} hideUnfiled disabledIds={disabledIds} maxHeight={320} />
-        <p className="m-0 min-h-4 text-xs text-soft-ink">{chosen ? `Move to: ${pathOf(folders, chosen.id)}` : "Choose a topic or a folder."}</p>
+        <p className="m-0 min-h-4 text-xs text-soft-ink">{chosen ? `${pathLabel}: ${pathOf(folders, chosen.id)}` : "Choose a topic or a folder."}</p>
         <div className="flex justify-end gap-2">
           <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={!chosen} onClick={() => onPick?.(picked)}>Move here</button>
+          <button type="button" className={primaryBtn} disabled={!chosen} onClick={() => onPick?.(picked)}>{confirmLabel}</button>
         </div>
       </div>
     </div>

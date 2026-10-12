@@ -13,10 +13,11 @@
 // Only the agents of the AI agents tab: the two built-in ones, then whatever the learner built or bought.
 export const BUILTIN_PLAN_AGENTS = [
   { id: "quiz", label: "Quiz Generator", purpose: "Questions to answer — multiple choice, true/false and short answer — plus practice exams and worksheets.", makes: ["quiz", "exam", "worksheet"] },
-  { id: "flashcards", label: "Vocabulary Flashcards", purpose: "Front/back cards for memorising terms, definitions and ideas.", makes: ["flashcards"] }
+  { id: "flashcards", label: "Vocabulary Flashcards", purpose: "Front/back cards for memorising terms, definitions and ideas.", makes: ["flashcards"] },
+  { id: "summary", label: "Topic Summary", purpose: "A 1–2 page summary of a group of topics with the key ideas, messages and formulas, read before the original notes to set the scene.", makes: ["summary"] }
 ];
 
-export const DEFAULT_PLAN_AGENT_IDS = ["quiz", "flashcards"];
+export const DEFAULT_PLAN_AGENT_IDS = ["quiz", "flashcards", "summary"];
 
 export const customAgentKey = (documentId) => `agent:${documentId}`;
 export const isCustomKey = (key) => String(key || "").startsWith("agent:");
@@ -56,7 +57,7 @@ export function generateLabel(key, scope) {
   if (!key) return "";
   const agent = (scope || []).find((entry) => (entry.makes || []).includes(key));
   if (isCustomKey(key)) return agent?.label || "agent";
-  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards" })[key] || key;
+  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary" })[key] || key;
 }
 
 /** Text for the planner prompt: which agents exist and what each can make. */

@@ -14,7 +14,8 @@
  *
  * Pure functions: the model call lives in /api/plans/update.
  */
-import { newGoal, newItem } from "./plan.js";
+import { newGoal, newItem, plannedForOf } from "./plan.js";
+import { capDailyMinutes, normaliseMaxPerDay } from "./dailyCap.js";
 import { generateKeys, generateLabel } from "./agents.js";
 import { coverageOf, conceptNames } from "./coverage.js";
 import { minutesPerWeek as currentMinutesPerWeek, plannedKinds, reviseWindow, spreadDates } from "./revise.js";
@@ -93,7 +94,7 @@ const describeStep = (item, done) => ({
 });
 
 /** What the model needs: the whole plan (done steps fixed), the request, the pace and the room there is. */
-export function buildPlanUpdatePayload({ plan, instruction, doneIds, minutesPerWeek, deadlines = null, conceptMap = [], performance = null, window, today = todayIso() }) {
+export function buildPlanUpdatePayload({ plan, instruction, doneIds, minutesPerWeek, minutesPerDay = 0, deadlines = null, conceptMap = [], performance = null, window, today = todayIso() }) {
   const list = deadlines || plan.deadlines || [];
   const goals = plan.goals || [];
   const goalTitle = (id) => goals.find((goal) => goal.id === id)?.title || "";
@@ -103,6 +104,10 @@ export function buildPlanUpdatePayload({ plan, instruction, doneIds, minutesPerW
     horizon: window.horizon,
     instruction: clean(instruction),
     minutesPerWeek: Number(minutesPerWeek) || currentPace(plan, today),
+    // The most to study in one day (0 = the plan never set one) and the learner's own words, kept on the plan.
+    maxMinutesPerDay: Number(minutesPerDay) > 0 ? normaliseMaxPerDay(minutesPerDay) : (Number(plan.minutesPerDay) > 0 ? normaliseMaxPerDay(plan.minutesPerDay) : 0),
+    ...(plan.instructions ? { instructions: plan.instructions } : {}),
+    ...(plan.formatNotes ? { formatNotes: plan.formatNotes } : {}),
     deadlines: list.map((deadline) => ({ id: deadline.id, title: deadline.title, date: deadline.date || "", kind: deadline.kind || "", locked: isImposedDeadline(deadline) })),
     kinds: allowedGenerateKeys(plan),
     ...(scoped ? { agents: plan.agentScope } : {}),
@@ -176,7 +181,7 @@ const sameContent = (a, b) => clean(a.title) === clean(b.title) && a.kind === b.
  *    conceptMap?: [{ name }], minutesPerWeek?: number (the pace the learner chose), instruction }
  * Returns { plan, changes: [{ change, item, before }], counts, deadlineMoves, summary, changed, coverage }.
  */
-export function applyPlanUpdate(plan, update, { doneIds = new Set(), today = todayIso(), generatedIds = new Set(), deadlineEdit = [], conceptMap = [], minutesPerWeek = 0, now = new Date().toISOString(), instruction = "" } = {}) {
+export function applyPlanUpdate(plan, update, { doneIds = new Set(), today = todayIso(), generatedIds = new Set(), deadlineEdit = [], conceptMap = [], minutesPerWeek = 0, minutesPerDay = 0, now = new Date().toISOString(), instruction = "" } = {}) {
   const items = plan.items || [];
   const done = items.filter((item) => doneIds.has(item.id));
   const pendingById = new Map(items.filter((item) => !doneIds.has(item.id)).map((item) => [item.id, item]));
@@ -248,6 +253,14 @@ export function applyPlanUpdate(plan, update, { doneIds = new Set(), today = tod
   }
   next.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
 
+  // The daily budget the learner set is enforced here, whatever the model added up: what does not fit moves to the nearest day with room.
+  const dayBudget = Number(minutesPerDay) > 0 ? Number(minutesPerDay) : Number(plan.minutesPerDay) > 0 ? Number(plan.minutesPerDay) : 0;
+  if (dayBudget) {
+    const capped = capDailyMinutes([...done, ...next], { maxPerDay: dayBudget, today: window.today, horizon: window.horizon, fixedIds: doneIds });
+    next.splice(0, next.length, ...capped.items.slice(done.length));
+    next.sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate)));
+  }
+
   // Classify every change against the plan as it was.
   const changes = [];
   for (const item of done) changes.push({ change: "kept", item, before: item, done: true });
@@ -273,6 +286,9 @@ export function applyPlanUpdate(plan, update, { doneIds = new Set(), today = tod
     goals,
     items: finalItems,
     ...(Number(minutesPerWeek) > 0 ? { minutesPerWeek: Number(minutesPerWeek) } : {}),
+    ...(dayBudget ? { minutesPerDay: normaliseMaxPerDay(dayBudget) } : {}),
+    // The plan is now fitted to these dates: moving a deadline later is what asks "update the plan?".
+    plannedFor: plannedForOf(deadlines),
     updatedAt: now
   };
   return {

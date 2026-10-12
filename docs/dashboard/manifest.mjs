@@ -218,7 +218,7 @@ export const REQUESTS = [
     file: SRC.generate, anchor: /export async function POST/,
     model: "gpt-4o", modelEnv: "LUNA_PLAN_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.3, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
-    input: "Deadline, minutes per week, the agents the learner put in scope (built-in and their own, each with what it can make), the learner's performance history, the document's concept map (canonical names only) and the list of chosen material.",
+    input: "Deadline, minutes per week, the most minutes in one day, the learner's optional instructions (preferred activities, what each exam covers) and format wishes for the material, the agents the learner put in scope (built-in and their own, each with what it can make), the learner's performance history, the document's concept map (canonical names only) and the list of chosen material.",
     output: "Plan name and note, 2–6 goals, a coverage ledger (every concept → where it is studied and tested) and dated steps (read / activity / review / exam) saying what Luna should generate for each. The result is then checked in code: any concept not studied and tested is added to a step, and the final exam lists them all.",
     fallbacks: "Error shown; nothing saved. Before the call, concepts are read from the material (U7) if the documents have none yet.",
     tokens: { basis: "measured", scale: { unit: "step", label: "plan step", fixedIn: 1500, inPer: 0, outPer: 85, units: 9 } },

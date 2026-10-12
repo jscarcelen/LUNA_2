@@ -67,12 +67,26 @@ export function parsePlan(document, { folders = [] } = {}) {
   }
 }
 
-export function buildPlan({ name, examDate = "", deadlines = [], startDate = "", learner = "", colour = PLAN_COLOURS[0], note = "", goals = [], items = [], materialIds = [], parentPlanId = "", agentScope = null }) {
+/** `{ [deadlineId]: date }`: the dates a plan was last fitted to. A deadline that moved since is how "update the plan?" is noticed. */
+export const plannedForOf = (deadlines = []) => Object.fromEntries(deadlines.filter((deadline) => deadline?.id && deadline.date).map((deadline) => [deadline.id, deadline.date]));
+
+/**
+ * `instructions` (what the learner prefers and what each exam covers), `formatNotes` (the shape of the exams,
+ * worksheets and flashcards to build) and `minutesPerDay` (the most to study in one day) are the learner's own
+ * words and numbers: they are kept on the plan so every later update and every generated resource honours them.
+ */
+export function buildPlan({ name, examDate = "", deadlines = [], startDate = "", learner = "", colour = PLAN_COLOURS[0], note = "", goals = [], items = [], materialIds = [], parentPlanId = "", agentScope = null, instructions = "", formatNotes = "", formatDocumentIds = [], minutesPerDay = 0 }) {
+  const deadlineList = deadlines.length ? deadlines : (examDate ? [newDeadline("Exam", examDate, "exam")] : []);
   return {
     kind: "study-plan",
     version: 2,
     name: String(name || "Study plan").trim(),
-    deadlines: deadlines.length ? deadlines : (examDate ? [newDeadline("Exam", examDate, "exam")] : []),
+    deadlines: deadlineList,
+    plannedFor: plannedForOf(deadlineList),
+    ...(String(instructions || "").trim() ? { instructions: String(instructions).trim() } : {}),
+    ...(String(formatNotes || "").trim() ? { formatNotes: String(formatNotes).trim() } : {}),
+    ...(Array.isArray(formatDocumentIds) && formatDocumentIds.length ? { formatDocumentIds } : {}),
+    ...(Number(minutesPerDay) > 0 ? { minutesPerDay: Number(minutesPerDay) } : {}),
     startDate: startDate || new Date().toISOString().slice(0, 10),
     learner,
     colour,

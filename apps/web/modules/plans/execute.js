@@ -38,14 +38,15 @@ export function fieldDefs(fields = []) {
  */
 const SUMMARY_AGENT = {
   name: "Summary writer",
-  instructions: `You are an expert teacher producing concise revision summaries.
+  instructions: `You are an expert teacher producing a short summary that sets the scene before the student reads the original notes.
 Rules you MUST follow:
-1. Use ONLY information from the provided reference material — never add external facts.
-2. Aim for 12–20 key points that together cover the whole document (not just the first pages).
-3. Each point must be self-contained: a student reading only that card should understand it.
-4. Assign a short topic label (2–4 words) to each point so they can be grouped.
-5. Keep the total length to roughly 20 % of the source — be ruthless about brevity.
-6. Where a concept needs an example or a memory hook, add it in the "detail" field.`,
+1. Use ONLY information from the provided reference material — never add external facts, because the student is examined on this material.
+2. The summary fits on one or two pages: 12–20 key points that together cover the whole of the topics you are given (not just the first pages).
+3. Each point is self-contained: the key idea or message in one clear sentence, so a student reading only that card understands it.
+4. Put every important formula, definition or rule in the "detail" field, written exactly as in the material with its variables explained, because formulas are what students must be able to recall.
+5. Give each point a short topic label (2–4 words) so the points group by topic.
+6. Where a concept needs an example or a memory hook, add it in the "detail" field.
+7. Be ruthless about brevity (roughly 20 % of the source): this is orientation, and the original notes carry the full detail.`,
   questions: [],
   template: {
     fields: [
@@ -123,6 +124,17 @@ function coverageInstruction(concepts, perConcept) {
   return `\n\nCOVERAGE (mandatory): this set must test EVERY one of the ${concepts.length} concepts below — ${perConcept > 1 ? `at least ${perConcept} questions each` : "at least one question each"}, spread evenly, none skipped, nothing outside the material. Set each item's "topic" to the exact concept name it tests (copy it exactly as written).\nConcepts:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
 }
 
+/** What the summary writer is told about its step: the topics to cover (a summary is not tested, so no question per concept). */
+function summaryScopeInstruction(concepts) {
+  return `\n\nSCOPE (mandatory): this summary covers exactly these ${concepts.length} topics, each with at least one key point and its formulas, and nothing outside them:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
+}
+
+/** The learner's wishes for the shape of what is built (set on the plan), folded into the agent's request. */
+export function planFormatInstruction(plan) {
+  const notes = String(plan?.formatNotes || "").trim();
+  return notes ? `The learner's wishes for the format of the material you produce (follow them wherever they apply to what you are making): ${notes}` : "";
+}
+
 /**
  * What a person said in words (a count, a difficulty, a language…) as answers to the agent's own
  * questions, matched by what each question asks. Used by the assistant, which does not know ids.
@@ -150,7 +162,7 @@ export function answersFromOptions(agent, options = {}) {
  * Generates the resource for a step WITHOUT saving it: the caller decides where it goes.
  * `options` are the user's words ({ count, difficulty, types, language, focus… }); `extraInstructions` a free request.
  */
-export async function generateStepResource({ step, sourceDocumentIds, workspaceId, subjectId, learnerNote = "", agentDocuments = [], subjectName = "", options = {}, extraInstructions = "", onAgentEvent }) {
+export async function generateStepResource({ step, sourceDocumentIds, workspaceId, subjectId, learnerNote = "", agentDocuments = [], subjectName = "", options = {}, extraInstructions = "", styleDocumentIds = [], onAgentEvent }) {
   const recipe = isCustomKey(step.generate) ? customRecipe(agentDocuments, step.generate) : (STEP_RECIPES[step.generate] || STEP_RECIPES.quiz);
   const agent = recipe.agent;
   const concepts = [...new Set((step.concepts || []).map((name) => String(name || "").trim()).filter(Boolean))];
@@ -166,7 +178,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
     if (!lastAnswers.length) lastAnswers = answers; // the first call's choices; a narrower follow-up call must not replace them
     const config = {
       name: agent.name,
-      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? coverageInstruction(focus, perConcept) : ""}`,
+      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length ? (step.generate === "summary" ? summaryScopeInstruction(focus) : coverageInstruction(focus, perConcept)) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
       // The consolidator is recognised by its spec (`pipeline: "consolidate"`).
       ...(recipe.streams ? { spec: agent.spec } : {}),
@@ -183,7 +195,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
         inputValues: Object.fromEntries((agent.questions || []).map((question, index) => [question.id, answers[index].answer]))
       } : {}),
       // No topic filter: the chosen documents may sit in any topic of the workspace (a document moved after the plan was made).
-      scope: { workspaceId, subjectId: sourceDocumentIds.length ? "" : subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: [] }
+      scope: { workspaceId, subjectId: sourceDocumentIds.length ? "" : subjectId, documentIds: [...sourceDocumentIds, ...(recipe.custom ? agent.scope?.documentIds || [] : [])], styleDocumentIds: recipe.streams || step.generate === "summary" ? [] : styleDocumentIds }
     };
     // A long run (the master document) streams its progress; the others are one quick request.
     if (recipe.streams) {
@@ -207,7 +219,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
   // Check the promise: every concept of the step needs at least one question. Whatever is still
   // missing is asked for in a second, narrower call and merged in.
   let coverage = null;
-  if (concepts.length && !recipe.custom && !data.isBlockOutput) {
+  if (concepts.length && !recipe.custom && !data.isBlockOutput && step.generate !== "summary") {
     const covered = conceptsTested(Array.isArray(data.items) ? data.items : [], concepts);
     const missing = concepts.filter((concept) => !covered.has(concept));
     if (missing.length && missing.length <= 12) {
@@ -341,6 +353,8 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
         folderIds,
         onSaveGeneratedQuizDocument,
         learnerNote: plan.note || "",
+        extraInstructions: planFormatInstruction(plan),
+        styleDocumentIds: Array.isArray(plan.formatDocumentIds) ? plan.formatDocumentIds : [],
         agentDocuments,
         subjectName
       });
@@ -349,6 +363,8 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
         items[position] = {
           ...items[position],
           resourceId: result.documentId,
+          // What the step was built as: a built summary is not summarised again.
+          madeAs: step.generate,
           generate: "",
           kind: result.questions ? "activity" : items[position].kind,
           note: `${result.kind} generated from ${master ? "the master document" : "your material"}${result.questions ? ` · ${result.questions} questions` : ""}.`
@@ -364,7 +380,9 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
   // Plans only use the agents of the AI agents tab, and the summary writer is not one of them, so a
   // summary is built only for plans whose scope already includes it (made before that rule).
   const summariesAllowed = Array.isArray(plan.agentScope) && plan.agentScope.some((agent) => (agent.makes || []).includes("summary"));
-  const readingPending = summariesAllowed ? (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId) : [];
+  // A plan that schedules its own summary steps (the planner puts "Summary: …" before the reading) needs no extra ones.
+  const schedulesSummaries = (plan.items || []).some((item) => item.generate === "summary" || item.madeAs === "summary");
+  const readingPending = summariesAllowed && !schedulesSummaries ? (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId && item.madeAs !== "summary") : [];
   for (const step of readingPending) {
     onProgress?.({ index: created, total: pending.length + readingPending.length, title: `Summarising: ${step.title}` });
     try {

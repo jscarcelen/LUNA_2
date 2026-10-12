@@ -36,15 +36,18 @@ const GROUPS = [
  * removed and moved steps with their dates before anything is saved. After applying it offers to build the
  * material for the new steps. The last five versions are kept, with Restore.
  */
-export function UpdatePlanDialog({ row, documents = [], attempts = [], workspaceId = "", conceptMap = null, onApply, onBuild, onCancel, onDone }) {
+export function UpdatePlanDialog({ row, documents = [], attempts = [], workspaceId = "", conceptMap = null, initialInstruction = "", onApply, onBuild, onCancel, onDone }) {
   const plan = row.plan;
   const today = new Date().toISOString().slice(0, 10);
   const doneIds = useMemo(() => doneItemIds(plan, attempts), [plan, attempts]);
   const editable = useMemo(() => editableDeadline(plan, today), [plan, today]);
   const imposed = (plan.deadlines || []).filter(isImposedDeadline);
 
-  const [instruction, setInstruction] = useState("");
+  const [instruction, setInstruction] = useState(initialInstruction);
   const [minutes, setMinutes] = useState(() => currentPace(plan, today));
+  // The most to study in one day (the plan's own number, else the usual 90): enforced in code when the changes are applied.
+  const dayNow = Number(plan.minutesPerDay) > 0 ? Number(plan.minutesPerDay) : 90;
+  const [perDay, setPerDay] = useState(dayNow);
   const [deadline, setDeadline] = useState(editable?.date || "");
   const [phase, setPhase] = useState("form"); // form | thinking | preview | applying | build | building
   const [currentId, setCurrentId] = useState("read");
@@ -58,6 +61,8 @@ export function UpdatePlanDialog({ row, documents = [], attempts = [], workspace
   const paceOptions = PACES.includes(pace) ? PACES : [...PACES, pace].sort((a, b) => a - b);
   const deadlineChanged = Boolean(editable && deadline && deadline !== editable.date);
   const paceChanged = minutes !== pace;
+  const dayChanged = perDay !== dayNow;
+  const dayOptions = [60, 90, 120, 180, 240, 300].includes(dayNow) ? [60, 90, 120, 180, 240, 300] : [60, 90, 120, 180, 240, 300, dayNow].sort((a, b) => a - b);
   const versions = Array.isArray(plan.history) ? plan.history : [];
 
   async function loadConceptMap() {
@@ -86,15 +91,15 @@ export function UpdatePlanDialog({ row, documents = [], attempts = [], workspace
       const deadlineEdit = deadlineChanged ? [{ id: editable.id, date: deadline }] : [];
       const { deadlines } = applyDeadlineChanges(plan, deadlineEdit, { today });
       const window = updateWindow(plan, deadlines, today);
-      const text = [instruction.trim(), paceChanged ? `I can now study about ${minutes / 60 >= 1 ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `${minutes} minutes`} a week.` : "", deadlineChanged ? `The deadline "${editable.title}" is now ${deadline}.` : ""].filter(Boolean).join(" ");
-      const payload = buildPlanUpdatePayload({ plan, instruction: text, doneIds, minutesPerWeek: minutes, deadlines, conceptMap: names, performance, window, today });
+      const text = [instruction.trim(), paceChanged ? `I can now study about ${minutes / 60 >= 1 ? `${minutes / 60} hour${minutes === 60 ? "" : "s"}` : `${minutes} minutes`} a week.` : "", deadlineChanged ? `The deadline "${editable.title}" is now ${deadline}.` : "", dayChanged ? `I can study at most ${perDay < 120 ? `${perDay} minutes` : `${perDay / 60} hours`} in one day.` : ""].filter(Boolean).join(" ");
+      const payload = buildPlanUpdatePayload({ plan, instruction: text, doneIds, minutesPerWeek: minutes, minutesPerDay: dayChanged ? perDay : 0, deadlines, conceptMap: names, performance, window, today });
       setCurrentId("plan");
       const response = await fetch("/api/plans/update", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const data = await response.json();
       if (!response.ok || !data?.update) throw new Error(data?.error || "Luna could not update the plan.");
       setCurrentId("check");
       const generatedIds = new Set(documents.filter((document) => document.sourceType === "generated").map((document) => document.id));
-      setProposal(applyPlanUpdate(plan, data.update, { doneIds, today, generatedIds, deadlineEdit, conceptMap: names, minutesPerWeek: paceChanged ? minutes : 0, instruction: text }));
+      setProposal(applyPlanUpdate(plan, data.update, { doneIds, today, generatedIds, deadlineEdit, conceptMap: names, minutesPerWeek: paceChanged ? minutes : 0, minutesPerDay: dayChanged ? perDay : 0, instruction: text }));
       setPhase("preview");
     } catch (problem) {
       setError(String(problem?.message || problem));
@@ -187,6 +192,11 @@ export function UpdatePlanDialog({ row, documents = [], attempts = [], workspace
                 <input type="date" className={input} min={today} value={deadline} disabled={!editable} onChange={(event) => setDeadline(event.target.value)} />
               </label>
             </div>
+            <label className="mt-3 grid gap-1 text-xs font-semibold text-soft-ink">Most in one day
+              <select className={input} value={perDay} onChange={(event) => setPerDay(Number(event.target.value))}>
+                {dayOptions.map((value) => <option key={value} value={value}>{value < 120 ? `${value} minutes` : `${value / 60} hours`} a day{value === dayNow ? " (now)" : ""}</option>)}
+              </select>
+            </label>
             {imposed.length ? <p className="m-0 mt-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-[11px] text-soft-ink">{imposed.map((entry) => `“${entry.title}” (${dateText(entry.date)})`).join(", ")} {imposed.length === 1 ? "was" : "were"} set by someone else and cannot be changed here.</p> : null}
             {Array.isArray(plan.agentScope) ? <p className="m-0 mt-2 text-[11px] text-soft-ink">New steps only use the agents of this plan: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none (studying the material only)"}.</p> : null}
             {versions.length ? (
@@ -207,7 +217,7 @@ export function UpdatePlanDialog({ row, documents = [], attempts = [], workspace
             {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-              <button type="button" className={primaryBtn} disabled={!instruction.trim() && !paceChanged && !deadlineChanged} onClick={propose}>Update the plan</button>
+              <button type="button" className={primaryBtn} disabled={!instruction.trim() && !paceChanged && !deadlineChanged && !dayChanged} onClick={propose}>Update the plan</button>
             </div>
           </>
         ) : null}

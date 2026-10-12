@@ -5,9 +5,9 @@ import { plannedKinds } from "../../modules/plans/revise.js";
 const agentDoc: any = { id: "d1", name: "Vocabulary.agent.json", sourceType: "generated", tags: ["ai-agent"], content: JSON.stringify({ name: "Vocabulary trainer", tagline: "Word lists with examples" }) };
 
 describe("plan agent scope", () => {
-  it("lists the AI-tab agents: the two built-in ones plus every saved agent", () => {
+  it("lists the AI-tab agents: the built-in ones (quiz, flashcards, topic summary) plus every saved agent", () => {
     const catalog = planAgentCatalog([agentDoc, { id: "x", sourceType: "uploaded", tags: [] }]);
-    expect(catalog.map((agent: any) => agent.id)).toEqual(["quiz", "flashcards", "agent:d1"]);
+    expect(catalog.map((agent: any) => agent.id)).toEqual(["quiz", "flashcards", "summary", "agent:d1"]);
     expect(customPlanAgents([agentDoc])[0]).toMatchObject({ label: "Vocabulary trainer", purpose: "Word lists with examples", custom: true });
   });
 

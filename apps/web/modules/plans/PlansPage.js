@@ -2,7 +2,7 @@
 
 import { sourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
+import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, plannedForOf, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
@@ -358,6 +358,33 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const open = plans.find((row) => row.document.id === openId) || null;
   const roots = plans.filter((row) => !row.plan.parentPlanId || !plans.some((other) => other.document.id === row.plan.parentPlanId));
 
+  // "Update the plan?": a deadline moved (by the learner, or by a teacher whose exam date the plan follows) since the plan was
+  // last fitted to its dates. Plans remember those dates (`plannedFor`); older ones are watched from the moment they are opened.
+  const sessionDatesRef = useRef({});
+  const [updatePrefill, setUpdatePrefill] = useState("");
+  useEffect(() => {
+    if (open && !open.plan.plannedFor && !sessionDatesRef.current[open.document.id]) sessionDatesRef.current[open.document.id] = plannedForOf(open.plan.deadlines);
+  }, [open?.document?.id]);
+  const movedDeadlines = useMemo(() => {
+    if (!open || isSharedDocument(open.document)) return [];
+    const base = open.plan.plannedFor || sessionDatesRef.current[open.document.id];
+    if (!base) return [];
+    return (open.plan.deadlines || []).filter((deadline) => deadline.date && base[deadline.id] && base[deadline.id] !== deadline.date).map((deadline) => ({ id: deadline.id, title: deadline.title, from: base[deadline.id], to: deadline.date }));
+  }, [open?.document?.id, open?.plan?.deadlines, open?.plan?.plannedFor]);
+  const dateLabel = (date) => new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  /** The plan stays as it is, and is now considered fitted to the new dates (the question is not asked again). */
+  function keepPlanAsIs() {
+    if (!open) return;
+    const fitted = plannedForOf(open.plan.deadlines);
+    sessionDatesRef.current[open.document.id] = fitted;
+    save({ ...open.plan, plannedFor: fitted }, open.document.id);
+  }
+  function askToUpdateForDeadlines() {
+    const text = movedDeadlines.map((move) => `The deadline "${move.title}" moved from ${dateLabel(move.from)} to ${dateLabel(move.to)}.`).join(" ");
+    setUpdatePrefill(`${text} Re-spread the steps still to do over the new timeline: move steps, and add or remove activities where the new time asks for it.`);
+    setUpdatingPlan(open);
+  }
+
   const [extracting, setExtracting] = useState(false);
   const extractingRef = useRef(false);
 
@@ -649,7 +676,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           onApply={(nextPlan) => save(nextPlan, updatingPlan.document.id)}
           onBuild={(nextPlan, report) => build({ document: updatingPlan.document, plan: nextPlan }, report)}
           onDone={setStatus}
-          onCancel={() => setUpdatingPlan(null)}
+          initialInstruction={updatePrefill}
+          onCancel={() => { setUpdatingPlan(null); setUpdatePrefill(""); }}
         />
       ) : null}
       {updatingResource ? (
@@ -779,6 +807,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             </div>
           </div>
         </div>
+
+        {movedDeadlines.length ? (
+          <section className={`${card} p-4`} style={{ borderLeft: "4px solid var(--accent)" }} role="status">
+            <p className="m-0 text-sm font-bold text-ink">{movedDeadlines.length === 1 ? "A deadline moved." : "Deadlines moved."} Update the study plan to fit the new timeline?</p>
+            <p className="m-0 mt-1 text-xs text-soft-ink">{movedDeadlines.map((move) => `“${move.title}”: ${dateLabel(move.from)} → ${dateLabel(move.to)}`).join(" · ")}. Luna re-spreads the steps still to do, and can remove or add activities; what you have done stays, and you see the changes before anything is saved.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className={primaryBtn} disabled={busy} onClick={askToUpdateForDeadlines}>Update the plan</button>
+              <button type="button" className={ghostBtn} disabled={busy} onClick={keepPlanAsIs}>Keep the plan as it is</button>
+            </div>
+          </section>
+        ) : null}
 
         {/* ── Deadlines — full width, first ── */}
         <section className={`${card} p-5`}>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { conceptNames, coverageOf, ensureCoverage } from "../../../../modules/plans/coverage.js";
+import { capDailyMinutes, normaliseMaxPerDay } from "../../../../modules/plans/dailyCap.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +82,12 @@ export async function POST(request) {
       ? `Agents Luna may use to build resources (the learner chose this scope; use only what the plan needs, not necessarily all of them, and nothing outside this list):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
       : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
+    // The most the learner studies in one day: a number they chose, checked again in code after the model answers.
+    const maxPerDay = normaliseMaxPerDay(body?.maxMinutesPerDay);
+    const stepMax = Math.min(90, maxPerDay);
+    // The learner's own words (optional): what they prefer and what each exam covers; the shape of what to build.
+    const instructions = String(body?.instructions || "").trim().slice(0, 2000);
+    const formatNotes = String(body?.formatNotes || "").trim().slice(0, 1500);
     const performance = body?.performance || null;
     if (!deadline) return NextResponse.json({ error: "A deadline is needed." }, { status: 400 });
     if (!materials.length) return NextResponse.json({ error: "Choose at least one document." }, { status: 400 });
@@ -126,7 +133,7 @@ Exhaustive coverage is the most important rule of this plan, because the learner
 
 <rules>
 1. Dates: every dueDate is YYYY-MM-DD, from ${today} to ${deadline} inclusive. A step outside that window cannot be done before the exam.
-2. Workload: about ${minutesPerWeek} minutes a week in total, at most 90 minutes on any one day, each step 15-90 minutes. A plan that overloads a day gets abandoned, so use more days rather than longer days.
+2. Workload: about ${minutesPerWeek} minutes a week in total, and the minutes of ALL the steps due on one day add up to at most ${maxPerDay} (add them up for every day before you answer), each step 15-${stepMax} minutes. A plan that overloads a day gets abandoned, so use more days rather than longer days.
 3. Review window: the last fifth of the time before ${deadline} holds review and a practice exam only, never new content, because the learner needs those days to consolidate. The practice exam is the last step.
 4. Spaced repetition: a topic studied once comes back a few days later as a short check of 15-30 minutes, because recalling after a gap fixes it in memory better than rereading.
 5. Weak concepts get more minutes and earlier practice than strong ones, because that is where the score is gained. With no history, assume an average pace and check understanding early.
@@ -134,17 +141,19 @@ Exhaustive coverage is the most important rule of this plan, because the learner
 7. Generated resources: set generate only to one of these kinds: ${kinds.join(", ") || "none"}; use "" for steps that read or review existing material, because Luna can build only those kinds. When generate is set, sourceId is the id of the material it is built from.
 8. Concept tags: each goal and step names the concepts it serves, using the wording given with the material, so the plan links back to it.
 9. Language: write the name, note, goal titles and step titles in the language of the material, because the learner reads them as written.
+10. Learner instructions: when <learner_instructions> is given, it says which kinds of activity the learner prefers and what material each exam or deadline covers. Follow it when choosing, ordering and sizing the steps, because the plan has to fit this learner; it never overrides rules 1-3 (dates, workload, review window).
+11. Summaries first: when "summary" is an allowed generate kind, open each group of related topics with a step "Summary: <topics>" (generate = summary, kind read, 20-30 minutes, naming those topics in concepts) and put the "Read: <topics>" step of the original notes right after it, on the same or the next day, because a 1-2 page summary of the key ideas, messages and formulas sets the scene before the learner reads the real notes. Every summary is read before its notes.
 </rules>
 
 <step_format>
 A well-formed step has a title that says what to do and on what, starting with a verb or its type ("Read: osmosis and diffusion", "Quiz: the cell membrane"); one kind (read, activity, review or exam) that matches the title; a realistic number of minutes; a sourceId taken from the material list (empty only when no single document applies); the exact title of the goal it serves; and its concepts. The plan has 2-6 goals, each naming the concepts it covers and a targetScore between 0 and 1 (the share of questions the learner should get right). The note is two sentences to the learner: what the plan does and why it is spread this way.
 </step_format>${coverageRules}
 
-Before you answer, check the schedule against the rules: every dueDate lies between ${today} and ${deadline}; no day exceeds 90 minutes; the last fifth holds no new content; every generate value is allowed; every step's concepts come from the material and its goal is one of your goals${conceptMap.length ? "; the coverage ledger has one entry per concept and each tested concept has a real activity step" : ""}. Fix what fails, then answer.`
+Before you answer, check the schedule against the rules: every dueDate lies between ${today} and ${deadline}; no day adds up to more than ${maxPerDay} minutes; the last fifth holds no new content; every generate value is allowed; every step's concepts come from the material and its goal is one of your goals${conceptMap.length ? "; the coverage ledger has one entry per concept and each tested concept has a real activity step" : ""}. Fix what fails, then answer.`
           },
           {
             role: "user",
-            content: `<today>${today}</today>\n<deadline>${deadline}</deadline>\n\n<learner_history>\n${history}\n</learner_history>\n\n<material>\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}\n</material>${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${conceptMapList ? `\n\n<concept_map>\n${conceptMapList}\n</concept_map>` : ""}\n\nBuild the study plan from ${today} to ${deadline} now.`
+            content: `<today>${today}</today>\n<deadline>${deadline}</deadline>\n\n<learner_history>\n${history}\n</learner_history>\n\n<material>\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}\n</material>${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${instructions ? `\n\n<learner_instructions>\n${instructions}\n</learner_instructions>` : ""}${formatNotes ? `\n\n<resource_formats>\nThe learner's wishes for the shape of the exams, worksheets and flashcards that will be built (they are applied when the material is generated; use them to choose kinds and sizes):\n${formatNotes}\n</resource_formats>` : ""}${conceptMapList ? `\n\n<concept_map>\n${conceptMapList}\n</concept_map>` : ""}\n\nBuild the study plan from ${today} to ${deadline} now.`
           }
         ]
       })
@@ -164,7 +173,14 @@ Before you answer, check the schedule against the rules: every dueDate lies betw
       coverage = { total: names.length, tested: after.tested.length, studied: after.studied.length, repairs: repaired.repairs.filter((entry) => entry.as !== "exam"), plannedGaps: { study: before.missingStudy.length, test: before.missingTest.length } };
     }
     delete parsed.coverage;
-    return NextResponse.json({ plan: parsed, coverage });
+    // Whatever the model added up, no day may exceed the budget the learner set.
+    let dailyCap = null;
+    if (Array.isArray(parsed.items)) {
+      const capped = capDailyMinutes(parsed.items, { maxPerDay, today, horizon: deadline });
+      parsed.items = capped.items;
+      dailyCap = { maxPerDay, moved: capped.moved, clamped: capped.clamped, overloadedDays: capped.overloadedDays };
+    }
+    return NextResponse.json({ plan: parsed, coverage, dailyCap });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }

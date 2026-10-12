@@ -1200,3 +1200,4 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - `canonical/model.js` `embedDocxImages`: reads `word/_rels/document.xml.rels`, embeds png/jpg/gif/webp as `data:` URIs on figure blocks (1.5 MB each, 8 MB total cap; emf/wmf skipped).
 - `htmlRenderer.js`: figures with an image render `<img>`; text/markdown/RAG output is untouched (no base64 in chunks).
 - Test: `tests/document-processing/docx-embedded-images.test.ts`. Applies to newly uploaded documents (re-upload existing ones).
+- Same day, PDF/PPTX: `lib/pdfRender.js` / `pptxRender.js` already embedded pictures, but the CDM re-render (`parseHtmlFallbackBlocks`) dropped `<img>`; it now keeps `data:image` pictures as figure blocks in order. Test added.

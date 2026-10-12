@@ -465,10 +465,19 @@ function parseHtmlFallbackBlocks(html = "") {
   if (!source) return [];
 
   const blocks = [];
-  const blockPattern = /<(h[1-6]|p|li|table)\b[^>]*>[\s\S]*?<\/\1>/gi;
+  const blockPattern = /<(h[1-6]|p|li|table)\b[^>]*>[\s\S]*?<\/\1>|<img\b[^>]*>/gi;
   for (const match of source.matchAll(blockPattern)) {
-    const tag = String(match[1] || "").toLowerCase();
     const xml = String(match[0] || "");
+    if (/^<img\b/i.test(xml)) {
+      // Pictures embedded by the PDF/PPTX renderers (data: URIs) must survive the model round-trip.
+      const src = xml.match(/\bsrc="([^"]*)"/i)?.[1] || "";
+      if (/^data:image\//i.test(src)) {
+        const alt = (xml.match(/\balt="([^"]*)"/i)?.[1] || "").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+        blocks.push({ type: "figure", caption: alt || "Figure", alt_text: alt, image: src, source: "fallback", confidence: 0.72 });
+      }
+      continue;
+    }
+    const tag = String(match[1] || "").toLowerCase();
     const text = stripTags(xml);
 
     if (tag.startsWith("h")) {

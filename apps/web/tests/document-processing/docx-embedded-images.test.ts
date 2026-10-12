@@ -1,7 +1,7 @@
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 // @ts-ignore JS module
-import { buildCanonicalDocumentFromDocxFile } from "../../modules/document-processing/canonical/model.js";
+import { buildCanonicalDocumentFromDocxFile, buildCanonicalDocumentFromExtraction } from "../../modules/document-processing/canonical/model.js";
 // @ts-ignore JS module
 import { renderCanonicalDocumentToHtml } from "../../modules/document-processing/renderers/htmlRenderer.js";
 
@@ -26,5 +26,18 @@ describe("docx embedded images", () => {
     expect(html).toContain("<img");
     expect(html).toContain("data:image/png;base64,");
     expect(html).toContain('alt="Bell curve"');
+  });
+
+  it("keeps PDF/PPTX pictures (data: img in the source HTML) through the model", async () => {
+    const sourceRenderHtml = `<h2>Slide 1</h2><p>Intro</p><figure><img alt="Slide 1 picture" src="data:image/png;base64,${PNG}" /></figure><p>After</p>`;
+    const cdm: any = await buildCanonicalDocumentFromExtraction({
+      file: { name: "t.pptx" },
+      extraction: { text: "Intro After", sourceRenderHtml },
+      detectedType: "pptx"
+    });
+    const html: string = renderCanonicalDocumentToHtml(cdm);
+    expect(html).toContain("data:image/png;base64,");
+    expect(html.indexOf("Intro")).toBeLessThan(html.indexOf("<img"));
+    expect(html.indexOf("<img")).toBeLessThan(html.indexOf("After"));
   });
 });

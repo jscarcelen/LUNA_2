@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../../components/EmptyState";
 import { sourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, plannedForOf, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
@@ -1396,7 +1397,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               />
             );
           })}
-          {!plans.length ? <p className="m-0 text-sm text-soft-ink">No plans yet — create one, or let Luna build one from your material.</p> : null}
+          {!plans.length ? <EmptyState title="No study plans yet" text="A plan says what to study and when, with activities and deadlines. Luna can build one from your material." action="Plan it for me" onAction={() => setGenerating(true)} /> : null}
         </div>
       )}
 

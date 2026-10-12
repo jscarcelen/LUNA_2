@@ -8,6 +8,7 @@ import { TopBar } from "./TopBar";
 import { roleProfiles } from "./data";
 import { PAGE_TITLES, isPageAllowed, navFor, sectionOf, tabKeyOf, tabsFor } from "./navModel";
 import { SectionTabs } from "./SectionTabs";
+import { FirstRunTour } from "./FirstRunTour";
 import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
 import { PlatformNotice } from "../modules/accounts/PlatformNotice";
@@ -235,6 +236,7 @@ export function AppShell({ account = null, initialPage = "" }) {
         onOpenPage={(target) => setPage(target)}
         examDates={examDates}
         onDismissExamDate={dismissExamDate}
+        account={Boolean(account)}
       />
     );
     if (page === "dashboard") return home;
@@ -943,7 +945,7 @@ export function AppShell({ account = null, initialPage = "" }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onOpenPage={setPage} />
+        <TopBar title={title} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onOpenPage={setPage} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (
@@ -963,6 +965,7 @@ export function AppShell({ account = null, initialPage = "" }) {
       {account && shareTarget ? (
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
+      <FirstRunTour />
       <UiCritic enabled={criticOn} />
       {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
       <FeedbackWidget page={page} title={title} role={role} account={account} />

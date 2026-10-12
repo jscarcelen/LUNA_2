@@ -1,5 +1,6 @@
 "use client";
 
+import { EmptyState } from "../../components/EmptyState";
 import { useMemo, useState } from "react";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { defaultLearner } from "../performance/learners";
@@ -130,7 +131,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", "To do"], ["done", "Done"], ["all", "All"], ["errors", `Mistakes (${allErrors.length})`]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
-          {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("ai-tools")}>＋ Create with an agent</button> : null}
+          {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("create")}>＋ Make something</button> : null}
           {/* Phone: the study-plan, topic and sort filters sit behind this button so the activities are what you see. */}
           {view !== "errors" ? <button type="button" className={`grid size-10 place-items-center rounded-full border text-lg leading-none md:hidden ${filtersOpen ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink"}`} aria-label="Filter and sort" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>⚙</button> : null}
         </div>
@@ -221,7 +222,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 </div>
                 );
               })}
-              {!visible.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{view === "todo" ? "Nothing to do here. Create a quiz, exam or flashcards with an agent — or let a study plan build them for you." : "Nothing yet."}</p> : null}
+              {!visible.length ? <EmptyState title={view === "todo" ? "Nothing to practise right now" : "Nothing here yet"} text={view === "todo" ? "Practice is where you answer quizzes, flashcards and worksheets. Make one from your material, or let a study plan build them for you." : "Finished activities show up here with your score."} action={view === "todo" ? "Make a quiz" : undefined} onAction={() => onOpenTool?.("create")} /> : null}
             </div>
           </section>
           <section className={`${card} p-5`}>

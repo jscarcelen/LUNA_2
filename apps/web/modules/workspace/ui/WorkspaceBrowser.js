@@ -14,6 +14,7 @@ import { branchOf, documentsOf, folderNode, foldersOf, parseNode, pathOf, subjec
 import { blockedTargets, destinationFolderId, documentMoveMessage, folderMoveMessage, undoGroups } from "../moveModel";
 import { MoveDialog } from "./MoveDialog";
 import { UploadProgress } from "./UploadProgress";
+import { EmptyState } from "../../../components/EmptyState";
 import { askLuna } from "../../chat/GlobalAskLuna";
 import { planUploadBatches, tooLargeMessage } from "../uploadPlan";
 import { ReaderView } from "../../reader/ReaderView";
@@ -889,7 +890,7 @@ export function WorkspaceBrowser({
 
               const roots = childrenOf.get("") || [];
               if (!roots.length && !visible.length) {
-                return <p key="empty" className="py-8 text-center text-sm text-soft-ink">Upload files or create a folder to get started.</p>;
+                return <EmptyState key="empty" title="Nothing here yet" text="This is where your course material lives. Upload your notes, slides or a whole folder, and Luna builds quizzes, summaries and plans from them." action="Upload files" onAction={() => fileRef.current?.click()} secondary="Upload a folder" onSecondary={() => folderRef.current?.click()} />;
               }
               if (!roots.length && visible.length) {
                 // Documents with no folder structure — flat list

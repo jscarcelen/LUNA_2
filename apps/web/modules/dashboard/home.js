@@ -164,3 +164,50 @@ export function nextSteps(entries = [], limit = 5) {
     })
     .slice(0, limit);
 }
+
+/**
+ * The one thing to do now, for the Home "Next step" card. The most urgent plan step when there is one; otherwise the
+ * next stage of getting started (upload, plan, practise). Never empty, so Home always answers "what do I do now?".
+ *
+ * @returns {{ kind: "step"|"upload"|"plan"|"practise"|"review", title: string, detail: string, cta: string, step?: object }}
+ */
+export function nextBestAction({ hasMaterial = false, hasPlans = false, steps = [], hasEvidence = false, role = "student" } = {}) {
+  if (steps.length) {
+    const step = steps[0];
+    const when = step.days === null || step.days === undefined ? "" : step.days < 0 ? "late" : step.days === 0 ? "due today" : step.days === 1 ? "due tomorrow" : `due in ${step.days} days`;
+    return { kind: "step", title: step.title, detail: [step.planName, when].filter(Boolean).join(" · "), cta: "Start", step };
+  }
+  if (role === "parent") return { kind: "review", title: "See how your child is doing", detail: "Progress shows what is going well and where help is needed.", cta: "Open progress" };
+  if (!hasMaterial) return { kind: "upload", title: "Add your course material", detail: "Upload notes, slides or a textbook. Luna reads them and builds everything else from them.", cta: "Upload material" };
+  if (!hasPlans) return { kind: "plan", title: "Let Luna plan your studying", detail: "A plan with deadlines and activities, built from your material.", cta: "Plan it for me" };
+  return { kind: "practise", title: hasEvidence ? "Practise what needs work" : "Do a first quiz", detail: "A short quiz shows Luna what you know, so it can tell you what to study next.", cta: "Make a quiz" };
+}
+
+/** Three first steps for a new person, each done or not: upload, plan, practise. Null once all three are done. */
+export function firstRunChecklist({ hasMaterial = false, hasPlans = false, hasEvidence = false } = {}) {
+  const items = [
+    { id: "upload", label: "Upload your material", done: hasMaterial, target: "workspaces" },
+    { id: "plan", label: "Make a study plan", done: hasPlans, target: "plans?generate=1" },
+    { id: "practise", label: "Do a first quiz", done: hasEvidence, target: "create" }
+  ];
+  return items.every((item) => item.done) ? null : items;
+}
+
+/** The three shortcuts on Home, by role. */
+export function homeShortcuts(role = "student", account = false) {
+  if (role === "parent") return [
+    { id: "progress", label: "See progress", target: "performance", icon: "◴" },
+    ...(account ? [{ id: "children", label: "My children", target: "students", icon: "☺" }] : []),
+    { id: "plans", label: "Open study plans", target: "plans", icon: "◷" }
+  ];
+  if (role === "teacher") return [
+    { id: "upload", label: "Upload material", target: "workspaces", icon: "⤒" },
+    { id: "make", label: "Make a quiz", target: "create", icon: "✎" },
+    account ? { id: "students", label: "Assign or follow students", target: "students", icon: "☺" } : { id: "plans", label: "Open study plans", target: "plans", icon: "◷" }
+  ];
+  return [
+    { id: "upload", label: "Upload material", target: "workspaces", icon: "⤒" },
+    { id: "make", label: "Make a quiz", target: "create", icon: "✎" },
+    { id: "plans", label: "Open my plan", target: "plans", icon: "◷" }
+  ];
+}

@@ -34,6 +34,7 @@ export const COMPONENT_FOR_BLOCK: Record<string, string | null> = {
   paragraph: "block-paragraph",
   bullet_list: "block-key-points",
   callout: "block-callout",
+  figure: "block-figure",
   vocabulary: "block-vocabulary-row",
   divider: null,
   question_mc: "block-exam-question",
@@ -306,6 +307,10 @@ const RUNS: Record<string, RunSpec> = {
   "block-callout": {
     merge: false,
     build: (blocks) => ({ data: { note: text(blocks[0]?.text) }, autoOff: {} })
+  },
+  "block-figure": {
+    merge: false,
+    build: (blocks) => ({ data: { picture: text(blocks[0]?.image), caption: text(blocks[0]?.caption) }, autoOff: {} })
   },
   "block-exam-question": {
     merge: true,

@@ -30,6 +30,8 @@ export function renderInline(text) {
   source = source.replace(/\$(?!\s)([^$\n]*?[^\s$])\$(?!\d)/g, (match, latex) => (/^\s|\s$/.test(latex) || /^\d/.test(latex) && !/[\\^_{}=+\-*/]/.test(latex) ? match : (maths.push(renderMath(latex, false)), `\uE000${maths.length - 1}\uE001`)));
   let html = escapeHtml(source);
   html = html
+    // A picture embedded in the notes (a data: image) is shown; any other image reference stays a "Figure" mark.
+    .replace(/!\[([^\]]*)\]\((data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)\)/g, (_, alt, src) => `<img class="md-image" src="${src}" alt="${alt || "Figure"}">`)
     .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => `<span class="md-figure">Figure${alt ? `: ${alt}` : ""}</span>`)
     // Links to the original documents (`/source?d=…&p=…`) carry a mark: inside the app they open the reader at that page.
     .replace(/\[([^[\]]+)\]\((https?:[^)\s]+|\/source\?[^)\s]+)\)/g, (_, label, href) => `<a href="${href}" target="_blank" rel="noreferrer"${/\/source\?/.test(href) ? " data-luna-source" : ""}>${label}</a>`)
@@ -161,6 +163,7 @@ export const MARKDOWN_CSS = `
 .md pre{background:#f5f5f7;border-radius:10px;padding:12px 14px;overflow:auto}.md pre code{background:none;padding:0}
 .md blockquote{margin:.8em 0;padding:.2em 1em;border-left:3px solid #d2d2d7;color:#515154}
 .md .md-page{margin:1.6em 0 .6em;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#8e8e93;border-top:1px solid #e5e5ea;padding-top:6px}
+.md .md-image{display:block;max-width:100%;max-height:420px;height:auto;margin:1em auto;border-radius:8px}
 .md .md-figure{display:inline-block;background:#f5f5f7;border-radius:8px;padding:2px 10px;font-size:.88em;color:#6e6e73}
 .md .md-math{margin:.8em 0;overflow-x:auto;text-align:center}
 .md .md-table{margin:.9em 0;overflow-x:auto;border:1px solid #e5e5ea;border-radius:12px}

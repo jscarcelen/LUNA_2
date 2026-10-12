@@ -119,6 +119,9 @@ export function blocksToMarkdown(blocks = []) {
         rows.push({ term: block.word, meaning: `${withoutTag(block.translation, tags[0])}${cite(refs[0])}`, detail: block.example });
         break;
       }
+      case "figure":
+        if (block.image) out.push(`![${String(block.caption || "Figure").replace(/[[\]\n]/g, " ")}](${block.image})${block.caption ? `\n\n*${String(block.caption).replace(/\n/g, " ")}*` : ""}`);
+        break;
       case "divider":
         out.push("---");
         break;

@@ -294,6 +294,15 @@ export function getSampleBlocks(selectedBlockIds) {
 export function conformBlocks(blocks) {
   const out = [];
   for (const block of Array.isArray(blocks) ? blocks : []) {
+    // A figure is a picture the pipeline placed itself (never written by a model): kept when it is an embedded image.
+    if (block?.type === 'figure') {
+      if (/^data:image\/(png|jpe?g|gif|webp);base64,/i.test(String(block.image || ''))) {
+        const figure = { type: 'figure', image: block.image, caption: String(block.caption || '').trim() || null };
+        for (const key of Object.keys(block)) if (key.startsWith('_')) figure[key] = block[key];
+        out.push(figure);
+      }
+      continue;
+    }
     const def = block && BLOCKS[block.type];
     if (!def) continue;
     const next = { type: block.type };

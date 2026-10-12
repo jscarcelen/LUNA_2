@@ -8,7 +8,7 @@
  */
 
 import type { Element, FieldDef, GroupElement, ID, TextElement } from "./types";
-import { createField, createGroup, createId, createShape, createText, defaultStyle, walkElements } from "./model";
+import { createField, createGroup, createId, createImage, createShape, createText, defaultStyle, walkElements } from "./model";
 import { INK, PAGE, PALETTES, RADIUS, SPACE, TYPE, ANSWER_INSET, accentEdge, accentMark, answerBand, cardStyle, chip, confidenceRow, divider, field, kicker, label, numberBadge, optionRow, palette, pointsPill, writingLine } from "./design";
 
 export type BlockCategory = "questions" | "cards" | "structure" | "kids" | "custom";
@@ -510,6 +510,24 @@ function headings(): BlockDef {
   return { id: "block-headings", family: "Headings", variant: "Levels 1–4", name: "Headings", description: "Section and sub-section headings at several levels — the bigger the level, the smaller the heading.", category: "structure", icon: "H", fields: [list], elements: [group], accent: { main: accent.main, tint: accent.tint }, builtIn: true };
 }
 
+/** A picture from the source documents (a figure, chart or diagram) with its caption, kept in the notes. */
+function figureBlock(): BlockDef {
+  const picture = createField("Picture", "image", { description: "The figure, as an image the page can show" });
+  const caption = createField("Caption", "text", { description: "What the figure shows" });
+  const W = PAGE.width;
+  const group = createGroup({
+    name: "Figure",
+    frame: { x: PAGE.margin, y: PAGE.margin, w: W, h: 82 },
+    layout: { mode: "free", gap: 0 },
+    repeat: null,
+    children: [
+      createImage({ type: "field", fieldId: picture.id }, { name: "Picture", frame: { x: 0, y: 0, w: W, h: 72 } }),
+      field(caption.id, "Figure 1. A diagram of the water cycle.", { x: 0, y: 74, w: W, h: 7 }, { fontSize: TYPE.small, color: INK.muted, align: "center" })
+    ]
+  });
+  return { id: "block-figure", family: "Figure", variant: "Picture with caption", name: "Figure", description: "A picture from the source documents with a caption under it.", category: "structure", icon: "▣", fields: [picture, caption], elements: [group], options: [], accent: { main: "#0071e3", tint: "#eaf3ff" }, builtIn: true };
+}
+
 function callout(): BlockDef {
   const accent = palette("orange");
   const note = createField("Note", "rich_text", { description: "Important information, tip or reminder" });
@@ -690,7 +708,7 @@ function mathPractice(): BlockDef {
 export function builtInBlocks(): BlockDef[] {
   return [
     // Structure
-    examHeader(), minimalHeader(), sectionHeader(), sectionTitle(), headings(), bodyText(), keyPoints(), callout(), vocabularyRow(), footer(),
+    examHeader(), minimalHeader(), sectionHeader(), sectionTitle(), headings(), bodyText(), keyPoints(), callout(), figureBlock(), vocabularyRow(), footer(),
     // Questions (every question type has an answer for the key)
     examQuestion(), openQuestion(), trueFalse(), fillBlanks(), matchPairs(), mathPractice(),
     // Cards & games

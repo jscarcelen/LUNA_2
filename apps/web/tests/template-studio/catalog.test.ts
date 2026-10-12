@@ -15,7 +15,7 @@ const textOf = (doc: ReturnType<typeof buildOutputDocument>, layoutIndex = 0, vi
 describe("the catalog", () => {
   it("has the components, in the categories, Template Studio now defines", () => {
     const names = (category: string) => blockFamilies(builtInBlocks().filter((block) => block.category === category)).map((family) => family.family);
-    expect(names("structure")).toEqual(["Exam header", "Document header", "Section header", "Headings", "Paragraph", "Key points", "Callout", "Table", "Footer"]);
+    expect(names("structure")).toEqual(["Exam header", "Document header", "Section header", "Headings", "Paragraph", "Key points", "Callout", "Figure", "Table", "Footer"]);
     expect(names("questions")).toEqual(["Multiple choice", "Open answer", "True / false", "Fill in the blanks", "Match the pairs", "Math practice set"]);
     expect(builtInBlocks().filter((block) => !["structure", "questions"].includes(block.category)).map((block) => block.family)).toEqual(["Flashcard"]);
   });

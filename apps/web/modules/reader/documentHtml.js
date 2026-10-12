@@ -56,6 +56,9 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "" }
       case "vocabulary":
         table.push({ word: text(block.word), translation: text(block.translation), example: text(block.example) });
         break;
+      case "figure":
+        if (/^data:image\//i.test(String(block.image || ""))) out.push(`<figure class="md-picture"><img src="${escape(block.image)}" alt="${escape(text(block.caption) || "Figure")}">${text(block.caption) ? `<figcaption>${renderInline(text(block.caption))}</figcaption>` : ""}</figure>`);
+        break;
       case "divider":
         out.push("<hr>");
         break;
@@ -82,6 +85,7 @@ export const READER_CSS = `
 .md a[data-luna-source]{color:#0071e3;text-decoration:none}.md a[data-luna-source]:hover{text-decoration:underline}
 .md .md-sub{color:#6e6e73;margin-top:-.3em}
 .md .md-list-title{font-weight:650;margin-bottom:0}
+.md .md-picture{margin:1.2em 0;text-align:center;break-inside:avoid}.md .md-picture img{max-width:100%;max-height:420px;height:auto;border-radius:8px}.md .md-picture figcaption{font-size:12px;color:#6e6e73;margin-top:6px}
 .md .md-callout{margin:1em 0;padding:12px 16px;border-radius:14px;background:#f5f5f7;border-left:4px solid #0071e3}
 .md .md-callout strong{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#515154;margin-bottom:2px}
 .md .md-callout-tip{background:#eef8f0;border-left-color:#34c759}.md .md-callout-warning{background:#fff4e5;border-left-color:#ff9500}

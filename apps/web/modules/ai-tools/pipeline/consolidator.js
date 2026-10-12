@@ -1,4 +1,5 @@
 import { chunkDocuments, DEFAULT_CHUNK_WORDS, DEFAULT_OVERLAP_WORDS } from "./chunking.js";
+import { keyFigures, placeFigures } from "./figures.js";
 import { conformBlocks } from "../blocks/blockRegistry.js";
 import { formatSourceTag } from "./masterDocument.js";
 import { codeSpanInvalid, invalidFormulas, isValidTex, repairMathText, replaceFormula } from "../../template-studio/engine/math/repair";
@@ -683,7 +684,7 @@ export async function runConsolidation({ documents = [], options = {}, deps = {}
   /* ---- 3 · MERGE */
   let merged = 0;
   emit({ step: "generate", status: "progress", phase: "merge", done: 0, total: outline.length, label: `Merging ${outline.length} section${outline.length === 1 ? "" : "s"}` });
-  const sections = await runPool(outline.map((entry) => async () => {
+  let sections = await runPool(outline.map((entry) => async () => {
     const topics = entry.topicIds.map((id) => draftTopics.find((topic) => topic.id === id)).filter(Boolean);
     const blocks = await mergeEntry(topics, entry.title);
     merged += 1;
@@ -749,10 +750,15 @@ export async function runConsolidation({ documents = [], options = {}, deps = {}
     let at = 0;
     for (const section of sections) { section.blocks = repaired.blocks.slice(at, at + section.blocks.length); at += section.blocks.length; }
   }
+  // Key pictures of the source documents go into the notes as figure blocks (embedded, so PDF and HTML both show them).
+  const docIndex = new Map(docs.map((doc, index) => [doc.tag, index]));
+  const placement = placeFigures(sections, keyFigures(documents.filter((document) => docs.some((doc) => doc.id === (document.id || "")))), (sid) => docIndex.get(byId.get(sid)?.tag) ?? -1);
+  sections = placement.sections;
+  stats.figures = placement.placed;
   const body = [];
   for (const section of sections) {
     if (!section.blocks.length) continue;
-    body.push({ type: "section_header", title: section.title, intro: null }, ...notesToBlocks(section.blocks, byId));
+    body.push({ type: "section_header", title: section.title, intro: null }, ...notesToBlocks(section.blocks, byId), ...(section.figures || []));
   }
   let finalBlocks = body;
   const absent = missingFormulas(chunks, finalBlocks);

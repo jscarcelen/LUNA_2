@@ -23,13 +23,14 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * Download button (top right) opens the PDF page-size × view matrix and the HTML.
  *
  * `html` replaces the generated reading page (an uploaded document); `resource` still describes it
- * for the PDF; `onDownloadOriginal` adds "original file" to the download panel.
+ * for the PDF; `onDownloadOriginal` adds "original file" to the download panel (for a document made from several uploads,
+ * `originals` + `onDownloadOriginalById` list each original file there).
  *
  * "Ask Luna" (a button at the bottom right) opens the assistant beside the page, answering from the study plan's
  * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -276,6 +277,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         {saveState ? <span className="text-[11px] text-soft-ink" aria-live="polite">{saveState}</span> : null}
         {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ Edit content</button> : null}
         {onUpdate && !editing ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={onUpdate}>✦<span className="ml-1">Update…</span></button> : null}
+        {onDownloadOriginal && !editing ? <button type="button" className={ghostBtn} title="The file you uploaded, in the format it was uploaded in" onClick={onDownloadOriginal}>⤓<span className="ml-1">Original file</span></button> : null}
         <button type="button" className={ghostBtn} aria-label="Download" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">Download</span></button>
         <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
         {downloadOpen ? (
@@ -283,13 +285,14 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
             <button type="button" aria-label="Close download" className="fixed inset-0 z-10 cursor-default bg-black/20" onClick={() => setDownloadOpen(false)} />
             <div className="absolute right-3 top-full z-20 mt-1 max-h-[75vh] w-[min(94vw,540px)] overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.25)]">
               <div className="mb-3 flex items-center justify-between"><p className="m-0 text-sm font-bold text-ink">Download</p><button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setDownloadOpen(false)}>Close</button></div>
-              <DownloadPanel resource={resource} filename={title || resource?.name} activity={playable} getHtml={getHtml} highlightCount={list.length} onOriginal={onDownloadOriginal} onError={setProblem} />
+              <DownloadPanel resource={resource} filename={title || resource?.name} activity={playable} getHtml={getHtml} highlightCount={list.length} onOriginal={onDownloadOriginal} originals={originals} onOriginalById={onDownloadOriginalById} onError={setProblem} />
               {problem ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{problem}</p> : null}
             </div>
           </>
         ) : null}
       </header>
       {notice ? <p className="m-0 bg-[var(--accent-soft)] px-4 py-1.5 text-xs text-[var(--accent-ink)]">{notice}</p> : null}
+      {extra && !editing ? extra : null}
       {focusInfo?.focused && !editing ? (
         <p className="m-0 flex flex-wrap items-center gap-2 bg-[var(--accent-soft)] px-4 py-1.5 text-xs text-[var(--accent-ink)]">
           {showingAll ? "Showing the whole document." : `Showing the part for this step: ${focusInfo.label || "the relevant sections"}.`}

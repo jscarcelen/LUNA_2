@@ -15,6 +15,7 @@ import { blockedTargets, destinationFolderId, documentMoveMessage, folderMoveMes
 import { MoveDialog } from "./MoveDialog";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
+import { masterOriginals, originalDownloader } from "../../reader/downloadOriginal";
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
 import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
@@ -921,6 +922,8 @@ export function WorkspaceBrowser({
             if (original) { setPreviewScroll({ page: target.page, section: target.section }); setPreview(original); } else window.open(sourceHref(target), "_blank", "noopener");
           }}
           chat={{ documentId: playing.document.id }}
+          originals={masterOriginals(playing.resource)}
+          onDownloadOriginalById={originalDownloader(rawDocuments, onDownloadDocument)}
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}
@@ -934,6 +937,7 @@ export function WorkspaceBrowser({
           document={preview}
           documents={rawDocuments}
           scrollTo={previewScroll}
+          workspaceId={workspace?.id || ""}
           onClose={() => { setPreview(null); setPreviewScroll(null); }}
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}

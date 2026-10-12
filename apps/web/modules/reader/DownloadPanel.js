@@ -29,7 +29,7 @@ export function standalonePage(title, body) {
  * view, each its own file) and the HTML — the interactive file for a quiz or flashcards, the
  * reading page (optionally with my highlights and notes) for a document.
  */
-export function DownloadPanel({ resource, filename, activity = null, getHtml, highlightCount = 0, onOriginal, originalLabel = "Original file", onError }) {
+export function DownloadPanel({ resource, filename, activity = null, getHtml, highlightCount = 0, onOriginal, originalLabel = "Original file", originals = [], onOriginalById, onError }) {
   const doc = useMemo(() => outputDocumentFor(resource), [resource]);
   const name = filename || resource?.name || "document";
   const activityData = activity && activity.questions ? activity : resource?.activity?.questions?.length ? resource.activity : null;
@@ -64,6 +64,17 @@ export function DownloadPanel({ resource, filename, activity = null, getHtml, hi
       {onOriginal ? (
         <div className="border-t border-ink/8 pt-3">
           <button type="button" className={ghostBtn} onClick={onOriginal}>{originalLabel}</button>
+        </div>
+      ) : null}
+      {/* A merged (master) document: the files it was made from, each in the format it was uploaded in. */}
+      {onOriginalById && originals.length ? (
+        <div className="grid gap-1.5 border-t border-ink/8 pt-3">
+          <p className="m-0 text-xs font-semibold text-soft-ink">Original files this was made from</p>
+          {originals.map((entry) => (
+            <button key={entry.id} type="button" className={`${ghostBtn} justify-start`} title={`Download ${entry.name} as it was uploaded`} onClick={async () => { const problem = await onOriginalById(entry.id); if (problem) onError?.(problem); }}>
+              <span className="truncate">⤓ {entry.name}</span>
+            </button>
+          ))}
         </div>
       ) : null}
     </div>

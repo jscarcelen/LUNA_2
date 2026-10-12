@@ -16,6 +16,7 @@ import { BUILTIN_PLAN_AGENTS, planAgentCatalog } from "./agents";
 import { ReaderView } from "../reader/ReaderView";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { DocumentReader } from "../reader/DocumentReader";
+import { masterOriginals, originalDownloader } from "../reader/downloadOriginal";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
 import { deletePlanEverything, ensurePlanFolders, planDeletionScope } from "./folders";
 import { KnowledgeGraph } from "./KnowledgeGraph.js";
@@ -1275,6 +1276,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               onUpdate={playing.resource && canUpdateResource(playing.resource) ? () => setUpdatingResource({ document: playing.resourceDocument, resource: playing.resource }) : undefined}
               activity={playing.activity}
               chat={{ documentId: playing.documentId, planId: playing.planDocumentId }}
+              originals={masterOriginals(playing.resource)}
+              onDownloadOriginalById={originalDownloader(workspaceDocuments, onDownloadDocument)}
               highlights={playing.resource?.highlights || []}
               onSaveHighlights={(list) => saveHighlights(playing.resourceDocument, playing.resource, list)}
               onSubmit={async (attempt) => {
@@ -1297,6 +1300,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             onUpdateDocumentContent={onUpdateDocumentContent}
             focus={readingDoc.focus}
             scrollTo={readingDoc.scrollTo}
+            workspaceId={selectedWorkspaceId}
             planId={open.document.id}
           />
         ) : null}
@@ -1306,6 +1310,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             resource={reading.resource}
             onUpdate={reading.document && canUpdateResource(reading.resource) ? () => setUpdatingResource({ document: reading.document, resource: reading.resource }) : undefined}
             chat={{ documentId: reading.document?.id, planId: open.document.id }}
+            originals={masterOriginals(reading.resource)}
+            onDownloadOriginalById={originalDownloader(workspaceDocuments, onDownloadDocument)}
             highlights={reading.resource?.highlights || []}
             onSaveHighlights={(list) => saveHighlights(reading.document, reading.resource, list)}
             onClose={() => setReading(null)}

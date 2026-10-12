@@ -1041,6 +1041,7 @@ export function WorkspaceBrowser({
           documents={rawDocuments}
           scrollTo={previewScroll}
           workspaceId={workspace?.id || ""}
+          onOpenActivity={(documentId) => { const row = rowsByDocumentId.get(documentId); if (row) { setPreview(null); setPreviewScroll(null); setPlaying(row); } }}
           onClose={() => { setPreview(null); setPreviewScroll(null); }}
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}

@@ -11,6 +11,7 @@ import { DownloadPanel } from "./DownloadPanel";
 import { AskLuna } from "../chat/AskLuna";
 import { parseSourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { SourcePeek } from "./SourcePeek";
+import { CoverageLines } from "./CoverageLines";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -30,7 +31,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null, coverage = null }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -39,6 +40,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
+  const [coverageOn, setCoverageOn] = useState(false);
   const [chatProgress, setChatProgress] = useState(null);
   const [focusId, setFocusId] = useState("");
   const [problem, setProblem] = useState("");
@@ -273,6 +275,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
             ))}
           </div>
         ) : null}
+        {coverage?.refs?.length && !playable && !editing ? <button type="button" className={ghostBtn} aria-pressed={coverageOn} title="Lines beside the text show which parts are tested or covered by your activities" onClick={() => setCoverageOn((on) => !on)}>▤<span className="ml-1">Coverage</span></button> : null}
         {noting ? <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ Notes{list.length ? ` (${noted}/${list.length})` : ""}</button> : view === "notes" && !editing ? <span className="text-xs text-soft-ink">Highlighting needs a newer browser.</span> : null}
         {saveState ? <span className="text-[11px] text-soft-ink" aria-live="polite">{saveState}</span> : null}
         {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ Edit content</button> : null}
@@ -319,12 +322,15 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
       ) : null}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect} onClick={onPageClick}>
+          <div className="relative">
           <div ref={rootRef}>
             {playable
               ? <ErrorBoundary onClose={onClose} title="This activity hit a problem"><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
               : html
                 ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
                 : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read here.</p>}
+          </div>
+          {coverageOn && coverage?.refs?.length && html && !playable && !editing ? <CoverageLines rootRef={rootRef} refs={coverage.refs} html={html} onOpen={coverage.onOpen} /> : null}
           </div>
         </div>
         {notesOpen && noting ? (

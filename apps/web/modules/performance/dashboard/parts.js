@@ -1,6 +1,7 @@
 "use client";
 
-import { MASTERY_THRESHOLD, statusOf } from "../mastery";
+import { useState } from "react";
+import { MASTERY_THRESHOLD, RECOVERY_GAP_DAYS, statusOf } from "../mastery";
 import { typeOf } from "../errors";
 
 export const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -8,15 +9,85 @@ export const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em]
 export const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 export const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
 
+/** What each headline number means and how it is computed: shown behind the "i" so the maths is never hidden. */
+export const METRIC_INFO = {
+  mastery: {
+    meaning: "How well you could answer questions on your topics today. It is not the same as accuracy: it also weighs difficulty, recency and how much evidence there is.",
+    formula: [
+      "topic mastery = min( blend × difficulty, coverage cap ) × freshness",
+      "blend = 0.65 × recent accuracy + 0.35 × overall accuracy",
+      "difficulty = 0.85 + 0.15 × average difficulty (easy 0.8, medium 1, hard 1.25)",
+      "coverage cap = 0.45 + 0.55 × min(1, questions ÷ 10)",
+      "overall mastery = average of topic mastery, weighted by questions answered"
+    ]
+  },
+  topicsMastered: {
+    meaning: "How many of your topics are at or above the mastery threshold.",
+    formula: `topics mastered = topics with mastery ≥ ${MASTERY_THRESHOLD}%  ·  shown as mastered ÷ all measured topics`
+  },
+  topicsToImprove: {
+    meaning: "How many topics are below the mastery threshold, weakest first.",
+    formula: `topics to improve = topics with mastery < ${MASTERY_THRESHOLD}%`
+  },
+  accuracy: {
+    meaning: "The share of the questions you answered that were right. A nearly-right written answer earns part of a point.",
+    formula: [
+      "accuracy = credit earned ÷ questions answered",
+      "credit: right = 1, close = the grader's score (0.5 unless stated), wrong = 0"
+    ]
+  },
+  retention: {
+    meaning: "Whether mistakes get fixed. Of the topics where you made mistakes, how many improved in the following weeks.",
+    formula: [
+      `follow-up = answers given ${RECOVERY_GAP_DAYS}+ days after the topic's first mistake (a mistake is an answer that earned under half a point)`,
+      "a topic is measured once its follow-up has 2+ answers",
+      "improved = follow-up accuracy is higher than the accuracy before it",
+      "retention = improved topics ÷ measured topics"
+    ]
+  },
+  topicAccuracy: {
+    meaning: "For each topic, the share of your answers that were right, next to the mastery Luna estimates from them.",
+    formula: "topic accuracy = correct answers ÷ answers attempted on that topic"
+  }
+};
+
 export const percent = (value) => `${Math.round((value || 0) * 100)}%`;
 export const trendArrow = (value) => (value > 0.04 ? "↑" : value < -0.04 ? "↓" : "→");
 export const trendTone = (value) => (value > 0.04 ? "text-[#2f9e5b]" : value < -0.04 ? "text-[var(--color-danger)]" : "text-soft-ink");
 
+/**
+ * The "i" next to a metric: click it to read what the number means and exactly how it is calculated, so
+ * nothing on the screen is a black box. `info` is { meaning, formula } (formula may be a string or a list of lines).
+ */
+export function InfoDot({ info, label = "this metric" }) {
+  const [open, setOpen] = useState(false);
+  if (!info) return null;
+  const lines = Array.isArray(info.formula) ? info.formula : info.formula ? [info.formula] : [];
+  return (
+    <span className="relative inline-flex normal-case tracking-normal">
+      <button
+        type="button"
+        aria-label={`What is ${label}?`}
+        aria-expanded={open}
+        onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
+        className="grid size-4 shrink-0 place-items-center rounded-full border border-ink/25 text-[10px] font-bold italic leading-none text-soft-ink transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+      >i</button>
+      {open ? (
+        <span role="dialog" aria-label={`About ${label}`} className="absolute left-0 top-6 z-30 grid w-72 max-w-[80vw] gap-2 rounded-2xl border border-ink/10 bg-white p-3 text-left text-xs font-normal text-ink shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+          <span className="block">{info.meaning}</span>
+          {lines.length ? <span className="grid gap-1"><span className="text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">How it is calculated</span>{lines.map((line) => <code key={line} className="block whitespace-pre-wrap rounded-lg bg-[var(--surface-soft)] px-2 py-1 text-[11px] leading-snug text-ink">{line}</code>)}</span> : null}
+          <button type="button" className="justify-self-end text-[11px] font-semibold text-[var(--accent-ink)] hover:underline" onClick={(event) => { event.stopPropagation(); setOpen(false); }}>Close</button>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /** One headline number. `tone` carries the judgement so every screen reads the same way. */
-export function Kpi({ label, value, hint, tone = "text-ink", footer }) {
+export function Kpi({ label, value, hint, tone = "text-ink", footer, info }) {
   return (
     <div className={`${card} p-4`}>
-      <p className={kicker}>{label}</p>
+      <p className={`${kicker} flex items-center gap-1.5`}>{label}<InfoDot info={info} label={label} /></p>
       <p className={`m-0 mt-1 text-2xl font-bold ${tone}`}>{value}</p>
       {hint ? <p className="m-0 text-[11px] text-soft-ink">{hint}</p> : null}
       {footer || null}

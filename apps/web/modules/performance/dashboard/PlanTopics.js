@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { buildConceptForest, capConceptTree } from "../../plans/conceptTree";
+import { InfoDot, METRIC_INFO } from "./parts";
 
 const TOP = 5;
 const colour = (mastery) => (mastery === undefined ? "#9ca3af" : mastery < 0.4 ? "#ff3b30" : mastery < 0.7 ? "#ff9500" : "#34c759");
@@ -14,12 +15,12 @@ const colour = (mastery) => (mastery === undefined ? "#9ca3af" : mastery < 0.4 ?
  */
 export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId = "" }) {
   const plan = plans.find((entry) => entry.id === planId) || plans[0] || null;
-  const [data, setData] = useState({ status: "idle", concepts: [], prerequisites: [], mastery: {} });
+  const [data, setData] = useState({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} });
   const [showUnassessed, setShowUnassessed] = useState(false);
   const materialKey = (plan?.materialIds || []).join(",");
 
   useEffect(() => {
-    if (!plan || !workspaceId) { setData({ status: "idle", concepts: [], prerequisites: [], mastery: {} }); return undefined; }
+    if (!plan || !workspaceId) { setData({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} }); return undefined; }
     let cancelled = false;
     setData((current) => ({ ...current, status: "loading" }));
     const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
@@ -30,8 +31,16 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
       if (cancelled) return;
       const graph = capConceptTree(Array.isArray(conceptData?.concepts) ? conceptData.concepts : [], Array.isArray(conceptData?.prerequisites) ? conceptData.prerequisites : []);
       const mastery = {};
-      for (const state of masteryData?.states || []) if (state.concept_id) mastery[state.concept_id] = state.mastery ?? 0;
-      setData({ status: "done", concepts: graph.concepts, prerequisites: graph.prerequisites, mastery });
+      const accuracy = {};
+      for (const state of masteryData?.states || []) {
+        if (!state.concept_id) continue;
+        mastery[state.concept_id] = state.mastery ?? 0;
+        const total = Number(state.attempts_total) || 0;
+        // Right answers over answers given; the stored overall_accuracy is the same number when present.
+        const value = state.overall_accuracy ?? (total ? (Number(state.attempts_correct) || 0) / total : null);
+        if (value !== null && value !== undefined && total > 0) accuracy[state.concept_id] = { value: Number(value), answers: total };
+      }
+      setData({ status: "done", concepts: graph.concepts, prerequisites: graph.prerequisites, mastery, accuracy });
     });
     return () => { cancelled = true; };
   }, [plan?.id, workspaceId, materialKey]);
@@ -52,7 +61,8 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
     const highest = [...assessed].sort((a, b) => data.mastery[b.id] - data.mastery[a.id]).filter((concept) => !lowIds.has(concept.id)).slice(0, TOP);
     // In the plan's order, so the indentation reads as the tree does.
     const inTreeOrder = (list) => [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
-    return { depth, byId, assessed, notAssessed, lowest: inTreeOrder(lowest), highest: inTreeOrder(highest), total: data.concepts.length };
+    const withAccuracy = assessed.filter((concept) => data.accuracy[concept.id]).sort((a, b) => data.accuracy[b.id].value - data.accuracy[a.id].value);
+    return { depth, byId, assessed, notAssessed, withAccuracy, lowest: inTreeOrder(lowest), highest: inTreeOrder(highest), total: data.concepts.length };
   }, [data]);
 
   if (!plans.length) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Make a study plan — its topics are what this tracks.</p>;
@@ -105,6 +115,24 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
               {group(`${TOP} strongest`, view.highest, "#1f7a3a")}
             </div>
           )}
+          {view.withAccuracy.length ? (
+            <div className="grid gap-2 rounded-2xl border border-ink/10 p-3">
+              <p className="m-0 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Accuracy by topic<InfoDot info={METRIC_INFO.topicAccuracy} label="accuracy by topic" /></p>
+              {view.withAccuracy.map((concept) => {
+                const { value, answers } = data.accuracy[concept.id];
+                const percent = Math.round(value * 100);
+                return (
+                  <div key={concept.id} className="grid gap-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="min-w-0 truncate text-xs font-medium text-ink" title={concept.name}>{concept.name}</span>
+                      <span className="shrink-0 text-[11px] text-soft-ink"><strong className="text-ink">{percent}%</strong> · {answers} answer{answers === 1 ? "" : "s"}</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-ink/8"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
           {!view.assessed.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing assessed yet — do an activity from this plan and its topics start to fill in.</p> : null}
           {view.notAssessed.length ? (
             <div className="grid gap-2">

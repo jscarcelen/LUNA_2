@@ -7,13 +7,13 @@ import { parseResource } from "../resources/resource";
 import { addLearner, readLearners, removeLearner } from "./learners";
 import { GOAL_TAG, buildGoal, goalProgress, parseGoal } from "./plan";
 import { SubjectTabs } from "../ui/SubjectTabs";
-import { attentionFlags, buildEvidence, byLearner, classTopicCoverage, classTopicMatrix, learnerSubjectMatrix, masteryOverTime, nextActions, overallMastery, retentionOf, statusOf, topicMastery } from "./mastery";
+import { attentionFlags, buildEvidence, byLearner, classTopicCoverage, classTopicMatrix, learnerSubjectMatrix, errorRecovery, masteryOverTime, nextActions, overallMastery, statusOf, topicMastery } from "./mastery";
 import { analyseErrors } from "./errors";
 import { coverageOf, targetsFor } from "./targets";
 import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
 import { panelById } from "./dashboard/registry";
 import { Customise } from "./dashboard/Customise";
-import { card, ghostBtn, kicker, percent } from "./dashboard/parts";
+import { InfoDot, card, ghostBtn, kicker, percent } from "./dashboard/parts";
 import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 
@@ -150,7 +150,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   const measured = trendPoints.filter((point) => point.mastery !== null);
   const trendChange = { points: trendPoints, change: measured.length > 1 ? (measured[measured.length - 1].mastery - measured[0].mastery) / 100 : 0 };
   const actions = useMemo(() => nextActions(topics, errors.byTopic), [topics, errors]);
-  const retention = useMemo(() => retentionOf(topics), [topics]);
+  // Retention = how many topics with mistakes improved in the following weeks (see errorRecovery in mastery.js).
+  const retention = useMemo(() => errorRecovery(evidence), [evidence]);
   const learnerRows = useMemo(() => byLearner(evidence), [evidence]);
   const flagged = useMemo(() => learnerRows.map((entry) => ({ ...entry, flags: attentionFlags(entry, (row) => analyseErrors(row.rows).types) })), [learnerRows]);
   const matrix = useMemo(() => classTopicMatrix(evidence), [evidence]);
@@ -467,7 +468,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           </section>
           {panels.filter(({ panel }) => panel.id === "mastery-map").map(({ panel, definition }) => (
             <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
-              <p className={kicker}>{definition.title}</p>
+              <p className={`${kicker} flex items-center gap-1.5`}>{definition.title}<InfoDot info={definition.info} label={definition.title} /></p>
               <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>
           ))}
@@ -477,7 +478,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           {panels.map(({ panel, definition }) => (
             <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className={kicker}>{definition.title}</p>
+                <p className={`${kicker} flex items-center gap-1.5`}>{definition.title}<InfoDot info={definition.info} label={definition.title} /></p>
               </div>
               <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>

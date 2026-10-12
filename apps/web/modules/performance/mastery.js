@@ -156,7 +156,8 @@ export function overallMastery(topics = []) {
     strongOrBetter: topics.filter((topic) => topic.mastery >= MASTERY_THRESHOLD).length,
     toImprove: topics.filter((topic) => topic.mastery < MASTERY_THRESHOLD).length,
     topicCount: topics.length,
-    accuracy: mean(topics.map((topic) => topic.accuracy)),
+    // Credit earned over questions answered (every question counts once), not an average of topic averages.
+    accuracy: topics.reduce((sum, topic) => sum + topic.accuracy * topic.questions, 0) / Math.max(1, topics.reduce((sum, topic) => sum + topic.questions, 0)),
     questions: topics.reduce((sum, topic) => sum + topic.questions, 0)
   };
 }
@@ -184,6 +185,43 @@ export function masteryOverTime(evidence = [], weeks = 12) {
 export function retentionOf(topics = []) {
   const measured = topics.filter((topic) => topic.retention !== null);
   return measured.length ? { value: mean(measured.map((topic) => topic.retention)), topics: measured.length } : { value: null, topics: 0 };
+}
+
+/** An answer counts as a mistake when it earned less than half the credit. */
+const MISTAKE_BELOW = 0.5;
+/** Answers given this long after a topic's first mistake are the "following weeks" that show whether it was fixed. */
+export const RECOVERY_GAP_DAYS = 7;
+
+/**
+ * Retention as the learner experiences it: of the topics where mistakes were made, how many were
+ * improved in the following weeks.
+ *
+ * For each topic with at least one mistake, the answers given at least RECOVERY_GAP_DAYS after the first
+ * mistake are the follow-up. A topic is measurable once the follow-up has 2+ answers, and it is improved
+ * when its follow-up accuracy is higher than its accuracy up to that point. value = improved / measurable.
+ */
+export function errorRecovery(evidence = []) {
+  const byTopic = new Map();
+  for (const row of evidence) {
+    if (!byTopic.has(row.topic)) byTopic.set(row.topic, []);
+    byTopic.get(row.topic).push(row);
+  }
+  let withErrors = 0;
+  let measurable = 0;
+  let improved = 0;
+  for (const rows of byTopic.values()) {
+    const ordered = [...rows].sort((a, b) => a.time - b.time);
+    const firstMiss = ordered.find((row) => creditOf(row) < MISTAKE_BELOW);
+    if (!firstMiss) continue;
+    withErrors += 1;
+    const cut = firstMiss.time + RECOVERY_GAP_DAYS * day;
+    const before = ordered.filter((row) => row.time < cut);
+    const follow = ordered.filter((row) => row.time >= cut);
+    if (follow.length < 2) continue;
+    measurable += 1;
+    if (mean(follow.map(creditOf)) > mean(before.map(creditOf))) improved += 1;
+  }
+  return { value: measurable ? improved / measurable : null, topics: measurable, improved, withErrors };
 }
 
 /**

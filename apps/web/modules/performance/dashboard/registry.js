@@ -1,10 +1,10 @@
 "use client";
 
-import { MASTERY_THRESHOLD, statusOf } from "../mastery";
+import { MASTERY_THRESHOLD, RECOVERY_GAP_DAYS, statusOf } from "../mastery";
 import { activityKindLabel } from "../metrics";
 import { dueLabel } from "../../plans/plan";
 import { DeadlineOrigin } from "../../plans/DeadlineBadge";
-import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
+import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, METRIC_INFO, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
 import { CoachPanel } from "./CoachPanel";
 import { PlanTopics } from "./PlanTopics";
 
@@ -24,24 +24,28 @@ export const PANELS = [
   {
     id: "headline",
     title: "Where things stand",
-    blurb: "Mastery, topics mastered, what needs work, accuracy and retention.",
+    blurb: "Overall accuracy and retention (mistakes that got fixed).",
     roles: ALL,
     size: "full",
     modes: ["value", "history"],
-    render: ({ overall, topics, retention, trendChange, weeks }, mode) => (mode === "history"
+    info: METRIC_INFO.accuracy,
+    render: ({ overall, retention, trendChange }, mode) => (mode === "history"
       ? <MasteryTrend points={trendChange.points} />
       : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Kpi
-            label="Overall mastery"
-            value={`${overall.mastery}%`}
-            hint={`${statusOf(overall.mastery).label}${weeks > 1 ? ` · ${trendArrow(trendChange.change)} ${Math.abs(Math.round(trendChange.change * 100))} pts over ${weeks} weeks` : ""}`}
-            footer={<div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${overall.mastery}%`, background: statusOf(overall.mastery).colour }} /></div>}
+            label="Overall accuracy"
+            value={percent(overall.accuracy)}
+            hint={`${overall.questions} questions answered`}
+            info={METRIC_INFO.accuracy}
+            footer={<div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${Math.round(overall.accuracy * 100)}%`, background: statusOf(overall.accuracy * 100).colour }} /></div>}
           />
-          <Kpi label="Topics mastered" value={`${overall.strongOrBetter} / ${overall.topicCount}`} hint={`at or above ${MASTERY_THRESHOLD}% mastery`} />
-          <Kpi label="Topics to improve" value={overall.toImprove} tone={overall.toImprove ? "text-[var(--color-warn)]" : "text-ink"} hint={overall.toImprove ? topics.slice(0, 2).map((entry) => entry.topic).join(", ") : "nothing lagging"} />
-          <Kpi label="Accuracy" value={percent(overall.accuracy)} hint={`${overall.questions} questions answered`} />
-          <Kpi label="Retention" value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? "measured once a topic comes back after a week" : `across ${retention.topics} topic${retention.topics === 1 ? "" : "s"} revisited later`} />
+          <Kpi
+            label="Retention"
+            value={retention.value === null ? "—" : percent(retention.value)}
+            hint={retention.value === null ? `measured once a topic with mistakes is practised again ${RECOVERY_GAP_DAYS}+ days later` : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved in the following weeks`}
+            info={METRIC_INFO.retention}
+          />
         </div>
       ))
   },
@@ -72,6 +76,7 @@ export const PANELS = [
     roles: ALL,
     size: "full",
     modes: ["value"],
+    info: METRIC_INFO.topicAccuracy,
     render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} />
   },
   {
@@ -81,6 +86,10 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
+    info: {
+      meaning: "The topics that most need practice, weakest first, with the main reason each one is lagging.",
+      formula: `listed when a topic has 2+ answered questions and mastery below ${MASTERY_THRESHOLD + 10}%  ·  mastery is explained under "Overall accuracy" and "Mastery over time"`
+    },
     render: (ctx) => <NextActions actions={ctx.actions} onOpen={ctx.onPractise} />
   },
   {
@@ -90,6 +99,10 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value", "detail"],
+    info: {
+      meaning: "Each wrong answer is given one most-likely cause, so you can see whether to revise content, slow down, or fix a missing basic skill.",
+      formula: "share of mistakes = mistakes of this kind ÷ all mistakes  ·  the cause comes from the grader's note and the pattern of your answers"
+    },
     render: (ctx, mode) => <ErrorBreakdown analysis={ctx.errors} limit={mode === "detail" ? 8 : 4} />
   },
   {
@@ -99,6 +112,7 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
+    info: METRIC_INFO.mastery,
     render: (ctx) => <MasteryTrend points={ctx.trendChange.points} />
   },
   {

@@ -6,6 +6,7 @@ import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
 import { DOMParser, XMLSerializer } from "@xmldom/xmldom";
 import { MathMLToLaTeX } from "mathml-to-latex";
+import { pptxToHtml } from "./pptxRender.js";
 import { extractXlsx } from "./spreadsheetExtraction.js";
 
 const TEXT_EXTENSIONS = new Set([
@@ -1999,9 +2000,18 @@ export async function extractTextFromUploadedFile(file, options = {}) {
     } catch {
       pptxIssues.push("generated-pdf-artifact-failed");
     }
+    let pptxRenderHtml = "";
+    try {
+      const rendered = await pptxToHtml(buffer);
+      if (rendered.imageCount) pptxRenderHtml = rendered.html;
+      if (rendered.skipped) pptxIssues.push("some-slide-images-not-embedded-size-limit");
+    } catch {
+      pptxIssues.push("slide-images-not-embedded");
+    }
     return createExtractionResult({
       text,
       markdown,
+      sourceRenderHtml: pptxRenderHtml,
       sourcePreview: text,
       sourceMimeType: mimeType || "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       sourceContentBase64: String(file?.contentBase64 || ""),

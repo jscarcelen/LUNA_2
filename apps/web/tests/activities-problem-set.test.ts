@@ -47,3 +47,15 @@ describe("questions carry the skills they need into the attempt", () => {
   });
 });
 
+describe("the learner's working travels with the answer", () => {
+  it("keeps the notes, a flag for the photo and the full-answer tick, but never the photo itself", () => {
+    const activity = buildActivity(fields, { items: [{ question: "Differentiate x^2 at x=3", type: "numeric", answer: "6" }] });
+    const id = activity.questions[0].id;
+    const attempt = (gradeActivity as any)(activity, { [id]: "9" }, undefined, {}, {}, { [id]: { text: "2x = 6?", image: "data:image/jpeg;base64,AAAA", full: true } }) as any;
+    expect(attempt.results[0].work).toEqual({ text: "2x = 6?", hasImage: true, full: true });
+    expect(JSON.stringify(attempt)).not.toContain("base64");
+    const bare = (gradeActivity as any)(activity, { [id]: "9" }, undefined, {}, {}, {}) as any;
+    expect(bare.results[0].work).toBeUndefined();
+  });
+});
+

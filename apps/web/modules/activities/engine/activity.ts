@@ -9,6 +9,8 @@ import { deriveData } from "../../template-studio/engine/derive";
 import { renderMath } from "../../template-studio/engine/latex";
 // @ts-ignore - plain JS module
 import { skillsForQuestion } from "../../skills/taxonomy.js";
+// @ts-ignore - plain JS module
+import { workSummary } from "../workImage.js";
 import { causeFor, gradeLocally, scoreOf } from "../grading.js";
 import { isQuantitative } from "../quantitative.js";
 
@@ -107,6 +109,12 @@ export interface AttemptResult {
   makesSense?: boolean;
   /** Does solving the question need maths? (decides analytical vs knowledge) */
   quantitative?: boolean;
+  /** The skill whose failure caused the mistake, named by the grader reading the learner's working (a taxonomy id). */
+  failedSkill?: string;
+  /** What the learner showed: notes, whether there was a photo, whether they ticked "this is my full answer". */
+  work?: { text: string; hasImage: boolean; full: boolean };
+  /** How the working fares, as the grader read it. */
+  workVerdict?: "none" | "correct" | "partly" | "wrong";
 }
 
 type Row = Record<string, unknown>;
@@ -234,7 +242,7 @@ export function hasAnswerableContent(fields: FieldDef[], data: Row): boolean {
  * (partial credit for "close"). The player then sends the written answers that need judging to
  * `/api/activities/grade` and merges the result with `applyGrades`.
  */
-export function gradeActivity(activity: Activity, answers: Record<string, unknown>, startedAt?: number, durations: Record<string, number> = {}, confidence: Record<string, string> = {}): Attempt {
+export function gradeActivity(activity: Activity, answers: Record<string, unknown>, startedAt?: number, durations: Record<string, number> = {}, confidence: Record<string, string> = {}, work: Record<string, unknown> = {}): Attempt {
   const results: Attempt["results"] = activity.questions.map((question) => {
     const given = answers[question.id];
     let correct: boolean | null = null;
@@ -270,6 +278,8 @@ export function gradeActivity(activity: Activity, answers: Record<string, unknow
     if (!written) return { ...base, verdict: correct ? "correct" as const : "incorrect" as const, score: correct ? 1 : 0, quantitative };
     return { ...base, verdict: written.verdict, score: written.score, feedback: written.feedback, errorCause: causeFor({ verdict: written.verdict, quantitative, blank: Boolean(written.blank) }), makesSense: written.makesSense, quantitative, graded: "local" as const };
   });
+  // The learner's working travels with the answer (notes and a flag for a photo, never the photo itself).
+  results.forEach((row, index) => { const summary = workSummary(work[row.id]); if (summary) results[index] = { ...row, work: summary }; });
   const graded = results.filter((r) => r.correct !== null);
   return { activityId: activity.id, activityTitle: activity.title, at: new Date().toISOString(), ...scoreOf(results), total: graded.length, durationMs: startedAt ? Date.now() - startedAt : undefined, durations, results };
 }

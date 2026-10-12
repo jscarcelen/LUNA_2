@@ -3,11 +3,13 @@
  *
  * Marks the written (open) answers of one attempt with a model, in ONE call.
  *
- * Body: { items: [{ id, question, expectedAnswer, givenAnswer, context?, skill?, topic? }], language? }
+ * Body: { items: [{ id, question, expectedAnswer, givenAnswer, context?, skill?, topic?, qkind?, options?, skills?, steps?,
+ *                    work?: { text, image (downscaled data URL), full } }], language? }
+ *       A wrong answer that comes with working is always read by the model, which also names the skill that failed.
  *       (or a single { question, expectedAnswer, givenAnswer, context?, language? }).
  * Reply: { graded: "ai" | "local" | "mixed", results: [{ id, verdict: "correct" | "close" | "incorrect",
  *          score 0..1, makesSense, feedback, errorCause: "knowledge" | "analytical" | "accuracy" | null,
- *          quantitative, causeReason, graded: "ai" | "local" }], model, usage, note }
+ *          quantitative, causeReason, failedSkill (a skills-taxonomy id or ""), workVerdict, graded: "ai" | "local" }], model, usage, note }
  *
  * Blank, identical and number-for-number answers are settled without the model; with no OPENAI_API_KEY
  * or if the model call fails everything is graded by the local comparison and says `graded: "local"`.

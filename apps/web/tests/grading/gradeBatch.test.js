@@ -166,3 +166,43 @@ describe("POST /api/activities/grade", () => {
     }
   });
 });
+
+describe("grading with the learner's working", () => {
+  const choice = (id, extra = {}) => ({ id, question: "Price after a 10% rise from $50?", expectedAnswer: "$55", givenAnswer: "$60", qkind: "choice", options: ["$45", "$55", "$60"], skills: ["percentages"], ...extra });
+  const row = (id, extra = {}) => ({ id, verdict: "incorrect", score: 0, makesSense: true, quantitative: true, errorCause: "analytical", causeReason: "x", failedSkill: "percentages", workVerdict: "wrong", feedback: "You added 10 instead of 10%.", ...extra });
+
+  it("sends a wrong choice with working to the model, names the failing skill and keeps it incorrect without the tick", async () => {
+    const { fetcher } = fakeModel((items) => items.map((entry) => row(entry.id, { verdict: "correct", score: 1, workVerdict: "correct" })));
+    const out = await gradeAnswers([choice("a", { work: { text: "50 + 10 = 60", full: false } })], { apiKey: "k", fetcher });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(out.results[0]).toMatchObject({ verdict: "incorrect", score: 0, failedSkill: "percentages", graded: "ai" });
+  });
+
+  it("with the full-answer tick, working that reaches the key earns partial credit as accuracy, never full marks", async () => {
+    const { fetcher } = fakeModel((items) => items.map((entry) => row(entry.id, { verdict: "correct", score: 1, workVerdict: "correct", failedSkill: "attention", feedback: "Your working gets $55; you picked the wrong option." })));
+    const out = await gradeAnswers([choice("a", { work: { text: "50 × 1.1 = 55", full: true } })], { apiKey: "k", fetcher });
+    expect(out.results[0]).toMatchObject({ verdict: "close", score: 0.6, errorCause: "accuracy", workVerdict: "correct" });
+  });
+
+  it("drops a skill the taxonomy does not know and blames nothing for a right answer", async () => {
+    const { fetcher } = fakeModel((items) => items.map((entry) => row(entry.id, { failedSkill: "made-up-skill" })));
+    const out = await gradeAnswers([choice("a", { work: { text: "guess", full: false } })], { apiKey: "k", fetcher });
+    expect(out.results[0].failedSkill).toBe("");
+    const right = await gradeAnswers([choice("b", { givenAnswer: "$55", work: { text: "ok" } })], { apiKey: "k", fetcher: fakeModel((items) => items.map((entry) => row(entry.id, { verdict: "correct", score: 1, failedSkill: "percentages" }))).fetcher });
+    expect(right.results[0].failedSkill).toBe("");
+  });
+
+  it("attaches the photo of the working after the items, and ignores anything that is not a small image", async () => {
+    const calls = [];
+    const fetcher = vi.fn(async (_url, init) => { calls.push(JSON.parse(init.body)); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: JSON.stringify({ results: [row("a")] }) } }], usage: null }) }; });
+    const photo = "data:image/jpeg;base64,AAAA";
+    await gradeAnswers([choice("a", { work: { image: photo, full: false } })], { apiKey: "k", fetcher });
+    const content = calls[0].messages[1].content;
+    expect(Array.isArray(content)).toBe(true);
+    expect(content.some((part) => part.type === "image_url" && part.image_url.url === photo)).toBe(true);
+    expect(JSON.parse(content[0].text).items[0].workImage).toContain("photo 1");
+    const bad = await gradeAnswers([choice("b", { work: { image: "javascript:alert(1)", text: "" } })], { apiKey: "k", fetcher });
+    expect(bad.graded).toBe("local"); // no usable working: settled without the model
+  });
+});
+

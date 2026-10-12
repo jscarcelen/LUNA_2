@@ -250,7 +250,9 @@ export function applyGrades(attempt, grades = {}) {
       errorCause: verdict === "correct" ? null : grade.errorCause || null,
       makesSense: grade.makesSense !== false,
       quantitative: typeof grade.quantitative === "boolean" ? grade.quantitative : row.quantitative,
-      graded: grade.graded || "local"
+      graded: grade.graded || "local",
+      failedSkill: verdict === "correct" ? "" : String(grade.failedSkill || ""),
+      workVerdict: grade.workVerdict || row.workVerdict || undefined
     };
   });
   return { ...attempt, results, ...scoreOf(results) };

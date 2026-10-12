@@ -6,6 +6,8 @@ import { applyGrades, needsModel } from "./grading.js";
 import { chargeRun } from "../credits/credits";
 import { FlashcardDeck } from "./FlashcardDeck";
 import { renderInline } from "../reader/markdown";
+import { cleanWork, fileToWorkImage } from "./workImage.js";
+import { skillLabel } from "../skills/taxonomy.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -52,13 +54,14 @@ function MarkNote({ result }) {
     <div className="mt-2" role="note">
       <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>{label}{credit}</span>
       {result.feedback ? <p className="m-0 mt-1.5 text-sm text-ink">{result.feedback}</p> : null}
+      {result.failedSkill ? <p className="m-0 mt-1 text-xs text-soft-ink">The skill that tripped this one: <strong className="text-ink">{skillLabel(result.failedSkill)}</strong>.</p> : null}
       {result.makesSense === false && result.given ? <p className="m-0 mt-1 text-xs text-soft-ink">This does not read as an answer to the question.</p> : null}
     </div>
   );
 }
 
 /** Sends the written answers that need judging to the grader in ONE call; resolves to { [questionId]: grade }. */
-async function gradeWritten(activity, questions, answers, signal) {
+async function gradeWritten(activity, questions, answers, signal, work = {}) {
   const items = questions.map((question) => ({
     id: question.id,
     question: question.prompt,
@@ -66,7 +69,13 @@ async function gradeWritten(activity, questions, answers, signal) {
     givenAnswer: String(answers[question.id] ?? ""),
     context: [activity.title, question.group, question.source?.extract].filter(Boolean).join(" · ").slice(0, 600),
     skill: question.skill || "",
-    topic: question.topic || ""
+    topic: question.topic || "",
+    // What the grader needs to read the learner's working and to name the skill that failed.
+    qkind: question.kind,
+    options: question.options || [],
+    skills: question.skills || [],
+    steps: Array.isArray(question.steps) ? question.steps.join(" ").slice(0, 700) : "",
+    work: cleanWork(work[question.id]) || undefined
   }));
   const response = await fetch("/api/activities/grade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items }), signal });
   const data = await response.json().catch(() => ({}));
@@ -94,10 +103,53 @@ function SourceNote({ source }) {
   );
 }
 
+/**
+ * "Show your working": notes and a photo of what the learner wrote on paper, per question. A choice or
+ * true/false answer hides how the learner got there; this lets the grader see it and name the real
+ * reason for a mistake. "This is my full answer" asks the grader to mark the working too.
+ */
+function WorkBox({ value, locked, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const work = value || { text: "", image: "", full: false };
+  const filled = Boolean(work.text || work.image);
+  const patch = (next) => onChange({ ...work, ...next });
+  async function pick(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setBusy(true); setError("");
+    try { patch({ image: await fileToWorkImage(file) }); } catch (problem) { setError(String(problem.message || problem)); } finally { setBusy(false); }
+  }
+  return (
+    <details className="mt-3 rounded-xl border border-ink/10 px-3 py-2" open={filled && !locked ? true : undefined}>
+      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Show your working (optional){filled ? " · added" : ""}</summary>
+      <div className="mt-2 grid gap-2">
+        <textarea className="w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-[var(--accent)]" rows={3} disabled={locked} value={work.text} onChange={(event) => patch({ text: event.target.value })} placeholder="Notes, steps, or why you chose this answer" />
+        <div className="flex flex-wrap items-center gap-2">
+          {!locked ? <label className="inline-flex cursor-pointer items-center rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold text-ink hover:bg-[var(--surface-soft)]">{busy ? "Reading the photo…" : work.image ? "Replace the photo" : "Add a photo of your working"}<input type="file" accept="image/*" className="sr-only" disabled={busy} onChange={pick} /></label> : null}
+          {work.image ? (
+            <span className="inline-flex items-center gap-2">
+              <img src={work.image} alt="Your working" className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
+              {!locked ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => patch({ image: "" })}>Remove</button> : null}
+            </span>
+          ) : null}
+        </div>
+        {error ? <p className="m-0 text-xs text-[var(--color-danger)]">{error}</p> : null}
+        <label className="flex items-start gap-2 text-xs text-soft-ink">
+          <input type="checkbox" className="mt-0.5" disabled={locked || !filled} checked={work.full === true} onChange={(event) => patch({ full: event.target.checked })} />
+          <span><strong className="text-ink">This is my full answer.</strong> Mark my working too, and use it to find the reason for a mistake. Without the tick, the working only helps explain a wrong answer.</span>
+        </label>
+      </div>
+    </details>
+  );
+}
+
 function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) {
   const [answers, setAnswers] = useState({});
   const [lastId, setLastId] = useState("");
   const [confidence, setConfidence] = useState({});
+  const [work, setWork] = useState({});
   const [attempt, setAttempt] = useState(null);
   // Written answers are read by Luna before the result is shown: true while that call is out.
   const [checking, setChecking] = useState(false);
@@ -141,14 +193,16 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
    */
   async function check() {
     if (checking || attempt) return;
-    let graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence);
-    const written = activity.questions.filter((question) => needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer }));
+    let graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence, work);
+    // The grader reads written answers, and any wrong answer that comes with working: that is where the reason for the mistake is.
+    const wrongWithWork = new Set(graded.results.filter((row) => row.correct === false && cleanWork(work[row.id])).map((row) => row.id));
+    const written = activity.questions.filter((question) => wrongWithWork.has(question.id) || needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer }));
     if (written.length) {
       setChecking(true);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 45000);
       try {
-        const { grades, note } = await gradeWritten(activity, written, answers, controller.signal);
+        const { grades, note } = await gradeWritten(activity, written, answers, controller.signal, work);
         graded = applyGrades(graded, grades);
         if (note && mounted.current) setGradingNote(note);
         else if (!Object.keys(grades).length && mounted.current) setGradingNote("Luna could not check the written answers, so they were marked by comparing words.");
@@ -322,6 +376,10 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
                     <button type="button" className="rounded-2xl border border-ink/10 bg-[var(--surface-soft)] p-5 text-center text-lg font-semibold text-ink" onClick={() => setFlipped((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}>{flipped[q.id] ? q.back : "Tap to reveal the answer"}</button>
                     {flipped[q.id] ? <div className="flex gap-2">{[["known", "✓ I knew it"], ["unknown", "✗ Not yet"]].map(([value, label]) => <button key={value} type="button" disabled={locked} onClick={() => set(q.id, value)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${answers[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-ink" : "border-ink/10 text-ink"}`}>{label}</button>)}</div> : null}
                   </div>
+                ) : null}
+
+                {["choice", "boolean", "number", "text"].includes(q.kind) && (!attempt || work[q.id]) ? (
+                  <WorkBox value={work[q.id]} locked={locked} onChange={(next) => setWork((previous) => ({ ...previous, [q.id]: next }))} />
                 ) : null}
 
                 {!attempt && answers[q.id] !== undefined && answers[q.id] !== "" ? (

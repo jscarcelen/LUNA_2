@@ -181,6 +181,51 @@ export async function updateAccountPhone(accountId, phone) {
   }
 }
 
+/* ------------------------------------------------------------------ profile (name, email, age, plan) */
+
+export class ProfileSetupError extends Error {}
+export const PLANS = ["free", "paid"];
+
+/** `{ age, plan, ready }`; `ready` is false until supabase/migrations/202610120001_account_profile.sql is applied. */
+export async function readAccountProfile(accountId) {
+  const { data, error } = await createSupabaseAdminClient().from("accounts").select("age, plan").eq("id", accountId).maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error)) return { age: null, plan: "free", ready: false };
+    throw error;
+  }
+  return { age: data?.age ?? null, plan: data?.plan === "paid" ? "paid" : "free", ready: true };
+}
+
+/** Name always; age and plan need the migration. `undefined` leaves a field as it is; `age: null` clears it. */
+export async function updateAccountProfile(accountId, { displayName, age, plan }) {
+  const client = createSupabaseAdminClient();
+  if (displayName !== undefined) {
+    const { error } = await client.from("accounts").update({ display_name: displayName }).eq("id", accountId);
+    if (error) throw error;
+  }
+  const extra = {};
+  if (age !== undefined) extra.age = age;
+  if (plan !== undefined) extra.plan = plan;
+  if (Object.keys(extra).length) {
+    const { error } = await client.from("accounts").update(extra).eq("id", accountId);
+    if (error) {
+      if (isMissingColumnError(error)) throw new ProfileSetupError("Age and plan are not set up yet: the account_profile migration has not been applied.");
+      throw error;
+    }
+  }
+}
+
+/** New email: it has to be confirmed again, so the confirmation mark is cleared (when verification exists). */
+export async function updateAccountEmail(accountId, email) {
+  const row = { email: normalizeEmail(email) };
+  if (await supportsVerification()) row.email_verified_at = null;
+  const { error } = await createSupabaseAdminClient().from("accounts").update(row).eq("id", accountId);
+  if (error) {
+    if (error.code === "23505") throw new EmailTakenError("An account with this email already exists.");
+    throw error;
+  }
+}
+
 /** New password: also records when, which is what ends every older session (see sessionRevocation.js). */
 export async function setAccountPassword(accountId, passwordHash, { now = new Date() } = {}) {
   const changedAt = now.toISOString();

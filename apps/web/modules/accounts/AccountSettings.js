@@ -33,7 +33,23 @@ export function AccountSettings({ account, onClose }) {
   const [phoneState, setPhoneState] = useState({ busy: false, error: "", ok: "", needsSetup: false });
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "", passwordConfirm: "" });
   const [pwState, setPwState] = useState({ busy: false, error: "", ok: "" });
+  const [profile, setProfile] = useState({ age: "", plan: "free", ready: true });
+  const [name, setName] = useState(account.displayName || "");
+  const [profileState, setProfileState] = useState({ busy: false, error: "", ok: "", needsSetup: false });
+  const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
+  const [emailState, setEmailState] = useState({ busy: false, error: "", ok: "" });
+  const [link, setLink] = useState({ busy: false, message: "", error: "" });
   const mismatch = pw.passwordConfirm.length > 0 && pw.newPassword !== pw.passwordConfirm;
+
+  useEffect(() => {
+    let cancelled = false;
+    accountsApi.me().then((result) => {
+      if (cancelled || !result.ok || !result.data?.profile) return;
+      setProfile({ age: result.data.profile.age ?? "", plan: result.data.profile.plan || "free", ready: result.data.profile.ready !== false });
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const onKey = (event) => { if (event.key === "Escape") onClose?.(); };
@@ -44,6 +60,40 @@ export function AccountSettings({ account, onClose }) {
   async function resendEmail() {
     setResend({ busy: true, message: null });
     setResend({ busy: false, message: resendMessage(await accountsApi.resendVerification()) });
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault();
+    if (profileState.busy) return;
+    setProfileState({ busy: true, error: "", ok: "", needsSetup: false });
+    const patch = { displayName: name };
+    if (profile.ready) { patch.age = profile.age === "" ? null : Number(profile.age); patch.plan = profile.plan; }
+    const result = await accountsApi.updateProfile(patch);
+    if (result.ok) {
+      setCurrent(result.data.account);
+      return setProfileState({ busy: false, error: "", ok: "Saved.", needsSetup: false });
+    }
+    setProfileState({ busy: false, error: result.error, ok: "", needsSetup: result.setupNeeded });
+  }
+
+  async function saveEmail(event) {
+    event.preventDefault();
+    if (emailState.busy) return;
+    setEmailState({ busy: true, error: "", ok: "" });
+    const result = await accountsApi.changeEmail(newEmail, emailPassword);
+    if (result.ok) {
+      setCurrent(result.data.account);
+      setNewEmail("");
+      setEmailPassword("");
+      return setEmailState({ busy: false, error: "", ok: "Email changed. We sent a link to confirm it." });
+    }
+    setEmailState({ busy: false, error: result.error, ok: "" });
+  }
+
+  async function sendResetLink() {
+    setLink({ busy: true, message: "", error: "" });
+    const result = await accountsApi.sendResetLink();
+    setLink(result.ok ? { busy: false, message: result.data.message || "Link sent.", error: "" } : { busy: false, message: "", error: result.error });
   }
 
   async function savePhone(event) {
@@ -83,6 +133,31 @@ export function AccountSettings({ account, onClose }) {
           <button type="button" onClick={onClose} aria-label="Close" className="h-8 w-8 rounded-full bg-[var(--surface-soft)] text-lg text-soft-ink">×</button>
         </div>
 
+        <Section title="Profile">
+          <form onSubmit={saveProfile} className="flex flex-col gap-2" noValidate>
+            <div>
+              <label htmlFor="luna-set-name" className={label}>Name</label>
+              <input id="luna-set-name" type="text" autoComplete="name" maxLength={60} className={`${field} w-full`} value={name} onChange={(event) => setName(event.target.value)} />
+            </div>
+            <div>
+              <label htmlFor="luna-set-age" className={label}>Age</label>
+              <input id="luna-set-age" type="number" inputMode="numeric" min={3} max={120} className={`${field} w-full`} value={profile.age} onChange={(event) => setProfile({ ...profile, age: event.target.value })} disabled={!profile.ready} placeholder="Optional" />
+            </div>
+            <div>
+              <label htmlFor="luna-set-plan" className={label}>Plan</label>
+              <select id="luna-set-plan" className={`${field} w-full`} value={profile.plan} onChange={(event) => setProfile({ ...profile, plan: event.target.value })} disabled={!profile.ready}>
+                <option value="free">Free</option>
+                <option value="paid">Paid</option>
+              </select>
+              <p className={hint}>Payment is not connected yet: choosing Paid records your choice and does not charge anything.</p>
+            </div>
+            {!profile.ready ? <p className={hint}>Age and plan will be available once the account profile update is applied.</p> : null}
+            {profileState.needsSetup ? <SetupNotice compact /> : profileState.error ? <p role="alert" className={errorText}>{profileState.error}</p> : null}
+            {profileState.ok ? <p role="status" className="m-0 text-xs text-[#1a7f37]">{profileState.ok}</p> : null}
+            <div><button type="submit" className={primaryBtn} disabled={profileState.busy}>{profileState.busy ? "Saving…" : "Save profile"}</button></div>
+          </form>
+        </Section>
+
         <Section title="Email">
           <p className="m-0 text-sm text-ink [overflow-wrap:anywhere]">{current.email}</p>
           {current.emailVerified ? (
@@ -95,6 +170,19 @@ export function AccountSettings({ account, onClose }) {
               {resend.message ? <p role={resend.message.tone === "error" ? "alert" : "status"} className={resend.message.tone === "error" ? errorText : hint}>{resend.message.text}{resend.message.link ? <> <a className="font-semibold text-[var(--accent-ink)] underline" href={resend.message.link}>Open the link</a></> : null}</p> : null}
             </>
           )}
+          <form onSubmit={saveEmail} className="mt-3 flex flex-col gap-2 border-t border-ink/10 pt-3" noValidate>
+            <div>
+              <label htmlFor="luna-set-email" className={label}>New email</label>
+              <input id="luna-set-email" type="email" autoComplete="email" className={`${field} w-full`} value={newEmail} onChange={(event) => setNewEmail(event.target.value)} />
+            </div>
+            <div>
+              <label htmlFor="luna-set-email-pw" className={label}>Current password</label>
+              <input id="luna-set-email-pw" type="password" autoComplete="current-password" className={`${field} w-full`} value={emailPassword} onChange={(event) => setEmailPassword(event.target.value)} />
+            </div>
+            {emailState.error ? <p role="alert" className={errorText}>{emailState.error}</p> : null}
+            {emailState.ok ? <p role="status" className="m-0 text-xs text-[#1a7f37]">{emailState.ok}</p> : null}
+            <div><button type="submit" className={ghostBtn} disabled={emailState.busy || !newEmail.trim()}>{emailState.busy ? "Saving…" : "Change email"}</button></div>
+          </form>
         </Section>
 
         <Section title="Phone">
@@ -115,6 +203,12 @@ export function AccountSettings({ account, onClose }) {
         </Section>
 
         <Section title="Password">
+          <div className="mb-3 border-b border-ink/10 pb-3">
+            <p className={`${hint} mt-0 mb-2`}>Forgot it, or prefer not to type the old one? We can email a link to {current.email}.</p>
+            <button type="button" className={ghostBtn} onClick={sendResetLink} disabled={link.busy}>{link.busy ? "Sending…" : "Email me a reset link"}</button>
+            {link.message ? <p role="status" className="m-0 mt-1 text-xs text-[#1a7f37]">{link.message}</p> : null}
+            {link.error ? <p role="alert" className={errorText}>{link.error}</p> : null}
+          </div>
           <form onSubmit={savePassword} className="flex flex-col gap-2" noValidate>
             <div>
               <label htmlFor="luna-pw-current" className={label}>Current password</label>

@@ -3,7 +3,7 @@
  * under-13 student still needs a parent to accept a connection.
  */
 import { ownAccount } from "../../../../lib/accountsCore.js";
-import { listLinkedAccounts } from "../../../../lib/accountsRepository.js";
+import { listLinkedAccounts, readAccountProfile } from "../../../../lib/accountsRepository.js";
 import { errorResponse, json, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
 
 export const runtime = "nodejs";
@@ -17,7 +17,8 @@ export async function GET(request) {
     if (found.response) return found.response;
     const { account } = found;
     const needsParent = account.role === "student" && account.under_13 && !(await listLinkedAccounts(account.id, { role: "parent" })).length;
-    return json({ account: ownAccount(account), needsParent });
+    const profile = await readAccountProfile(account.id).catch(() => ({ age: null, plan: "free", ready: false }));
+    return json({ account: ownAccount(account), needsParent, profile });
   } catch (error) {
     return errorResponse(error);
   }

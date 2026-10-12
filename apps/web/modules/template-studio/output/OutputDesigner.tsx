@@ -299,6 +299,8 @@ export interface OutputPreviewPaneProps {
 }
 
 const MM_PX = 3.78;
+// Fit the widest laid-out page to the frame from inside the iframe, using its real size (not an estimate).
+const FIT_SCRIPT = "function fit(){var b=document.body;b.style.zoom=1;var w=0;document.querySelectorAll('.doc-page').forEach(function(p){w=Math.max(w,p.getBoundingClientRect().width)});if(!w)return;var pad=parseFloat(getComputedStyle(b).paddingLeft)||0;var z=Math.max(0.25,Math.min(1.25,(window.innerWidth-2)/(w+2*pad)));b.style.zoom=z}window.addEventListener('load',fit);window.addEventListener('resize',fit);fit();";
 
 export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyHint, onError, interactive, onOpenSource }: OutputPreviewPaneProps) {
   // The interactive version comes first when there is one (it is what is done on Luna); the document is the printable one.
@@ -353,7 +355,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
   const current = doc ? idsFor(doc, selection) : null;
   const pageWidthPx = (current?.layout.canvas.width || 210) * MM_PX;
   const zoom = Math.max(0.3, Math.min(1.25, (width - 8) / (pageWidthPx + 2 * 10 * MM_PX)));
-  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}html,body{margin:0;background:#e9e9ee}body{padding:10mm;zoom:${zoom.toFixed(3)}}</style></head><body>${html}</body></html>`;
+  const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{-webkit-text-size-adjust:100%;text-size-adjust:100%}html,body{margin:0;background:#e9e9ee}body{padding:10mm;zoom:${zoom.toFixed(3)}}</style></head><body>${html}<script>${FIT_SCRIPT}</script></body></html>`;
   const showMatrix = Boolean(doc && (doc.layouts.length > 1 || doc.views.length > 1));
 
   const tabButton = (id: typeof tab, label: string) => (

@@ -173,7 +173,8 @@ export const MARKDOWN_CSS = `
 /* Hard margins: nothing runs past the page. Long words break, wide tables scroll inside their box, and a long formula
    wraps onto a second line at an operator (KaTeX's bases are the break points) instead of running off the page. */
 .md{overflow-wrap:anywhere;max-width:100%}
-.md img,.md svg,.md video{max-width:100%;height:auto}
+.md img,.md video,.md svg:not(.katex svg){max-width:100%;height:auto}
+/* KaTeX draws radicals/long arrows as svgs sized in em; `height:auto` / `max-width` would erase them (a missing square-root sign). */
 .md table{display:block;max-width:100%;overflow-x:auto}
 .md .katex,.md .katex-display>.katex{white-space:normal}
 .md .katex-html{white-space:normal}

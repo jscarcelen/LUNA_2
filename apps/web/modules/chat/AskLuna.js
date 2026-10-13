@@ -149,7 +149,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
                 <div className="grid gap-2">
                   {SUGGESTIONS[page ? "page" : kind].map((suggestion) => <button key={suggestion} type="button" onClick={() => send(suggestion)} className="rounded-2xl border border-ink/10 bg-white px-3 py-2 text-left text-sm text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">{suggestion}</button>)}
                 </div>
-                <p className="m-0 text-[11px] text-soft-ink">{page ? "Chatting here does not change your plans or results." : "Chatting here does not count"} as an attempt and does not change your results.</p>
+                <p className="m-0 text-[11px] text-soft-ink">{page ? "Chatting here does not change your plans or results." : "Chatting here does not count as an attempt and does not change your results."}</p>
               </div>
             ) : (
               <div className="grid gap-5">

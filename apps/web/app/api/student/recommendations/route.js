@@ -1,6 +1,6 @@
 /**
- * GET /api/student/recommendations?learnerId=&workspaceId=&examDate=&topN=
- * Returns today's recommended study items for a learner, ranked by priority.
+ * GET /api/student/recommendations?workspaceId=&examDate=&topN=
+ * Returns today's recommended study items for the signed-in owner (session account or demo owner; a learnerId param is ignored), ranked by priority.
  *
  * Each item includes:
  *   concept { id, name, topic, difficulty, importance }
@@ -10,6 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
+import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { getRecommendations } from "../../../../lib/studentStateRepository.js";
 
 export const runtime = "nodejs";
@@ -18,14 +19,13 @@ export const dynamic = "force-dynamic";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const learnerId   = String(searchParams.get("learnerId")   || "").trim();
     const workspaceId = String(searchParams.get("workspaceId") || "").trim();
     const examDate    = searchParams.get("examDate") || null;
     const topN        = Math.min(10, Math.max(1, Number(searchParams.get("topN") || 5)));
 
-    if (!learnerId || !workspaceId) {
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "learnerId and workspaceId are required." },
+        { error: "workspaceId is required." },
         { status: 400 }
       );
     }
@@ -33,7 +33,7 @@ export async function GET(request) {
     const denied = await denyUnlessOwner(request, { workspaceId });
     if (denied) return denied;
 
-    const recommendations = await getRecommendations(learnerId, workspaceId, { examDate, topN });
+    const recommendations = await getRecommendations(await ownerUserIdForFresh(request), workspaceId, { examDate, topN });
 
     return NextResponse.json({ recommendations });
   } catch (err) {

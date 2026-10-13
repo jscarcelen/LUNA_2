@@ -6,25 +6,35 @@ import { createSupabaseAdminClient } from "./supabaseClient.js";
 import { selectResource } from "../modules/performance/resourcePolicy.js";
 import { conceptPriority } from "../modules/plans/priorityEngine.js";
 
+// concept_prerequisites points at concepts twice (concept_id, prerequisite_id), so every embed names its foreign key.
+// "Is a prerequisite for" = rows whose prerequisite_id is this concept.
+const PREREQ_FOR_COUNT = "concept_prerequisites!concept_prerequisites_prerequisite_id_fkey(count)";
+
 /**
- * Fetch all concept states for a learner, optionally filtered to one workspace.
- * @param {string} learnerId
- * @param {string} [workspaceId]
+ * Fetch the concept states of one owner (an account, or the demo owner) in one workspace.
+ * Rows are scoped by owner_user_id, which the server sets from the session when an attempt is saved;
+ * the client-side learner id ("anonymous" for most browsers) is never used to decide whose data is read.
+ * @param {string} ownerUserId  from ownerUserIdFor / ownerUserIdForFresh, never from the request
+ * @param {string} workspaceId
  * @returns {Promise<{ stateByConceptId: object, states: object[] }>}
  */
-export async function getSubjectStates(learnerId, workspaceId) {
+export async function getSubjectStates(ownerUserId, workspaceId) {
   const supabase = createSupabaseAdminClient();
 
-  // Join through concepts to filter by workspace
-  let query = supabase
+  const { data, error } = await supabase
     .from("student_concept_state")
-    .select("*, concept:concepts(id, name, topic, importance, difficulty, bloom_level, is_prerequisite_for_count:concept_prerequisites(count))")
-    .eq("learner_id", learnerId);
-
-  const { data, error } = await query;
+    .select(`*, concept:concepts!inner(id, workspace_id, name, topic, importance, difficulty, bloom_level, is_prerequisite_for_count:${PREREQ_FOR_COUNT})`)
+    .eq("owner_user_id", ownerUserId)
+    .eq("concept.workspace_id", workspaceId);
   if (error) throw new Error(error.message);
 
-  const states = data || [];
+  // One row per concept: the demo owner can hold several browser learner ids, keep the most recent.
+  const latest = new Map();
+  for (const row of data || []) {
+    const kept = latest.get(row.concept_id);
+    if (!kept || String(row.updated_at || "") > String(kept.updated_at || "")) latest.set(row.concept_id, row);
+  }
+  const states = [...latest.values()];
   const stateByConceptId = {};
   for (const s of states) {
     // Flatten prerequisite count from the joined aggregate
@@ -61,14 +71,14 @@ export async function getConceptState(learnerId, conceptId) {
  * Get today's recommended study items for a learner in a workspace.
  * Ranks all concepts by priority and returns the top N with recommended resource kinds.
  *
- * @param {string} learnerId
+ * @param {string} ownerUserId  from the session, never from the request
  * @param {string} workspaceId
  * @param {object} [opts]
  *   @param {string|null} [opts.examDate]
  *   @param {number}      [opts.topN=5]
  * @returns {Promise<object[]>} array of { concept, state, priority, recommended }
  */
-export async function getRecommendations(learnerId, workspaceId, opts = {}) {
+export async function getRecommendations(ownerUserId, workspaceId, opts = {}) {
   const supabase = createSupabaseAdminClient();
   const { examDate = null, topN = 5 } = opts;
 
@@ -76,9 +86,9 @@ export async function getRecommendations(learnerId, workspaceId, opts = {}) {
   const [{ data: concepts, error: cErr }, { stateByConceptId }] = await Promise.all([
     supabase
       .from("concepts")
-      .select("*, prereq_count:concept_prerequisites(count)")
+      .select(`*, prereq_count:${PREREQ_FOR_COUNT}`)
       .eq("workspace_id", workspaceId),
-    getSubjectStates(learnerId, workspaceId),
+    getSubjectStates(ownerUserId, workspaceId),
   ]);
 
   if (cErr) throw new Error(cErr.message);

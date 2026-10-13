@@ -12,6 +12,7 @@ import { GroupView } from "./GroupView";
 import { GroupDots, GroupsBar, StudentGroupsMenu } from "./GroupsBar";
 import { SetupNotice } from "./SetupNotice";
 import { card, chip, ghostBtn, kicker } from "./ui";
+import { pluralNoun } from "./nouns.js";
 
 const noop = async () => null;
 
@@ -154,12 +155,12 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
                   <GroupDots groups={groupsOfStudent(entry.id)} />
                 </button>
               ))}
-              {group && !shown.length ? <span className="text-xs text-soft-ink">No {noun}s in this group yet.</span> : null}
+              {group && !shown.length ? <span className="text-xs text-soft-ink">No {pluralNoun(noun)} in this group yet.</span> : null}
             </div>
           </>
         ) : (
           <p className="m-0 text-sm text-soft-ink">
-            No connected {noun}s yet. Send a request from <button type="button" className="font-semibold text-[var(--accent-ink)] underline" onClick={() => onOpenPage?.("connections")}>Connections</button>; once they accept you can follow their work here.
+            No connected {pluralNoun(noun)} yet. Send a request from <button type="button" className="font-semibold text-[var(--accent-ink)] underline" onClick={() => onOpenPage?.("connections")}>Connections</button>; once they accept you can follow their work here.
           </p>
         )}
       </div>

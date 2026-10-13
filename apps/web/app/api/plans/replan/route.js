@@ -3,7 +3,7 @@
  * Checks whether a study plan needs adjustment after a new attempt.
  * Returns { shouldReplan, reasons, suggestedItems[] }
  *
- * Body: { planDocumentId, learnerId, ownerUserId, workspaceId }
+ * Body: { planDocumentId, workspaceId } (the learner is the session owner; body ids are ignored)
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
@@ -21,11 +21,10 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const planDocumentId = String(body?.planDocumentId || "").trim();
-    const learnerId      = String(body?.learnerId      || "").trim();
     const ownerUserId    = await ownerUserIdForFresh(request); // session account or the demo owner, never the body
     const workspaceId    = String(body?.workspaceId    || "").trim();
 
-    if (!planDocumentId || !learnerId || !workspaceId) {
+    if (!planDocumentId || !workspaceId) {
       return NextResponse.json({ shouldReplan: false, reason: "Missing parameters." });
     }
 
@@ -53,7 +52,7 @@ export async function POST(request) {
     }
 
     // 2. Get current concept states for this learner + workspace
-    const { stateByConceptId } = await getSubjectStates(learnerId, workspaceId);
+    const { stateByConceptId } = await getSubjectStates(ownerUserId, workspaceId);
 
     // 3. Run the replan detector
     const detection = shouldReplan(

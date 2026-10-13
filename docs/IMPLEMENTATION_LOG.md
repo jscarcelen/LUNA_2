@@ -1207,3 +1207,11 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - **Plan agents** (`plans/agents.js`, `plans/execute.js` `STEP_RECIPES`): the dialog offered 3 hard-coded agents; it now offers every built-in agent of the Create tab (Quiz, Vocabulary Flashcards, Topic Summary, Math Problem Set, Concept Flashcards, Document Summarizer, Formula Sheet, Level Test) plus the learner's own and bought ones. The Summary Notes Consolidator is not offered: the plan builds the master document itself. Summary-like keys (`isSummaryKey`) are scoped by topics, not tested per concept.
 - **Formula Sheet** (`ai-tools/tools/formula-sheet`, `createFormulaSheetSpec`): built-in agent; every key formula as the material states it, each variable, the logic behind it, when to use it. Also in Quick make. Dashboard card A13 updated.
 - **Coverage view** (`reader/coverageMap.js`, `reader/CoverageLines.js`): a "Coverage" button in a document's preview draws a line beside every paragraph that an activity tests (a question's source extract) or a written output was made from (its source passages); darker = more often, grey = untouched, a pill gives the covered share. Tapping a line lists the activities, their questions and plan, with a link that opens the activity (Courses). Applies to any resource that keeps sources. Not wired: the link in the study plan page's reader. Test: `tests/reader-coverage-map.test.ts`.
+
+## 2026-10-13 (live review fixes: mastery request)
+
+- `/api/student/mastery`, `/patterns`, `/recommendations` and `/api/plans/replan` returned 500 ("more than one relationship was found
+  for 'concepts' and 'concept_prerequisites'"): the prerequisite-count embeds now name `concept_prerequisites_prerequisite_id_fkey`.
+- Concept states are read for the session owner (`ownerUserIdForFresh`) and filtered to the requested workspace; the client's
+  localStorage `learnerId` ("anonymous" for most browsers) no longer decides whose rows are returned.
+- Copy: the chat panel's broken "does not count as an attempt" sentence, and "All childs" → "All children" (`modules/accounts/nouns.js`).

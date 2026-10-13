@@ -7,6 +7,7 @@ import { OriginBadge } from "../plans/DeadlineBadge";
 import { accountsApi } from "./api";
 import { GROUP_SUBJECT_ID, GROUP_WORKSPACE_ID, buildGroupWorkspaces, compareMembers, memberLabels, memberPlanRows, subjectNamesOf } from "./groupData";
 import { card, field, ghostBtn, kicker } from "./ui";
+import { pluralNoun } from "./nouns.js";
 
 const noop = async () => null;
 
@@ -130,14 +131,14 @@ export function GroupView({ group, tab, sent = [], noun, onOpenStudent }) {
     return [...byTitle.values()];
   }, [sent, memberIds]);
 
-  if (!group.memberCount) return <p className={`${card} p-5 text-sm text-soft-ink`}>This group has no {noun}s yet. Use “Edit group…” above to add some.</p>;
+  if (!group.memberCount) return <p className={`${card} p-5 text-sm text-soft-ink`}>This group has no {pluralNoun(noun)} yet. Use “Edit group…” above to add some.</p>;
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-soft-ink">
         <span className="size-2.5 rounded-full" style={{ background: group.colour }} />
         <span className="font-semibold text-ink">{group.name}</span>
-        <span>{loading ? `Reading ${members.length} of ${total || group.memberCount} ${noun}s…` : `${members.length} ${members.length === 1 ? noun : `${noun}s`}${skipped ? ` · ${skipped} not shown (no longer connected)` : ""}`} · read-only · uploaded material and private notes are not shown</span>
+        <span>{loading ? `Reading ${members.length} of ${total || group.memberCount} ${pluralNoun(noun)}…` : `${members.length} ${members.length === 1 ? noun : `${pluralNoun(noun)}`}${skipped ? ` · ${skipped} not shown (no longer connected)` : ""}`} · read-only · uploaded material and private notes are not shown</span>
         <button type="button" className={ghostBtn} disabled={loading} onClick={reload}>{loading ? "Loading…" : "Refresh"}</button>
       </div>
       {error ? <p className={`${card} p-4 text-sm text-[var(--color-danger)]`} role="alert">{error}</p> : null}
@@ -181,7 +182,7 @@ export function GroupView({ group, tab, sent = [], noun, onOpenStudent }) {
               {sentToGroup.map((item) => (
                 <li key={item.id} className="rounded-xl border border-ink/10 px-3 py-2">
                   <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                  <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? "Assigned" : "Shared"}{item.dueDate ? ` · due ${dueLabel(item.dueDate)} (your deadline, locked for them)` : ""} · {item.people.length} of {group.memberCount} {noun}s</span>
+                  <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? "Assigned" : "Shared"}{item.dueDate ? ` · due ${dueLabel(item.dueDate)} (your deadline, locked for them)` : ""} · {item.people.length} of {group.memberCount} {pluralNoun(noun)}</span>
                 </li>
               ))}
             </ul>

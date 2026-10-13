@@ -1,9 +1,10 @@
 /**
- * GET /api/student/patterns?learnerId=&workspaceId=
- * Returns detected transversal skill patterns for a learner in a workspace.
+ * GET /api/student/patterns?workspaceId=
+ * Returns detected transversal skill patterns for the signed-in owner (session account or demo owner; a learnerId param is ignored) in a workspace.
  */
 import { NextResponse } from "next/server";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
+import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 import { getConceptGraph } from "../../../../lib/conceptsRepository.js";
 import { detectTransversalPatterns } from "../../../../modules/performance/patternDetector.js";
@@ -14,12 +15,11 @@ export const dynamic = "force-dynamic";
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const learnerId   = String(searchParams.get("learnerId")   || "").trim();
     const workspaceId = String(searchParams.get("workspaceId") || "").trim();
 
-    if (!learnerId || !workspaceId) {
+    if (!workspaceId) {
       return NextResponse.json(
-        { error: "learnerId and workspaceId are required." },
+        { error: "workspaceId is required." },
         { status: 400 }
       );
     }
@@ -28,7 +28,7 @@ export async function GET(request) {
     if (denied) return denied;
 
     const [{ stateByConceptId }, { conceptById }] = await Promise.all([
-      getSubjectStates(learnerId, workspaceId),
+      getSubjectStates(await ownerUserIdForFresh(request), workspaceId),
       getConceptGraph(workspaceId),
     ]);
 

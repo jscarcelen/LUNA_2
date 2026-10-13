@@ -10,6 +10,7 @@ import { classifyDeliverable } from "./shared";
 import { card, dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
 import { dueLabel } from "../plans/plan";
 import { shortDate } from "../plans/deadlines";
+import { pluralNoun } from "./nouns.js";
 
 const who = (person) => person.displayName || person.email;
 
@@ -92,12 +93,12 @@ function ExamDateDialog({ mode, initial, groups, students, workspaces, scope, no
                           <input type="checkbox" checked={groupIds.includes(group.id)} onChange={() => setGroupIds((current) => (current.includes(group.id) ? current.filter((id) => id !== group.id) : [...current, group.id]))} />
                           <span className="size-2 shrink-0 rounded-full" style={{ background: group.colour }} />
                           <span className="min-w-0 flex-1 truncate font-semibold text-ink">{group.name}</span>
-                          <span className="text-[11px] text-soft-ink">{group.memberCount} {group.memberCount === 1 ? noun : `${noun}s`}</span>
+                          <span className="text-[11px] text-soft-ink">{group.memberCount} {group.memberCount === 1 ? noun : `${pluralNoun(noun)}`}</span>
                         </label>
                       ))}
                     </div>
                   ) : null}
-                  <p className="m-0 mb-1 text-[11px] font-semibold text-soft-ink">{groups.length ? "…and individual " : "Individual "}{noun}s</p>
+                  <p className="m-0 mb-1 text-[11px] font-semibold text-soft-ink">{groups.length ? "…and individual " : "Individual "}{pluralNoun(noun)}</p>
                   <MemberPicker students={students} selectedIds={studentIds} onChange={setStudentIds} />
                   <p className="m-0 mt-1.5 text-xs text-ink" role="status">{stats.people ? `${stats.line || `${stats.people} people`} · ${stats.people} ${stats.people === 1 ? "person" : "people"} in total` : "Choose a group or at least one person."}</p>
                 </div>
@@ -167,7 +168,7 @@ export function ExamDatesTab({ account, groups, students, workspaces, scope, nou
   }
 
   async function cancel(item) {
-    if (!window.confirm(`Cancel “${item.title}”? It disappears for the ${noun}s. Their study plans keep the date as their own deadline.`)) return;
+    if (!window.confirm(`Cancel “${item.title}”? It disappears for the ${pluralNoun(noun)}. Their study plans keep the date as their own deadline.`)) return;
     setBusyId(item.batchId);
     const result = await accountsApi.cancelExamDate(item.batchId);
     setBusyId("");
@@ -189,7 +190,7 @@ export function ExamDatesTab({ account, groups, students, workspaces, scope, nou
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className={kicker}>Exam dates you sent</p>
-          <p className="m-0 mt-1 text-sm text-soft-ink">Send a date to a group or to {noun}s: it shows on their Home, in their bell and as a target they can plan for. If you move it, their plans move with it.</p>
+          <p className="m-0 mt-1 text-sm text-soft-ink">Send a date to a group or to {pluralNoun(noun)}: it shows on their Home, in their bell and as a target they can plan for. If you move it, their plans move with it.</p>
         </div>
         <button type="button" className={primaryBtn} onClick={() => setDialog({ mode: "send" })}>＋ Send an exam date</button>
       </div>
@@ -204,7 +205,7 @@ export function ExamDatesTab({ account, groups, students, workspaces, scope, nou
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-bold text-ink">{item.title}{item.cancelled ? " · cancelled" : ""}</span>
-                    <span className="block text-[11px] text-soft-ink">{shortDate(item.date)} ({dueLabel(item.date)}){item.subjectHint ? ` · ${item.subjectHint}` : ""} · {item.groups.length ? `${item.groups.join(", ")}` : `${item.recipients.length} ${item.recipients.length === 1 ? noun : `${noun}s`}`}{item.groups.length ? ` (${item.recipients.length})` : ""} · {planned} of {item.recipients.length} planned</span>
+                    <span className="block text-[11px] text-soft-ink">{shortDate(item.date)} ({dueLabel(item.date)}){item.subjectHint ? ` · ${item.subjectHint}` : ""} · {item.groups.length ? `${item.groups.join(", ")}` : `${item.recipients.length} ${item.recipients.length === 1 ? noun : `${pluralNoun(noun)}`}`}{item.groups.length ? ` (${item.recipients.length})` : ""} · {planned} of {item.recipients.length} planned</span>
                   </span>
                   <button type="button" className={ghostBtn} onClick={() => setOpen(open === item.batchId ? "" : item.batchId)}>{open === item.batchId ? "Hide" : "Who has planned"}</button>
                   {!item.cancelled ? <button type="button" className={ghostBtn} onClick={() => setDialog({ mode: "edit", item })}>Edit</button> : null}

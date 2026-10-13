@@ -5,6 +5,7 @@ import { accountsApi } from "./api";
 import { GROUP_COLOURS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME } from "./groups";
 import { GROUPS_MIGRATION, SetupNotice } from "./SetupNotice";
 import { dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
+import { pluralNoun } from "./nouns.js";
 
 const label = (person) => person.displayName || person.email;
 
@@ -95,7 +96,7 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
       <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Groups">
         <span className={`${kicker} mr-1`}>Groups</span>
         <button type="button" role="tab" aria-selected={!groupId} onClick={() => onSelectGroup("")} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${!groupId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
-          All {noun}s <span className="opacity-70">{students.length}</span>
+          All {pluralNoun(noun)} <span className="opacity-70">{students.length}</span>
         </button>
         {groups.map((group) => (
           <button key={group.id} type="button" role="tab" aria-selected={group.id === groupId} onClick={() => onSelectGroup(group.id)} className={`inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${group.id === groupId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
@@ -123,11 +124,11 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
 
       {selected ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-soft-ink">
-          <span>{selected.memberCount} {selected.memberCount === 1 ? noun : `${noun}s`} in this group</span>
+          <span>{selected.memberCount} {selected.memberCount === 1 ? noun : `${pluralNoun(noun)}`} in this group</span>
           <button type="button" className={ghostBtn} onClick={() => setEditing(editing ? null : { name: selected.name, colour: selected.colour, memberIds: selected.memberIds })}>{editing ? "Close" : "Edit group…"}</button>
           {confirmDelete ? (
             <span className="inline-flex flex-wrap items-center gap-1.5">
-              Delete “{selected.name}”? The {noun}s are not deleted or disconnected.
+              Delete “{selected.name}”? The {pluralNoun(noun)} are not deleted or disconnected.
               <button type="button" className={dangerBtn} disabled={busy} onClick={() => run(() => accountsApi.deleteGroup(selected.id), () => { setConfirmDelete(false); setEditing(null); onSelectGroup(""); })}>Delete group</button>
               <button type="button" className={ghostBtn} onClick={() => setConfirmDelete(false)}>Keep</button>
             </span>

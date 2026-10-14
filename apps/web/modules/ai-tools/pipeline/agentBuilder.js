@@ -572,6 +572,7 @@ COMPOSITION RULES (follow exactly)
 ${enhancedRules}
 
 Additional hard rules:
+- For every paragraph, bullet_list and callout set _source to the sourceId of the reference passage it was written from, _quote to the exact words of that passage that support it (copied character for character, at most 300 characters, never a paraphrase) and _support to "stated" or "inferred"; set all three to null for headings, titles and purely connecting text. The quotes are checked against the material by code.
 - Use ONLY the reference material: never add a fact, figure, formula or example that is not in it, because the learner is examined on this material. If it does not contain enough for something asked, write less rather than fill the gap.
 - Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
 - Never omit a required field; set optional fields to null if unused.
@@ -863,7 +864,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   const selectedBlockEntries = config.output?.selectedBlocks || config.spec?.output?.selectedBlocks || [];
   const selectedBlockIds = selectedBlockEntries.map((e) => e.blockId || e).filter(Boolean);
   if (selectedBlockIds.length > 0) {
-    const blockSchema = buildBlockJsonSchema(selectedBlockIds.length > 0 ? selectedBlockIds : ["heading", "paragraph", "bullet_list"]);
+    const blockSchema = buildBlockJsonSchema(selectedBlockIds.length > 0 ? selectedBlockIds : ["heading", "paragraph", "bullet_list"], { grounded: true });
     const { scopedDocuments: blockDocs, rankedChunks: blockChunks, styleChunks: blockStyleChunks } = await prepareMaterial(config, emit);
     let blockResult = null;
     let blockFallback = "";

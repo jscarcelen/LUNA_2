@@ -101,6 +101,41 @@ describe("groundBlocks", () => {
   });
 });
 
+describe("groundBlocks with per-paragraph quotes", () => {
+  const quoted = (extra: object) => ({ type: "paragraph", text: "Returns are measured as the payoff less the price paid, relative to the price paid.", ...extra });
+  it("verifies a paragraph whose quote is in the passage it cites and keeps the quote", async () => {
+    const { blocks: out, summary } = await groundBlocks([quoted({ _source: "S1", _quote: "payoff minus the price paid, divided by the price paid", _support: "stated" })], chunks, { judge: none });
+    expect(out[0]._grounding).toMatchObject({ level: "verified", quote: "payoff minus the price paid, divided by the price paid" });
+    expect(summary).toMatchObject({ total: 1, quoted: 1, unverified: 0 });
+  });
+  it("marks a paragraph unverified when its quote is invented, even with no figure in it", async () => {
+    const { blocks: out } = await groundBlocks([quoted({ _source: "S1", _quote: "Every investor should hold only government bonds", _support: "stated" })], chunks, { judge: none });
+    expect(out[0]._grounding.level).toBe("unverified");
+    expect(out[0]._grounding.reasons.join(" ")).toMatch(/not found/);
+  });
+  it("notes a real quote cited under the wrong passage and does not fail the paragraph", async () => {
+    const { blocks: out } = await groundBlocks([quoted({ _source: "S2", _quote: "payoff minus the price paid, divided by the price paid" })], chunks, { judge: none });
+    expect(out[0]._grounding.level).toBe("verified");
+    expect(out[0]._grounding.reasons.join(" ")).toMatch(/not in the passage cited/);
+  });
+  it("lets the second pass overrule a real quote", async () => {
+    const { blocks: out } = await groundBlocks([quoted({ _source: "S1", _quote: "payoff minus the price paid, divided by the price paid" })], chunks, { judge: judgeWith({ 0: ["unsupported", "Paragraph reverses the formula"] }) });
+    expect(out[0]._grounding.level).toBe("unverified");
+  });
+});
+
+describe("block schema", () => {
+  it("asks text blocks for a source, a quote and a support label, and conformBlocks keeps them", async () => {
+    // @ts-ignore - plain JS modules
+    const registry = await import("../modules/ai-tools/blocks/blockRegistry.js");
+    const schema = registry.buildJsonSchema(["heading", "paragraph"], { grounded: true });
+    expect(schema.items.required).toEqual(expect.arrayContaining(["_source", "_quote", "_support"]));
+    expect((registry.buildJsonSchema(["paragraph"]).items.properties as any)._quote).toBeUndefined();
+    const kept = registry.conformBlocks([{ type: "paragraph", text: "Some text", _source: "S1", _quote: "exact words here", _support: "stated" }]);
+    expect(kept[0]).toMatchObject({ _source: "S1", _quote: "exact words here" });
+  });
+});
+
 describe("chat grounding", () => {
   const passages = [{ n: "P1", content: chunks[0].content }, { n: "P2", content: chunks[1].content }];
   it("finds the sentences that carry a citation", () => {

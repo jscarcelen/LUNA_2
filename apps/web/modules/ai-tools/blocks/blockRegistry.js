@@ -222,7 +222,7 @@ export function getBlock(id) { return BLOCKS[id]; }
  * valid. This is the only schema shape that OpenAI strict mode reliably accepts for polymorphic
  * block arrays.
  */
-export function buildJsonSchema(selectedBlockIds) {
+export function buildJsonSchema(selectedBlockIds, { grounded = false } = {}) {
   const ids = (selectedBlockIds || []).filter((id) => BLOCKS[id]);
 
   // Collect every unique field name across all selected block types.
@@ -260,6 +260,14 @@ export function buildJsonSchema(selectedBlockIds) {
     properties[name] = { description: def.description, anyOf: [base, { type: 'null' }] };
   }
 
+  // Grounding (pipeline/grounding.js): text blocks name the passage they come from and quote the words that support them.
+  // Nullable, because headings, titles and connecting text have nothing to quote.
+  if (grounded) {
+    properties._source = { description: 'For a paragraph, bullet list or callout: the sourceId (S1, S2…) of the reference passage it was written from. null for headings and text that is not drawn from one passage.', anyOf: [{ type: 'string' }, { type: 'null' }] };
+    properties._quote = { description: 'For a paragraph, bullet list or callout: the exact words of that passage that support it, copied character for character (max 300 characters). null when there is nothing to quote.', anyOf: [{ type: 'string' }, { type: 'null' }] };
+    properties._support = { description: 'stated = the passage says it directly; inferred = it follows from the passage by reasoning. null for headings.', anyOf: [{ type: 'string', enum: ['stated', 'inferred'] }, { type: 'null' }] };
+    required.push('_source', '_quote', '_support');
+  }
   const itemSchema = { type: 'object', properties, required, additionalProperties: false };
   return { type: 'array', items: itemSchema };
 }

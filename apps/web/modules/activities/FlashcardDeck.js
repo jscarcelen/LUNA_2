@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
+import { SourceNote } from "./SourceNote";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -95,6 +96,8 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
           <div className={`${card} p-4`}>
             {flipped ? (
               <>
+                {/* Where the card comes from, and whether Luna could confirm it in the material (pipeline/grounding.js). */}
+                {current.source?.extract || current.source?.grounding ? <div className="mb-3"><SourceNote source={current.source} /></div> : null}
                 <p className="m-0 text-sm font-semibold text-ink">How well did you know it?</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {LEVELS.map((level, position) => (

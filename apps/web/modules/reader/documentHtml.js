@@ -16,6 +16,9 @@ const flagOf = (block) => (block?._grounding?.level === "unverified"
   ? ` <span class="md-flag" title="${escape((block._grounding.reasons || []).join(" ") || "Luna could not confirm this in your material.")}">⚠ not confirmed in your material</span>`
   : "");
 
+/** The supporting words of a verified paragraph, shown on hover. */
+const quoteTitle = (block) => (block?._grounding?.level === "verified" && block._grounding.quote ? ` title="${escape(`Supported by your material: “${block._grounding.quote}”`)}"` : "");
+
 export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", grounding = null } = {}) {
   // Source tags ("[D1 p.3]") become links to the original document (the app opens its reader at that page).
   const blocks = linkSourceBlocks(rawBlocks, linkBase);
@@ -46,7 +49,7 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", 
         break;
       }
       case "paragraph":
-        out.push(`<p>${renderInline(text(block.text))}${flagOf(block)}</p>`);
+        out.push(`<p${quoteTitle(block)}>${renderInline(text(block.text))}${flagOf(block)}</p>`);
         break;
       case "bullet_list": {
         const items = (Array.isArray(block.items) ? block.items : []).map((item) => `<li>${renderInline(text(item))}</li>`).join("") + (flagOf(block) ? `<li class="md-flag-item">${flagOf(block)}</li>` : "");

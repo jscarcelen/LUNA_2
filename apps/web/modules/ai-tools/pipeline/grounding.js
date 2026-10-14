@@ -203,46 +203,67 @@ const blockText = (block) => {
   if (Array.isArray(block.items)) return block.items.map(String).join(" ");
   return String(block.text || block.title || "");
 };
-const CHECKED = new Set(["paragraph", "bullet_list", "callout", "heading"]);
+const CHECKED = new Set(["paragraph", "bullet_list", "callout"]);
 
 /**
- * Written output (summaries, formula sheets, reading parts) has no per-block quote, so it gets the checks that work without one:
- * every figure must be in the material, and a second pass compares each paragraph with the best-matching passages.
- * Flagged blocks carry `_grounding: { level: "unverified", reasons }`; the reader marks them.
+ * Written output (summaries, formula sheets, reading parts) is checked paragraph by paragraph:
+ *  - each paragraph, bullet list and callout names its passage (`_source`) and quotes the supporting words (`_quote`); the quote
+ *    must be in that passage (an invented one marks the paragraph unverified);
+ *  - every figure must be in the material;
+ *  - a second pass compares the paragraph with its passage (or, without a citation, the best-matching passages).
+ * Each checked block carries `_grounding: { level, quote, reasons, judged }`; the reader marks the unverified ones and shows the
+ * supporting quote of the others. Blocks without a quote still get the figure check and the second pass.
  */
 export async function groundBlocks(blocks, chunks, { judge = judgeSupport } = {}) {
   const materialText = chunks.map((chunk) => chunk.content).join("\n");
-  const materialNorm = norm(materialText);
   const checked = [];
-  const out = blocks.map((block, index) => {
+  blocks.forEach((block, index) => {
     const type = String(block?.type || "");
     const text = blockText(block);
-    if (!CHECKED.has(type) || type === "heading" || text.trim().length < 30) return block;
+    if (!CHECKED.has(type) || text.trim().length < 30) return;
     const reasons = [];
+    const quote = String(block._quote || "").trim();
+    const cited = citedChunk(block, chunks);
+    let quoteMatch = "none";
+    if (quote) {
+      const inCited = cited ? matchQuote(quote, cited.content) : { status: "none" };
+      if (inCited.status !== "none") quoteMatch = inCited.status;
+      else {
+        const elsewhere = chunks.map((chunk) => matchQuote(quote, chunk.content)).find((hit) => hit.status !== "none");
+        if (elsewhere) { quoteMatch = elsewhere.status; reasons.push("The quote is in the material, but not in the passage cited."); }
+        else reasons.push("The supporting quote was not found in your material.");
+      }
+    }
+    const quoteFailed = Boolean(quote) && quoteMatch === "none";
     const numbers = ungroundedNumbers(text, materialText);
-    if (numbers.length) reasons.push(`The figure${numbers.length > 1 ? "s" : ""} ${numbers.slice(0, 4).join(", ")} ${numbers.length > 1 ? "do" : "does"} not appear in your material.`);
-    checked.push({ index, text, reasons });
-    return block;
+    const numberReason = numbers.length ? `The figure${numbers.length > 1 ? "s" : ""} ${numbers.slice(0, 4).join(", ")} ${numbers.length > 1 ? "do" : "does"} not appear in your material.` : "";
+    checked.push({ index, text, reasons, quoteFailed, quoteMatch, quote: quoteMatch === "none" ? "" : quote, numberReason, cited });
   });
+
   const entries = checked.slice(0, 40).map((entry) => {
-    const words = new Set(norm(entry.text).split(" ").filter((word) => word.length > 3));
-    const ranked = chunks.map((chunk) => ({ chunk, score: [...words].filter((word) => norm(chunk.content).includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 2);
-    return { claim: entry.text.slice(0, 900), passage: ranked.map((row) => row.chunk.content).join("\n---\n") };
+    let passage = entry.cited?.content || "";
+    if (!passage) {
+      const words = new Set(norm(entry.text).split(" ").filter((word) => word.length > 3));
+      passage = chunks.map((chunk) => ({ chunk, score: [...words].filter((word) => norm(chunk.content).includes(word)).length })).sort((a, b) => b.score - a.score).slice(0, 2).map((row) => row.chunk.content).join("\n---\n");
+    }
+    return { claim: entry.text.slice(0, 900), passage };
   });
   const result = await judge(entries);
+
+  const final = blocks.map((block) => block);
   let flagged = 0;
-  let unmatched = 0;
-  const final = out.map((block) => block);
+  let quoted = 0;
   checked.forEach((entry, position) => {
     const verdict = result.verdicts?.get(position);
     const reasons = [...entry.reasons];
-    // A figure that is not in the material only fails a paragraph when the second pass does not vouch for it.
-    let level = reasons.length && verdict?.verdict !== "supported" ? "unverified" : "verified";
+    if (entry.numberReason) reasons.push(entry.numberReason);
+    // A figure missing from the material only fails a paragraph when the second pass does not vouch for it; an invented quote always does.
+    let level = entry.quoteFailed || (entry.numberReason && verdict?.verdict !== "supported") ? "unverified" : "verified";
     if (verdict?.verdict === "unsupported") { level = "unverified"; reasons.push(verdict.reason || "A second check found no support for it in your material."); }
     else if (verdict?.verdict === "partly") reasons.push(verdict.reason || "Only part of it is in your material.");
     if (level === "unverified") flagged += 1;
-    final[entry.index] = { ...final[entry.index], _grounding: { level, reasons, judged: verdict?.verdict || "" } };
+    if (entry.quote) quoted += 1;
+    final[entry.index] = { ...final[entry.index], _grounding: { level, quote: entry.quote, quoteMatch: entry.quoteMatch, reasons, judged: verdict?.verdict || "" } };
   });
-  void materialNorm; void unmatched;
-  return { blocks: final, summary: { total: checked.length, unverified: flagged, judged: !result.skipped, judgeUsage: result.usage || null } };
+  return { blocks: final, summary: { total: checked.length, quoted, unverified: flagged, judged: !result.skipped, judgeUsage: result.usage || null } };
 }

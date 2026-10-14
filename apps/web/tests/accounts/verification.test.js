@@ -347,6 +347,13 @@ describe("sign-up age gate and terms (legal compliance migration)", () => {
     expect(db.table("accounts")).toHaveLength(0);
   });
 
+  it("does not ask a teenager for a phone number", async () => {
+    const teen = new Date(); teen.setUTCFullYear(teen.getUTCFullYear() - 16);
+    const ok = await call(signup.POST, "/api/accounts/signup", form({ birthDate: teen.toISOString().slice(0, 10), phone: "" }));
+    expect(ok.status).toBe(200);
+    expect((await call(signup.POST, "/api/accounts/signup", form({ email: "adult@home.com", phone: "" }))).status).toBe(400);
+  });
+
   it("an adult is not marked as a minor", async () => {
     await call(signup.POST, "/api/accounts/signup", form({ birthDate: "1990-01-01" }));
     expect(db.table("accounts")[0].is_minor).toBe(false);

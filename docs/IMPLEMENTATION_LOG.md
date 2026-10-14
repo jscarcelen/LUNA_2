@@ -1235,3 +1235,11 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - L14 `AiGuidanceNote` under AI scores, coach, level report, skill map. L16 `docs/DPIA_RAT.md`.
 - Not done (still open in the plan): teacher grade override, RLS, phone optional for minors, marketplace/sharing blocks for minors (L5), retention jobs beyond deletion, Spanish texts, payments.
 - Tests: `tests/legal-compliance.test.ts`, age-gate cases in `tests/accounts/verification.test.js`.
+
+## 2026-10-13 — Legal compliance, second pass
+- L5: minors cannot request or accept `peer` connections (`requestLink`/`changeLink`/`attachPendingLinks`; a request to a minor looks like a normal pending one), cannot sell in the marketplace, and the phone number is optional under 18 (sign-up route + `AuthModal`).
+- L11: `public/katex` (CSS + woff2 fonts) used by the workspace preview instead of jsDelivr.
+- L9: `purgeDue` also drops expired tokens and feedback screenshots older than 90 days.
+- L12: migration `202610130002_enable_rls_all_tables.sql`.
+- Spanish Terms/Privacy/AI texts (`lib/legalTextsEs.js`, `?lang=es`), "Made with AI" label on the output preview, `docs/PRIVACY_OPERATIONS.md` (breach procedure, sub-processors).
+- Tests: peer/minor rules in `tests/accounts/network.test.js`, teen phone in `verification.test.js`, Spanish texts and retention numbers in `legal-compliance.test.ts`.

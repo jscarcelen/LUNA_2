@@ -504,3 +504,24 @@ describe("agents, templates and components are shared as copies", () => {
     expect((await (await get(copyRoute, "/api/accounts/share-copy", maria)).json()).components).toEqual([]);
   });
 });
+
+describe("under 18: no open-network connections", () => {
+  const teen = () => account({ email: "teen@home.com", role: "student", birth_date: new Date(Date.UTC(new Date().getUTCFullYear() - 16, 0, 1)).toISOString().slice(0, 10), is_minor: true });
+  const adult = () => account({ email: "grown@home.com", role: "student", birth_date: "1990-01-01" });
+
+  it("a minor cannot ask a peer to connect, but can still connect with a teacher", async () => {
+    const kid = teen();
+    const peer = adult();
+    await expect(repo.requestLink(kid, { email: peer.email })).rejects.toMatchObject({ code: "minor_peer" });
+    const ok = await repo.requestLink(account({ email: "prof@school.edu", role: "teacher" }), { email: kid.email, relation: "student" });
+    expect(ok.status).toBe("pending");
+  });
+
+  it("asking a minor to be peers changes nothing and says the same as a sent request", async () => {
+    const kid = teen();
+    const before = db.table("account_links").length;
+    const result = await repo.requestLink(adult(), { email: kid.email });
+    expect(result.status).toBe("pending");
+    expect(db.table("account_links").length).toBe(before);
+  });
+});

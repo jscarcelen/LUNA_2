@@ -462,6 +462,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       return (
         <MarketplacePage
           role={role}
+          isMinor={Boolean(account?.isMinor)}
           profileName={profileName}
           workspaces={workspaces}
           selectedWorkspaceId={selectedWorkspaceId}

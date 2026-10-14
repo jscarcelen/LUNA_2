@@ -26,6 +26,7 @@ function Stars({ value, size = 12 }) {
  */
 export function MarketplacePage({
   role = "student",
+  isMinor = false,
   profileName = "",
   workspaces = [],
   selectedWorkspaceId,
@@ -119,7 +120,7 @@ export function MarketplacePage({
             <p className="m-0 mt-1 max-w-2xl text-sm text-soft-ink">Tools, ready-made study material and whole study plans made by other people. Add one and it appears in Make.</p>
           </div>
           {/* Selling is for people who make material for others: students browse and add, nothing more. */}
-          {role === "student" ? null : (
+          {role === "student" || isMinor ? null : (
             <div className="flex flex-wrap gap-2">
               <button type="button" className={ghostBtn} onClick={() => setStoreForm(true)}>{myStore ? "Edit my store" : "Open my store"}</button>
               <button type="button" className={ghostBtn} onClick={() => setSelling(true)}>Sell something</button>

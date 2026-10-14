@@ -85,3 +85,21 @@ describe("legal texts", () => {
     expect(o.contact).toBe("privacy@luna.test");
   });
 });
+
+describe("Spanish texts and minor protections", () => {
+  it("serves the Spanish versions with the same structure", () => {
+    for (const fn of [privacyPolicy, termsOfService, aiNotice]) {
+      const en: any = (fn as any)("en");
+      const es: any = (fn as any)("es");
+      expect(es.sections.length).toBe(en.sections.length);
+      expect(es.title).not.toBe(en.title);
+    }
+  });
+
+  it("keeps the retention numbers promised in the privacy text", async () => {
+    const data: any = await import("../lib/accountData.js");
+    expect(data.DELETION_GRACE_DAYS).toBe(30);
+    expect(data.FEEDBACK_SCREENSHOT_DAYS).toBe(90);
+    expect(JSON.stringify(privacyPolicy())).toMatch(/90 days/);
+  });
+});

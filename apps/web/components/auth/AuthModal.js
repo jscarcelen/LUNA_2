@@ -134,7 +134,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     if (isSignUp) {
       const problems = {};
       if (form.password !== form.passwordConfirm) problems.passwordConfirm = 'The two passwords do not match.';
-      const phone = normalizePhone(form.phone);
+      const phone = normalizePhone(form.phone, { required: !(age !== null && age < 18) });
       if (!phone.ok) problems.phone = phone.error;
       if (!acceptTerms) problems.acceptTerms = 'Accept the Terms of Service and the Privacy Policy to continue.';
       if (Object.keys(problems).length) {
@@ -342,7 +342,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
             </div>
             {isSignUp && (
               <div>
-                <label htmlFor="luna-phone" style={labelStyle}>Phone number</label>
+                <label htmlFor="luna-phone" style={labelStyle}>Phone number{age !== null && age < 18 ? <span style={{ color: T.sub, fontWeight: 400 }}> (optional under 18)</span> : null}</label>
                 <input id="luna-phone" type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={setField('phone')} placeholder="+1 415 555 2671" style={{ ...inputStyle, borderColor: fieldErrors.phone ? T.red : T.line }} {...errorProps('luna-phone-msg', fieldErrors.phone)} />
                 <div id="luna-phone-msg" role={fieldErrors.phone ? 'alert' : undefined} style={{ fontSize: 11.5, marginTop: 4, color: fieldErrors.phone ? T.red : T.sub, lineHeight: 1.45 }}>
                   {fieldErrors.phone || `${PHONE_HELP} One phone per account. We do not verify it by SMS yet (not verified yet).`}

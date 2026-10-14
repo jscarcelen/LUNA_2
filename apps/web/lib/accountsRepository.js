@@ -12,6 +12,7 @@ import {
   decideLinkRequest,
   hasGuardianPowers,
   isEmailVerified,
+  isMinorAccount,
   isMissingColumnError,
   isSetupNeededError,
   isValidEmail,
@@ -457,6 +458,10 @@ export async function requestLink(requester, { email, relation = "" }) {
   // follows the role the requester hinted at and is settled from the real roles when the person signs up.
   const kind = target ? kindForRoles(requester.role, target.role) : kindForRequest(requester.role, hinted);
   if (kind === "peer") await assertSharingReady("Connecting with people outside teacher, parent and student pairs");
+  // Under 18: no open-network (peer) connections, so a child is never reachable by strangers. Teacher and parent links stay.
+  if (kind === "peer" && isMinorAccount(requester)) throw new LinkError("minor_peer", "Under 18 you can connect with your teachers and parents. Ask a parent or teacher to connect with the people you study with.");
+  // The other way round the answer is the same as a request that was sent, so it never reveals that someone is a minor.
+  if (kind === "peer" && target && isMinorAccount(target)) return sent;
 
   const key = pairKey(kind, requester.email, targetEmail);
   const [existing] = await selectLinks((query) => query.eq("pair_key", key));
@@ -508,6 +513,7 @@ export async function changeLink(account, linkId, action) {
   if (action === "accept") assertEmailVerified(account, "accept connections");
   // A by-email request that has not attached yet can be answered by the account whose email it names
   // (only once that email is confirmed: an unconfirmed address proves nothing).
+  if (action === "accept" && link.kind === "peer" && isMinorAccount(account)) throw new LinkError("minor_peer", "Under 18 you can connect with your teachers and parents only.");
   const claimable = !link.targetId && link.targetEmail === account.email && isEmailVerified(account);
   const next = transitionLink(claimable ? { ...link, targetId: account.id } : link, account.id, action);
   const patch = { status: next, responded_at: new Date().toISOString() };
@@ -535,7 +541,7 @@ export async function attachPendingLinks(account) {
     const requester = byId.get(row.requesterId);
     const kind = requester ? kindForRoles(requester.role, account.role) : null;
     // Without the sharing migration a peer connection cannot be stored: such a request is dropped, as before.
-    const usable = Boolean(kind) && (kind !== "peer" || sharing);
+    const usable = Boolean(kind) && (kind !== "peer" || (sharing && !isMinorAccount(account)));
     if (!usable) {
       const { error } = await client.from("account_links").update({ status: "revoked", responded_at: new Date().toISOString() }).eq("id", row.id);
       if (error) throw error;

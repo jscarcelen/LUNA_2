@@ -8,6 +8,7 @@
  * These texts were drafted from docs/LEGAL_COMPLIANCE_PLAN.md and must be reviewed by the company's lawyer before launch.
  */
 import { TERMS_VERSION } from "./accountsCore.js";
+import { aiNoticeEs, privacyPolicyEs, termsOfServiceEs } from "./legalTextsEs.js";
 
 export function operatorDetails(env = process.env) {
   const name = String(env.LUNA_LEGAL_NAME || "").trim() || "LUNA (legal entity being incorporated in Madrid, Spain)";
@@ -18,8 +19,9 @@ export function operatorDetails(env = process.env) {
 
 const op = () => operatorDetails();
 
-export function privacyPolicy() {
+export function privacyPolicy(lang = "en") {
   const o = op();
+  if (lang === "es") return privacyPolicyEs(o);
   return {
     title: "Privacy Policy",
     updated: TERMS_VERSION,
@@ -39,14 +41,14 @@ export function privacyPolicy() {
         "To send service emails: confirm your email, reset a password, connection and sharing requests (contract / legitimate interest).",
         "For children under 14: only after a parent or guardian consents (consent, Article 8 GDPR and LOPDGDD art. 7; COPPA verifiable parental consent in the US). For school accounts, the school’s authorisation."
       ] },
-      { h: "Children", p: ["Under 14 (13 in the US) a child cannot open an account alone. Until a parent or guardian agrees, we keep only the child’s first name, birth date and the guardian’s email, and delete them after 48 hours. We store no IP address and set no cookie for that request.", "Once consent is given, the guardian gets a parent account and can see, export and delete the child’s data at any time. Accounts of under-18s get extra protection: they cannot publish in the marketplace or share outside their connections, and their content is sent to AI providers with the strictest privacy settings available. We never use children’s data for advertising or to build marketing profiles."] },
+      { h: "Children", p: ["Under 14 (13 in the US) a child cannot open an account alone. Until a parent or guardian agrees, we keep only the child’s first name, birth date and the guardian’s email, and delete them after 48 hours. We store no IP address and set no cookie for that request.", "Once consent is given, the guardian gets a parent account and can see, export and delete the child’s data at any time. Accounts of under-18s get extra protection: they cannot sell in the marketplace or make open-network connections with people they do not know, and their content is sent to AI providers with the strictest privacy settings available. We never use children’s data for advertising or to build marketing profiles."] },
       { h: "Who we share it with", p: ["Only service providers that run LUNA for us (processors), under contracts that limit them to our instructions:"], ul: [
         "Hosting and database: Vercel and Supabase.",
         "AI: OpenAI and Anthropic process the text, images and questions needed to generate content and grade answers. We ask them not to retain data for training. Mathpix may process images of formulas.",
         "Email delivery: our email provider.",
         "Payments (when launched): our payment provider or merchant of record."
       ], after: "We do not sell personal data. Some providers are in the United States; transfers rely on the EU–US Data Privacy Framework or Standard Contractual Clauses." },
-      { h: "How long we keep it", ul: ["Your account data while the account exists. When you delete your account it is erased after a 30-day grace period (you can cancel by logging in).", "Pending guardian requests: 48 hours.", "Photos of your working are sent to the grader and not kept on your attempt record.", "Beta feedback and screenshots: until the beta ends."] },
+      { h: "How long we keep it", ul: ["Your account data while the account exists. When you delete your account it is erased after a 30-day grace period (you can cancel by logging in).", "Pending guardian requests: 48 hours.", "Photos of your working are sent to the grader and not kept on your attempt record.", "Beta feedback: screenshots 90 days, the text until the beta ends."] },
       { h: "Your rights", p: [`You can access, correct, export and delete your data from Account settings, ask us to restrict or object to processing, and withdraw consent at any time (${o.contact}). Parents and guardians can do this for their child from “My students”. In Spain you can complain to the Agencia Española de Protección de Datos (aepd.es); US residents may also contact the FTC.`] },
       { h: "Automated decisions", p: ["LUNA scores answers and estimates mastery with AI to help you study. These are guidance for you and your teacher, never a final grade, admission or certification: a teacher decides what counts at school. See the AI notice."] },
       { h: "Security and changes", p: ["Data is encrypted in transit, passwords are hashed, access is limited to what is needed, and we will notify the authority and affected people of a serious breach as the law requires. If we change this policy in substance we will tell you and ask you to accept the new version."] }
@@ -54,8 +56,9 @@ export function privacyPolicy() {
   };
 }
 
-export function termsOfService() {
+export function termsOfService(lang = "en") {
   const o = op();
+  if (lang === "es") return termsOfServiceEs(o);
   return {
     title: "Terms of Service",
     updated: TERMS_VERSION,
@@ -74,7 +77,8 @@ export function termsOfService() {
   };
 }
 
-export function aiNotice() {
+export function aiNotice(lang = "en") {
+  if (lang === "es") return aiNoticeEs();
   return {
     title: "AI notice",
     updated: TERMS_VERSION,

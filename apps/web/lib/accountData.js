@@ -10,6 +10,7 @@ import { listWorkspaceTree } from "./workspacesRepository.js";
 import { findAccountById } from "./accountsRepository.js";
 
 export const DELETION_GRACE_DAYS = 30;
+export const FEEDBACK_SCREENSHOT_DAYS = 90;
 /** Deleted explicitly, in this order (children before parents), by `owner_user_id`. Missing tables are skipped. */
 export const OWNER_TABLES = ["attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
 const HEAVY_KEY = /base64|render_?html|screenshot/i;
@@ -98,6 +99,9 @@ export async function eraseAccount(accountId) {
 export async function purgeDue(now = new Date()) {
   const client = createSupabaseAdminClient();
   await client.from("guardian_consents").delete().lt("expires_at", now.toISOString());
+  // Retention: used or expired one-time tokens, and beta-feedback screenshots after 90 days (the text stays).
+  await client.from("account_tokens").delete().lt("expires_at", now.toISOString());
+  await client.from("feedback_items").update({ screenshot: null, has_screenshot: false }).lt("created_at", new Date(now.getTime() - FEEDBACK_SCREENSHOT_DAYS * 86400000).toISOString()).not("screenshot", "is", null);
   const { data, error } = await client.from("accounts").select("id").lte("deletion_scheduled_at", now.toISOString()).not("deletion_scheduled_at", "is", null).limit(200);
   if (error) {
     if (/deletion_scheduled_at/.test(String(error.message || ""))) return 0;

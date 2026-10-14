@@ -366,6 +366,7 @@ export function OutputPreviewPane({ doc, selection, onSelection, overlay, emptyH
     <div className="flex min-h-[560px] flex-col overflow-hidden rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/10 px-4 py-3">
         <div className="flex items-center gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">{interactive ? tabButton("interactive", "Interactive") : null}{tabButton("preview", "Document")}</div>
+        <span className="ml-2 text-[11px] text-soft-ink" title="AI can make mistakes: check important facts against your teacher or textbook.">Made with AI · check important facts</span>
       </div>
 
       {showMatrix && doc && tab === "preview" ? (

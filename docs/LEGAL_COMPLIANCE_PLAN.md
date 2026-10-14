@@ -78,7 +78,16 @@ SL constitution (CIRCE/PAE, 3,000 € capital, solidary administrators) · **Pac
 
 ## 4. Status (2026-10-13)
 
-Implemented in code: L1, L2, L3, L4 (OpenAI `store:false` + no student name to the coach; provider DPAs/ZDR still to sign), L8, L14 (labels; a teacher override is still to build), L16 (draft in `docs/DPIA_RAT.md`), L18 (English texts, to be lawyer-reviewed and translated). Everything else is still open.
+**Done in code:** L1, L2, L3 (age gate, guardian consent, `is_minor`) · L4 (OpenAI `store:false`, no student name to the coach) · L5 (minors cannot sell, cannot make or accept open-network connections, phone optional under 18) · L8 (export, delete, parent rights L7) · L9 (daily purge: deletions, expired tokens/guardian requests, feedback screenshots after 90 days) · L11 (KaTeX CSS and fonts served from `/katex`, no CDN in the in-app preview) · L12 (migration enabling RLS on every table) · L14 (guidance labels; "Made with AI" on generated output) · L15 partly (AI labelling, notice) · L18 (Terms, Privacy, AI notice in English and Spanish) · L13/L16 as documents (`docs/PRIVACY_OPERATIONS.md`, `docs/DPIA_RAT.md`).
+
+**Still open (needs a decision, a contract or a bigger build):**
+- Teacher grade override / "ask for review" (the texts say a teacher decides what counts; no override button yet).
+- Provider DPAs and zero-data-retention requests (OpenAI, Anthropic, Mathpix, Supabase, Vercel); EU regions.
+- Lawyer review of `lib/legalTexts.js` and `lib/legalTextsEs.js`; school DPA template.
+- L17 prompt-by-prompt data-minimisation audit beyond the coach (grader and chat send task text only; not re-audited line by line).
+- L19 copyright report-a-listing button; L20 marketplace seller identity and DSA flow; L21–L25 payments (not built).
+- Standalone HTML downloads from the reader still link KaTeX from jsDelivr (a file opened on the user's own computer).
+- Retention of inactive accounts (needs a last-login column and a policy).
 
 ## 5. Suggested order of work
 

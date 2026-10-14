@@ -132,3 +132,4 @@ Supported actions currently mirror the mock route:
 - Delete safety checks return `409` + `requiresForce` for workspace/subject when related data exists.
 - Workspace UI is connected to `/api/workspaces-supabase`.
 - `202610130001_legal_compliance.sql`: age gate, guardian consent, terms acceptance, account deletion (optional: the app feature-detects it; apply before onboarding real users). Also set `CRON_SECRET` in Vercel for the daily purge.
+- `202610130002_enable_rls_all_tables.sql`: row level security on every table (no policies: only the server's service role can read/write). Run `get_advisors` after applying.

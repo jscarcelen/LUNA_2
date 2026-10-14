@@ -61,8 +61,6 @@ export async function POST(request) {
   if (!isRole(role)) return json({ error: "Choose a profile: student, parent or teacher." }, 400);
   const password = validatePasswordPair(body?.password, body?.passwordConfirm, email);
   if (!password.ok) return json({ error: password.error, field: String(body?.passwordConfirm) === String(body?.password) ? "password" : "passwordConfirm" }, 400);
-  const phone = normalizePhone(body?.phone, { required: true });
-  if (!phone.ok) return json({ error: phone.error, field: "phone" }, 400);
   // Age gate (GDPR/LOPDGDD art. 7, COPPA): everyone gives a birth date. Under 14 never gets an account here: a parent or
   // guardian consents first (/api/accounts/guardian/request). Until the legal migration is applied the old optional age is used.
   const legal = await supportsLegal();
@@ -76,6 +74,9 @@ export async function POST(request) {
   const age = ownAge ?? Number(body?.age);
   const under13 = Number.isFinite(age) && age > 0 && age < 13;
   const isMinor = Number.isFinite(age) && age > 0 && isMinorAge(age);
+  // Data minimisation: a phone number is not needed from anyone under 18 (it stays optional for them).
+  const phone = normalizePhone(body?.phone, { required: !isMinor });
+  if (!phone.ok) return json({ error: phone.error, field: "phone" }, 400);
   try {
     resolveSessionSecret(); // fail before creating anything if production has no session secret
     const verification = await supportsVerification();

@@ -36,13 +36,15 @@ const chip = "inline-flex max-w-[11rem] items-center truncate whitespace-nowrap 
  * iframe renders math and has basic readable styling.
  * `sandbox="allow-same-origin"` (no allow-scripts) lets CSS load but blocks JS.
  */
+// KaTeX CSS and fonts are served from our own origin (public/katex): no third-party request carries the reader's IP.
+const KATEX_CSS = () => `${typeof window !== "undefined" ? window.location.origin : ""}/katex/katex.min.css`;
 function wrapPreviewHtml(html = "") {
   const body = String(html || "").trim();
   if (!body) return "<html><body><p style='color:#999;padding:24px'>No preview available.</p></body></html>";
   // Already a full document — inject KaTeX CSS into <head> if not present
   if (/<html[\s>]/i.test(body)) {
     if (!body.includes("katex")) {
-      return body.replace(/<head[^>]*>/i, (m) => `${m}<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">`);
+      return body.replace(/<head[^>]*>/i, (m) => `${m}<link rel="stylesheet" href="${KATEX_CSS()}">`);
     }
     return body;
   }
@@ -52,7 +54,7 @@ function wrapPreviewHtml(html = "") {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="${KATEX_CSS()}">
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.65; margin: 0; padding: 24px 28px; color: #1d1d1f; background: #fff; font-size: 15px; }
   h1,h2,h3,h4,h5,h6 { color: #1d1d1f; margin: 1.2em 0 0.4em; font-weight: 700; }

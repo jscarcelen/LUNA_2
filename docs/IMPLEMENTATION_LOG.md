@@ -1262,3 +1262,8 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - New built-in agent **Reading Splitter** (`reading`): splits documents into reading parts that are the material's own text (or, in a plan, one part per read step). Create tab, plan agent catalog, Update… registry.
 - Planner: every selected agent is used (prompt rules 12–13 + `modules/plans/agentUse.js` adds a step for any agent left out; read steps of uploaded documents become reading parts when the splitter is selected).
 - Landing: new **Trust** tab (Spain/EU and US law, what Luna does with data, how it is protected, what is still in progress; EN/ES).
+
+## 2026-10-14 — grounding checks
+- `pipeline/grounding.js`: quote-and-verify (`_quote` must be in the cited passage), `_support` stated/inferred, unmatched-figure flags, and a second-pass judge (gpt-4o-mini); wired into `runAgentGeneration` (items and written blocks) and the chat engine (`chat/groundChat.js`).
+- Failing items are dropped when strict and enough remain, otherwise flagged. UI: Stated / Inferred / Could not be confirmed badge and verified quote under each answered question; ⚠ marks and a notice in written documents; a check note under chat answers.
+- Config: `config.grounding === false` or `groundingStrict === false` per run; `LUNA_GROUNDING_JUDGE=off`, `LUNA_GROUNDING_MODEL`.

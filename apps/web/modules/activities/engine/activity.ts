@@ -30,6 +30,8 @@ export interface ActivitySource {
   chunkIndex?: number;
   page?: number | null;
   heading?: string;
+  /** What the grounding checks found (pipeline/grounding.js): verified = the quote is in the material, inferred = reasoned from it, unverified = could not be confirmed. */
+  grounding?: { level: "verified" | "inferred" | "unverified"; reasons?: string[] };
 }
 
 export interface ActivityQuestion {
@@ -181,9 +183,14 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     const sourceText = text(pick(item, "source", "reference", "evidence", "quote", "extract"));
     // The agent cites the passage each item came from (_source → _sourceResolved); the quote is found later.
     const resolved = (item as Row)._sourceResolved as { documentId?: string; documentName?: string; headingPath?: string; section?: string; chunkIndex?: number; page?: number | null } | null | undefined;
-    const source: ActivitySource | undefined = resolved?.documentName
+    let source: ActivitySource | undefined = resolved?.documentName
       ? { documentName: resolved.documentName, documentId: resolved.documentId || "", chunkIndex: resolved.chunkIndex, page: resolved.page ?? null, heading: resolved.headingPath || resolved.section || "", locator: sourceLocator(resolved.headingPath || resolved.section || "", resolved.page ?? null, resolved.chunkIndex), extract: sourceText }
       : sourceText ? { documentName: "", locator: "", extract: sourceText } : undefined;
+    // The grounding checks: a verified quote is the extract (the real words of the material), and the level travels with the source.
+    const grounded = (item as Row)._grounding as { level?: string; quote?: string; reasons?: string[] } | undefined;
+    if (grounded?.level === "verified" || grounded?.level === "inferred" || grounded?.level === "unverified") {
+      source = { documentName: "", locator: "", extract: "", ...(source || {}), ...(grounded.quote ? { extract: grounded.quote } : {}), grounding: { level: grounded.level, reasons: grounded.reasons || [] } };
+    }
     // Nested lists (sections → questions) recurse with the section title as the group label.
     for (const [key, value] of Object.entries(item)) {
       if (Array.isArray(value) && value.length && typeof value[0] === "object" && value[0] !== null && slug(key) !== "options" && slug(key) !== "choices") {

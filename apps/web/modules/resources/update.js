@@ -352,8 +352,8 @@ export function rebuildResource({ previous, output, agent, instruction = "", mat
   if (!items.length && !blocks?.length) throw new Error("The agent returned nothing to update the result with.");
   const consolidation = output?.consolidation || null;
   const data = blocks
-    ? { items: [], isBlockOutput: true, blocks, sources: trimSources(output.sources), ...(output.data?.title ? { title: output.data.title } : {}), ...(consolidation ? { originals: consolidation.originals, coverage: consolidation.coverage } : {}) }
-    : { ...(output.data || {}), items, sources: trimSources(output.sources) };
+    ? { items: [], isBlockOutput: true, blocks, sources: trimSources(output.sources), ...(output?.grounding ? { grounding: output.grounding } : {}), ...(output.data?.title ? { title: output.data.title } : {}), ...(consolidation ? { originals: consolidation.originals, coverage: consolidation.coverage } : {}) }
+    : { ...(output.data || {}), items, sources: trimSources(output.sources), ...(output?.grounding ? { grounding: output.grounding } : {}) };
 
   let activity = null;
   try {

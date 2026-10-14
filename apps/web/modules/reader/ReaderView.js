@@ -62,7 +62,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     if (playable) return "";
     if (htmlOverride) return htmlOverride;
     const blocks = resourceBlocks(resource);
-    return blocks ? blocksToReaderHtml(blocks, { title: title || outputTitle(resource) }) : "";
+    return blocks ? blocksToReaderHtml(blocks, { title: title || outputTitle(resource), grounding: resource?.data?.grounding || null }) : "";
   }, [playable, resource, title, htmlOverride]);
 
   // A document opens as its original unless it already has notes; a quiz or flashcard set always allows highlighting.

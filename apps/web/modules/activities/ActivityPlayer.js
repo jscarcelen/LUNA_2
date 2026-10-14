@@ -89,6 +89,19 @@ async function gradeWritten(activity, questions, answers, signal, work = {}) {
 }
 
 /** Where the answer can be traced: document, place in it, the exact words, and a link to that passage. */
+const GROUNDING_LABEL = {
+  verified: ["Stated in your material", "text-[#1f7a3d]", "The supporting words were found in your document."],
+  inferred: ["Inferred from your material", "text-[#8a4a00]", "This follows from the passage by reasoning; it is not a direct quotation."],
+  unverified: ["Could not be confirmed", "text-[var(--color-danger)]", "Luna could not match this to your material. Check the source, or ask your teacher."]
+};
+
+function GroundingBadge({ grounding }) {
+  const entry = grounding && GROUNDING_LABEL[grounding.level];
+  if (!entry) return null;
+  const why = [entry[2], ...(grounding.level === "verified" ? [] : grounding.reasons || [])].join(" ");
+  return <span className={`ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-semibold ${entry[1]}`} title={why}>{entry[0]}</span>;
+}
+
 function SourceNote({ source }) {
   const url = source.documentId ? `/source?d=${encodeURIComponent(source.documentId)}&c=${source.chunkIndex || 1}&q=${encodeURIComponent(String(source.extract || "").slice(0, 200))}` : "";
   return (
@@ -97,9 +110,11 @@ function SourceNote({ source }) {
         <span aria-hidden>📖</span>
         {source.documentName ? <strong className="text-ink">{source.documentName}</strong> : <strong className="text-ink">Source</strong>}
         {source.locator ? <span>· {source.locator}</span> : null}
+        <GroundingBadge grounding={source.grounding} />
         {url ? <a href={url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-[var(--accent)] hover:underline">Open this part of the document →</a> : null}
       </p>
-      <p className="m-0 mt-1 border-l-2 border-[var(--accent)] pl-2 italic text-ink">“{source.extract}”</p>
+      {source.extract ? <p className="m-0 mt-1 border-l-2 border-[var(--accent)] pl-2 italic text-ink">“{source.extract}”</p> : null}
+      {source.grounding?.level === "unverified" && source.grounding.reasons?.length ? <p className="m-0 mt-1 text-[11px] text-[var(--color-danger)]">{source.grounding.reasons[0]}</p> : null}
     </div>
   );
 }
@@ -454,7 +469,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                   </div>
                 ) : null}
                 {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? "Expected answer" : "Correct answer"}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
-                {result && q.source?.extract ? <SourceNote source={q.source} /> : null}
+                {result && (q.source?.extract || q.source?.grounding) ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink">{q.explanation}</p> : null}
                 {result && documentId && q.kind !== "match" && q.kind !== "tiles" ? <ReviewRequest documentId={documentId} question={q} result={result} existing={reviews[q.id]} onSent={(review) => setReviews((current) => ({ ...current, [q.id]: review }))} /> : null}

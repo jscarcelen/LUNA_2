@@ -14,7 +14,7 @@ import { planChoicesOf, saveResourceFlow } from "../resources/saveFlow";
 import { agentFromAction, documentFromAction, runProposedAgent } from "./actions";
 import { LOOSE_FOLDER } from "../plans/folders";
 import { streamChat } from "./client";
-import { CITE_CSS, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
+import { CITE_CSS, GroundingNote, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
 
 const STORAGE_KEY = "luna.chat.v1";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -121,6 +121,7 @@ export function ChatPage({ toolContext = {} }) {
           else if (event.type === "estimate") patch({ estimate: event });
           else if (event.type === "confirm") patch({ status: "", confirm: event, pending: { text: clean, user: userMessage, history: base } });
           else if (event.type === "sources") patch({ sources: event.sources });
+          else if (event.type === "grounding") patch({ grounding: event });
           else if (event.type === "actions") patch({ actions: event.actions });
           else if (event.type === "usage") { patch({ usage: event }); chargeRun({ agentName: "Assistant", usage: { total_tokens: event.totalTokens }, model: event.model }); }
           else if (event.type === "error") patch({ status: "", error: event.error });
@@ -296,7 +297,7 @@ export function ChatPage({ toolContext = {} }) {
                           <div className="mt-3 flex gap-2"><button type="button" className={primaryBtn} onClick={() => confirmRun(message)}>Run it</button><button type="button" className={ghostBtn} onClick={() => cancelRun(message)}>Cancel</button></div>
                         </div>
                       ) : null}
-                      <SourceList messageId={message.id} sources={message.sources} />
+                      <SourceList messageId={message.id} sources={message.sources} /><GroundingNote grounding={message.grounding} />
                       {(message.actions || []).map((action) => (
                         <ActionCard key={action.id} action={action} state={actions[action.id] || {}} subject={subject} onRun={() => runAgent(action)} onPreview={() => setReading({ resource: actions[action.id]?.resource || openDocumentCard(action), document: null })} onSave={() => setSaving({ id: action.id, resource: actions[action.id]?.resource || openDocumentCard(action) })} onSaveAgent={() => saveAgent(action)} onUpdate={() => startUpdate(action)} onOpenPage={onOpenPage} />
                       ))}

@@ -43,3 +43,6 @@ Special categories: none intentionally collected; children's data is treated as 
 - Have a lawyer review `lib/legalTexts.js` (Terms, Privacy, AI notice) and produce the Spanish versions.
 - Sign DPAs: Supabase, Vercel, OpenAI, Anthropic, Mathpix, email provider, payment provider. Ask OpenAI/Anthropic for zero data retention.
 - Data-processing agreement template for schools (LUNA as encargado).
+
+## Addendum 2026-10-14 — grounding checks (anti-hallucination)
+New AI request: after an agent run that read material, and after a chat answer that cites passages, a small model (`LUNA_GROUNDING_MODEL`, default gpt-4o-mini, `store:false`) compares each generated claim with the passage it cites. Data sent: the generated claim and the cited passage of the learner's material; no names or emails. Same processors, purposes and retention as the generation request it follows; it produces labels (verified / inferred / unverified) stored with the generated resource, not new personal data. Switch off with `LUNA_GROUNDING_JUDGE=off` (code checks still run). Risk reduced: a learner relying on an invented or altered statement; residual: the checks reduce, they do not eliminate, wrong statements, so AI output stays labelled as guidance.

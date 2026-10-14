@@ -5,6 +5,7 @@ import { validateOutput } from "../../agent-studio/engine/validate";
 import { buildJsonSchema as buildBlockJsonSchema, conformBlocks, BLOCKS } from "../blocks/blockRegistry.js";
 import { consolidationOptions, estimateConsolidationTokens, prepareSources, runConsolidation } from "./consolidator.js";
 import { isMasterDocument } from "./masterDocument.js";
+import { GROUNDING_INSTRUCTION, QUOTE_FIELD, SUPPORT_FIELD, groundBlocks, groundItems } from "./grounding.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o", label: "Luna 3 Pro (Recommended, high quality)", tier: "standard" },
@@ -98,6 +99,11 @@ function buildJsonSchemaFromFields(fields = []) {
   // Never shown as a user-configured field; resolved to full metadata in runAgentGeneration.
   properties["_source"] = { type: "string", description: "The sourceId of the reference chunk this item was primarily drawn from (e.g. S3). Use the sourceId values from referenceMaterial." };
   required.push("_source");
+  // Grounding (grounding.js): the exact supporting words and whether the item is stated or inferred, so code can verify them.
+  properties["_quote"] = QUOTE_FIELD;
+  required.push("_quote");
+  properties["_support"] = SUPPORT_FIELD;
+  required.push("_support");
 
   return {
     type: "object",
@@ -213,6 +219,7 @@ function buildUserMessage(config, chunks, styleChunks) {
     refinementPrompt: config.refinementPrompt || "",
     previousOutput: config.previousOutput || null,
     sourcingInstruction: "Each referenceMaterial entry has a sourceId (S1, S2…). For every item you generate, set _source to the sourceId of the chunk it was primarily drawn from. If an item spans multiple chunks, pick the most relevant one.",
+    groundingInstruction: GROUNDING_INSTRUCTION,
     referenceMaterial: buildChunksContext(chunks),
     styleExamples: styleChunks.length
       ? { note: "Imitate the format, tone and difficulty of these examples. Do not take content from them.", samples: buildChunksContext(styleChunks, 4) }
@@ -565,6 +572,7 @@ COMPOSITION RULES (follow exactly)
 ${enhancedRules}
 
 Additional hard rules:
+- Use ONLY the reference material: never add a fact, figure, formula or example that is not in it, because the learner is examined on this material. If it does not contain enough for something asked, write less rather than fill the gap.
 - Never use a block type that is not in the ALLOWED BLOCK TYPES list above.
 - Never omit a required field; set optional fields to null if unused.
 - Write every mathematical expression as valid LaTeX: inline $x^2$ or display $$\\frac{a}{b}$$, even when the material gives it as plain text or Unicode (S²ₓ becomes $S_x^2$). Never put sentences inside the dollars, and write currency as "5 USD" or \\$5.${config.refinementPrompt ? REVISION_NOTE : ""}`;
@@ -712,7 +720,13 @@ function injectSourceFieldIntoSchema(schema) {
   try {
     const itemsSchema = schema?.properties?.items?.items;
     if (!itemsSchema || itemsSchema.type !== "object") return schema;
-    if (itemsSchema.properties?._source) return schema; // already there
+    const wanted = {
+      _source: { type: "string", description: "The sourceId of the reference chunk this item was primarily drawn from (e.g. S3)." },
+      _quote: QUOTE_FIELD,
+      _support: SUPPORT_FIELD
+    };
+    const missing = Object.keys(wanted).filter((key) => !itemsSchema.properties?.[key]);
+    if (!missing.length) return schema;
     return {
       ...schema,
       properties: {
@@ -721,11 +735,8 @@ function injectSourceFieldIntoSchema(schema) {
           ...schema.properties.items,
           items: {
             ...itemsSchema,
-            properties: {
-              ...itemsSchema.properties,
-              _source: { type: "string", description: "The sourceId of the reference chunk this item was primarily drawn from (e.g. S3)." }
-            },
-            required: [...(itemsSchema.required || []), "_source"]
+            properties: { ...itemsSchema.properties, ...Object.fromEntries(missing.map((key) => [key, wanted[key]])) },
+            required: [...new Set([...(itemsSchema.required || []), ...missing])]
           }
         }
       }
@@ -881,7 +892,16 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       };
     }
     emit({ step: "generate", status: "end", model: blockResult.model, blockCount: blockResult.blocks.length, fallbackReason: blockFallback });
-    emit({ step: "done", status: "end", blocks: blockResult.blocks, model: blockResult.model, usage: blockResult.usage || null, fallbackReason: blockFallback, referenceDocumentCount: blockDocs.length, referenceChunkCount: blockChunks.length });
+    // Written output: figures must be in the material and a second pass compares each paragraph with it (grounding.js).
+    let blockGrounding = null;
+    if (blockResult.model !== "local-heuristic-v1" && blockChunks.length && config.grounding !== false) {
+      emit({ step: "ground", status: "start" });
+      const checkedBlocks = await groundBlocks(blockResult.blocks, buildChunksContext(blockChunks));
+      blockResult = { ...blockResult, blocks: checkedBlocks.blocks };
+      blockGrounding = checkedBlocks.summary;
+      emit({ step: "ground", status: "end", ...blockGrounding });
+    }
+    emit({ step: "done", status: "end", blocks: blockResult.blocks, model: blockResult.model, usage: blockResult.usage || null, fallbackReason: blockFallback, referenceDocumentCount: blockDocs.length, referenceChunkCount: blockChunks.length, grounding: blockGrounding });
     return {
       blocks: blockResult.blocks,
       items: blockResult.blocks, // alias for backward compat (LivePreviewPane ignores unknown shapes)
@@ -894,6 +914,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
       referenceChunkCount: blockChunks.length,
       sources: sourcesFromChunks(blockChunks, blockDocs),
       isBlockOutput: true,
+      grounding: blockGrounding,
     };
   }
   // ── Legacy field/template generation path ────────────────────────────
@@ -968,6 +989,17 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     };
   });
 
+  // Grounding checks (grounding.js): the quote of each item must be in the passage it cites, a second pass confirms support,
+  // and items that fail are dropped when the run is strict and enough remain. Not for the offline fallback, which quotes nothing.
+  let grounding = null;
+  if (result.model !== "local-heuristic-v1" && rankedChunks.length && result.items.length && config.grounding !== false) {
+    emit({ step: "ground", status: "start" });
+    const checked = await groundItems(result.items, chunkContextForResolution, { strict: config.groundingStrict !== false });
+    result.items = checked.items;
+    grounding = checked.summary;
+    emit({ step: "ground", status: "end", ...grounding });
+  }
+
   // Enforce a hard cap on item count.
   // config.maxItems allows callers to request a tighter limit (e.g. 10 targeted questions).
   // The global FLASHCARD_MAX_ITEMS ceiling applies automatically when the generation looks like
@@ -997,6 +1029,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     checks,
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length,
+    grounding,
     // The passages the answer came from: used to link each question back to its source material.
     sources: sourcesFromChunks(rankedChunks, scopedDocuments)
   };

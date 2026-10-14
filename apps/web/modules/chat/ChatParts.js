@@ -33,6 +33,23 @@ export function SourceList({ messageId, sources = [] }) {
   );
 }
 
+/** What the grounding check found about an answer: confirmed against the material, partly, or not taken from it. */
+export function GroundingNote({ grounding }) {
+  if (!grounding) return null;
+  if (grounding.uncited) return <p className="m-0 mt-2 text-[11px] text-[#8a4a00]">This answer cites none of your material, so treat it as general knowledge.</p>;
+  const bad = (grounding.unsupported || 0) + (grounding.partly || 0) + (grounding.invalidCitations?.length || 0);
+  if (!bad) return grounding.judged === false ? null : <p className="m-0 mt-2 text-[11px] text-[#1f7a3d]">✓ Checked against your material: {grounding.supported} of {grounding.checked} cited statements confirmed.</p>;
+  return (
+    <div className="mt-2 rounded-xl bg-[#fff4e5] px-3 py-2 text-[11px] text-[#8a4a00]">
+      <p className="m-0 font-semibold">⚠ Check this against your material</p>
+      <ul className="m-0 mt-1 list-disc pl-4">
+        {(grounding.flagged || []).map((item) => <li key={item.text}>“{item.text.slice(0, 110)}” — {item.reason}</li>)}
+        {grounding.invalidCitations?.length ? <li>Some references do not exist: {grounding.invalidCitations.join(", ")}.</li> : null}
+      </ul>
+    </div>
+  );
+}
+
 /** A click on a [P#] button scrolls to (and flashes) its reference card inside the same thread. */
 export function jumpToCitation(event) {
   const cite = event.target.closest?.("[data-cite]");

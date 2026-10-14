@@ -11,7 +11,12 @@ const text = (value) => (value === undefined || value === null ? "" : Array.isAr
 
 const CALLOUT_LABEL = { info: "Info", tip: "Tip", warning: "Careful", note: "Note", important: "Important" };
 
-export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "" } = {}) {
+/** A paragraph the grounding checks could not match to the material gets a visible mark (pipeline/grounding.js groundBlocks). */
+const flagOf = (block) => (block?._grounding?.level === "unverified"
+  ? ` <span class="md-flag" title="${escape((block._grounding.reasons || []).join(" ") || "Luna could not confirm this in your material.")}">⚠ not confirmed in your material</span>`
+  : "");
+
+export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", grounding = null } = {}) {
   // Source tags ("[D1 p.3]") become links to the original document (the app opens its reader at that page).
   const blocks = linkSourceBlocks(rawBlocks, linkBase);
   const out = [];
@@ -41,16 +46,16 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "" }
         break;
       }
       case "paragraph":
-        out.push(`<p>${renderInline(text(block.text))}</p>`);
+        out.push(`<p>${renderInline(text(block.text))}${flagOf(block)}</p>`);
         break;
       case "bullet_list": {
-        const items = (Array.isArray(block.items) ? block.items : []).map((item) => `<li>${renderInline(text(item))}</li>`).join("");
+        const items = (Array.isArray(block.items) ? block.items : []).map((item) => `<li>${renderInline(text(item))}</li>`).join("") + (flagOf(block) ? `<li class="md-flag-item">${flagOf(block)}</li>` : "");
         out.push(`${text(block.title) ? `<p class="md-list-title">${renderInline(text(block.title))}</p>` : ""}<ul>${items}</ul>`);
         break;
       }
       case "callout": {
         const kind = String(block.callout_type || block.type_ || "note").toLowerCase();
-        out.push(`<aside class="md-callout md-callout-${escape(kind)}"><strong>${CALLOUT_LABEL[kind] || "Note"}</strong><div>${renderInline(text(block.text))}</div></aside>`);
+        out.push(`<aside class="md-callout md-callout-${escape(kind)}"><strong>${CALLOUT_LABEL[kind] || "Note"}</strong><div>${renderInline(text(block.text))}${flagOf(block)}</div></aside>`);
         break;
       }
       case "vocabulary":
@@ -76,6 +81,9 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "" }
     }
   }
   flushTable();
+  // A short notice when some statements could not be matched to the material: which ones are marked in the text.
+  const unconfirmed = Number(grounding?.unverified) || 0;
+  if (unconfirmed > 0) out.unshift(`<aside class="md-callout md-callout-warning"><strong>Check against your material</strong><div>${unconfirmed} statement${unconfirmed === 1 ? "" : "s"} below could not be confirmed in your documents and ${unconfirmed === 1 ? "is" : "are"} marked ⚠. Treat ${unconfirmed === 1 ? "it" : "them"} with care.</div></aside>`);
   const body = out.join("\n");
   return !hasTitle && title ? `<h1>${renderInline(title)}</h1>\n${body}` : body;
 }
@@ -90,5 +98,6 @@ export const READER_CSS = `
 .md .md-callout strong{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#515154;margin-bottom:2px}
 .md .md-callout-tip{background:#eef8f0;border-left-color:#34c759}.md .md-callout-warning{background:#fff4e5;border-left-color:#ff9500}
 .md .md-callout-info{background:#eaf3ff;border-left-color:#0071e3}
+.md .md-flag{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#fff4e5;color:#8a4a00;font-size:11px;font-weight:600;white-space:nowrap}.md .md-flag-item{list-style:none}
 .md .md-question{margin:1em 0;padding:12px 16px;border:1px solid #e5e5ea;border-radius:14px}
 `;

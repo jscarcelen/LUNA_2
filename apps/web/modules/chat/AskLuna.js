@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MARKDOWN_CSS } from "../reader/markdown";
 import { chargeRun } from "../credits/credits";
 import { streamChat } from "./client";
-import { CITE_CSS, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
+import { CITE_CSS, GroundingNote, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
 import { useAskLunaWorkspace } from "./AskLunaContext";
 import { describeView, selectMaterial } from "./materialChat";
 
@@ -91,6 +91,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
           else if (event.type === "status") patch({ status: event.text });
           else if (event.type === "confirm") patch({ status: "", confirm: event, pending: { text: clean, user: userMessage, history: base } });
           else if (event.type === "sources") patch({ sources: event.sources });
+          else if (event.type === "grounding") patch({ grounding: event });
           else if (event.type === "usage") { patch({ usage: event }); chargeRun({ agentName: "Ask Luna", usage: { total_tokens: event.totalTokens }, model: event.model }); }
           else if (event.type === "error") patch({ status: "", error: event.error });
         }
@@ -169,7 +170,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
                             <div className="mt-2 flex gap-2"><button type="button" className={primaryBtn} onClick={() => confirmRun(message)}>Run it</button><button type="button" className={ghostBtn} onClick={() => cancelRun(message)}>Cancel</button></div>
                           </div>
                         ) : null}
-                        <SourceList messageId={message.id} sources={message.sources} />
+                        <SourceList messageId={message.id} sources={message.sources} /><GroundingNote grounding={message.grounding} />
                         {message.usage ? <p className="m-0 mt-2 text-[10px] text-soft-ink">{fmt(message.usage.totalTokens)} lunas used</p> : null}
                       </div>
                     )}

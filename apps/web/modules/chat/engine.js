@@ -6,6 +6,7 @@ import { readChatStream } from "./stream.js";
 import { CHAT_TOOLS, agentsInScope, chunkCache, documentsInScope, executeTool } from "./tools.js";
 import { EMBEDDED_TOOLS, cleanContext } from "./materialChat.js";
 import { sourcesFromPassages } from "./sources.js";
+import { groundChatAnswer } from "./groundChat.js";
 
 /** The chat runs on Luna 3 Pro at least. */
 export const chatModel = () => resolveAgentModel(process.env.LUNA_CHAT_MODEL);
@@ -176,6 +177,11 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
   const cited = new Set([...finalText.matchAll(/\[P(\d+)\]/g)].map((match) => `P${match[1]}`));
   const sources = sourcesFromPassages(ctx.passages.filter((passage) => cited.has(passage.n)));
   if (sources.length) emit({ type: "sources", sources });
+  // Grounding: does the material say what the answer says? A failure here never blocks the answer: the answer is already shown.
+  try {
+    const grounding = await groundChatAnswer({ text: finalText, passages: ctx.passages });
+    if (grounding) emit({ type: "grounding", ...grounding });
+  } catch { /* the check is a safety net, not a gate */ }
   if (ctx.actions.length) emit({ type: "actions", actions: ctx.actions });
   const price = MODEL_PRICING[model] || MODEL_PRICING["gpt-4o"];
   emit({ type: "usage", model, promptTokens: usage.prompt, completionTokens: usage.completion, totalTokens: usage.prompt + usage.completion, costUsd: Number(((usage.prompt * price.input + usage.completion * price.output) / 1e6).toFixed(5)) });

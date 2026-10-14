@@ -746,7 +746,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     return buildResource({
       name: agentConfig?.name || "Generated document",
       activity: activity && activity.questions.length ? { ...activity, title: agentConfig?.name || activity.title } : null,
-      data: { ...(output.data || {}), items: output.items || [], sources: trimSources(output.sources), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
+      data: { ...(output.data || {}), items: output.items || [], sources: trimSources(output.sources), ...(output?.grounding ? { grounding: output.grounding } : {}), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
       request: { outputStyles },
       meta: { agentName: agentConfig?.name || "", subjectName: selectedSubject?.name || "" }
     });
@@ -845,7 +845,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       const payload = buildResource({
         name,
         activity: activity && activity.questions.length ? { ...activity, title: name } : null,
-        data: { ...(output?.data || {}), items: output?.items || [], sources: trimSources(output?.sources), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
+        data: { ...(output?.data || {}), items: output?.items || [], sources: trimSources(output?.sources), ...(output?.grounding ? { grounding: output.grounding } : {}), ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) },
         request: currentRequest(),
         meta: {
           agentId: agentDocument?.id || "",

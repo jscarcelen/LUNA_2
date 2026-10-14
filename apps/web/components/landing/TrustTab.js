@@ -17,7 +17,7 @@ const COPY = {
     cards: [
       ["No selling, no ads", "We never sell personal data, never show ads and never build marketing profiles. Luna earns from subscriptions, not from your data."],
       ["AI sees only what a task needs", "The text, images and questions needed for a task go to our AI providers. Not your name or email: contact details typed into free text are masked first. Content is not used to train models."],
-      ["Grounded in your material", "Answers, quizzes and summaries are built from the documents you uploaded and keep a link to where they came from. AI marks are guidance: a teacher can review and change them."],
+      ["Grounded in your material", "Answers, quizzes and summaries are built from the documents you uploaded. Each one must quote the passage it comes from, the quote is checked against your document in code, and a second check flags what the material does not support. AI marks are guidance: a teacher can review and change them."],
       ["Children protected first", "Under 14 (13 in the US) a parent or guardian must agree before an account exists. Under-18s cannot sell, cannot connect with strangers and get the strictest AI privacy settings."]
     ],
     sections: [
@@ -34,6 +34,7 @@ const COPY = {
         "Access is decided on the server for every request: your own data, or what someone shared with you through a live, revocable permission. Teachers and parents only see students linked to them.",
         "Database row-level security is on for every table, so the public database interface exposes nothing.",
         "Data minimisation before AI: names and emails are never part of the prompts, and phone numbers or emails typed into free text are masked.",
+        "Anti-hallucination checks on everything Luna writes from your material: a quote that must exist in your document, figures that must appear in it, a Stated / Inferred / Could not be confirmed label, and a second independent check. What fails is removed or marked.",
         "Uploaded files and generated material stay private until you share them.",
         "A written procedure for personal-data breaches: assess, contain, tell the Spanish data authority (AEPD) within 72 hours when required, and tell affected people and schools without delay."
       ] },
@@ -69,7 +70,7 @@ const COPY = {
     cards: [
       ["Ni venta ni publicidad", "Nunca vendemos datos personales, ni mostramos anuncios ni creamos perfiles comerciales. Luna se financia con suscripciones, no con tus datos."],
       ["La IA ve solo lo que cada tarea necesita", "El texto, las imágenes y las preguntas necesarios para una tarea van a nuestros proveedores de IA. No tu nombre ni tu correo: los datos de contacto escritos en texto libre se enmascaran antes. El contenido no se usa para entrenar modelos."],
-      ["Basada en tu material", "Las respuestas, cuestionarios y resúmenes se hacen con los documentos que subes y conservan el enlace a su origen. Las notas de la IA son orientación: un docente puede revisarlas y cambiarlas."],
+      ["Basada en tu material", "Las respuestas, cuestionarios y resúmenes se hacen con los documentos que subes. Cada uno debe citar el pasaje del que sale, la cita se comprueba en código contra tu documento y una segunda comprobación señala lo que el material no respalda. Las notas de la IA son orientación: un docente puede revisarlas y cambiarlas."],
       ["Menores, primero", "Con menos de 14 años (13 en EE. UU.) un padre, madre o tutor debe aceptar antes de que exista la cuenta. Los menores de 18 no pueden vender, no se conectan con desconocidos y tienen los ajustes de privacidad de IA más estrictos."]
     ],
     sections: [
@@ -86,6 +87,7 @@ const COPY = {
         "El acceso se decide en el servidor en cada petición: tus propios datos, o lo que alguien comparta contigo con un permiso vigente y revocable. Docentes y familias solo ven a estudiantes vinculados con ellos.",
         "La seguridad a nivel de fila de la base de datos está activada en todas las tablas, de modo que la interfaz pública de la base no expone nada.",
         "Minimización antes de la IA: nombres y correos nunca forman parte de los prompts, y los teléfonos o correos escritos en texto libre se enmascaran.",
+        "Comprobaciones contra alucinaciones en todo lo que Luna escribe con tu material: una cita que debe existir en tu documento, cifras que deben aparecer en él, una etiqueta Indicado / Inferido / No confirmado y una segunda comprobación independiente. Lo que falla se elimina o se marca.",
         "Los archivos subidos y el material generado son privados hasta que los compartes.",
         "Un procedimiento escrito ante brechas de datos personales: evaluar, contener, avisar a la Agencia Española de Protección de Datos (AEPD) en 72 horas cuando proceda, y avisar sin demora a personas afectadas y centros."
       ] },

@@ -264,8 +264,8 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
     name: step.title,
     activity: activity?.questions?.length ? activity : null,
     data: blocks
-      ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources), ...(data.data?.title ? { title: data.data.title } : {}), ...(data.consolidation ? { originals: data.consolidation.originals, coverage: data.consolidation.coverage } : {}) }
-      : { items, sources: trimSources(data.sources) },
+      ? { items: [], isBlockOutput: true, blocks, sources: trimSources(data.sources), ...(data?.grounding ? { grounding: data.grounding } : {}), ...(data.data?.title ? { title: data.data.title } : {}), ...(data.consolidation ? { originals: data.consolidation.originals, coverage: data.consolidation.coverage } : {}) }
+      : { items, sources: trimSources(data.sources), ...(data?.grounding ? { grounding: data.grounding } : {}) },
     // What it takes to run the same agent again with a change (Update…): the agent and the choices it was run with.
     request: { generatedFromPlan: true, agentName: agent.name, sourceDocumentIds, answersByQuestion: lastAnswers },
     meta: { agentId: recipe.documentId || "", agentName: agent.name, subjectName, sourceDocumentIds, sourceNames: [], topic: step.concepts?.[0] || "" }

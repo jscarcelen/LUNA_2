@@ -168,6 +168,8 @@ function BlockRenderer({ block = {} }) {
     const caption = String(block?.caption || "").trim();
     const figureChildren = [createNode("img", { src: block.image, alt: alt || caption || "Figure", style: "max-width:100%;height:auto" })];
     if (caption) figureChildren.push(createNode("figcaption", {}, [caption]));
+    // The picture is shown AND described: the words stay readable (and searchable) next to it.
+    if (alt && alt !== caption) figureChildren.push(createNode("p", { class: "cdm-alt-text", style: "font-size:.88em;color:#6e6e73;margin:.4em 0 0" }, [alt]));
     return createNode("figure", {}, figureChildren);
   }
 

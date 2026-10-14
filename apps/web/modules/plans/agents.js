@@ -20,11 +20,12 @@ export const BUILTIN_PLAN_AGENTS = [
   { id: "concept-flashcards", label: "Concept Flashcards", purpose: "The key concepts of the material, each on a card with its definition.", makes: ["concept-flashcards"] },
   { id: "document-summarizer", label: "Document Summarizer", purpose: "One or two pages with the key messages, concepts, formulas and what to remember, written like a consultant's briefing.", makes: ["document-summarizer"] },
   { id: "formulas", label: "Formula Sheet", purpose: "Every key formula of the material with what each variable means, the logic behind it and when to use it.", makes: ["formulas"] },
+  { id: "reading-splitter", label: "Reading Splitter", purpose: "Cuts a long document into short reading parts (the material's own text, copied exactly) so a reading step is one part, not the whole file.", makes: ["reading"] },
   { id: "level-test", label: "Level Test", purpose: "A short diagnostic test of the foundations the material builds on, to find out where to start.", makes: ["level-test"] }
 ];
 
 /** Keys whose output is read, not answered: a summary-like document, scoped by topics rather than tested per concept. */
-export const isSummaryKey = (key) => ["summary", "document-summarizer", "formulas"].includes(String(key || ""));
+export const isSummaryKey = (key) => ["summary", "document-summarizer", "formulas", "reading"].includes(String(key || ""));
 
 export const DEFAULT_PLAN_AGENT_IDS = ["quiz", "flashcards", "summary"];
 
@@ -66,7 +67,7 @@ export function generateLabel(key, scope) {
   if (!key) return "";
   const agent = (scope || []).find((entry) => (entry.makes || []).includes(key));
   if (isCustomKey(key)) return agent?.label || "agent";
-  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary", math: "problem set", "concept-flashcards": "concept flashcards", "document-summarizer": "document summary", formulas: "formula sheet", "level-test": "level test" })[key] || key;
+  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary", math: "problem set", "concept-flashcards": "concept flashcards", "document-summarizer": "document summary", formulas: "formula sheet", reading: "reading part", "level-test": "level test" })[key] || key;
 }
 
 /** Text for the planner prompt: which agents exist and what each can make. */

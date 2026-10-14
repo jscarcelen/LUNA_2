@@ -20,6 +20,7 @@ import { LEVEL_AGENT } from "../ai-tools/tools/level-test/levelAgent";
 import { CONCEPT_FLASHCARDS_AGENT } from "../ai-tools/tools/concept-flashcards/conceptAgent";
 import { DOCUMENT_SUMMARIZER_AGENT } from "../ai-tools/tools/document-summarizer/summarizerAgent";
 import { FORMULA_SHEET_AGENT } from "../ai-tools/tools/formula-sheet/formulaAgent";
+import { READING_SPLITTER_AGENT } from "../ai-tools/tools/reading-splitter/readingAgent";
 import { CONSOLIDATOR_AGENT } from "../ai-tools/tools/summary-consolidator/consolidatorAgent";
 import { runConfigFromSpec } from "../agent-studio/engine/migrate";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
@@ -53,7 +54,8 @@ export const BUILTIN_AGENTS = [
   { id: "level-test", kind: "quiz", label: LEVEL_AGENT.name, agent: LEVEL_AGENT },
   { id: "concept-flashcards", kind: "flashcards", label: CONCEPT_FLASHCARDS_AGENT.name, agent: CONCEPT_FLASHCARDS_AGENT },
   { id: "document-summarizer", kind: "summary", label: DOCUMENT_SUMMARIZER_AGENT.name, agent: DOCUMENT_SUMMARIZER_AGENT },
-  { id: "formulas", kind: "summary", label: FORMULA_SHEET_AGENT.name, agent: FORMULA_SHEET_AGENT }
+  { id: "formulas", kind: "summary", label: FORMULA_SHEET_AGENT.name, agent: FORMULA_SHEET_AGENT },
+  { id: "reading", kind: "summary", label: READING_SPLITTER_AGENT.name, agent: READING_SPLITTER_AGENT }
 ];
 
 /** The same quick suggestions as Iterate, then the ones that fit the kind of resource. */

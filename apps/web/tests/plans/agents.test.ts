@@ -8,7 +8,7 @@ const agentDoc: any = { id: "d1", name: "Vocabulary.agent.json", sourceType: "ge
 describe("plan agent scope", () => {
   it("lists the AI-tab agents: every built-in agent of the Create tab plus every saved agent", () => {
     const catalog = planAgentCatalog([agentDoc, { id: "x", sourceType: "uploaded", tags: [] }]);
-    expect(catalog.map((agent: any) => agent.id)).toEqual(["quiz", "flashcards", "summary", "math", "concept-flashcards", "document-summarizer", "formulas", "level-test", "agent:d1"]);
+    expect(catalog.map((agent: any) => agent.id)).toEqual(["quiz", "flashcards", "summary", "math", "concept-flashcards", "document-summarizer", "formulas", "reading-splitter", "level-test", "agent:d1"]);
     expect(customPlanAgents([agentDoc])[0]).toMatchObject({ label: "Vocabulary trainer", purpose: "Word lists with examples", custom: true });
   });
 

@@ -8,6 +8,7 @@ import { mathProblemSetTool } from "./tools/math-problem-set";
 import { conceptFlashcardsTool } from "./tools/concept-flashcards";
 import { documentSummarizerTool } from "./tools/document-summarizer";
 import { formulaSheetTool } from "./tools/formula-sheet";
+import { readingSplitterTool } from "./tools/reading-splitter";
 import { levelTestTool } from "./tools/level-test";
 import { validateAiToolManifest } from "../core";
 
@@ -19,6 +20,7 @@ const toolCandidates = [
   vocabularyFlashcardsTool,
   documentSummarizerTool,
   formulaSheetTool,
+  readingSplitterTool,
   summaryConsolidatorTool,
   agentBuilderTool,
   templateBuilderTool,

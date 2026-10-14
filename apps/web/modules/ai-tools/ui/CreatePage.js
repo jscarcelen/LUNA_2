@@ -16,7 +16,8 @@ export const QUICK_MAKES = [
   { id: "level-test", title: "A level test", text: "A short test of the foundations, to find out where to start.", icon: "◎" },
   { id: "concept-flashcards", title: "Flashcards", text: "Each key concept on a card, with its definition.", icon: "▭" },
   { id: "document-summarizer", title: "A summary", text: "One or two pages with the key messages and what to remember.", icon: "☰" },
-  { id: "formula-sheet", title: "A formula sheet", text: "Every key formula, what each variable means and the logic behind it.", icon: "ƒ" }
+  { id: "formula-sheet", title: "A formula sheet", text: "Every key formula, what each variable means and the logic behind it.", icon: "ƒ" },
+  { id: "reading-splitter", title: "Reading parts", text: "Split a long document into short parts to read, by topic or time.", icon: "✂" }
 ];
 
 /** `ai-tool:quiz-generator?docs=a,b`: the page that opens a tool with material already chosen. */

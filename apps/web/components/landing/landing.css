@@ -320,3 +320,17 @@
 
 /* Shots that are not 16:10 (a cropped panel): show the whole picture on a quiet canvas instead of cropping it. */
 .lp-slide .lp-shot.lp-shot-natural, .lp-tour-stage .lp-shot.lp-shot-natural { object-fit: contain; object-position: center; background: #f5f5f7; padding: 3% 0; }
+
+/* Trust & compliance tab */
+.lp-trust { padding: 56px 0 80px; }
+.lp-trust-wrap { max-width: 980px; }
+.lp-trust-head { text-align: center; display: grid; justify-items: center; gap: 4px; margin-bottom: 36px; }
+.lp-trust-status { margin: 16px 0 8px; padding: 6px 14px; border-radius: 999px; background: #fff; border: 1px solid var(--lp-line); font-size: 13px; color: var(--lp-sub); }
+.lp-trust-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 40px; }
+.lp-trust-card { background: #fff; border: 1px solid var(--lp-line); border-radius: 20px; padding: 20px; box-shadow: 0 2px 10px rgba(0, 0, 0, .04); }
+.lp-trust-card p { margin: 8px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--lp-sub); }
+.lp-trust-section { background: #fff; border: 1px solid var(--lp-line); border-radius: 22px; padding: clamp(20px, 4vw, 32px); margin-bottom: 16px; }
+.lp-trust-section .lp-list { margin-top: 14px; }
+.lp-trust-section .lp-list li { margin: 8px 0; line-height: 1.55; }
+.lp-trust-docs { text-align: center; margin: 28px 0 0; font-weight: 600; }
+.lp-trust-docs a { color: var(--lp-blue); text-decoration: none; }

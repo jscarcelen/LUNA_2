@@ -115,7 +115,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
   const panelClass = layout === "aside"
     ? "fixed inset-x-0 bottom-0 z-[61] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:static lg:z-auto lg:h-auto lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
     : "fixed inset-x-0 bottom-0 z-[46] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:inset-x-auto lg:bottom-4 lg:right-4 lg:top-20 lg:h-auto lg:w-96 lg:rounded-2xl lg:border lg:shadow-[0_16px_48px_rgba(0,0,0,0.2)]";
-  const launcherBase = launcherPosition || (layout === "aside" ? "fixed bottom-5 right-5 z-[5]" : "fixed bottom-5 right-5 z-[45]");
+  const launcherBase = launcherPosition || (layout === "aside" ? "fixed bottom-[152px] right-3 z-[56] min-[761px]:bottom-[4.5rem] min-[761px]:right-4" : "fixed bottom-5 right-5 z-[45]");
 
   return (
     <>

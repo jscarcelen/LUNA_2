@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { conceptNames, coverageOf, ensureCoverage } from "../../../../modules/plans/coverage.js";
 import { capDailyMinutes, normaliseMaxPerDay } from "../../../../modules/plans/dailyCap.js";
+import { ensureAgentUse } from "../../../../modules/plans/agentUse.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export async function POST(request) {
     const agentSection = scoped && !agents.length
       ? `The learner allowed NO agents: Luna builds nothing, so generate is "" on every step and the plan schedules studying the material itself.`
       : agents.length
-      ? `Agents Luna may use to build resources (the learner chose this scope; use only what the plan needs, not necessarily all of them, and nothing outside this list):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
+      ? `Agents Luna may use to build resources (the learner chose each of these on purpose: use EVERY one of them at least once in the plan, each where it helps most, and nothing outside this list):\n${agents.map((agent) => `- ${agent.label}: ${agent.purpose || "builds study material"} → generate = ${agent.makes.join(" | ")}`).join("\n")}`
       : "";
     const minutesPerWeek = Number(body?.minutesPerWeek) || 120;
     // The most the learner studies in one day: a number they chose, checked again in code after the model answers.
@@ -144,6 +145,8 @@ Exhaustive coverage is the most important rule of this plan, because the learner
 9. Language: write the name, note, goal titles and step titles in the language of the material, because the learner reads them as written.
 10. Learner instructions: when <learner_instructions> is given, it says which kinds of activity the learner prefers and what material each exam or deadline covers. Follow it when choosing, ordering and sizing the steps, because the plan has to fit this learner; it never overrides rules 1-3 (dates, workload, review window).
 11. Summaries first: when "summary" is an allowed generate kind, open each group of related topics with a step "Summary: <topics>" (generate = summary, kind read, 20-30 minutes, naming those topics in concepts) and put the "Read: <topics>" step of the original notes right after it, on the same or the next day, because a 1-2 page summary of the key ideas, messages and formulas sets the scene before the learner reads the real notes. Every summary is read before its notes.
+12. Every agent in <agent_scope> is used at least once, because the learner chose each of them deliberately: a level test at the start, summaries, formula sheets and reading parts before the notes, flashcards and problem sets spread through the middle, quizzes and the practice exam after the topics they test.
+13. Reading parts: when "reading" is an allowed generate kind, never schedule "read the whole document". Every step that reads an uploaded document is its own part: generate = reading, sourceId = that document, a title "Read: <what this part covers>" and the 1-8 concepts of that part in concepts, with different parts on different days, because the learner works through the material piece by piece.
 </rules>
 
 <step_format>
@@ -174,6 +177,13 @@ Before you answer, check the schedule against the rules: every dueDate lies betw
       coverage = { total: names.length, tested: after.tested.length, studied: after.studied.length, repairs: repaired.repairs.filter((entry) => entry.as !== "exam"), plannedGaps: { study: before.missingStudy.length, test: before.missingTest.length } };
     }
     delete parsed.coverage;
+    // The learner chose these agents on purpose: any the model left out gets a step, and reading parts replace "read the whole file".
+    let agentUse = null;
+    if (Array.isArray(parsed.items) && agents.length) {
+      const used = ensureAgentUse(parsed.items, agents, { today, deadline, materials, concepts: names });
+      parsed.items = used.items;
+      agentUse = { added: used.added, converted: used.converted };
+    }
     // Whatever the model added up, no day may exceed the budget the learner set.
     let dailyCap = null;
     if (Array.isArray(parsed.items)) {
@@ -181,7 +191,7 @@ Before you answer, check the schedule against the rules: every dueDate lies betw
       parsed.items = capped.items;
       dailyCap = { maxPerDay, moved: capped.moved, clamped: capped.clamped, overloadedDays: capped.overloadedDays };
     }
-    return NextResponse.json({ plan: parsed, coverage, dailyCap });
+    return NextResponse.json({ plan: parsed, coverage, dailyCap, agentUse });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }

@@ -18,6 +18,7 @@ import { LEVEL_AGENT } from "../ai-tools/tools/level-test/levelAgent";
 import { CONCEPT_FLASHCARDS_AGENT } from "../ai-tools/tools/concept-flashcards/conceptAgent";
 import { DOCUMENT_SUMMARIZER_AGENT } from "../ai-tools/tools/document-summarizer/summarizerAgent";
 import { FORMULA_SHEET_AGENT } from "../ai-tools/tools/formula-sheet/formulaAgent";
+import { READING_SPLITTER_AGENT } from "../ai-tools/tools/reading-splitter/readingAgent";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
 import { MASTER_TAG } from "../ai-tools/pipeline/masterDocument";
 import { findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, stepSourceIds, uploadedMaterialIds } from "./master";
@@ -76,6 +77,7 @@ export const STEP_RECIPES = {
   "concept-flashcards": { agent: CONCEPT_FLASHCARDS_AGENT, label: "Concept flashcards", answers: {} },
   "document-summarizer": { agent: DOCUMENT_SUMMARIZER_AGENT, label: "Document summary", answers: {} },
   formulas: { agent: FORMULA_SHEET_AGENT, label: "Formula sheet", answers: {} },
+  reading: { agent: READING_SPLITTER_AGENT, label: "Reading part", answers: {} },
   "level-test": { agent: LEVEL_AGENT, label: "Level test", answers: {} },
   // Not a step the planner schedules: the first thing built for a plan with 2+ uploaded documents.
   // Streams (it takes minutes) and reads every document in full. Language "" = the documents' own.
@@ -136,7 +138,8 @@ function coverageInstruction(concepts, perConcept) {
 }
 
 /** What the summary writer is told about its step: the topics to cover (a summary is not tested, so no question per concept). */
-function summaryScopeInstruction(concepts) {
+function summaryScopeInstruction(concepts, key = "summary") {
+  if (key === "reading") return `\n\nFOCUS (mandatory): write ONE reading part only, with exactly the passages of the material that deal with these ${concepts.length} topics, copied exactly and in their original order, and nothing else from the material:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
   return `\n\nSCOPE (mandatory): this summary covers exactly these ${concepts.length} topics, each with at least one key point and its formulas, and nothing outside them:\n${concepts.map((concept) => `- ${concept}`).join("\n")}`;
 }
 
@@ -189,7 +192,7 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
     if (!lastAnswers.length) lastAnswers = answers; // the first call's choices; a narrower follow-up call must not replace them
     const config = {
       name: agent.name,
-      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length && step.generate !== "level-test" ? (isSummaryKey(step.generate) ? summaryScopeInstruction(focus) : coverageInstruction(focus, perConcept)) : ""}`,
+      instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length && step.generate !== "level-test" ? (isSummaryKey(step.generate) ? summaryScopeInstruction(focus, step.generate) : coverageInstruction(focus, perConcept)) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
       // The consolidator is recognised by its spec (`pipeline: "consolidate"`).
       ...(recipe.streams ? { spec: agent.spec } : {}),

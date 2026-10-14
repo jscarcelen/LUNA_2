@@ -7,6 +7,7 @@ import { LandingNav, TABS } from './landing/LandingNav.js';
 import { HomeTab } from './landing/HomeTab.js';
 import { DemoTab } from './landing/DemoTab.js';
 import { PricingTab, TrainingTab } from './landing/SoonTabs.js';
+import { TrustTab } from './landing/TrustTab.js';
 import './landing/landing.css';
 
 /**
@@ -46,6 +47,7 @@ export function LandingPage() {
       <main className="lp-main">
         {tab === 'home' && <HomeTab onSignUp={openSignUp} />}
         {tab === 'demo' && <DemoTab />}
+        {tab === 'trust' && <TrustTab />}
         {tab === 'pricing' && <PricingTab onSignUp={openSignUp} />}
         {tab === 'training' && <TrainingTab onSignUp={openSignUp} />}
       </main>

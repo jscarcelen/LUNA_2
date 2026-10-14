@@ -5,6 +5,7 @@ import { LunaLogo } from "../brand/LunaLogo.js";
 export const TABS = [
   { id: "home", label: "Home" },
   { id: "demo", label: "Demo" },
+  { id: "trust", label: "Trust" },
   { id: "pricing", label: "Pricing", soon: true },
   { id: "training", label: "Training", soon: true }
 ];

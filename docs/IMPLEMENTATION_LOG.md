@@ -1255,3 +1255,10 @@ Founder: "any generated material, for example by the AI study planner, can be up
 ## 2026-10-14 — iPhone (installable web app)
 - PWA: manifest (id/scope/category), `public/sw.js` (offline page + static assets only; pages and `/api` are never cached because they hold study data), `/offline` page, `modules/pwa/PwaSetup.js` (registers the worker; on iPhone Safari shows an "Add to Home Screen" hint once). Native wrapper (Capacitor) or a rewrite stays an option; needs Xcode + Apple Developer account.
 - Reader: PDF pictures embedded via a pdfjs child process (pdf-parse needs a canvas that is not available), page separators, section-level coverage bars.
+
+## 2026-10-14 — plans, reading, trust page
+- Summary resources made of key points (point/detail/topic) now render in the reader (`keyPointBlocks` in `modules/resources/look.js`); they opened as "nothing to read".
+- Chat with Luna in the reader was hidden under the Feedback button: the launcher now stacks above it.
+- New built-in agent **Reading Splitter** (`reading`): splits documents into reading parts that are the material's own text (or, in a plan, one part per read step). Create tab, plan agent catalog, Update… registry.
+- Planner: every selected agent is used (prompt rules 12–13 + `modules/plans/agentUse.js` adds a step for any agent left out; read steps of uploaded documents become reading parts when the splitter is selected).
+- Landing: new **Trust** tab (Spain/EU and US law, what Luna does with data, how it is protected, what is still in progress; EN/ES).

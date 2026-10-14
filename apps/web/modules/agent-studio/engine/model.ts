@@ -231,6 +231,53 @@ Write, in this order, using the available blocks:
 }
 
 /**
+ * Splits a long document into short reading parts that are the material's OWN words, so a reading step of a study plan is
+ * "read pages 4–9" and not "read the whole file". With a focus (what a plan step covers) it returns just that one part.
+ */
+export function createReadingPartsSpec(): AgentSpec {
+  const spec = createAgentSpec("Reading Splitter");
+  spec.purpose = { headline: "Split a long document into short reading parts", description: "Cuts your documents into reading parts by topic, reading time or difficulty. Every part is the material's own text, copied exactly with its formulas and tables, so you read a manageable piece instead of the whole file and nothing is added or reworded." };
+  spec.instructions = {
+    core: `<role>
+You split study material into reading parts. Each part is a piece of the material itself, copied exactly, short enough to be read in one sitting. You are an editor choosing where to cut, not an author: you never summarise, reword or add anything.
+</role>
+
+<structure>
+Write, using the available blocks:
+1. document_header: a title naming the material and saying it is split into reading parts.
+2. If NO focus is given, split the whole material into parts following the "Split by" choice. For EACH part, in the order of the material:
+   a. section_header: "Part N: <specific title of what the part covers>" and, as its intro, the estimated reading time in minutes and where the part sits in the original (pages or section names) when the material shows them.
+   b. callout (info) "Why read this": one sentence on what the learner will understand after this part.
+   c. The part's passages, copied exactly from the material as headings, paragraphs and bullet lists (a table becomes one bullet per row), in the original order. Formulas stay in LaTeX exactly as the material has them.
+   d. bullet_list "Check yourself": two or three questions the part answers, so the learner can test their reading. These come from the part's own text.
+3. If a FOCUS is given, write ONE part only: the passages of the material that deal with the focus, copied exactly, in the original order, with the same pieces a and b above, and nothing else from the material.
+</structure>
+
+<rules>
+1. EXACT TEXT. The part's body is the material's own wording. Copy it; do not paraphrase, shorten sentences, merge or reorder them. Remove only text that repeats a heading or a page footer.
+2. WHOLE COVERAGE. With no focus, every passage of the material belongs to exactly one part: nothing is dropped and nothing appears in two parts, because the learner must be able to read all of it across the parts.
+3. CLEAN CUTS. Cut at topic or section boundaries and never in the middle of a derivation, worked example, table or definition. One idea stays in one part.
+4. SIZE. Size the parts by the "Minutes per part" input (about 200 words per minute of plain text; formulas and worked examples take longer, so count them as more). Split by "Topic" means one part per topic but never longer than twice the target; "Reading time" means equal parts of about the target; "Difficulty" means foundations first, then core ideas, then hard or advanced passages.
+5. ORDER. Parts follow the order that teaches best; say in a part's intro when it needs an earlier one.
+6. SOURCE. Use only the reference material. If a focus matches nothing, write the header and one callout saying the material has nothing on it.
+7. CHECK BEFORE WRITING. Confirm that each passage is copied exactly, that no part is cut mid-idea, and (without a focus) that no passage of the material is missing or repeated.
+8. LANGUAGE. Keep the material's own language; write only the titles, intros, "Why read this" and "Check yourself" in the requested language.
+</rules>`,
+    style: "Plain and exact: the learner's material, cut into pieces they can finish.",
+    constraints: ["Passages are copied exactly from the material.", "No passage is dropped or repeated.", "Never cut in the middle of an idea."]
+  };
+  const language = createInput("Language", "language", { default: "English", description: "The language of the titles and notes around each part. The passages keep the material's own language." });
+  const splitBy = createInput("Split by", "choice", { options: ["Topic", "Reading time", "Difficulty"], default: "Topic", description: "How the cuts are chosen." });
+  const minutes = createInput("Minutes per part", "number", { default: 25, min: 10, max: 60, description: "About how long each part takes to read." });
+  const focus = createInput("Focus (optional)", "text", { required: false, description: "Give one topic and you get just that part. Leave empty to split the whole material." });
+  spec.inputs = [language, splitBy, minutes, focus];
+  spec.contextSlots = [createSlot("user_material", "Documents to split", { description: "One or several documents; each is split into reading parts.", required: true, multiple: true, usage: "source" })];
+  spec.output = { selectedBlocks: ["document_header", "section_header", "heading", "paragraph", "bullet_list", "callout"].map((blockId) => ({ blockId, formatId: "", color: "blue" })) };
+  spec.model = { model: "gpt-4o", creativity: "low" };
+  return spec;
+}
+
+/**
  * Merges several documents (from any subject or folder) into ONE exhaustive set of notes organised by
  * topic, with overlapping information written once and every statement tagged with the original
  * document and page/section it came from. Runs through its own multi-pass pipeline

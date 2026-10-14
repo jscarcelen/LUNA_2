@@ -1251,3 +1251,7 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Lunas-only economy in Terms EN/ES (no cash, no cash-out); marketplace prices shown in lunas; "Report" button on listings (goes to the feedback inbox).
 - Standalone HTML downloads (reader and workspace export) inline KaTeX CSS/fonts instead of loading jsDelivr.
 - `docs/SCHOOL_DPA_TEMPLATE_en.md` / `_es.md`, `docs/PROVIDER_DPA_STEPS.md`.
+
+## 2026-10-14 — iPhone (installable web app)
+- PWA: manifest (id/scope/category), `public/sw.js` (offline page + static assets only; pages and `/api` are never cached because they hold study data), `/offline` page, `modules/pwa/PwaSetup.js` (registers the worker; on iPhone Safari shows an "Add to Home Screen" hint once). Native wrapper (Capacitor) or a rewrite stays an option; needs Xcode + Apple Developer account.
+- Reader: PDF pictures embedded via a pdfjs child process (pdf-parse needs a canvas that is not available), page separators, section-level coverage bars.

@@ -1,5 +1,6 @@
 import "./globals.css";
 import { SiteFeedback } from "../modules/feedback/SiteFeedback";
+import { PwaSetup } from "../modules/pwa/PwaSetup";
 
 export const metadata = {
   title: "LUNA Platform",
@@ -26,6 +27,7 @@ export default function RootLayout({ children }) {
         {children}
         {/* Beta feedback tool (temporary, see modules/feedback/README.md); the app mounts its own inside AppShell. */}
         <SiteFeedback />
+        <PwaSetup />
       </body>
     </html>
   );

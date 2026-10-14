@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { scrubPii } from "../../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../../modules/ai-tools/pipeline/agentBuilder.js";
 
 export const runtime = "nodejs";
@@ -52,7 +53,7 @@ Before answering, check that every target ref exists in the outline, that scope 
 export async function POST(request) {
   try {
     const body = await request.json();
-    const text = String(body?.request || "").trim();
+    const text = scrubPii(String(body?.request || "").trim());
     if (!text) return NextResponse.json({ error: "Say what to change." }, { status: 400 });
     const apiKey = process.env.OPENAI_API_KEY;
     const fallback = { understood: text, scope: "other", targets: [], fields: [], brief: text, checklist: [], relax: [], keep: [] };

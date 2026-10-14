@@ -133,3 +133,6 @@ Supported actions currently mirror the mock route:
 - Workspace UI is connected to `/api/workspaces-supabase`.
 - `202610130001_legal_compliance.sql`: age gate, guardian consent, terms acceptance, account deletion (optional: the app feature-detects it; apply before onboarding real users). Also set `CRON_SECRET` in Vercel for the daily purge.
 - `202610130002_enable_rls_all_tables.sql`: row level security on every table (no policies: only the server's service role can read/write). Run `get_advisors` after applying.
+
+- `202610130003_inactive_accounts.sql` — `last_login_at`, `inactivity_warned_at` (inactive-account policy; feature-detected).
+- `202610130004_mark_reviews.sql` — `mark_reviews` table (teacher review of AI marks; routes answer 503 `setupNeeded` until applied).

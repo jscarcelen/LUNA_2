@@ -292,8 +292,14 @@ export async function recordLoginFailure(account, now = Date.now()) {
 }
 
 export async function recordLoginSuccess(account) {
+  const client = createSupabaseAdminClient();
+  const reset = { failed_logins: 0, locked_until: null };
+  // Inactivity policy (migration 202610130003): remember the last sign-in and clear any "we will delete your account" warning.
+  const { error: trackedError } = await client.from("accounts").update({ ...reset, last_login_at: new Date().toISOString(), inactivity_warned_at: null }).eq("id", account.id);
+  if (!trackedError) return;
+  if (!/last_login_at|inactivity_warned_at/.test(String(trackedError.message || ""))) throw trackedError;
   if (!account.failed_logins && !account.locked_until) return;
-  const { error } = await createSupabaseAdminClient().from("accounts").update({ failed_logins: 0, locked_until: null }).eq("id", account.id);
+  const { error } = await client.from("accounts").update(reset).eq("id", account.id);
   if (error) throw error;
 }
 

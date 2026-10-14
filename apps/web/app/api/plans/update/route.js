@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { scrubPii } from "../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { planUpdateSchema } from "../../../../modules/plans/updatePlan.js";
 
@@ -17,7 +18,7 @@ const list = (items, render) => (items.length ? items.map(render).join("\n") : "
 export async function POST(request) {
   try {
     const body = await request.json();
-    const instruction = String(body?.instruction || "").trim();
+    const instruction = scrubPii(String(body?.instruction || "").trim());
     const today = String(body?.today || new Date().toISOString().slice(0, 10));
     const horizon = String(body?.horizon || "").trim();
     if (!instruction) return NextResponse.json({ error: "Say what to change in the plan." }, { status: 400 });
@@ -42,7 +43,7 @@ export async function POST(request) {
     // The most to study in one day: the learner's number when the plan has one, else the usual 90. Enforced again in code afterwards.
     const maxPerDay = Number(body?.maxMinutesPerDay) > 0 ? Math.min(480, Math.max(30, Math.round(Number(body.maxMinutesPerDay)))) : 90;
     const stepMax = Math.min(90, maxPerDay);
-    const instructions = String(body?.instructions || "").trim().slice(0, 2000);
+    const instructions = scrubPii(String(body?.instructions || "").trim().slice(0, 2000));
     const formatNotes = String(body?.formatNotes || "").trim().slice(0, 1500);
     const performance = body?.performance || null;
     const conceptMap = Array.isArray(body?.conceptMap) ? body.conceptMap : [];

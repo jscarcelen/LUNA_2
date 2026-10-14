@@ -17,6 +17,7 @@
  * `graded: "local"`; the learner is never blocked.
  */
 import { MIN_AGENT_MODEL, openAiFetch, resolveAgentModel } from "../ai-tools/pipeline/agentBuilder.js";
+import { scrubPii } from "../../lib/aiPrivacy.js";
 import { CLOSE_CREDIT, causeFor, gradeLocally, needsModel } from "./grading.js";
 import { declaredQuantitative, isQuantitative } from "./quantitative.js";
 import { normaliseSkillIds, skillPromptList, toSkillId } from "../skills/taxonomy.js";
@@ -164,8 +165,8 @@ export function buildGradeMessage(items, language) {
     items: items.map((item, index) => ({
       id: item.id, question: item.question, context: item.context || undefined, topic: item.topic || undefined,
       kind: item.qkind || undefined, options: item.options?.length ? item.options : undefined, skills: item.skills?.length ? item.skills : undefined,
-      expectedAnswer: item.expected, solutionSteps: item.hasWork && item.steps ? item.steps : undefined, learnerAnswer: item.given,
-      learnerWorking: item.workText || undefined, workImage: item.image ? `photo ${imageNumber(items, index)} (attached after this message)` : undefined,
+      expectedAnswer: item.expected, solutionSteps: item.hasWork && item.steps ? item.steps : undefined, learnerAnswer: scrubPii(item.given),
+      learnerWorking: scrubPii(item.workText) || undefined, workImage: item.image ? `photo ${imageNumber(items, index)} (attached after this message)` : undefined,
       workIsFullAnswer: item.hasWork ? item.full : undefined
     }))
   });

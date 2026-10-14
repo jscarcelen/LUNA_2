@@ -8,11 +8,15 @@
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 import { listWorkspaceTree } from "./workspacesRepository.js";
 import { findAccountById } from "./accountsRepository.js";
+import { publicBaseUrl, sendMail } from "./mailer.js";
+import { inactivityWarningMail } from "./mailTemplates.js";
 
 export const DELETION_GRACE_DAYS = 30;
+export const INACTIVE_MONTHS = 24;
+export const INACTIVITY_NOTICE_DAYS = 30;
 export const FEEDBACK_SCREENSHOT_DAYS = 90;
 /** Deleted explicitly, in this order (children before parents), by `owner_user_id`. Missing tables are skipped. */
-export const OWNER_TABLES = ["attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
+export const OWNER_TABLES = ["mark_reviews", "attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
 const HEAVY_KEY = /base64|render_?html|screenshot/i;
 
 /** A copy of a value without the heavy original-file payloads (they are the user's own uploads: download them from the app). */
@@ -93,6 +97,41 @@ export async function eraseAccount(accountId) {
   }
   const { error } = await client.from("accounts").delete().eq("id", accountId);
   if (error) throw error;
+}
+
+/**
+ * Inactivity policy: an account nobody has signed in to for INACTIVE_MONTHS gets an email; if there is still no sign-in
+ * INACTIVITY_NOTICE_DAYS later, the normal 30-day deletion grace starts (signing in cancels it). Needs migration 202610130003.
+ * @returns { warned, scheduled }
+ */
+export async function handleInactiveAccounts(now = new Date(), { send = sendMail } = {}) {
+  const client = createSupabaseAdminClient();
+  const result = { warned: 0, scheduled: 0 };
+  const cutoff = new Date(now);
+  cutoff.setMonth(cutoff.getMonth() - INACTIVE_MONTHS);
+  const noticeCutoff = new Date(now.getTime() - INACTIVITY_NOTICE_DAYS * 86400000).toISOString();
+  // 1. Warn.
+  const warn = await client.from("accounts").select("id, email, display_name").lt("last_login_at", cutoff.toISOString()).is("inactivity_warned_at", null).is("deletion_scheduled_at", null).limit(100);
+  if (warn.error) {
+    if (/last_login_at|inactivity_warned_at|deletion_scheduled_at/.test(String(warn.error.message || ""))) return result;
+    throw warn.error;
+  }
+  for (const row of warn.data || []) {
+    const outcome = await send(inactivityWarningMail({ to: row.email, name: row.display_name, months: INACTIVE_MONTHS, days: INACTIVITY_NOTICE_DAYS + DELETION_GRACE_DAYS, loginUrl: `${publicBaseUrl()}/login` }));
+    // Only mark as warned when the email really went out; otherwise try again tomorrow and never delete someone unwarned.
+    if (!outcome?.delivered) continue;
+    const { error } = await client.from("accounts").update({ inactivity_warned_at: now.toISOString() }).eq("id", row.id);
+    if (error) throw error;
+    result.warned += 1;
+  }
+  // 2. Start the grace period for those warned long enough ago who still have not come back.
+  const due = await client.from("accounts").select("id").lt("last_login_at", cutoff.toISOString()).lt("inactivity_warned_at", noticeCutoff).is("deletion_scheduled_at", null).limit(100);
+  if (due.error) throw due.error;
+  for (const row of due.data || []) {
+    await scheduleAccountDeletion(row.id, now);
+    result.scheduled += 1;
+  }
+  return result;
 }
 
 /** Daily job: erase accounts whose grace period is over, and drop expired guardian requests. @returns how many accounts were erased */

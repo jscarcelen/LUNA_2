@@ -1243,3 +1243,11 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - L12: migration `202610130002_enable_rls_all_tables.sql`.
 - Spanish Terms/Privacy/AI texts (`lib/legalTextsEs.js`, `?lang=es`), "Made with AI" label on the output preview, `docs/PRIVACY_OPERATIONS.md` (breach procedure, sub-processors).
 - Tests: peer/minor rules in `tests/accounts/network.test.js`, teen phone in `verification.test.js`, Spanish texts and retention numbers in `legal-compliance.test.ts`.
+
+## 2026-10-13 — legal follow-ups (prompt audit, inactivity, review, lunas, offline KaTeX)
+- Prompt audit: `lib/aiPrivacy.js` `scrubPii` (emails/phones → markers) applied to grader answers/working, chat messages, plan-update instructions, agent-builder iterate/improve feedback. No prompt template contains an account name or email; the coach already says "the learner". Uploaded material is deliberately not scrubbed.
+- Inactive accounts: migration `202610130003_inactive_accounts.sql` (`last_login_at`, `inactivity_warned_at`); login sets/clears them; the daily cron warns after 24 months, schedules deletion 30 days later (+30-day grace; login cancels). Privacy texts EN/ES updated.
+- Mark reviews: migration `202610130004_mark_reviews.sql`; student "Ask my teacher to review this mark" under each question (`/api/attempts/review`), teacher "Mark reviews" tab confirms/overrides (`/api/accounts/linked/reviews`, teacher only, parents read-only); an override updates the stored result and attempt score.
+- Lunas-only economy in Terms EN/ES (no cash, no cash-out); marketplace prices shown in lunas; "Report" button on listings (goes to the feedback inbox).
+- Standalone HTML downloads (reader and workspace export) inline KaTeX CSS/fonts instead of loading jsDelivr.
+- `docs/SCHOOL_DPA_TEMPLATE_en.md` / `_es.md`, `docs/PROVIDER_DPA_STEPS.md`.

@@ -31,6 +31,7 @@ import { processUploadedDocument } from "../modules/document-processing/index.js
 import { moveDocumentsTo, moveFolderTree } from "./workspaceMove.js";
 import JSZip from "jszip";
 import katex from "katex";
+import { mathStyleTag } from "../modules/ai-tools/render/mathHtml.js";
 import TurndownService from "turndown";
 
 let folderHierarchySupported;
@@ -802,7 +803,7 @@ function wrapDownloadedHtmlDocument(html = "") {
   const headExtras = `
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+${mathStyleTag(content)}
 <style>
   body { font-family: "Iowan Old Style", "Palatino Linotype", serif; line-height: 1.62; margin: 28px auto; max-width: 900px; padding: 0 20px; color: #1e2333; }
   article { background: linear-gradient(180deg, #ffffff, #fbfcff); border: 1px solid #e6ecff; border-radius: 14px; padding: 24px; box-shadow: 0 8px 26px rgba(36, 68, 128, 0.08); }

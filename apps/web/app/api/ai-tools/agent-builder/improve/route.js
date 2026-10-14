@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { scrubPii } from "../../../../../lib/aiPrivacy.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function POST(request) {
   try {
     const body = await request.json();
     const spec = body?.spec;
-    const feedback = String(body?.feedback || "").trim();
+    const feedback = scrubPii(String(body?.feedback || "").trim());
     if (!spec || !feedback) return NextResponse.json({ error: "spec and feedback are required" }, { status: 400 });
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {

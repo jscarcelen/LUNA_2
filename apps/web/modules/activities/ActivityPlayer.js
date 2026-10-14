@@ -146,7 +146,47 @@ function WorkBox({ value, locked, onChange }) {
   );
 }
 
-function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) {
+/** "Ask my teacher to review this mark": the AI mark is guidance, a person decides. Only offered when the quiz is a saved document. */
+function ReviewRequest({ documentId, question, result, existing, onSent }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState("");
+  const [state, setState] = useState({ busy: false, error: "" });
+  if (existing && existing.status !== "requested") {
+    return <p className="m-0 mt-2 text-xs font-semibold text-ink">Your teacher {existing.status === "overridden" ? "changed this mark" : "confirmed this mark"}: now {existing.final_correct ? "right" : "wrong"}{existing.teacher_note ? ` — ${existing.teacher_note}` : ""}</p>;
+  }
+  if (existing) return <p className="m-0 mt-2 text-xs text-soft-ink">Review requested — your teacher will look at it.</p>;
+  async function send() {
+    setState({ busy: true, error: "" });
+    try {
+      const response = await fetch("/api/attempts/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activityDocumentId: documentId, questionId: question.id, questionPrompt: question.prompt, given: result.given, expected: result.expected, aiCorrect: result.correct, note }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) { setState({ busy: false, error: response.status === 401 ? "Log in with your student account to ask for a review." : body.setupNeeded ? "Reviews are not switched on yet." : body.error || "Could not send." }); return; }
+      setState({ busy: false, error: "" });
+      onSent?.(body.review);
+    } catch {
+      setState({ busy: false, error: "Could not send. Try again." });
+    }
+  }
+  return open ? (
+    <div className="mt-2 grid gap-1.5">
+      <input className={input} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why do you think the mark is wrong? (optional)" />
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" className={ghostBtn} disabled={state.busy} onClick={send}>{state.busy ? "Sending…" : "Send to my teacher"}</button>
+        <button type="button" className="text-xs font-semibold text-soft-ink underline" onClick={() => setOpen(false)}>Cancel</button>
+        {state.error ? <span className="text-xs text-[var(--color-danger)]" role="alert">{state.error}</span> : null}
+      </div>
+    </div>
+  ) : <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent-ink)] underline" onClick={() => setOpen(true)}>Ask my teacher to review this mark</button>;
+}
+
+function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, documentId = "" }) {
+  const [reviews, setReviews] = useState({});
+  useEffect(() => {
+    if (!documentId) return;
+    fetch(`/api/attempts/review?activityDocumentId=${encodeURIComponent(documentId)}`).then((r) => (r.ok ? r.json() : null)).then((body) => {
+      if (body?.reviews) setReviews(Object.fromEntries(body.reviews.map((row) => [row.question_id, row])));
+    }).catch(() => {});
+  }, [documentId]);
   const [answers, setAnswers] = useState({});
   const [lastId, setLastId] = useState("");
   const [confidence, setConfidence] = useState({});
@@ -417,6 +457,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
                 {result && q.source?.extract ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink">{q.explanation}</p> : null}
+                {result && documentId && q.kind !== "match" && q.kind !== "tiles" ? <ReviewRequest documentId={documentId} question={q} result={result} existing={reviews[q.id]} onSent={(review) => setReviews((current) => ({ ...current, [q.id]: review }))} /> : null}
               </div>
             </div>
           </article>

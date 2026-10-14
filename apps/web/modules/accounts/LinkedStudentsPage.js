@@ -8,6 +8,7 @@ import { PlanDeadlines } from "../plans/DeadlineBadge";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { accountsApi } from "./api";
 import { ExamDatesTab } from "./ExamDatesTab";
+import { MarkReviewsTab } from "./MarkReviewsTab";
 import { GroupView } from "./GroupView";
 import { GroupDots, GroupsBar, StudentGroupsMenu } from "./GroupsBar";
 import { SetupNotice } from "./SetupNotice";
@@ -166,7 +167,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
 
   const tabs = inGroupView
     ? [["performance", "Group performance"], ["plans", "Study plans"], ["sent", `Sent to ${group.name}`], ["exams", "Exam dates"]]
-    : student ? [["performance", "Performance"], ["plans", "Study plans"], ["sent", `Sent to ${student.displayName || noun}`], ["exams", "Exam dates"]] : [["exams", "Exam dates"]];
+    : student ? [["performance", "Performance"], ["reviews", "Mark reviews"], ["plans", "Study plans"], ["sent", `Sent to ${student.displayName || noun}`], ["exams", "Exam dates"]] : [["exams", "Exam dates"]];
 
   return (
     <section className="tw-scope grid gap-3">
@@ -244,6 +245,8 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
                   <ReadOnlyPlans documents={subject?.documents || []} folders={subject?.folders || []} studentName={student.displayName || noun} />
                 </div>
               ) : null}
+
+              {tab === "reviews" && student ? <MarkReviewsTab key={`reviews-${student.id}`} student={student} canDecide={account?.role === "teacher"} /> : null}
 
               {tab === "sent" ? (
                 <div className={`${card} p-5`}>

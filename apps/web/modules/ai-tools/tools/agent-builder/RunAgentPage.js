@@ -1196,7 +1196,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       )}
       {playing ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-          <ActivityPlayer activity={playing.activity} look={activityLook({ data: { ...(output?.data || {}), items: output?.items || [], ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) }, request: { outputStyles } })} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />
+          <ActivityPlayer activity={playing.activity} documentId={playing.documentId || ""} look={activityLook({ data: { ...(output?.data || {}), items: output?.items || [], ...(outputBlocks ? { isBlockOutput: true, blocks: outputBlocks } : {}) }, request: { outputStyles } })} onSubmit={handleAttempt} onClose={() => setPlaying(null)} />
         </div>
       ) : null}
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}

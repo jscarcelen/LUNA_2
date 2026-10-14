@@ -1,4 +1,5 @@
 import { MODEL_PRICING, approxTokens, openAiFetch, resolveAgentModel } from "../ai-tools/pipeline/agentBuilder.js";
+import { scrubMessages } from "../../lib/aiPrivacy.js";
 import { loadWorkspaceTreeForAi } from "../ai-tools/pipeline/workspaceSource.js";
 import { LUNA_GUIDE } from "./knowledge.js";
 import { readChatStream } from "./stream.js";
@@ -126,7 +127,7 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
   const tree = await loadWorkspaceTreeForAi();
   const documents = documentsInScope(tree, scope, referencedDocumentIds);
   const referenced = documents.filter((document) => (referencedDocumentIds || []).includes(document.id));
-  const history = trimHistory(messages);
+  const history = scrubMessages(trimHistory(messages));
   const lastUser = [...history].reverse().find((message) => message.role === "user")?.content || "";
   // With a context line the chat is embedded next to some material: it reads only that, and cannot make or run anything.
   const embedded = cleanContext(context);

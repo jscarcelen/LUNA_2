@@ -4,7 +4,7 @@
  * anything else is refused (and with no CRON_SECRET configured the route stays closed).
  */
 import { timingSafeEqual } from "node:crypto";
-import { purgeDue } from "../../../../lib/accountData.js";
+import { handleInactiveAccounts, purgeDue } from "../../../../lib/accountData.js";
 import { json, rejectUnconfigured } from "../../../../lib/accountsApi.js";
 
 export const runtime = "nodejs";
@@ -24,7 +24,8 @@ export async function GET(request) {
   const unconfigured = rejectUnconfigured();
   if (unconfigured) return unconfigured;
   try {
-    return json({ ok: true, erased: await purgeDue() });
+    const inactive = await handleInactiveAccounts();
+    return json({ ok: true, erased: await purgeDue(), inactiveWarned: inactive.warned, inactiveScheduled: inactive.scheduled });
   } catch (error) {
     console.error("[api/cron/privacy]", error);
     return json({ error: "The privacy job failed." }, 500);

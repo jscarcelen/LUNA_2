@@ -103,3 +103,16 @@ describe("Spanish texts and minor protections", () => {
     expect(JSON.stringify(privacyPolicy())).toMatch(/90 days/);
   });
 });
+
+// @ts-ignore - plain JS modules
+import { scrubPii, scrubMessages } from "../lib/aiPrivacy.js";
+
+describe("scrubPii", () => {
+  it("masks emails and phone numbers but keeps ordinary numbers", () => {
+    expect(scrubPii("write to ana@school.es or call +34 612 345 678")).toBe("write to [email] or call [phone]");
+    expect(scrubPii("the answer is 3.14 in 2026, score 12 34")).toBe("the answer is 3.14 in 2026, score 12 34");
+  });
+  it("scrubs chat message contents only", () => {
+    expect(scrubMessages([{ role: "user", content: "mail me a@b.co" }])).toEqual([{ role: "user", content: "mail me [email]" }]);
+  });
+});

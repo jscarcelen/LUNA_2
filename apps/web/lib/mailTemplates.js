@@ -195,3 +195,18 @@ export function invitationMail({ to, sender, url }) {
     footer: "You are receiving this once because someone typed your address. If you do not know them, ignore this message: no account is created and we do not contact you again about this request. This email has no tracking."
   });
 }
+
+export function inactivityWarningMail({ to, name, months, days, loginUrl }) {
+  const who = oneLine(name) || "there";
+  return build({
+    to,
+    subject: "Your Luna account will be deleted if you do not sign in",
+    heading: "Do you still want your Luna account?",
+    paragraphs: [
+      `Hi ${who}, you have not signed in to Luna for ${months} months. To keep your data only as long as it is useful, we delete accounts that stay inactive, together with their workspaces, documents, study plans and results.`,
+      `Signing in once is enough to keep everything. If we do not see you, the account is scheduled for deletion and erased about ${days} days from now. Before that you can still sign in to cancel it, or download your data from Settings.`
+    ],
+    button: { label: "Sign in to keep my account", url: loginUrl },
+    footer: "You are getting this email because you have a Luna account with this address. If it is not yours, ignore it."
+  });
+}

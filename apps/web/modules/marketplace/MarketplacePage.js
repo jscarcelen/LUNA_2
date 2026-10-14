@@ -13,7 +13,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
 const field = "w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm text-ink";
 const chip = "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold";
 
-const priceLabel = (listing) => (listing.price ? `€${Number(listing.price).toFixed(2)}${listing.pricingType && listing.pricingType !== "one-time" ? ` · ${PRICING_TYPE_LABELS[listing.pricingType]}` : ""}` : "Free");
+const priceLabel = (listing) => (listing.price ? `${Number(listing.price)} lunas${listing.pricingType && listing.pricingType !== "one-time" ? ` · ${PRICING_TYPE_LABELS[listing.pricingType]}` : ""}` : "Free");
 
 function Stars({ value, size = 12 }) {
   return <span className="whitespace-nowrap text-[#f5a623]" style={{ fontSize: size }}>{"★★★★★".slice(0, Math.round(value))}<span className="text-ink/15">{"★★★★★".slice(Math.round(value))}</span></span>;
@@ -64,6 +64,17 @@ export function MarketplacePage({
       return `${listing.name} ${listing.tagline} ${listing.description} ${(listing.tags || []).join(" ")} ${store?.name || ""}`.toLowerCase().includes(term);
     }), [listings, kind, subjectFilter, query, stores]);
 
+  // Report a listing (illegal, infringing or misleading content): goes to the same inbox as beta feedback, with the listing named.
+  async function report(listing) {
+    if (typeof window !== "undefined" && !window.confirm(`Report “${listing.name}” to the LUNA team?`)) return;
+    try {
+      const response = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "problem", message: `REPORTED LISTING: ${listing.name} (id ${listing.id}, store ${listing.storeId || "?"}). Please review it against the marketplace rules.`, page: "/marketplace" }) });
+      setStatus(response.ok ? "Thanks — we will review that listing." : "Could not send the report. Try again, or write to us.");
+    } catch {
+      setStatus("Could not send the report. Try again, or write to us.");
+    }
+  }
+
   function install(listing) {
     try {
       if (listing.kind === "agent") onInstallAgent?.(listing);
@@ -103,7 +114,7 @@ export function MarketplacePage({
           </div>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {mine.map((listing) => <ListingCard key={listing.id} listing={listing} store={store} onInstall={install} onReview={() => setReviewFor(listing.id)} onOpenStore={setOpenStore} onRemove={myStore?.id === store.id ? () => setListings(unpublish(listing.id)) : undefined} />)}
+          {mine.map((listing) => <ListingCard key={listing.id} listing={listing} store={store} onInstall={install} onReview={() => setReviewFor(listing.id)} onReport={report} onOpenStore={setOpenStore} onRemove={myStore?.id === store.id ? () => setListings(unpublish(listing.id)) : undefined} />)}
         </div>
       </section>
     );
@@ -179,6 +190,7 @@ export function MarketplacePage({
             listing={listing}
             store={stores.find((entry) => entry.id === listing.storeId)}
             onInstall={install}
+            onReport={report}
             onReview={() => setReviewFor(listing.id)}
             onOpenStore={setOpenStore}
             onRemove={myStore && listing.storeId === myStore.id ? () => setListings(unpublish(listing.id)) : undefined}
@@ -230,7 +242,7 @@ export function MarketplacePage({
   );
 }
 
-function ListingCard({ listing, store, onInstall, onReview, onOpenStore, onRemove }) {
+function ListingCard({ listing, store, onInstall, onReview, onReport, onOpenStore, onRemove }) {
   const rating = ratingOf(listing);
   const kind = KINDS.find((entry) => entry.id === listing.kind);
   return (
@@ -259,6 +271,7 @@ function ListingCard({ listing, store, onInstall, onReview, onOpenStore, onRemov
         <span className="text-sm font-bold text-ink">{priceLabel(listing)}</span>
         <button type="button" className={`${primaryBtn} ml-auto py-1.5 text-xs`} onClick={() => onInstall(listing)}>Get it</button>
         <button type="button" className={ghostBtn} onClick={onReview}>Review</button>
+        {onReport ? <button type="button" className={ghostBtn} onClick={() => onReport(listing)}>Report</button> : null}
         {onRemove ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={onRemove}>Unlist</button> : null}
       </div>
     </article>
@@ -347,7 +360,7 @@ function SellDialog({ store, documents = [], templates = [], onCancel, onPublish
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">One line<input className={field} value={draft.tagline} onChange={(event) => setDraft({ ...draft, tagline: event.target.value })} placeholder="What it does, in a sentence." /></label>
           <label className="grid gap-1 text-xs font-semibold text-soft-ink">Description<textarea className={field} rows={3} value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="What the buyer gets and who it is for." /></label>
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Price (€)<input type="number" min="0" step="0.5" className={field} value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} /></label>
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Price (lunas — paid in lunas, no cash)<input type="number" min="0" step="1" className={field} value={draft.price} onChange={(event) => setDraft({ ...draft, price: event.target.value })} /></label>
             <label className="grid gap-1 text-xs font-semibold text-soft-ink">How it is charged
               <select className={field} value={draft.pricingType} onChange={(event) => setDraft({ ...draft, pricingType: event.target.value })}>
                 {Object.entries(PRICING_TYPE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

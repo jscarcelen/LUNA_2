@@ -49,6 +49,10 @@ export const accountsApi = {
   notifications: () => call("/api/accounts/notifications"),
   markNotificationsSeen: () => post("/api/accounts/notifications", { action: "seen" }),
   studentWorkspaces: (accountId) => call(`/api/accounts/linked/workspaces?accountId=${encodeURIComponent(accountId)}`),
+  studentReviews: (accountId) => call(`/api/accounts/linked/reviews?accountId=${encodeURIComponent(accountId)}`),
+  decideReview: (id, correct, note) => post("/api/accounts/linked/reviews", { id, correct, note }),
+  ownReviews: (activityDocumentId) => call(`/api/attempts/review?activityDocumentId=${encodeURIComponent(activityDocumentId)}`),
+  requestReview: (payload) => post("/api/attempts/review", payload),
   // groups of students (teacher / parent)
   groups: () => call("/api/accounts/groups"),
   createGroup: ({ name, colour, memberIds }) => post("/api/accounts/groups", { action: "create", name, colour, memberIds }),

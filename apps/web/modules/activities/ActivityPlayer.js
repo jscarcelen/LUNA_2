@@ -6,7 +6,12 @@ import { applyGrades, needsModel } from "./grading.js";
 import { chargeRun } from "../credits/credits";
 import { AiGuidanceNote } from "../performance/dashboard/parts";
 import { FlashcardDeck } from "./FlashcardDeck";
-import { renderInline } from "../reader/markdown";
+import { renderInline, renderRich } from "../reader/markdown";
+
+/** Text with typeset maths (formulas the model wrote with or without `$`). */
+function Rich({ text, className = "" }) {
+  return <span className={className} dangerouslySetInnerHTML={{ __html: renderRich(text) }} />;
+}
 import { cleanWork, fileToWorkImage } from "./workImage.js";
 import { skillLabel } from "../skills/taxonomy.js";
 import { SourceNote } from "./SourceNote";
@@ -295,14 +300,14 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-sm font-bold text-white">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 {q.group ? <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{q.group}</p> : null}
-                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? "Match each pair" : q.kind === "tiles" ? "Rebuild the grid — matching edges together" : q.prompt}</p>
+                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? "Match each pair" : q.kind === "tiles" ? "Rebuild the grid — matching edges together" : <Rich text={q.tex?.prompt || q.prompt} />}</p>
 
                 {q.kind === "choice" ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {(q.options || []).map((option, optionIndex) => {
                       const on = answers[q.id] === option;
                       const isAnswer = result && option === result.expected;
-                      return <button key={option} type="button" disabled={locked} onClick={() => set(q.id, option)} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition ${on ? "border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-ink" : "border-ink/10 text-ink hover:bg-[var(--surface-soft)]"} ${isAnswer ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{look?.letters ? <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold ${on ? "bg-[var(--accent)] text-white" : "bg-[var(--accent-soft)] text-[var(--accent-ink)]"}`}>{String.fromCharCode(65 + optionIndex)}</span> : null}<span>{option}</span></button>;
+                      return <button key={option} type="button" disabled={locked} onClick={() => set(q.id, option)} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-left text-sm transition ${on ? "border-[var(--accent)] bg-[var(--accent-soft)] font-semibold text-ink" : "border-ink/10 text-ink hover:bg-[var(--surface-soft)]"} ${isAnswer ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{look?.letters ? <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs font-bold ${on ? "bg-[var(--accent)] text-white" : "bg-[var(--accent-soft)] text-[var(--accent-ink)]"}`}>{String.fromCharCode(65 + optionIndex)}</span> : null}<Rich text={q.tex?.options?.[optionIndex] || option} /></button>;
                     })}
                   </div>
                 ) : null}
@@ -441,7 +446,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                 {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? "Expected answer" : "Correct answer"}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
                 {result && (q.source?.extract || q.source?.grounding) ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
-                {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink">{q.explanation}</p> : null}
+                {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink"><Rich text={q.tex?.explanation || q.explanation} /></p> : null}
                 {result && documentId && q.kind !== "match" && q.kind !== "tiles" ? <ReviewRequest documentId={documentId} question={q} result={result} existing={reviews[q.id]} onSent={(review) => setReviews((current) => ({ ...current, [q.id]: review }))} /> : null}
               </div>
             </div>

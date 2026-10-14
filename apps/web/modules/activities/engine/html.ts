@@ -1,6 +1,9 @@
 import type { Activity } from "./activity";
-import { renderMath } from "../../template-studio/engine/latex";
+import { renderRich } from "../../reader/markdown";
+import { mathStyleTag } from "../../ai-tools/render/mathHtml.js";
 
+/** Text with its formulas typeset (KaTeX HTML): the model's LaTeX when the question carries it, else the plain text. */
+const rich = (tex: string | undefined, plain: unknown) => renderRich(tex || String(plain ?? ""));
 const esc = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] as string));
 
 /**
@@ -9,9 +12,9 @@ const esc = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (c) => (
  */
 export function renderActivityHtml(activity: Activity): string {
   const q = activity.questions.map((question, index) => {
-    const head = `<div class="q-head"><span class="n">${index + 1}</span><div>${question.group ? `<div class="g">${esc(question.group)}</div>` : ""}<div class="p">${esc(question.kind === "match" ? "Match each pair" : question.prompt)}</div></div></div>`;
+    const head = `<div class="q-head"><span class="n">${index + 1}</span><div>${question.group ? `<div class="g">${esc(question.group)}</div>` : ""}<div class="p">${question.kind === "match" ? "Match each pair" : rich(question.tex?.prompt, question.prompt)}</div></div></div>`;
     let body = "";
-    if (question.kind === "choice") body = `<div class="opts">${(question.options || []).map((o) => `<label class="opt"><input type="radio" name="${esc(question.id)}" value="${esc(o)}"> ${esc(o)}</label>`).join("")}</div>`;
+    if (question.kind === "choice") body = `<div class="opts">${(question.options || []).map((o, oi) => `<label class="opt"><input type="radio" name="${esc(question.id)}" value="${esc(o)}"> ${rich(question.tex?.options?.[oi], o)}</label>`).join("")}</div>`;
     else if (question.kind === "boolean") body = `<div class="opts">${["true", "false"].map((v) => `<label class="opt"><input type="radio" name="${esc(question.id)}" value="${v}"> ${v === "true" ? "True" : "False"}</label>`).join("")}</div>`;
     else if (question.kind === "match") {
       const rights = [...(question.pairs || []).map((p) => p.right)].sort();
@@ -20,10 +23,16 @@ export function renderActivityHtml(activity: Activity): string {
     else body = `<input class="txt" name="${esc(question.id)}" placeholder="${question.kind === "number" ? "Your result" : "Your answer"}">`;
     return `<section class="q" id="q-${esc(question.id)}">${head}${body}<div class="fb"></div></section>`;
   }).join("");
-  // The standalone file has no typesetter: formulas in the worked steps are shown in readable symbols.
-  const data = JSON.stringify({ ...activity, questions: activity.questions.map((question) => (question.steps?.length ? { ...question, steps: question.steps.map(renderMath) } : question)) }).replace(/</g, "\\u003c");
+  // Formulas are typeset (KaTeX, fonts inlined below), also in the feedback shown after checking.
+  const answerTex = (question: Activity["questions"][number]) => {
+    if (typeof question.answer !== "string") return "";
+    const at = question.kind === "choice" ? (question.options || []).indexOf(question.answer) : -1;
+    return rich(at >= 0 ? question.tex?.options?.[at] : undefined, question.answer);
+  };
+  const data = JSON.stringify({ ...activity, questions: activity.questions.map((question) => ({ ...question, answerHtml: answerTex(question), explanationHtml: question.explanation ? rich(question.tex?.explanation, question.explanation) : "", stepsHtml: (question.steps || []).map((step) => renderRich(step)) })) }).replace(/</g, "\\u003c");
+  const mathStyle = mathStyleTag(`${q}${data}`.replace(/\\u003c/g, "<"));
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(activity.title)}</title>
-<style>
+${mathStyle}<style>
 body{margin:0;background:#f5f5f7;font-family:-apple-system,Helvetica,Arial,sans-serif;color:#1d1d1f}
 .wrap{max-width:760px;margin:0 auto;padding:24px 16px}
 .hdr,.q{background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:18px;padding:20px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.05)}
@@ -50,8 +59,8 @@ else if(q.kind==="flashcard"){const r=el.querySelector("input:checked");ok=r?r.v
 else if(q.kind==="number"){const r=el.querySelector("input.txt");const a=Number(String(q.answer).replace(",","."));const b=Number(String(r.value).replace(",","."));ok=isFinite(a)&&isFinite(b)?Math.abs(a-b)<1e-9:norm(r.value)===norm(q.answer);}
 else{const r=el.querySelector("input:checked")||el.querySelector("input.txt");given=r?r.value:"";ok=norm(given)===norm(q.answer);}
 if(ok!==null){total++;if(ok)score++;}el.classList.toggle("ok",ok===true);el.classList.toggle("bad",ok===false);
-el.querySelector(".fb").textContent=ok===false?("Correct answer: "+(q.kind==="match"?Object.entries(q.answer).map(([l,r])=>l+" → "+r).join(" · "):q.answer)+(q.explanation?" — "+q.explanation:"")):"";
-if(q.steps&&q.steps.length){const d=document.createElement("div");d.className="steps";q.steps.forEach(t=>{const p=document.createElement("p");p.textContent=t;d.appendChild(p)});el.appendChild(d);}
+const esc=t=>String(t).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));el.querySelector(".fb").innerHTML=ok===false?("Correct answer: "+(q.kind==="match"?Object.entries(q.answer).map(([l,r])=>esc(l)+" → "+esc(r)).join(" · "):q.answerHtml)+(q.explanationHtml?" — "+q.explanationHtml:"")):"";
+if(q.steps&&q.steps.length){const d=document.createElement("div");d.className="steps";(q.stepsHtml||q.steps).forEach(t=>{const p=document.createElement("p");p.innerHTML=t;d.appendChild(p)});el.appendChild(d);}
 el.querySelectorAll("input,select").forEach(i=>i.disabled=true);}
 document.getElementById("score").innerHTML='<div class="score">'+score+' / '+total+'</div>';document.getElementById("check").style.display="none";window.scrollTo({top:0,behavior:"smooth"});};
 </script></body></html>`;

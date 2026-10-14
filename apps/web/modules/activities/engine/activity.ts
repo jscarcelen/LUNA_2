@@ -46,6 +46,8 @@ export interface ActivityQuestion {
   answer: string | Record<string, string>;
   /** Extra info shown after checking (explanation, model answer…). */
   explanation?: string;
+  /** The same prompt / options / explanation with their formulas as the model wrote them (LaTeX), for the players that typeset maths. */
+  tex?: { prompt?: string; options?: string[]; explanation?: string };
   /** A worked solution, one string per step, LaTeX kept raw so the player can typeset it. */
   steps?: string[];
   difficulty?: string;
@@ -133,6 +135,7 @@ const slug = (name: string) => String(name || "").toLowerCase().replace(/[^a-z0-
 // Questions carry formulas as LaTeX; the player and the exported HTML show plain text, so the
 // maths is converted as the activity is built — answers are compared on the converted form too.
 const text = (value: unknown): string => (value === undefined || value === null ? "" : Array.isArray(value) ? value.map(text).join(", ") : typeof value === "object" ? JSON.stringify(value) : renderMath(String(value)));
+const rawText = (value: unknown): string => (value === undefined || value === null ? "" : Array.isArray(value) ? value.map(rawText).join(", ") : typeof value === "object" ? JSON.stringify(value) : String(value));
 const norm = (value: unknown) => text(value).trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?"'()]/g, "");
 
 function pick(row: Row, ...names: string[]): unknown {
@@ -164,7 +167,8 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
   }
   items.forEach((item, index) => {
     const id = `${slug(listName)}_${index + 1}`;
-    const prompt = text(pick(item, "question", "sentence", "statement", "problem", "prompt", "front", "word", "left", "text"));
+    const promptValue = pick(item, "question", "sentence", "statement", "problem", "prompt", "front", "word", "left", "text");
+    const prompt = text(promptValue);
     const options = pick(item, "options", "choices");
     const answer = pick(item, "answer", "correct", "solution", "right", "back", "translation");
     // A worked answer (step-by-step solution, the formulas and maths it used, the unit) is shown with the explanation.
@@ -174,6 +178,7 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       units && `Unit: ${units}`,
       text(pick(item, "math_concepts")) && `Key math concepts: ${text(pick(item, "math_concepts"))}`
     ].filter(Boolean).join("\n\n");
+    const explanationRaw = [rawText(pick(item, "explanation", "hint")), units && `Unit: ${units}`].filter(Boolean).join("\n\n");
     const steps = splitSteps(pick(item, "worked_solution"));
     const stepText = steps.join(" ");
     const skills: string[] = skillsForQuestion({ skills: pick(item, "requires_skills", "required_skills", "skills"), prompt, answer: text(answer), explanation, steps: stepText });
@@ -203,11 +208,11 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
       // The answer may be the option text or its letter/index.
       const letter = norm(answer);
       const byLetter = /^[a-z]$/.test(letter) ? opts[letter.charCodeAt(0) - 97] : /^\d+$/.test(letter) ? opts[Number(letter) - 1] : undefined;
-      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, steps, difficulty, topic, skill, skills, source });
+      out.push({ id, kind: "choice", prompt, group, options: opts, answer: byLetter || text(answer), explanation, tex: { prompt: rawText(promptValue), options: options.map(rawText), explanation: explanationRaw }, steps, difficulty, topic, skill, skills, source });
       return;
     }
     if (pick(item, "statement") !== undefined || typeof answer === "boolean" || ["true", "false"].includes(norm(answer))) {
-      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, steps, difficulty, topic, skill, skills, source });
+      out.push({ id, kind: "boolean", prompt, group, answer: String(norm(answer) === "true" || answer === true), explanation, tex: { prompt: rawText(promptValue), explanation: explanationRaw }, steps, difficulty, topic, skill, skills, source });
       return;
     }
     if (pick(item, "front") !== undefined && pick(item, "back") !== undefined) {
@@ -216,7 +221,7 @@ function questionsFromList(items: Row[], listName: string, group: string | undef
     }
     if (answer === undefined) return;
     const numeric = typeof answer === "number" || (/^-?\d+([.,]\d+)?$/.test(text(answer).trim()) && (pick(item, "problem") !== undefined || /numeric|number/.test(norm(pick(item, "type", "question_type")))));
-    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, steps, difficulty, topic, skill, skills, source });
+    out.push({ id, kind: numeric ? "number" : "text", prompt, group, answer: text(answer), explanation, tex: { prompt: rawText(promptValue), explanation: explanationRaw }, steps, difficulty, topic, skill, skills, source });
   });
 }
 

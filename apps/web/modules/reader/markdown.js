@@ -42,6 +42,26 @@ export function renderInline(text) {
   return html.replace(/\uE000(\d+)\uE001/g, (_, index) => maths[Number(index)] || "").replace(/\uE002/g, "$");
 }
 
+/**
+ * Maths a model wrote without `$` delimiters (an answer option like `E(\\tilde{r}_p) = wE(\\tilde{r}_A) + (1 - w)r_f`): a line that has no
+ * delimiters but is clearly a formula (a LaTeX command, `x_i` / `x^2`, or `=` with such symbols) is typeset whole; a LaTeX command
+ * inside a sentence is typeset on its own. Text that already has `$` / `\\(` is left alone.
+ */
+const COMMAND = /\\[a-zA-Z]{2,}/;
+const SUBSUP = /[A-Za-z\u0370-\u03ff)\]}]\s?[_^]\s?(?:\{[^{}]+\}|[A-Za-z0-9]{1,2}(?![A-Za-z0-9]))/;
+export function autoMath(text) {
+  const value = String(text ?? "");
+  if (!value || /\$|\\\(|\\\[/.test(value) || !(COMMAND.test(value) || SUBSUP.test(value))) return value;
+  const proseWords = (value.replace(/\\[a-zA-Z]+/g, " ").match(/\b[A-Za-z]{4,}\b/g) || []).length;
+  if (proseWords <= 1) return `$${value.trim()}$`;
+  return value.replace(/(?:\\[a-zA-Z]+(?:\{[^{}]*\})*(?:[_^](?:\{[^{}]*\}|[A-Za-z0-9]))*)+/g, (match) => `$${match}$`);
+}
+
+/** A line of a quiz or exercise as HTML: Markdown, `$…$` maths, and formulas that came without delimiters. */
+export function renderRich(text) {
+  return renderInline(autoMath(text));
+}
+
 const plain = (value) => String(value ?? "").toLowerCase().replace(/[*_`#>|$\\{}]/g, " ").replace(/^\s*(?:[-+]|\d+[.)])\s+/gm, " ").replace(/\s+/g, " ").trim();
 
 /** True when this block of Markdown contains the beginning of `quote`. */

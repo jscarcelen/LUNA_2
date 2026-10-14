@@ -1,3 +1,4 @@
+import { normalizeChart } from "./chartSvg.js";
 function renderInlineChildren(children = []) {
   return (Array.isArray(children) ? children : []).map((child) => {
     if (child?.type === "inline_math") {
@@ -84,6 +85,9 @@ function renderBlock(block = {}) {
     return (Array.isArray(block?.items) ? block.items : [])
       .map((item) => `- ${String(item || "").trim()}`)
       .join("\n");
+  }
+  if (type === "chart") {
+    return `\`\`\`chart\n${JSON.stringify(normalizeChart(block?.chart))}\n\`\`\``;
   }
   if (type === "table") {
     return renderTable(block?.rows);

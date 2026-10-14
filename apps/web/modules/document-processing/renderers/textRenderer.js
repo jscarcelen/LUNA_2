@@ -1,3 +1,4 @@
+import { chartToRows } from "./chartSvg.js";
 function flattenInlineChildren(children = []) {
   return (Array.isArray(children) ? children : []).map((child) => {
     if (child?.type === "inline_math") {
@@ -61,6 +62,9 @@ function flattenBlock(block = {}) {
         .join("\n");
     }
     return (Array.isArray(block?.items) ? block.items : []).map((item) => String(item || "")).join("\n");
+  }
+  if (type === "chart") {
+    return chartToRows(block?.chart).map((row) => row.join(" | ")).join("\n");
   }
   if (type === "table") {
     return flattenTable(block?.rows);

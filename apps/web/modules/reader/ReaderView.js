@@ -8,6 +8,9 @@ import { MARKDOWN_CSS, renderMath } from "./markdown";
 import { htmlToMarkdown } from "./documentView";
 import { READER_CSS, blocksToReaderHtml } from "./documentHtml";
 import { DownloadPanel } from "./DownloadPanel";
+import { FormulaEditor } from "./FormulaEditor";
+import { ChartEditor } from "./ChartEditor";
+import { chartToHtml } from "../document-processing/renderers/chartSvg.js";
 import { AskLuna } from "../chat/AskLuna";
 import { parseSourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { SourcePeek } from "./SourcePeek";
@@ -131,10 +134,40 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const exec = (command, value = null) => { rootRef.current?.querySelector("article")?.focus(); document.execCommand(command, false, value); setDirty(true); };
   const outerMath = (element) => { let found = element.closest?.("[data-latex], .katex-display, .katex") || null; while (found?.parentElement?.closest?.("[data-latex], .katex-display, .katex")) found = found.parentElement.closest("[data-latex], .katex-display, .katex"); return found; };
   const mathHtml = (tex, display) => `<span class="math-${display ? "display" : "inline"} nicer-latex" data-latex="${tex.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")}" contenteditable="false">${renderMath(tex, display)}</span>${display ? "" : "&nbsp;"}`;
+  // The visual formula editor: `formula` = { initial, apply(latex) }; the caret is remembered because the dialog takes the focus.
+  const [formula, setFormula] = useState(null);
+  function askFormula(initial, apply) {
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+    setFormula({
+      initial,
+      apply: (latex) => {
+        rootRef.current?.querySelector("article")?.focus();
+        if (range) { selection.removeAllRanges(); selection.addRange(range); }
+        apply(latex);
+      }
+    });
+  }
+  // A chart in a document keeps its numbers (data-chart): a click opens them to play with; the chart redraws from them.
+  const [chartEdit, setChartEdit] = useState(null);
+  function openChart(event) {
+    const element = event.target.closest?.(".luna-chart");
+    if (!element) return false;
+    let chart = null;
+    try { chart = JSON.parse(element.getAttribute("data-chart") || "null"); } catch { chart = null; }
+    if (!chart) return false;
+    setChartEdit({ chart, element });
+    return true;
+  }
+  function applyChart(chart) {
+    const holder = document.createElement("div");
+    holder.innerHTML = chartToHtml(chart);
+    chartEdit?.element?.replaceWith(holder.firstChild);
+    if (editing) setDirty(true);
+    setChartEdit(null);
+  }
   function insertMath() {
-    const tex = window.prompt("LaTeX formula (for example: \\frac{a}{b} or x^2 + 1)");
-    if (!tex?.trim()) return;
-    exec("insertHTML", mathHtml(tex.trim(), false));
+    askFormula("", (tex) => exec("insertHTML", mathHtml(tex, false)));
   }
   function insertTable() {
     const answer = window.prompt("Table: type its size (for example 3x4 = 3 rows, 4 columns), or paste the rows, one per line, cells separated by commas or tabs.");
@@ -153,13 +186,16 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     const target = outerMath(event.target);
     if (!target) return;
     const current = target.getAttribute("data-latex") || target.querySelector?.('annotation[encoding="application/x-tex"]')?.textContent || "";
-    const tex = window.prompt("Edit the LaTeX formula", current);
-    if (tex === null || !tex.trim()) return;
     const display = target.classList.contains("katex-display") || target.classList.contains("math-display");
-    const holder = document.createElement("span");
-    holder.innerHTML = mathHtml(tex.trim(), display);
-    target.replaceWith(holder.firstChild);
-    setDirty(true);
+    setFormula({
+      initial: current,
+      apply: (tex) => {
+        const holder = document.createElement("span");
+        holder.innerHTML = mathHtml(tex, display);
+        target.replaceWith(holder.firstChild);
+        setDirty(true);
+      }
+    });
   }
   function startEditing() {
     onEditStart?.();
@@ -217,6 +253,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
 
   // Tapping a highlight opens its note.
   function onPageClick(event) {
+    if (openChart(event)) return;
     const link = event.target?.closest?.("a[data-luna-source]");
     if (link) {
       const target = parseSourceHref(link.getAttribute("href"));
@@ -315,7 +352,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
           <button type="button" className={ghostBtn} onClick={() => exec("undo")}>↶</button>
           <button type="button" className={ghostBtn} onClick={() => exec("redo")}>↷</button>
           <span className="flex-1" />
-          <span className="hidden text-[11px] text-soft-ink md:inline">Double-tap a formula to edit it.</span>
+          <span className="hidden text-[11px] text-soft-ink md:inline">Double-tap a formula to edit it visually.</span>
           <button type="button" className={ghostBtn} onClick={cancelEditing}>Cancel</button>
           <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white" onClick={saveEditing}>Save changes</button>
         </div>
@@ -363,6 +400,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         ) : null}
         {askOn ? <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="aside" launcherClassName={notesOpen && noting ? "lg:right-[21rem]" : ""} /> : null}
       </div>
+      {chartEdit ? <ChartEditor initial={chartEdit.chart} canSave={editing} onCancel={() => setChartEdit(null)} onApply={applyChart} /> : null}
+      {formula ? <FormulaEditor initial={formula.initial} onCancel={() => setFormula(null)} onDone={(latex) => { const apply = formula.apply; setFormula(null); if (latex) apply(latex); }} /> : null}
       {peek ? <SourcePeek target={peek} onClose={() => setPeek(null)} /> : null}
       {toolbar ? (
         <div className="fixed z-[62] flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]" style={{ left: toolbar.x, top: toolbar.y }} onMouseDown={(event) => event.preventDefault()}>

@@ -1,3 +1,4 @@
+import { chartToHtml } from "./chartSvg.js";
 function escapeHtml(value = "") {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -18,6 +19,7 @@ function createNode(tag, attrs = {}, children = []) {
 function renderNode(node) {
   if (node == null) return "";
   if (typeof node === "string") return escapeHtml(node);
+  if (typeof node.raw === "string") return node.raw;
 
   const attrs = Object.entries(node.attrs || {})
     .filter(([, value]) => value != null && value !== "")
@@ -142,6 +144,9 @@ function BlockRenderer({ block = {} }) {
     }
     const items = Array.isArray(block?.items) ? block.items : [];
     return createNode("ul", {}, items.map((item) => createNode("li", {}, [String(item || "")])));
+  }
+  if (type === "chart") {
+    return { raw: chartToHtml(block?.chart) };
   }
   if (type === "table") {
     return TableComponent({ rows: block?.rows || [] });

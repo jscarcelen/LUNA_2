@@ -11,6 +11,7 @@
  */
 
 import JSZip from "jszip";
+import { normalizeChart } from "../renderers/chartSvg.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { writeFileSync, existsSync, unlinkSync } from "fs";
@@ -370,6 +371,9 @@ function normalizeBlockFields(block) {
         }))
       };
 
+    case "chart":
+      return { ...base, chart: normalizeChart(block.chart) };
+
     case "figure":
       return {
         ...base,
@@ -475,6 +479,14 @@ function stripLatexDelimiters(latex = "") {
   return s;
 }
 
+/** A plain-text cell: the model sometimes returns an object ({ value: -3.6 }) instead of a string, which must never print as [object Object]. */
+function tableCellText(cell) {
+  if (cell == null) return "";
+  if (typeof cell !== "object") return String(cell);
+  if (typeof cell.text === "string" || typeof cell.text === "number") return String(cell.text);
+  return Object.values(cell).filter((value) => ["string", "number", "boolean"].includes(typeof value)).join(" ");
+}
+
 function normalizeTableRows(rows) {
   if (!Array.isArray(rows)) return [];
   return rows.map((row) => {
@@ -486,7 +498,7 @@ function normalizeTableRows(rows) {
         // GPT returned a plain-text cell
         {
           type: "paragraph",
-          children: [{ type: "text", text: String(cell?.text || cell || ""), formatting: {}, source: "ai-vision", confidence: 0.88 }],
+          children: [{ type: "text", text: tableCellText(cell), formatting: {}, source: "ai-vision", confidence: 0.88 }],
           equation_ids: [],
           confidence: 0.88,
           source: "ai-vision"
@@ -663,10 +675,10 @@ const MARKDOWN_SYSTEM_PROMPT = `You convert documents into clean Markdown that a
 RULES:
 1. Work page by page. Begin each page with the marker <!-- page N --> (N = 1, 2, 3 ...) and then transcribe EVERYTHING on that page, top to bottom, including every paragraph that sits above, below or between figures, tables and equations. Never summarise, shorten, merge or skip anything: if a paragraph is on the page it must be in your answer. No commentary and do not wrap the answer in a code fence.
 2. Headings and titles: use # to ###### according to the visual hierarchy. A numbered or bold section title such as "1. Central tendency" is a HEADING: write it as "## 1. Central tendency", never as a list item and never as bold text. Do not indent any content under a heading.
-3. Formulas: LaTeX. Inline as $...$, standalone equations on their own lines as $$ ... $$. Convert every symbol and fraction faithfully.
+3. Formulas: LaTeX. Inline as $...$, standalone equations on their own lines as $$ ... $$. Convert every symbol and fraction faithfully, and keep every annotation drawn on the formula: braces with a label under or over them are \\underbrace{...}_{\\text{label}} / \\overbrace{...}^{\\text{label}}, words inside a formula are \\text{...}, equation numbers are \\tag{...}. A formula without the words printed around it is incomplete.
 4. Tables: GitHub Markdown tables with a header row. Keep every row and column.
 5. Lists: - for bullets, 1. for numbered, indent for nesting.
-6. Figures, charts, graphs, diagrams, schemes and pictures: put ![detailed description](figure) on its own line. The description must say what it shows: type of chart, axis titles and ranges, series, key values, shapes, labels and the point it makes. Put the caption, if any, on the next line in italics.
+6. Figures, charts, graphs, diagrams, schemes and pictures that carry information: put ![detailed description](figure) on its own line. The description must say what it shows: type of chart, axis titles and ranges, series, key values, shapes, labels and the point it makes. Put the caption, if any, on the next line in italics. For a chart or graph, ALSO add, right after the figure line, the numbers it plots as a fenced block tagged chart holding one JSON object: {"type":"bar" or "line","title":"...","xLabel":"...","yLabel":"...","categories":["x label of each group, in order"],"series":[{"name":"series name from the legend","values":[one number per category, null where there is none]}]}. Read the values off the chart as exactly as you can (use the printed numbers when there are any); numbers only, no units or % signs inside values. Pie charts and diagrams that are not plotted numbers stay a figure line only. Never describe a logo, a decorative banner, a background or an icon: they are not content, so write nothing for them (no figure line).
 7. Bold and italic: **bold**, *italic*. Code: fenced blocks with the language.
 8. Handwriting or scanned pages: transcribe faithfully.
 9. Running page headers, footers and page numbers (text repeated at the top or bottom of every page, e.g. the document or course name) are NOT content: omit them entirely, but keep the <!-- page N --> markers.
@@ -757,6 +769,11 @@ function markdownToBlocks(markdown) {
       i++;
       while (i < lines.length && !lines[i].trim().startsWith("```")) buf.push(lines[i++]);
       i++;
+      if (language.toLowerCase() === "chart") {
+        let chart = null;
+        try { chart = normalizeChart(JSON.parse(buf.join("\n"))); } catch { /* not valid JSON: keep it as code below */ }
+        if (chart?.categories.length && chart.series.length) { blocks.push({ type: "chart", chart }); continue; }
+      }
       blocks.push({ type: "code", language, text: buf.join("\n") });
       continue;
     }
@@ -859,11 +876,11 @@ function markdownToBlocks(markdown) {
 
 // ─── PDF pictures ────────────────────────────────────────────────────────────
 
-const IMAGE_WORKER_VERSION = "v1";
-const PDF_MIN_IMAGE_SIDE = 80;
+const IMAGE_WORKER_VERSION = "v3";
+const PDF_MIN_IMAGE_SIDE = 120;
 const PDF_MAX_IMAGE_SIDE = 900;
-const PDF_MAX_IMAGES = 40;
-const PDF_MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const PDF_MAX_IMAGES = 150;
+const PDF_MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 
 function findSharpDir() {
   // sharp sits in the nearest node_modules above pdfjs-dist (apps/web or, hoisted, the repo root), or at the Vercel root.
@@ -902,12 +919,25 @@ const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(inputFil
 const out = [];
 let total = 0;
 const seen = new Set();
+// A picture that sits on many pages (a logo, a banner) is decoration: count the pages each shared picture appears on first.
+const pagesOf = new Map();
+for (let n = 1; n <= pdf.numPages; n += 1) {
+  const ops = await (await pdf.getPage(n)).getOperatorList();
+  for (let i = 0; i < ops.fnArray.length; i += 1) {
+    if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
+    const name = ops.argsArray[i][0];
+    if (!pagesOf.has(name)) pagesOf.set(name, new Set());
+    pagesOf.get(name).add(n);
+  }
+}
+const repeated = (name) => name.startsWith("g_") && (pagesOf.get(name)?.size || 0) >= 3;
 outer: for (let n = 1; n <= pdf.numPages; n += 1) {
   const page = await pdf.getPage(n);
   const ops = await page.getOperatorList();
   for (let i = 0; i < ops.fnArray.length; i += 1) {
     if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
     const name = ops.argsArray[i][0];
+    if (repeated(name)) continue;
     const key = \`\${n}:\${name}\`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -917,11 +947,20 @@ outer: for (let n = 1; n <= pdf.numPages; n += 1) {
       const t = setTimeout(() => { if (!done) resolve(null); }, 5000);
       store.get(name, (value) => { done = true; clearTimeout(t); resolve(value); });
     });
-    if (!img || !img.data || img.width < +minSide || img.height < +minSide) continue;
-    const channels = img.kind === 3 ? 4 : img.kind === 2 ? 3 : 0;
-    if (!channels || img.data.length < img.width * img.height * channels) continue;
+    if (!img || !img.data || img.width < +minSide || img.height < +minSide || (img.width <= 200 && img.height <= 200)) continue;
+    let raw = img.data;
+    let channels = img.kind === 3 ? 4 : img.kind === 2 ? 3 : 0;
+    if (img.kind === 1) {
+      // 1 bit per pixel (a scanned black-and-white drawing): rows are packed bits, pad to a byte.
+      const rowBytes = (img.width + 7) >> 3;
+      const gray = new Uint8Array(img.width * img.height);
+      for (let y = 0; y < img.height; y += 1) for (let x = 0; x < img.width; x += 1) gray[y * img.width + x] = (raw[y * rowBytes + (x >> 3)] >> (7 - (x & 7))) & 1 ? 255 : 0;
+      raw = gray;
+      channels = 1;
+    }
+    if (!channels || raw.length < img.width * img.height * channels) continue;
     try {
-      const buf = await sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.length), { raw: { width: img.width, height: img.height, channels } })
+      const buf = await sharp(Buffer.from(raw.buffer, raw.byteOffset, raw.length), { raw: { width: img.width, height: img.height, channels } })
         .flatten({ background: "#ffffff" }).resize({ width: +maxSide, height: +maxSide, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 78 }).toBuffer();
       if (total + buf.length > +maxBytes) break outer;
       total += buf.length;
@@ -930,8 +969,8 @@ outer: for (let n = 1; n <= pdf.numPages; n += 1) {
     } catch { /* skip */ }
   }
 }
-process.stdout.write(JSON.stringify({ images: out }));
-process.exit(0);
+// Exit only once stdout is flushed: process.exit() right after a big write to a pipe cuts the JSON short.
+process.stdout.write(JSON.stringify({ images: out }), () => process.exit(0));
 `, "utf8");
   const inputPath = path.join(tmpdir(), `luna-pdf-img-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
   writeFileSync(inputPath, buf);
@@ -956,6 +995,48 @@ process.exit(0);
 }
 
 /**
+ * Whole pages as JPEG data URLs, for figures that are drawn (vector charts, diagrams) and so have no embedded picture:
+ * Map(page → url). Needs a canvas (@napi-rs/canvas); where it cannot load, nothing is returned and the description stays.
+ */
+async function renderPdfPages(buf, pages) {
+  const workerPath = path.join(tmpdir(), `luna-pdfPageWorker-${IMAGE_WORKER_VERSION}.mjs`);
+  writeFileSync(workerPath, `import path from "path";
+import { createRequire } from "module";
+import { pathToFileURL } from "url";
+import { readFileSync } from "fs";
+const [,, inputFile, pdfjsPath, pagesCsv] = process.argv;
+const require = createRequire(pathToFileURL(pdfjsPath).href);
+const { createCanvas } = require("@napi-rs/canvas");
+const pdfjs = await import(pathToFileURL(pdfjsPath).href);
+pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(path.dirname(pdfjsPath), "pdf.worker.mjs")).href;
+const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(inputFile)), disableFontFace: true, isEvalSupported: false, useWorkerFetch: false, stopAtErrors: false }).promise;
+const out = [];
+for (const n of pagesCsv.split(",").map(Number)) {
+  if (!(n >= 1 && n <= pdf.numPages)) continue;
+  try {
+    const page = await pdf.getPage(n);
+    const base = page.getViewport({ scale: 1 });
+    const viewport = page.getViewport({ scale: 1100 / base.width });
+    const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport, canvas }).promise;
+    out.push({ page: n, url: "data:image/jpeg;base64," + canvas.toBuffer("image/jpeg", 80).toString("base64") });
+  } catch { /* skip this page */ }
+}
+process.stdout.write(JSON.stringify({ pages: out }), () => process.exit(0));
+`, "utf8");
+  const inputPath = path.join(tmpdir(), `luna-pdf-pg-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+  writeFileSync(inputPath, buf);
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [workerPath, inputPath, PDFJS_PATH, pages.join(",")], { maxBuffer: 64 * 1024 * 1024, timeout: 90_000 });
+    const jsonStart = String(stdout || "").indexOf('{"pages"');
+    const parsed = jsonStart >= 0 ? JSON.parse(String(stdout).slice(jsonStart)) : {};
+    return new Map((parsed.pages || []).map((entry) => [entry.page, entry.url]));
+  } finally {
+    try { unlinkSync(inputPath); } catch { /* ignore */ }
+  }
+}
+
+/**
  * The PDF's embedded pictures, put back where the converter only described a figure. Pictures of a page fill that page's figure
  * blocks in order; pictures left over follow the page's last block. Vector drawings are not embedded pictures, so a figure
  * with nothing to show keeps its description.
@@ -966,9 +1047,9 @@ async function embedPdfFigures(file, blocks) {
     byPage = await extractPdfPageImages(base64ToBuffer(file.contentBase64));
   } catch (error) {
     console.warn("[aiVisionExtractor] could not read PDF pictures:", error.message);
-    return blocks;
+    byPage = new Map();
   }
-  if (!byPage?.size) return blocks;
+  if (!byPage?.size) byPage = new Map();
   const out = [];
   const pages = [...new Set(blocks.map((block) => block.page).filter(Boolean))];
   const lastIndexOfPage = new Map();
@@ -983,6 +1064,16 @@ async function embedPdfFigures(file, blocks) {
     }
   });
   void pages;
+  // Figures that are drawings (no embedded picture): show the page itself, as a screenshot of the slide.
+  const bare = out.filter((block) => block.type === "figure" && !block.image && block.page);
+  if (bare.length) {
+    try {
+      const shots = await renderPdfPages(base64ToBuffer(file.contentBase64), [...new Set(bare.map((block) => block.page))].slice(0, 60));
+      for (const block of bare) if (shots.get(block.page)) block.image = shots.get(block.page);
+    } catch (error) {
+      console.warn("[aiVisionExtractor] could not render PDF pages:", error.message);
+    }
+  }
   return out;
 }
 

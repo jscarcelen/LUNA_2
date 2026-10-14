@@ -163,6 +163,7 @@ export function htmlToMarkdown(root) {
     if (node.nodeType === 3) { const text = node.nodeValue.replace(/\s+/g, " ").trim(); if (text) lines.push(text, ""); return; }
     if (node.nodeType !== 1 || node.getAttribute?.("data-luna-hidden")) return;
     const tag = node.tagName.toLowerCase();
+    if (node.classList?.contains("luna-chart") && node.getAttribute("data-chart")) { lines.push("```chart", node.getAttribute("data-chart"), "```", ""); return; }
     if (/^h[1-6]$/.test(tag)) { lines.push(`${"#".repeat(Number(tag[1]))} ${inline(node).trim()}`, ""); return; }
     if (tag === "p") { const text = inline(node).trim(); if (text) lines.push(text, ""); return; }
     if (tag === "ul" || tag === "ol") {

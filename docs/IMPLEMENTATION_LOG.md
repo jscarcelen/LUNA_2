@@ -1268,3 +1268,11 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Failing items are dropped when strict and enough remain, otherwise flagged. UI: Stated / Inferred / Could not be confirmed badge and verified quote under each answered question; ⚠ marks and a notice in written documents; a check note under chat answers.
 - Config: `config.grounding === false` or `groundingStrict === false` per run; `LUNA_GROUNDING_JUDGE=off`, `LUNA_GROUNDING_MODEL`.
 - Grounding follow-up: flashcards show the source note and badge on the flipped card (`activities/SourceNote.js`); written documents (summaries, formula sheets, reading parts) now carry `_source`/`_quote`/`_support` per paragraph, bullet list and callout (block schema `grounded: true`), the quote is verified in code, verified paragraphs show their supporting quote on hover and unverified ones a ⚠ mark.
+
+## 2026-10-14 — PDF fidelity: batches, lists, pictures, visual formula editor, interactive charts
+- PDF → Markdown now converts in batches of 5 pages (4 in parallel, one retry, visible note for a failed batch) instead of one 16k-token call for the whole file.
+- `normalizeCanonicalDocument` no longer empties bullet lists of AI-read files; list items keep their nesting (`depth`) in the HTML/Markdown/text renderers.
+- Pictures: shared logos and tiny images skipped, 1-bit scans read, caps raised, picture worker flushes stdout before exit; figures without an embedded picture (vector drawings) get a page screenshot (needs `@napi-rs/canvas`).
+- Formula editor: MathLive visual dialog (`reader/FormulaEditor.js`, fonts self-hosted in `public/mathlive`). Converter prompt keeps underbraces/labels.
+- Charts: new `chart` block (`renderers/chartSvg.js`) holding the plotted numbers, drawn as SVG in the reader/exports; click a chart to change its numbers (`reader/ChartEditor.js`); saved with "Edit content". Converter emits a fenced `chart` JSON block for plotted charts.
+- Dashboard U1 updated (batching, chart block); run `npm run dashboard:publish`.

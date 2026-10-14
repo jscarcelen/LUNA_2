@@ -84,15 +84,15 @@ export const REQUESTS = [
     trigger: "Upload of a .pdf (workspace → upload)",
     file: SRC.vision, anchor: /async function extractPdfViaMarkdown/,
     model: "gpt-4o", modelEnv: "LUNA_DOCUMENT_MODEL", provider: "OpenAI · chat/completions",
-    params: { temperature: 0, maxTokens: 16384, format: "Free text (Markdown), PDF sent as a file input", streaming: false },
-    input: "The whole PDF (file input: OpenAI extracts the text of each page and also looks at the page image) + the system prompt + one short instruction.",
+    params: { temperature: 0, maxTokens: 16384, format: "Free text (Markdown), PDF sent as a file input; one call per batch of 5 pages, 4 calls in parallel", streaming: false },
+    input: "The PDF cut into batches of 5 pages (file input: OpenAI extracts the text of each page and also looks at the page image) + the system prompt + one short instruction per batch. Charts also come back as a chart JSON block (their numbers), drawn as an editable SVG chart.",
     output: "Markdown with a <!-- page N --> marker per page. Converted to the canonical document model (blocks, equations, tables) and stored.",
     fallbacks: "If it fails: pdfjs text extraction + GPT-4o JSON structuring (U4). If the PDF has no selectable text: Claude Haiku (U5).",
     tokens: { basis: "measured", scale: { unit: "page", label: "PDF page", fixedIn: 0, inPer: 744, outPer: 451, units: 10 } },
     seconds: { typical: 34, note: "≈ 3–4 s per page (measured)" },
     prompts: [
       { label: "System prompt", file: SRC.vision, re: /const MARKDOWN_SYSTEM_PROMPT = `([\s\S]*?)`;/ },
-      { label: "User message (request body)", file: SRC.vision, re: /const \{ text, finishReason \} = await callOpenAIText\(\[([\s\S]*?)\n  \]\);/ }
+      { label: "User message (request body)", file: SRC.vision, re: /async function convertPdfBatch[\s\S]*?await callOpenAIText\(\[([\s\S]*?)\n  \], \{ maxTokens/ }
     ]
   },
   {

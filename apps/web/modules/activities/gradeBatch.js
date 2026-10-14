@@ -187,6 +187,7 @@ async function callModel(items, { language, apiKey, model, fetcher }) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model,
       temperature: 0.1,
       max_tokens: Math.min(4000, 400 + items.length * 320),

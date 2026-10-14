@@ -59,6 +59,16 @@ export function AccountSettings({ account, onClose, onAccountChange }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const [deletePw, setDeletePw] = useState({ value: "", busy: false, error: "" });
+  async function deleteAccount(event) {
+    event.preventDefault();
+    if (deletePw.busy || !window.confirm("Delete your LUNA account? It is erased after 30 days, unless you log in again before then.")) return;
+    setDeletePw({ ...deletePw, busy: true, error: "" });
+    const result = await accountsApi.deleteAccount(deletePw.value);
+    if (result.ok) { window.location.assign("/?deleted=1"); return; }
+    setDeletePw({ value: "", busy: false, error: result.error });
+  }
+
   async function resendEmail() {
     setResend({ busy: true, message: null });
     setResend({ busy: false, message: resendMessage(await accountsApi.resendVerification()) });
@@ -228,6 +238,18 @@ export function AccountSettings({ account, onClose, onAccountChange }) {
             {pwState.error && !mismatch ? <p role="alert" className={errorText}>{pwState.error}</p> : null}
             {pwState.ok ? <p role="status" className="m-0 text-xs text-[#1a7f37]">{pwState.ok}</p> : null}
             <div><button type="submit" className={primaryBtn} disabled={pwState.busy || mismatch}>{pwState.busy ? "Saving…" : "Change password"}</button></div>
+          </form>
+        </Section>
+
+        <Section title="Your data">
+          <p className={hint}>Download everything LUNA holds about you, or delete your account. Read the <a className="text-[var(--accent)] underline" href="/privacy" target="_blank" rel="noopener">Privacy Policy</a>, <a className="text-[var(--accent)] underline" href="/terms" target="_blank" rel="noopener">Terms</a> and <a className="text-[var(--accent)] underline" href="/ai" target="_blank" rel="noopener">AI notice</a>.</p>
+          <div className="mt-2"><a className={ghostBtn} href="/api/accounts/data" download>Download my data</a></div>
+          <form onSubmit={deleteAccount} className="mt-3 flex flex-col gap-2 border-t border-ink/10 pt-3" noValidate>
+            <p className="m-0 text-sm font-semibold text-ink">Delete my account</p>
+            <p className={hint}>Your account, workspaces, documents, answers and results are erased after 30 days. Logging back in before then cancels it. Type your password to confirm.</p>
+            <input id="luna-del-pw" type="password" aria-label="Current password" autoComplete="current-password" className={`${field} w-full`} value={deletePw.value} onChange={(event) => setDeletePw({ ...deletePw, value: event.target.value })} />
+            {deletePw.error ? <p role="alert" className={errorText}>{deletePw.error}</p> : null}
+            <div><button type="submit" className={`${ghostBtn} !text-[var(--color-danger)]`} disabled={deletePw.busy || !deletePw.value}>{deletePw.busy ? "Working…" : "Delete my account"}</button></div>
           </form>
         </Section>
       </div>

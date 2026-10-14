@@ -56,6 +56,9 @@ export function LandingPage() {
           <nav aria-label="Footer">
             {TABS.map((t) => <button key={t.id} type="button" onClick={() => setTab(t.id)}>{t.label}</button>)}
             <a href="/app">Live demo</a>
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/ai">AI notice</a>
           </nav>
         </div>
       </footer>

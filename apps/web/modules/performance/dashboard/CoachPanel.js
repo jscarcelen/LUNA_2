@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { card, ghostBtn, kicker } from "./parts";
+import { AiGuidanceNote, card, ghostBtn, kicker } from "./parts";
 
 const KIND_LABEL = {
   practise: "Practise",
@@ -72,6 +72,7 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
 
   return (
     <div className="grid gap-3">
+      <AiGuidanceNote />
       {result ? (
         <>
           <p className="m-0 text-[15px] font-semibold leading-snug text-ink">{result.headline}</p>

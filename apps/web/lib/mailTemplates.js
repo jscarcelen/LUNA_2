@@ -52,6 +52,22 @@ export function verifyEmailMail({ to, name, url }) {
   });
 }
 
+/** To a parent/guardian: a child under 14 wants a Luna account and cannot have one without their consent. */
+export function guardianConsentMail({ to, studentName, url }) {
+  const child = oneLine(studentName) || "A child";
+  return build({
+    to,
+    subject: `${child} asked to use Luna: your consent is needed`,
+    heading: "Your consent is needed",
+    paragraphs: [
+      `${child} wants to use Luna, a study platform that uses AI to make quizzes and study plans from school material. By law (GDPR / LOPDGDD for children under 14, and COPPA in the US) we need a parent or guardian to agree first.`,
+      "Nothing about your child has been saved except their first name and birth date, and that is deleted automatically after 48 hours if you do nothing. Opening the link shows exactly what Luna collects, and lets you give or refuse consent. You will get your own parent account to see and delete your child's data at any time."
+    ],
+    button: { label: "Review and decide", url },
+    footer: `The link works once and expires in 48 hours. ${NOT_YOU}`
+  });
+}
+
 export function resetPasswordMail({ to, name, url }) {
   const hello = oneLine(name) ? `Hi ${oneLine(name)},` : "Hi,";
   return build({

@@ -133,3 +133,100 @@ export function ResetPasswordScreen({ token, state, migration }) {
     </Frame>
   );
 }
+
+/**
+ * /guardian?token=… — the link in the email to a parent/guardian of a child under 14. Shows what LUNA collects and
+ * lets them consent (creating the child's account and their own parent account) or refuse. Looking at the page does
+ * not use the link up. `state`: "ready" | "invalid" | "setup".
+ */
+export function GuardianConsentScreen({ token, studentName = '', state, migration }) {
+  const [form, setForm] = useState({ guardianName: '', guardianPassword: '', guardianPasswordConfirm: '', studentEmail: '', studentPassword: '', accept: false });
+  const [phase, setPhase] = useState('idle'); // idle | busy | done | refused | failed
+  const [error, setError] = useState('');
+  const [result, setResult] = useState(null);
+  const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.type === 'checkbox' ? event.target.checked : event.target.value }));
+
+  async function consent(event) {
+    event.preventDefault();
+    if (phase === 'busy') return;
+    setError('');
+    setPhase('busy');
+    const response = await accountsApi.guardianConsent({ token, action: 'consent', ...form });
+    if (response.ok) { setResult(response.data); setPhase('done'); return; }
+    setError(response.error);
+    setPhase(response.status === 410 || response.status === 404 ? 'failed' : 'idle');
+  }
+
+  async function refuse() {
+    setPhase('busy');
+    await accountsApi.guardianConsent({ token, action: 'refuse' });
+    setPhase('refused');
+  }
+
+  if (state === 'setup') return <Frame title="Parent or guardian consent"><SetupBox migration={migration} /></Frame>;
+  if (state === 'invalid' || phase === 'failed') {
+    return (
+      <Frame title="This link does not work">
+        <div role="alert" style={infoBox}>{error || 'This link has expired (they last 48 hours), was already used, or is not valid. Ask your child to start again from the sign-up page.'}</div>
+      </Frame>
+    );
+  }
+  if (phase === 'refused') {
+    return (
+      <Frame title="Done: no account created">
+        <div role="status" style={infoBox}>Thank you. Nothing was created, and what we held about the request has been deleted.</div>
+      </Frame>
+    );
+  }
+  if (phase === 'done') {
+    return (
+      <Frame title="Consent given">
+        <div role="status" style={infoBox}>
+          {studentName ? <><strong>{studentName}</strong>’s account is ready</> : 'The account is ready'}. They log in with <strong style={{ overflowWrap: 'anywhere' }}>{result?.studentEmail}</strong> and the password you chose.
+          {result?.createdGuardian ? <> Your own parent account is <strong style={{ overflowWrap: 'anywhere' }}>{result?.guardianEmail}</strong>, with the password you just set.</> : <> Log in with your existing parent account to see their progress.</>}
+          {' '}From “My students” you can see, export or delete their data at any time.
+        </div>
+        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>Log in</a>
+      </Frame>
+    );
+  }
+  return (
+    <Frame title="Parent or guardian consent">
+      <form onSubmit={consent} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+        <div style={infoBox}>
+          <strong>{studentName || 'Your child'}</strong> asked to use LUNA, a study platform that uses AI to make quizzes and study plans from school material. Under 14, we need your consent.
+          <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
+            <li>We keep their name, the material they upload, their answers and results, to run the platform.</li>
+            <li>The text they write and the material they upload is processed by AI providers to generate content. It is not used for advertising, and we ask providers not to train on it.</li>
+            <li>AI scores and “diagnoses” are guidance for study, never a final grade or decision.</li>
+            <li>You get a parent account to see their progress, and you can export or delete all their data whenever you want.</li>
+          </ul>
+          <div style={{ marginTop: 8 }}>Read the <a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>Privacy Policy</a>, the <a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>Terms</a> and the <a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>AI notice</a>.</div>
+        </div>
+        <div>
+          <label htmlFor="g-sname" style={labelStyle}>Email your child will log in with</label>
+          <input id="g-sname" type="email" value={form.studentEmail} onChange={set('studentEmail')} placeholder="child@example.com" style={inputStyle} autoComplete="off" />
+        </div>
+        <div>
+          <label htmlFor="g-spass" style={labelStyle}>Password for your child’s account</label>
+          <input id="g-spass" type="password" value={form.studentPassword} onChange={set('studentPassword')} style={inputStyle} autoComplete="new-password" />
+        </div>
+        <div>
+          <label htmlFor="g-name" style={labelStyle}>Your name</label>
+          <input id="g-name" value={form.guardianName} onChange={set('guardianName')} style={inputStyle} autoComplete="name" />
+        </div>
+        <div>
+          <label htmlFor="g-pass" style={labelStyle}>Password for your parent account <span style={{ color: T.sub, fontWeight: 400 }}>(not needed if you already have one)</span></label>
+          <input id="g-pass" type="password" value={form.guardianPassword} onChange={(event) => setForm((current) => ({ ...current, guardianPassword: event.target.value, guardianPasswordConfirm: event.target.value }))} style={inputStyle} autoComplete="new-password" />
+        </div>
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: T.ink, lineHeight: 1.5, cursor: 'pointer' }}>
+          <input type="checkbox" checked={form.accept} onChange={set('accept')} style={{ marginTop: 3 }} />
+          <span>I am the parent or legal guardian of {studentName || 'this child'} and I consent to the processing described above.</span>
+        </label>
+        {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
+        <button type="submit" disabled={phase === 'busy'} style={buttonStyle(phase === 'busy')}>{phase === 'busy' ? 'One moment…' : 'I consent: create the account'}</button>
+        <button type="button" onClick={refuse} disabled={phase === 'busy'} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>No, I do not consent</button>
+      </form>
+    </Frame>
+  );
+}

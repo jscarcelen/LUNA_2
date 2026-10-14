@@ -354,7 +354,7 @@ describe("recognising a missing accounts table", () => {
 describe("what the browser may see of an account", () => {
   it("never includes the password hash", () => {
     const shown = publicAccount({ id: "1", email: "a@b.co", display_name: "A", role: "student", under_13: true, password_hash: "secret" });
-    expect(shown).toEqual({ id: "1", email: "a@b.co", displayName: "A", role: "student", under13: true });
+    expect(shown).toEqual({ id: "1", email: "a@b.co", displayName: "A", role: "student", under13: true, isMinor: true });
     expect(publicAccount(null)).toBeNull();
   });
 });

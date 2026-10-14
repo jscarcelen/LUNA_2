@@ -42,7 +42,7 @@ const call = (handler, path, body, headers = {}) =>
   handler(new Request(`http://localhost${path}`, { method: "POST", headers: { "content-type": "application/json", "x-forwarded-for": `10.0.0.${++counter}`, ...headers }, body: JSON.stringify(body) }));
 const cookieOf = (id) => ({ cookie: `${SESSION_COOKIE}=${encodeURIComponent(signSession(id, resolveSessionSecret()))}` });
 const tokenFrom = (message) => new URL(message.links[0]).searchParams.get("token");
-const form = (over = {}) => ({ displayName: "Maria", email: "maria@home.com", password: "correct horse", passwordConfirm: "correct horse", phone: "+1 415 555 2671", role: "student", ...over });
+const form = (over = {}) => ({ displayName: "Maria", email: "maria@home.com", password: "correct horse", passwordConfirm: "correct horse", phone: "+1 415 555 2671", role: "student", birthDate: "2000-01-01", acceptTerms: true, ...over });
 const unverified = (over) => db.add("accounts", { password_hash: "x", display_name: over.email, under_13: false, failed_logins: 0, locked_until: null, email_verified_at: null, phone: null, ...over });
 const verified = (over) => unverified({ email_verified_at: new Date().toISOString(), ...over });
 
@@ -321,6 +321,35 @@ describe("what an unconfirmed account cannot do (enforced on the server)", () =>
     expect(result.ok).toBe(true);
     const fresh = await repo.findAccountById(me.id);
     expect((await repo.requestLink(fresh, { email: "kid@x.com", relation: "student" })).status).toBe("pending");
+  });
+});
+
+describe("sign-up age gate and terms (legal compliance migration)", () => {
+  it("needs a birth date and accepted terms, and stores them", async () => {
+    expect((await call(signup.POST, "/api/accounts/signup", form({ birthDate: undefined }))).status).toBe(400);
+    const noTerms = await call(signup.POST, "/api/accounts/signup", form({ acceptTerms: false }));
+    expect(noTerms.status).toBe(400);
+    expect(await noTerms.json()).toMatchObject({ field: "acceptTerms" });
+    expect(db.table("accounts")).toHaveLength(0);
+    const ok = await call(signup.POST, "/api/accounts/signup", form({ birthDate: "2009-05-05" }));
+    expect(ok.status).toBe(200);
+    const row = db.table("accounts")[0];
+    expect(row.birth_date).toBe("2009-05-05");
+    expect(row.is_minor).toBe(true);
+    expect(row.terms_version).toBeTruthy();
+  });
+
+  it("never creates an account under 14: a parent has to consent first", async () => {
+    const kid = new Date(); kid.setUTCFullYear(kid.getUTCFullYear() - 11);
+    const response = await call(signup.POST, "/api/accounts/signup", form({ birthDate: kid.toISOString().slice(0, 10) }));
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({ needsGuardian: true });
+    expect(db.table("accounts")).toHaveLength(0);
+  });
+
+  it("an adult is not marked as a minor", async () => {
+    await call(signup.POST, "/api/accounts/signup", form({ birthDate: "1990-01-01" }));
+    expect(db.table("accounts")[0].is_minor).toBe(false);
   });
 });
 

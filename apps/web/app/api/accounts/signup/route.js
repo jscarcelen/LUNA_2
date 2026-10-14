@@ -11,6 +11,11 @@
  */
 import {
   LinkError,
+  TERMS_VERSION,
+  ageFromBirthDate,
+  isMinorAge,
+  needsGuardianConsent,
+  parseBirthDate,
   createRateLimiter,
   hashPassword,
   isRole,
@@ -22,7 +27,7 @@ import {
   resolveSessionSecret,
   validatePasswordPair
 } from "../../../../lib/accountsCore.js";
-import { EmailTakenError, PhoneTakenError, attachPendingLinks, ensureFirstWorkspace, findAccountIdByPhone, insertAccount, requestLink, supportsVerification } from "../../../../lib/accountsRepository.js";
+import { EmailTakenError, PhoneTakenError, attachPendingLinks, ensureFirstWorkspace, findAccountIdByPhone, insertAccount, requestLink, supportsLegal, supportsVerification } from "../../../../lib/accountsRepository.js";
 import { MAX_QUEUED_INVITES, sendVerificationEmail } from "../../../../lib/accountFlows.js";
 import { clientIp, errorResponse, json, rejectCrossSite, rejectUnconfigured } from "../../../../lib/accountsApi.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
@@ -58,9 +63,19 @@ export async function POST(request) {
   if (!password.ok) return json({ error: password.error, field: String(body?.passwordConfirm) === String(body?.password) ? "password" : "passwordConfirm" }, 400);
   const phone = normalizePhone(body?.phone, { required: true });
   if (!phone.ok) return json({ error: phone.error, field: "phone" }, 400);
-  const age = Number(body?.age);
-  const under13 = role === "student" && Number.isFinite(age) && age > 0 && age < 13;
-
+  // Age gate (GDPR/LOPDGDD art. 7, COPPA): everyone gives a birth date. Under 14 never gets an account here: a parent or
+  // guardian consents first (/api/accounts/guardian/request). Until the legal migration is applied the old optional age is used.
+  const legal = await supportsLegal();
+  const birthDate = parseBirthDate(body?.birthDate);
+  const ownAge = birthDate ? ageFromBirthDate(birthDate) : null;
+  if (legal) {
+    if (!birthDate) return json({ error: "Enter your birth date.", field: "birthDate" }, 400);
+    if (needsGuardianConsent(ownAge)) return json({ error: "Under 14, a parent or guardian has to agree first.", needsGuardian: true, field: "birthDate" }, 403);
+    if (body?.acceptTerms !== true) return json({ error: "Accept the Terms of Service and the Privacy Policy to continue.", field: "acceptTerms" }, 400);
+  }
+  const age = ownAge ?? Number(body?.age);
+  const under13 = Number.isFinite(age) && age > 0 && age < 13;
+  const isMinor = Number.isFinite(age) && age > 0 && isMinorAge(age);
   try {
     resolveSessionSecret(); // fail before creating anything if production has no session secret
     const verification = await supportsVerification();
@@ -80,6 +95,9 @@ export async function POST(request) {
       displayName,
       role,
       under13,
+      birthDate,
+      isMinor,
+      termsVersion: legal ? TERMS_VERSION : "",
       phone: phone.e164,
       pendingInvites: verification ? queueable : []
     });

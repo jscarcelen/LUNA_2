@@ -148,7 +148,7 @@ export async function runChat({ messages, scope = {}, referencedDocumentIds = []
     const response = await openAiFetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.3, max_tokens: 2400, stream: true, stream_options: { include_usage: true }, messages: conversation, ...(last ? {} : { tools, tool_choice: "auto" }) })
+      body: JSON.stringify({ store: false, model, temperature: 0.3, max_tokens: 2400, stream: true, stream_options: { include_usage: true }, messages: conversation, ...(last ? {} : { tools, tool_choice: "auto" }) })
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));

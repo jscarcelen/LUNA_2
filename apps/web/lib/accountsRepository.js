@@ -31,6 +31,8 @@ import { rememberPasswordChange } from "./sessionRevocation.js";
 const BASE_COLUMNS = "id, email, display_name, role, under_13, created_at";
 /** Added by supabase/migrations/202610050001_account_verification_phone_tokens.sql. */
 const V2_COLUMNS = "email_verified_at, phone, phone_verified_at, password_changed_at, notifications_seen_at, pending_invites";
+/** Added by supabase/migrations/202610130001_legal_compliance.sql (age gate, guardian consent, terms, deletion). */
+const LEGAL_COLUMNS = "birth_date, is_minor, terms_version, terms_accepted_at, guardian_confirmed_at, deletion_scheduled_at";
 export const MAX_FAILED_LOGINS = 5;
 export const LOCK_MINUTES = 15;
 
@@ -41,9 +43,11 @@ export class PhoneTakenError extends Error {}
 
 const RECHECK_MISSING_MS = 15000;
 let capability = { v2: null, checkedAt: 0 };
+let legalCapability = { ok: null, checkedAt: 0 };
 
 export function resetSchemaCache() {
   capability = { v2: null, checkedAt: 0 };
+  legalCapability = { ok: null, checkedAt: 0 };
 }
 
 /** Called when a query proves the new columns are not there (the migration has not been applied yet). */
@@ -112,8 +116,21 @@ export async function assertSharingReady(what) {
   if (!(await supportsSharing())) throw new SharingSetupError(what);
 }
 
+/* ------------------------------------------------------------------ is the legal-compliance migration applied? */
+
+/** Has 202610130001_legal_compliance.sql been applied? A "yes" is remembered, a "no" for 15 s. Until then sign-up works as before. */
+export async function supportsLegal() {
+  if (legalCapability.ok === true) return true;
+  if (legalCapability.ok === false && Date.now() - legalCapability.checkedAt < RECHECK_MISSING_MS) return false;
+  const { error } = await createSupabaseAdminClient().from("accounts").select("birth_date").limit(1);
+  if (!error) { legalCapability = { ok: true, checkedAt: Date.now() }; return true; }
+  if (isMissingColumnError(error)) { legalCapability = { ok: false, checkedAt: Date.now() }; return false; }
+  throw error;
+}
+
 async function accountColumns() {
-  return (await supportsVerification()) ? `${BASE_COLUMNS}, ${V2_COLUMNS}` : BASE_COLUMNS;
+  const base = (await supportsVerification()) ? `${BASE_COLUMNS}, ${V2_COLUMNS}` : BASE_COLUMNS;
+  return (await supportsLegal()) ? `${base}, ${LEGAL_COLUMNS}` : base;
 }
 
 /* ------------------------------------------------------------------ accounts */
@@ -156,12 +173,17 @@ export async function findAccountIdByPhone(phone) {
  * @param {string} [fields.phone] normalised E.164; stored only once the migration is applied (kept `null` otherwise)
  * @param {Array} [fields.pendingInvites] link requests typed at sign-up, sent only after the email is confirmed
  */
-export async function insertAccount({ email, passwordHash, displayName, role, under13 = false, phone = "", pendingInvites = [] }) {
+export async function insertAccount({ email, passwordHash, displayName, role, under13 = false, phone = "", pendingInvites = [], birthDate = "", isMinor = false, termsVersion = "", guardianConfirmed = false }) {
   const client = createSupabaseAdminClient();
   const base = { email: normalizeEmail(email), password_hash: passwordHash, display_name: displayName, role, under_13: Boolean(under13) };
   const v2 = await supportsVerification();
-  const row = v2 ? { ...base, phone: phone || null, pending_invites: pendingInvites.length ? pendingInvites : null } : base;
-  const { data, error } = await client.from("accounts").insert(row).select(v2 ? `${BASE_COLUMNS}, ${V2_COLUMNS}` : BASE_COLUMNS).single();
+  const legal = await supportsLegal();
+  let row = v2 ? { ...base, phone: phone || null, pending_invites: pendingInvites.length ? pendingInvites : null } : base;
+  if (legal) {
+    const now = new Date().toISOString();
+    row = { ...row, birth_date: birthDate || null, is_minor: Boolean(isMinor), terms_version: termsVersion || null, terms_accepted_at: termsVersion ? now : null, guardian_confirmed_at: guardianConfirmed ? now : null };
+  }
+  const { data, error } = await client.from("accounts").insert(row).select(await accountColumns()).single();
   if (error) {
     if (error.code === "23505") {
       if (/phone/i.test(`${error.message} ${error.details}`)) throw new PhoneTakenError("That phone number is already linked to another account.");

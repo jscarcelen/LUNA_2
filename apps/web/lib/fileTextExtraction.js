@@ -1633,6 +1633,7 @@ async function callVisionForText(base64Str, mimeType, prompt) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${OPENAI_API_KEY}` },
       body: JSON.stringify({
+        store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: LUNA_VISION_MODEL,
         max_tokens: 4096,
         messages: [{

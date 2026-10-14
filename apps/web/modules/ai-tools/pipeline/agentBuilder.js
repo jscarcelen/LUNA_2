@@ -376,6 +376,7 @@ async function callOpenAiAgent(config, chunks, schema, { onToken, styleChunks = 
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model,
       temperature: creativityToTemperature(config.creativity),
       max_tokens: maxTokens,
@@ -507,6 +508,7 @@ Before answering, check that the skeleton obeys every rule and that each type ap
         Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
+        store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: MIN_AGENT_MODEL,
         temperature: 0,
         max_tokens: 500,
@@ -586,6 +588,7 @@ Additional hard rules:
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model,
       temperature: creativityToTemperature(config.creativity),
       max_tokens: maxTokens,
@@ -756,6 +759,7 @@ async function callConsolidationModel(config, { system, user, schema, schemaName
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model: resolveAgentModel(config.model),
       temperature: creativityToTemperature(config.creativity || "low"),
       max_tokens: maxTokens,

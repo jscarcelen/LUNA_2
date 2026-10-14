@@ -20,6 +20,7 @@ export const SESSION_COOKIE = "luna_session";
 export const SESSION_TTL_SECONDS = 14 * 24 * 60 * 60;
 export const ACCOUNTS_MIGRATION = "supabase/migrations/202610040001_accounts_links_sharing.sql";
 export const VERIFICATION_MIGRATION = "supabase/migrations/202610050001_account_verification_phone_tokens.sql";
+export const LEGAL_MIGRATION = "supabase/migrations/202610130001_legal_compliance.sql";
 export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_sharing_grants.sql";
 export const GROUPS_MIGRATION = "supabase/migrations/202610070001_groups_exam_dates.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -90,7 +91,7 @@ export function isMissingColumnError(error) {
   const code = String(error.code || "");
   const message = String(error.message || error.details || "").toLowerCase();
   if (code !== "42703" && code !== "PGRST204" && code !== "PGRST200" && !message.includes("does not exist") && !message.includes("could not find")) return false;
-  return /email_verified_at|phone|password_changed_at|notifications_seen_at|pending_invites|notified_at|accepted_notified_at/.test(message);
+  return /email_verified_at|phone|password_changed_at|notifications_seen_at|pending_invites|notified_at|accepted_notified_at|birth_date|is_minor|terms_version|terms_accepted_at|guardian_confirmed_at|deletion_scheduled_at/.test(message);
 }
 
 /* ------------------------------------------------------------------ password hashing */
@@ -415,7 +416,8 @@ export function publicAccount(row) {
     email: row.email,
     displayName: row.display_name ?? row.displayName,
     role: row.role,
-    under13: Boolean(row.under_13 ?? row.under13)
+    under13: Boolean(row.under_13 ?? row.under13),
+    isMinor: isMinorAccount(row)
   };
 }
 
@@ -429,6 +431,55 @@ export function ownAccount(row) {
     ...publicAccount(row),
     phone: row.phone || "",
     phoneVerified: Boolean(row.phone_verified_at),
-    emailVerified: isEmailVerified(row)
+    emailVerified: isEmailVerified(row),
+    termsAccepted: row.terms_version ? String(row.terms_version) : "",
+    deletionScheduledAt: row.deletion_scheduled_at || ""
   };
+}
+
+
+/* ------------------------------------------------------------------ age, minors, terms (docs/LEGAL_COMPLIANCE_PLAN.md) */
+
+/** Version of the Terms of Service / Privacy Policy a person accepts at sign-up. Bump it when the texts change. */
+export const TERMS_VERSION = "2026-10-13";
+/** Under this age (Spain, LOPDGDD art. 7) a parent/guardian must consent; COPPA's own line is 13. */
+export const GUARDIAN_AGE = 14;
+/** Under this age the account gets the extra protections (no marketplace, no public sharing, strictest AI privacy). */
+export const ADULT_AGE = 18;
+export const GUARDIAN_CONSENT_TTL_MS = 48 * 60 * 60 * 1000;
+
+/** `YYYY-MM-DD` → the same string when it is a real, plausible birth date (age 3-110, not in the future); otherwise "". */
+export function parseBirthDate(value, now = new Date()) {
+  const text = String(value || "").trim();
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!match) return "";
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return "";
+  const age = ageFromBirthDate(text, now);
+  return age !== null && age >= 3 && age <= 110 ? text : "";
+}
+
+/** Whole years on `now` for a `YYYY-MM-DD` birth date, or null. */
+export function ageFromBirthDate(birthDate, now = new Date()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(birthDate || ""));
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  let age = now.getUTCFullYear() - year;
+  if (now.getUTCMonth() + 1 < month || (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)) age -= 1;
+  return age >= 0 ? age : null;
+}
+
+export const needsGuardianConsent = (age) => Number.isFinite(age) && age < GUARDIAN_AGE;
+export const isMinorAge = (age) => Number.isFinite(age) && age < ADULT_AGE;
+
+/** Is this account a minor? The birth date wins; without one, the stored flag, the under-13 flag or the age they gave. */
+export function isMinorAccount(row, now = new Date()) {
+  if (!row) return false;
+  const born = ageFromBirthDate(row.birth_date ?? row.birthDate, now);
+  if (born !== null) return isMinorAge(born);
+  if (row.is_minor ?? row.isMinor) return true;
+  if (row.under_13 ?? row.under13) return true;
+  const age = Number(row.age);
+  return Number.isFinite(age) && age > 0 && isMinorAge(age);
 }

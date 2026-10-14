@@ -67,6 +67,19 @@ export const METRIC_INFO = {
   }
 };
 
+/**
+ * One line under every AI-made score, diagnosis or recommendation: it is guidance, a person has the last word, and
+ * where to read more. Keeps LUNA a study aid and never a final, automated judgement (GDPR art. 22, EU AI Act).
+ */
+export function AiGuidanceNote({ className = "" }) {
+  return (
+    <p className={`m-0 text-[11px] leading-snug text-soft-ink ${className}`}>
+      Made with AI as guidance for studying, not a final grade: your teacher decides what counts. It can be wrong.{" "}
+      <a href="/ai" target="_blank" rel="noopener" className="font-semibold text-[var(--accent-ink)] hover:underline">How it works</a>
+    </p>
+  );
+}
+
 export const percent = (value) => `${Math.round((value || 0) * 100)}%`;
 export const trendArrow = (value) => (value > 0.04 ? "↑" : value < -0.04 ? "↓" : "→");
 export const trendTone = (value) => (value > 0.04 ? "text-[#2f9e5b]" : value < -0.04 ? "text-[var(--color-danger)]" : "text-soft-ink");

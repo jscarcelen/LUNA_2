@@ -38,7 +38,7 @@ async function chat(apiKey, { system, messages, schema, name, temperature = 0.3 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: MODEL(), temperature, response_format: { type: "json_schema", json_schema: { name, strict: true, schema } }, messages: [{ role: "system", content: system }, ...messages] })
+    body: JSON.stringify({ store: false, model: MODEL(), temperature, response_format: { type: "json_schema", json_schema: { name, strict: true, schema } }, messages: [{ role: "system", content: system }, ...messages] })
   });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.error?.message || "Model request failed");

@@ -123,6 +123,7 @@ Exhaustive coverage is the most important rule of this plan, because the learner
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
+        store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: process.env.LUNA_PLAN_MODEL || "gpt-4o",
         temperature: 0.3,
         response_format: { type: "json_schema", json_schema: { name: "study_plan", strict: true, schema: schemaFor(kinds) } },

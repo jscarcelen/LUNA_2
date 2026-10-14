@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
 import { applyGrades, needsModel } from "./grading.js";
 import { chargeRun } from "../credits/credits";
+import { AiGuidanceNote } from "../performance/dashboard/parts";
 import { FlashcardDeck } from "./FlashcardDeck";
 import { renderInline } from "../reader/markdown";
 import { cleanWork, fileToWorkImage } from "./workImage.js";
@@ -237,6 +238,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null }) 
             <p className="m-0 text-3xl font-bold text-ink">{Number.isInteger(attempt.score) ? attempt.score : attempt.score.toFixed(1)} / {attempt.total}</p>
             <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}{attempt.results.some((r) => r.verdict === "close") ? " Answers that were almost right earn part of a point." : ""}</p>
             {gradingNote ? <p className="m-0 mt-1 text-xs text-soft-ink">{gradingNote}</p> : null}
+            <AiGuidanceNote className="mt-1" />
             {(() => {
               // Where certainty and correctness disagree is the most useful thing on this screen.
               const sureWrong = attempt.results.filter((row) => row.confidence === "high" && row.correct === false).length;

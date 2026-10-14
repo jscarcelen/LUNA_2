@@ -184,6 +184,7 @@ export async function extractConcepts(documentText, opts = {}) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model: MODEL,
       temperature: 0.2,
       response_format: {

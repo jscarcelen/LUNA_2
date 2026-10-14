@@ -277,6 +277,7 @@ See `apps/web/modules/README.md`.
 `EXTRACTION_MIN_CONFIDENCE`, `LUNA_SESSION_SECRET` (32+ random chars signing the session cookie; required in
 production/preview on Vercel, a dev fallback is used locally), `LUNA_MAIL_FROM`, `LUNA_SMTP_URL` (SMTP provider, wins over Resend),
 `LUNA_FEEDBACK_ADMIN_KEY` (opens the temporary beta feedback board at `/feedback-admin`; see `apps/web/modules/feedback/README.md`),
+`LUNA_LEGAL_NAME`, `LUNA_LEGAL_ADDRESS`, `LUNA_PRIVACY_EMAIL` (operator shown on /terms, /privacy, /ai), `CRON_SECRET` (authorises the daily privacy job `/api/cron/privacy`: deletion purge),
 `RESEND_API_KEY`, `LUNA_PUBLIC_URL` (outgoing email; none configured = dev console preview / production "Email is not set up yet").
 
 ## Conventions

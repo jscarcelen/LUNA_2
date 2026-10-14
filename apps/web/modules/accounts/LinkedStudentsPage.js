@@ -16,6 +16,34 @@ import { pluralNoun } from "./nouns.js";
 
 const noop = async () => null;
 
+/** A parent's rights over a child's data (GDPR / COPPA): download it, or erase the account now. Parents only. */
+function ChildDataControls({ student, onErased }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [state, setState] = useState({ busy: false, error: "" });
+  async function erase(event) {
+    event.preventDefault();
+    if (state.busy || !window.confirm(`Erase ${student.displayName || "this"} account and all its data now? This cannot be undone.`)) return;
+    setState({ busy: true, error: "" });
+    const result = await accountsApi.deleteAccount(password, student.id);
+    if (result.ok) { setOpen(false); onErased?.(student.id); return; }
+    setState({ busy: false, error: result.error });
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <a className={ghostBtn} href={`/api/accounts/data?studentId=${encodeURIComponent(student.id)}`} download>Download their data</a>
+      {open ? (
+        <form onSubmit={erase} className="flex flex-wrap items-center gap-1.5">
+          <input type="password" aria-label="Your password" autoComplete="current-password" placeholder="Your password" className="rounded-lg border border-ink/12 px-2 py-1 text-xs" value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button type="submit" className={`${ghostBtn} !text-[var(--color-danger)]`} disabled={state.busy || !password}>{state.busy ? "Erasing…" : "Erase now"}</button>
+          <button type="button" className={ghostBtn} onClick={() => setOpen(false)}>Cancel</button>
+          {state.error ? <span role="alert" className="text-[var(--color-danger)]">{state.error}</span> : null}
+        </form>
+      ) : <button type="button" className={`${ghostBtn} !text-[var(--color-danger)]`} onClick={() => setOpen(true)}>Delete their account</button>}
+    </span>
+  );
+}
+
 /** A student's study plans, read-only: how far each is, what is next, what is late, and who set each deadline. */
 function ReadOnlyPlans({ documents, folders = [], studentName }) {
   const attempts = useMemo(() => joinAttempts(documents), [documents]);
@@ -182,6 +210,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
                 <StudentGroupsMenu key={student.id} student={student} groups={groups} memberOf={groupsOfStudent(student.id).map((entry) => entry.id)} onChanged={onGroupsChanged} noun={noun} />
                 Read-only view of {student.displayName || student.email}’s work · uploaded material and private notes are not shown
                 <button type="button" className={ghostBtn} disabled={loading} onClick={() => loadStudent(selectedId)}>{loading ? "Loading…" : "Refresh"}</button>
+                {account?.role === "parent" ? <ChildDataControls key={`data-${student.id}`} student={student} onErased={(id) => { setStudents((list) => (list || []).filter((entry) => entry.id !== id)); setSelectedId(""); }} /> : null}
               </span>
             ) : null}
           </div>

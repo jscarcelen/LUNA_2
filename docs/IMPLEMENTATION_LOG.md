@@ -1224,3 +1224,14 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - f0c53813: folders get a checkbox; the selection bar handles files and folders together: Move to… and Delete (nested picks collapse to the outer folder).
 - 2f46075a: saving Account settings now updates the account in `AppShell` (`onAccountChange`), so Home's greeting and the menu show the new name at once.
 - Needs `npm run dashboard:publish` locally (the plan-update prompt changed).
+
+## 2026-10-13 — Legal compliance P0 (docs/LEGAL_COMPLIANCE_PLAN.md: L1–L4, L8, L14, L16, L18)
+- Migration `202610130001_legal_compliance.sql` (feature-detected via `supportsLegal`; sign-up works as before until applied): `accounts.birth_date/is_minor/terms_version/terms_accepted_at/guardian_confirmed_at/deletion_scheduled_at`, table `guardian_consents`.
+- L1/L3 age gate: sign-up asks the birth date for everyone (`AuthModal` step 1), server rules in `accountsCore.js` (`parseBirthDate`, `needsGuardianConsent` <14, `isMinorAccount` <18). Under 14 gets no account (`403 needsGuardian`).
+- L2 guardian consent: `lib/guardianConsent.js` + `/api/accounts/guardian/{request,consent}` + `/guardian` page. Only first name + birth date + guardian email kept, 48 h; consent creates the child account and the guardian's parent account (or links an existing parent) with an accepted link.
+- L18 `/terms`, `/privacy`, `/ai` (texts in `lib/legalTexts.js`, operator from env), sign-up checkbox, version stored per account, footer links.
+- L4 `store:false` on every OpenAI chat call; the coach no longer sends the student's name.
+- L8 `/api/accounts/data` (download JSON; delete = 30-day grace, login cancels; a parent can export/erase a child), `lib/accountData.js`, daily `/api/cron/privacy` (vercel.json cron, needs `CRON_SECRET`), Account settings "Your data", parent controls in "My students".
+- L14 `AiGuidanceNote` under AI scores, coach, level report, skill map. L16 `docs/DPIA_RAT.md`.
+- Not done (still open in the plan): teacher grade override, RLS, phone optional for minors, marketplace/sharing blocks for minors (L5), retention jobs beyond deletion, Spanish texts, payments.
+- Tests: `tests/legal-compliance.test.ts`, age-gate cases in `tests/accounts/verification.test.js`.

@@ -62,6 +62,7 @@ export async function POST(request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
+        store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: resolveAgentModel(process.env.LUNA_REFINER_MODEL),
         temperature: 0.2,
         response_format: { type: "json_schema", json_schema: { name: "iteration_brief", strict: true, schema: SCHEMA } },

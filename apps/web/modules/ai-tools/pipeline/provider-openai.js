@@ -85,6 +85,7 @@ async function callOpenAiQuiz(config, chunks, scopeSummary) {
       Authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model: DEFAULT_QUIZ_MODEL,
       temperature: 0.2,
       max_tokens: Math.min(12000, Math.max(2400, requestedCount * 700)),

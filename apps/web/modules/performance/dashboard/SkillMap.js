@@ -1,6 +1,6 @@
 "use client";
 
-import { card, chip, ghostBtn, kicker } from "./parts";
+import { AiGuidanceNote, card, chip, ghostBtn, kicker } from "./parts";
 import { skillLabel } from "../../skills/taxonomy.js";
 import { SkillMatrix } from "./SkillMatrix";
 
@@ -39,6 +39,7 @@ export function SkillMap({ diagnosis, overview = null, onPrimer, onReteach, comp
   return (
     <div className="grid gap-4">
       <p className="m-0 text-[15px] font-semibold leading-snug text-ink">{headline}</p>
+      <AiGuidanceNote />
 
       {overview?.subjects?.length ? <SkillMatrix overview={overview} /> : null}
 

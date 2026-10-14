@@ -1,6 +1,6 @@
 "use client";
 
-import { card, chip, ghostBtn, kicker } from "./parts";
+import { AiGuidanceNote, card, chip, ghostBtn, kicker } from "./parts";
 
 const STATUS = {
   strong: { label: "Solid", tone: "bg-[#e9f9ee] text-[#1d7a44]", bar: "#34c759" },
@@ -19,6 +19,7 @@ export function LevelReport({ reports = [], onBuild, onSkill, onRetake, compact 
   const shown = compact ? reports.slice(0, 1) : reports;
   return (
     <div className="grid gap-4">
+      <AiGuidanceNote />
       {shown.map((report) => (
         <div key={report.id || report.title} className={`${card} grid gap-3 p-4`}>
           <div className="flex flex-wrap items-baseline justify-between gap-2">

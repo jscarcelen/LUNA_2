@@ -90,7 +90,7 @@ export async function POST(request) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return NextResponse.json({ error: "No model configured." }, { status: 500 });
 
-    const learner = String(body?.learner || "the learner").slice(0, 80);
+    const learner = "the learner"; // data minimisation: the student's name is never sent to the AI provider
     const role = ["student", "parent", "teacher"].includes(body?.role) ? body.role : "student";
     const topics = Array.isArray(body?.topics) ? body.topics.slice(0, 24) : [];
     const errorTypes = Array.isArray(body?.errorTypes) ? body.errorTypes.slice(0, 8) : [];
@@ -126,6 +126,7 @@ export async function POST(request) {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
+        store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: process.env.LUNA_COACH_MODEL || "gpt-4o",
         temperature: 0.3,
         response_format: { type: "json_schema", json_schema: { name: "performance_coach", strict: true, schema: SCHEMA } },

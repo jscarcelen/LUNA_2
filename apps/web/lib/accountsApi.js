@@ -3,8 +3,8 @@
  * checks, and one place that turns errors into responses (a missing table becomes `setupNeeded`).
  */
 import { NextResponse } from "next/server";
-import { GROUPS_MIGRATION, LinkError, SHARING_MIGRATION, SessionConfigError, VERIFICATION_MIGRATION, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
-import { findAccountById, supportsVerification } from "./accountsRepository.js";
+import { GROUPS_MIGRATION, LEGAL_MIGRATION, LinkError, SHARING_MIGRATION, SessionConfigError, VERIFICATION_MIGRATION, isSameOrigin, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
+import { findAccountById, supportsLegal, supportsVerification } from "./accountsRepository.js";
 import { freshSessionFromRequest, loggedOutCookie } from "./session.js";
 import { isSupabaseConfigured } from "./supabaseClient.js";
 
@@ -30,6 +30,11 @@ export function rejectUnconfigured() {
  */
 export async function rejectUnlessVerificationReady() {
   return (await supportsVerification()) ? null : json(setupNeededBody(VERIFICATION_MIGRATION), 503);
+}
+
+/** For the guardian-consent and data-rights routes: 503 `setupNeeded` naming the legal-compliance migration until it is applied. */
+export async function rejectUnlessLegalReady() {
+  return (await supportsLegal()) ? null : json(setupNeededBody(LEGAL_MIGRATION), 503);
 }
 
 /**

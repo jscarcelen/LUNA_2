@@ -145,6 +145,7 @@ async function callOpenAI(messages, { model = VISION_MODEL, maxTokens = MAX_TOKE
       "Authorization": `Bearer ${key}`
     },
     body: JSON.stringify({
+      store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
       model,
       messages,
       max_tokens: maxTokens,

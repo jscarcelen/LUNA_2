@@ -49,6 +49,18 @@ const INVITE_FIELDS = {
   ],
 };
 
+/** Whole years today for a YYYY-MM-DD date, or null (a small copy of the server rule; the server decides). */
+export function ageOfBirthDate(value, now = new Date()) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  let age = now.getUTCFullYear() - year;
+  if (now.getUTCMonth() + 1 < month || (now.getUTCMonth() + 1 === month && now.getUTCDate() < day)) age -= 1;
+  return age >= 3 && age <= 110 ? age : null;
+}
+
 /** "a@b.com, c@d.com\ne@f.com" -> ['a@b.com', 'c@d.com', 'e@f.com'] */
 export function parseEmailList(text) {
   return [...new Set(String(text || '').split(/[\s,;]+/).map((entry) => entry.trim().toLowerCase()).filter(Boolean))];
@@ -61,7 +73,9 @@ export function parseEmailList(text) {
 export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   const [step, setStep] = useState(1);
   const [role, setRole] = useState('student');
-  const [age, setAge] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [guardian, setGuardian] = useState({ name: '', email: '' });
   const [form, setForm] = useState({ email: '', password: '', passwordConfirm: '', phone: '', name: '' });
   const [invites, setInvites] = useState({});
   const [error, setError] = useState('');
@@ -77,7 +91,8 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     setForm((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => (current[key] ? { ...current, [key]: '' } : current));
   };
-  const under13 = role === 'student' && Number(age) > 0 && Number(age) < 13;
+  const age = ageOfBirthDate(birthDate);
+  const needsGuardian = age !== null && age < 14;
   // The mismatch message appears as soon as both fields have something, and the form cannot be sent until they match.
   const mismatch = isSignUp && form.passwordConfirm.length > 0 && form.password !== form.passwordConfirm;
   const passwordConfirmError = fieldErrors.passwordConfirm || (mismatch ? 'The two passwords do not match.' : '');
@@ -85,8 +100,29 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   function showFailure(result) {
     if (result.setupNeeded) setSetupMigration(result.migration || ACCOUNTS_MIGRATION);
     const field = result.data?.field;
-    if (field && ['phone', 'password', 'passwordConfirm'].includes(field)) setFieldErrors((current) => ({ ...current, [field]: result.error }));
+    if (result.data?.needsGuardian) { setView('guardian'); return; }
+    if (field && ['phone', 'password', 'passwordConfirm', 'acceptTerms'].includes(field)) setFieldErrors((current) => ({ ...current, [field]: result.error }));
     else setError(result.error);
+  }
+
+  function continueFromProfile() {
+    if (age === null) { setError('Enter your date of birth to continue.'); return; }
+    setError('');
+    if (needsGuardian) { setView('guardian'); return; }
+    setStep(2);
+  }
+
+  async function sendGuardianRequest(event) {
+    event?.preventDefault();
+    if (busy) return;
+    setError('');
+    if (!guardian.name.trim() || !guardian.email.trim()) { setError('Enter your first name and your parent or guardian’s email.'); return; }
+    setBusy(true);
+    const result = await accountsApi.guardianRequest({ studentName: guardian.name, birthDate, guardianEmail: guardian.email });
+    setBusy(false);
+    if (result.ok) { setNotice({ guardian: result.data }); setView('guardianSent'); return; }
+    if (result.setupNeeded) setSetupMigration(result.migration || ACCOUNTS_MIGRATION);
+    setError(result.error);
   }
 
   async function submit(event) {
@@ -100,6 +136,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
       if (form.password !== form.passwordConfirm) problems.passwordConfirm = 'The two passwords do not match.';
       const phone = normalizePhone(form.phone);
       if (!phone.ok) problems.phone = phone.error;
+      if (!acceptTerms) problems.acceptTerms = 'Accept the Terms of Service and the Privacy Policy to continue.';
       if (Object.keys(problems).length) {
         setFieldErrors(problems);
         return;
@@ -114,7 +151,8 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           passwordConfirm: form.passwordConfirm,
           phone: form.phone,
           role,
-          age: role === 'student' && age ? Number(age) : undefined,
+          birthDate,
+          acceptTerms,
           invites: (INVITE_FIELDS[role] || []).flatMap((field) => parseEmailList(invites[field.key]).map((email) => ({ email, relation: field.relation }))),
         })
       : await accountsApi.login({ email: form.email, password: form.password });
@@ -158,7 +196,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   const goTo = (name) => { setError(''); setFieldErrors({}); setNotice(null); setView(name); };
   const errorProps = (id, text) => (text ? { 'aria-invalid': true, 'aria-describedby': id } : {});
 
-  const heading = view === 'forgot' ? 'Reset your password' : view === 'done' ? 'Check your email' : isSignUp ? (step === 1 ? 'Choose your profile' : 'Create your account') : 'Welcome back';
+  const heading = view === 'guardian' ? 'Ask a parent or guardian' : view === 'guardianSent' ? 'Check with your parent' : view === 'forgot' ? 'Reset your password' : view === 'done' ? 'Check your email' : isSignUp ? (step === 1 ? 'Choose your profile' : 'Create your account') : 'Welcome back';
   const confirmation = notice?.confirmation;
   const infoBox = { fontSize: 13.5, color: T.ink, lineHeight: 1.55, background: T.bg, borderRadius: 12, padding: '12px 14px' };
   const linkButton = { background: 'none', border: 'none', color: T.accent, cursor: 'pointer', fontSize: 13, fontWeight: 500, padding: 0 };
@@ -211,6 +249,35 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           </div>
         )}
 
+        {view === 'guardian' && (
+          <form onSubmit={sendGuardianRequest} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+            <p style={{ fontSize: 13.5, color: T.sub, margin: 0, lineHeight: 1.5 }}>Under 14, a parent or guardian has to agree before you can use LUNA. We will email them. Until they say yes we only keep your first name, birth date and their email, and we delete them after 48 hours.</p>
+            <div>
+              <label htmlFor="luna-g-name" style={labelStyle}>Your first name</label>
+              <input id="luna-g-name" value={guardian.name} onChange={(event) => setGuardian((current) => ({ ...current, name: event.target.value }))} style={inputStyle} />
+            </div>
+            <div>
+              <label htmlFor="luna-g-email" style={labelStyle}>Parent or guardian’s email</label>
+              <input id="luna-g-email" type="email" value={guardian.email} onChange={(event) => setGuardian((current) => ({ ...current, email: event.target.value }))} placeholder="parent@example.com" style={inputStyle} />
+            </div>
+            {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
+            <button type="submit" disabled={busy} style={primaryButton(busy)}>{busy ? 'One moment…' : 'Email my parent or guardian'}</button>
+            <button type="button" onClick={() => { setError(''); setView('form'); setStep(1); }} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>← Back</button>
+          </form>
+        )}
+
+        {view === 'guardianSent' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div role="status" style={infoBox}>
+              {notice?.guardian?.mailSetupNeeded
+                ? <>Email is not set up yet on this LUNA, so we could not email your parent or guardian.</>
+                : <>We emailed <strong style={{ overflowWrap: 'anywhere' }}>{guardian.email}</strong>. When they open the link and agree, your account is created and they can log in to see how you are doing. The link works for 48 hours.</>}
+            </div>
+            {notice?.guardian?.devPreview?.links?.length ? <div style={{ fontSize: 12, color: T.sub, overflowWrap: 'anywhere' }}>Development only: <a href={notice.guardian.devPreview.links[0]} style={{ color: T.accent }}>consent link</a></div> : null}
+            <button type="button" onClick={onClose || (() => window.location.assign('/'))} style={primaryButton(false)}>Done</button>
+          </div>
+        )}
+
         {view === 'forgot' && (
           <form onSubmit={sendReset} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
             {notice?.sent ? (
@@ -248,16 +315,16 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
                 </div>
               </button>
             ))}
-            {role === 'student' && (
-              <div style={{ padding: 14, background: T.bg, borderRadius: 12, marginTop: 4 }}>
-                <label htmlFor="luna-age" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>Your age</label>
-                <input id="luna-age" type="number" min="5" max="99" placeholder="e.g. 12" value={age} onChange={(event) => setAge(event.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
-                {under13 && (
-                  <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>⚠️ Under 13 requires a parent account to be linked after sign-up. Add your parent’s email on the next step and they will need to accept.</div>
-                )}
-              </div>
-            )}
-            <button type="button" onClick={() => setStep(2)} style={{ ...primaryButton(false), marginTop: 6 }}>Continue →</button>
+            <div style={{ padding: 14, background: T.bg, borderRadius: 12, marginTop: 4 }}>
+              <label htmlFor="luna-birth" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>Your date of birth</label>
+              <input id="luna-birth" type="date" autoComplete="bday" value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => { setBirthDate(event.target.value); setError(''); }} style={{ ...inputStyle, marginTop: 6 }} />
+              <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>We use it only to check your age. Under 14, a parent or guardian has to agree first.</div>
+              {needsGuardian && (
+                <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>Under 14: we will ask your parent or guardian to agree. Nothing else about you is saved until they do.</div>
+              )}
+            </div>
+            {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
+            <button type="button" onClick={continueFromProfile} style={{ ...primaryButton(false), marginTop: 6 }}>Continue →</button>
           </div>
         )}
 
@@ -316,8 +383,13 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
             {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
 
             {isSignUp && (
-              <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5 }}>
-                We will email you a link to confirm your address. By creating an account you agree to the Terms of Service and Privacy Policy.
+              <div>
+                <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: T.ink, lineHeight: 1.5, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={acceptTerms} onChange={(event) => { setAcceptTerms(event.target.checked); setFieldErrors((current) => ({ ...current, acceptTerms: '' })); }} style={{ marginTop: 3 }} />
+                  <span>I accept the <a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>Privacy Policy</a> and the <a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>AI notice</a>.</span>
+                </label>
+                {fieldErrors.acceptTerms ? <div role="alert" style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>{fieldErrors.acceptTerms}</div> : null}
+                <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 6 }}>We will email you a link to confirm your address.</div>
               </div>
             )}
             <button type="submit" disabled={busy || mismatch} style={primaryButton(busy || mismatch)}>

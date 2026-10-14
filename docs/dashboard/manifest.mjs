@@ -646,6 +646,25 @@ export const REQUESTS = [
       { label: "System prompt", file: SRC.grade, re: /const GRADE_SYSTEM = `([\s\S]*?)`;/ },
       { label: "User message", file: SRC.grade, re: /(export function buildGradeMessage[\s\S]*?\n\}\n)/ }
     ]
+  },
+  {
+    id: "A14", stage: "agents", name: "Grounding check (second pass on every generated item and chat answer)", status: "live",
+    purpose: "After an agent writes quiz questions, cards, summaries or a chat answer, a separate small model reads each item next to the passage of the learner's material it cites and answers supported, partly or unsupported. Checked in code before it: the quote the agent returned must really be in that passage, and figures must appear in the material.",
+    why: "Luna's promise is that what it writes comes from the learner's own documents. A citation says where an answer came from, not that it matches; this check catches invented quotes, changed figures and claims the passage does not make.",
+    position: "At the end of every agent run that read material (A1/A2/A13) and after every chat answer that cites passages. Items that fail are dropped when enough remain, otherwise flagged. Off with LUNA_GROUNDING_JUDGE=off.",
+    trigger: "Any agent run with reference material; any chat answer with [P#] citations",
+    file: "apps/web/modules/ai-tools/pipeline/grounding.js", anchor: /export async function judgeSupport/,
+    model: "gpt-4o-mini", modelEnv: "LUNA_GROUNDING_MODEL", provider: "OpenAI · chat/completions (store: false)",
+    params: { temperature: 0, maxTokens: 2500, format: "JSON schema (strict): verdicts [{ id, verdict, reason }]", streaming: false },
+    input: "System prompt + up to 40 entries, each the claim (content fields only, no bookkeeping) and the cited passage (up to 1,800 characters). No names or emails.",
+    output: "One verdict per entry: supported / partly / unsupported, with a reason of at most 15 words.",
+    fallbacks: "Fails open: if the call cannot be made the quote and figure checks still apply and nothing is blocked.",
+    tokens: { basis: "estimated", typical: { in: 4500, out: 600 }, scale: null },
+    seconds: { typical: 3, note: "estimate" },
+    prompts: [
+      { label: "Support check · system prompt", file: "apps/web/modules/ai-tools/pipeline/grounding.js", re: /content: `(You check whether[\s\S]*?)` \},\n/ },
+      { label: "Grounding rule added to every agent request", file: "apps/web/modules/ai-tools/pipeline/grounding.js", re: /GROUNDING_INSTRUCTION = `([\s\S]*?)`;/ }
+    ]
   }
 ];
 

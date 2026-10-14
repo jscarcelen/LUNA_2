@@ -322,7 +322,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
       ) : null}
       <div className="flex min-h-0 flex-1">
         <div className="min-w-0 flex-1 overflow-y-auto px-3 py-6 sm:px-8" onMouseUp={onSelect} onTouchEnd={() => window.setTimeout(onSelect, 50)} onKeyUp={onSelect} onClick={onPageClick}>
-          <div className="relative">
+          <div className={`relative ${coverageOn && coverage?.refs?.length && html && !playable && !editing ? "pt-10" : ""}`}>
           <div ref={rootRef}>
             {playable
               ? <ErrorBoundary onClose={onClose} title="This activity hit a problem"><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>

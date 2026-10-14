@@ -88,3 +88,36 @@ export function groupByActivity(indexes = [], refs = []) {
   }
   return [...groups.values()];
 }
+
+const MIN_SECTION_HEIGHT = 220;
+const FALLBACK_SECTION_HEIGHT = 700;
+
+const kindOf = (node) => (node.matches(".luna-page-break, .md-page") ? "page" : node.matches("figure, img") ? "image" : node.matches(".katex-display, .math-display") ? "formula" : node.matches("table") ? "table" : "text");
+
+/**
+ * Groups the pieces into sections: a new section starts at a heading (h1–h3) once the current one is tall enough, otherwise at a
+ * page line; a document with neither is cut every few hundred pixels. Returns [{ title, top, bottom, nodes, counts }].
+ */
+export function buildSections(pieces, box) {
+  const sections = [];
+  let current = null;
+  const open = (title) => { current = { title, top: Infinity, bottom: 0, nodes: [], counts: { formula: 0, image: 0, table: 0 } }; sections.push(current); };
+  const hasHeadings = pieces.some((node) => /^H[1-3]$/.test(node.tagName));
+  for (const node of pieces) {
+    const kind = kindOf(node);
+    const rect = node.getBoundingClientRect();
+    if (kind === "page") { if (!hasHeadings && current && current.bottom - current.top >= MIN_SECTION_HEIGHT) current = null; continue; }
+    if (rect.height <= 0) continue;
+    const top = rect.top - box.top;
+    const isHeading = /^H[1-3]$/.test(node.tagName);
+    const tall = current ? current.bottom - current.top : 0;
+    if (!current || (isHeading && tall >= MIN_SECTION_HEIGHT) || (!hasHeadings && tall >= FALLBACK_SECTION_HEIGHT)) open(isHeading ? (node.textContent || "").trim() : "");
+    if (isHeading && !current.title) current.title = (node.textContent || "").trim();
+    current.top = Math.min(current.top, top);
+    current.bottom = Math.max(current.bottom, top + rect.height);
+    if (kind === "text") current.nodes.push(node);
+    else { current.counts[kind] += 1; if (kind === "table") current.nodes.push(node); }
+  }
+  return sections.filter((section) => section.bottom > section.top);
+}
+

@@ -311,7 +311,16 @@ function buildCdmFromAiResponse(aiJson, { sourceType, fileName } = {}) {
   };
 }
 
+/** normalizeBlock, keeping what the PDF path adds to a block: its page, where a page starts, and a figure's real picture. */
 function normalizeBlock(block) {
+  const out = normalizeBlockFields(block);
+  if (Number(block?.page) > 0) out.page = Number(block.page);
+  if (Number(block?.page_start) > 0) out.page_start = Number(block.page_start);
+  if (out.type === "figure" && typeof block?.image === "string" && block.image.startsWith("data:image/")) out.image = block.image;
+  return out;
+}
+
+function normalizeBlockFields(block) {
   const type = String(block?.type || "paragraph");
   const base = {
     type,
@@ -708,6 +717,7 @@ function markdownInlineChildren(text) {
 
 function markdownToBlocks(markdown) {
   const lines = String(markdown || "").replace(/\r/g, "").split("\n");
+  const pageStarts = [];
   const blocks = [];
   const equations = [];
   let para = [];
@@ -728,7 +738,14 @@ function markdownToBlocks(markdown) {
     const t = lines[i].trim();
     if (!t) { flushPara(); i++; continue; }
 
-    if (/^<!--\s*page\b/i.test(t)) { flushPara(); afterPageMarker = true; i++; continue; }
+    if (/^<!--\s*page\b/i.test(t)) {
+      flushPara();
+      afterPageMarker = true;
+      const pageNumber = Number(t.match(/page\s+(\d+)/i)?.[1]);
+      if (pageNumber > 0) pageStarts.push({ index: blocks.length, page: pageNumber });
+      i++;
+      continue;
+    }
     const wasAfterPageMarker = afterPageMarker;
     afterPageMarker = false;
 
@@ -825,7 +842,143 @@ function markdownToBlocks(markdown) {
     i++;
   }
   flushPara();
+  // Page numbers from the <!-- page N --> markers: every block knows its page, the first block of a page marks where it starts.
+  for (let k = 0; k < pageStarts.length; k += 1) {
+    const end = k + 1 < pageStarts.length ? pageStarts[k + 1].index : blocks.length;
+    for (let b = pageStarts[k].index; b < end; b += 1) blocks[b].page = pageStarts[k].page;
+    if (pageStarts[k].index < end) blocks[pageStarts[k].index].page_start = pageStarts[k].page;
+  }
   return { blocks, equations };
+}
+
+
+// ─── PDF pictures ────────────────────────────────────────────────────────────
+
+const IMAGE_WORKER_VERSION = "v1";
+const PDF_MIN_IMAGE_SIDE = 80;
+const PDF_MAX_IMAGE_SIDE = 900;
+const PDF_MAX_IMAGES = 40;
+const PDF_MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+
+function findSharpDir() {
+  // sharp sits in the nearest node_modules above pdfjs-dist (apps/web or, hoisted, the repo root), or at the Vercel root.
+  let dir = path.dirname(PDFJS_PATH);
+  for (let depth = 0; depth < 8; depth += 1) {
+    const candidate = path.join(dir, "sharp");
+    if (path.basename(dir) === "node_modules" && existsSync(path.join(candidate, "package.json"))) return candidate;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  for (const candidate of [path.join(process.cwd(), "node_modules/sharp"), path.join(process.cwd(), "../../node_modules/sharp"), "/node_modules/sharp"]) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return "sharp";
+}
+
+/**
+ * The embedded pictures of a PDF as JPEG data URLs, per page: Map(page → urls[]). pdf-parse cannot do this here (it needs a
+ * canvas), so a plain Node child process reads each page's drawing operators with pdfjs and shrinks the pictures with sharp.
+ */
+async function extractPdfPageImages(buf) {
+  const workerPath = path.join(tmpdir(), `luna-pdfImageWorker-${IMAGE_WORKER_VERSION}.mjs`);
+  writeFileSync(workerPath, `import path from "path";
+import { createRequire } from "module";
+import { pathToFileURL } from "url";
+if (typeof globalThis.DOMMatrix === "undefined") globalThis.DOMMatrix = class DOMMatrix {constructor(){this.a=1;this.b=0;this.c=0;this.d=1;this.e=0;this.f=0;}multiply(){return new DOMMatrix();}translate(){return new DOMMatrix();}scale(){return new DOMMatrix();}inverse(){return new DOMMatrix();}static fromMatrix(){return new DOMMatrix();}};
+if (typeof globalThis.ImageData === "undefined") globalThis.ImageData = class ImageData {constructor(w,h){this.width=w;this.height=h;this.data=new Uint8ClampedArray(w*h*4);}};
+if (typeof globalThis.Path2D === "undefined") globalThis.Path2D = class Path2D {};
+const [,, inputFile, pdfjsPath, sharpDir, minSide, maxSide, maxImages, maxBytes] = process.argv;
+const { readFileSync } = await import("fs");
+const pdfjs = await import(pathToFileURL(pdfjsPath).href);
+pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(path.dirname(pdfjsPath), "pdf.worker.mjs")).href;
+const sharp = createRequire(import.meta.url)(sharpDir);
+const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(inputFile)), disableFontFace: true, isEvalSupported: false, useWorkerFetch: false, stopAtErrors: false }).promise;
+const out = [];
+let total = 0;
+const seen = new Set();
+outer: for (let n = 1; n <= pdf.numPages; n += 1) {
+  const page = await pdf.getPage(n);
+  const ops = await page.getOperatorList();
+  for (let i = 0; i < ops.fnArray.length; i += 1) {
+    if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
+    const name = ops.argsArray[i][0];
+    const key = \`\${n}:\${name}\`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const img = await new Promise((resolve) => {
+      const store = name.startsWith("g_") ? page.commonObjs : page.objs;
+      let done = false;
+      const t = setTimeout(() => { if (!done) resolve(null); }, 5000);
+      store.get(name, (value) => { done = true; clearTimeout(t); resolve(value); });
+    });
+    if (!img || !img.data || img.width < +minSide || img.height < +minSide) continue;
+    const channels = img.kind === 3 ? 4 : img.kind === 2 ? 3 : 0;
+    if (!channels || img.data.length < img.width * img.height * channels) continue;
+    try {
+      const buf = await sharp(Buffer.from(img.data.buffer, img.data.byteOffset, img.data.length), { raw: { width: img.width, height: img.height, channels } })
+        .flatten({ background: "#ffffff" }).resize({ width: +maxSide, height: +maxSide, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 78 }).toBuffer();
+      if (total + buf.length > +maxBytes) break outer;
+      total += buf.length;
+      out.push({ page: n, url: \`data:image/jpeg;base64,\${buf.toString("base64")}\` });
+      if (out.length >= +maxImages) break outer;
+    } catch { /* skip */ }
+  }
+}
+process.stdout.write(JSON.stringify({ images: out }));
+process.exit(0);
+`, "utf8");
+  const inputPath = path.join(tmpdir(), `luna-pdf-img-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+  writeFileSync(inputPath, buf);
+  try {
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [workerPath, inputPath, PDFJS_PATH, findSharpDir(), String(PDF_MIN_IMAGE_SIDE), String(PDF_MAX_IMAGE_SIDE), String(PDF_MAX_IMAGES), String(PDF_MAX_IMAGE_BYTES)],
+      { maxBuffer: 64 * 1024 * 1024, timeout: 90_000 }
+    );
+    // pdfjs may print warnings on stdout before the JSON.
+    const jsonStart = String(stdout || "").indexOf('{"images"');
+    const parsed = jsonStart >= 0 ? JSON.parse(String(stdout).slice(jsonStart)) : {};
+    const byPage = new Map();
+    for (const image of parsed.images || []) {
+      if (!byPage.has(image.page)) byPage.set(image.page, []);
+      byPage.get(image.page).push(image.url);
+    }
+    return byPage;
+  } finally {
+    try { unlinkSync(inputPath); } catch { /* ignore */ }
+  }
+}
+
+/**
+ * The PDF's embedded pictures, put back where the converter only described a figure. Pictures of a page fill that page's figure
+ * blocks in order; pictures left over follow the page's last block. Vector drawings are not embedded pictures, so a figure
+ * with nothing to show keeps its description.
+ */
+async function embedPdfFigures(file, blocks) {
+  let byPage;
+  try {
+    byPage = await extractPdfPageImages(base64ToBuffer(file.contentBase64));
+  } catch (error) {
+    console.warn("[aiVisionExtractor] could not read PDF pictures:", error.message);
+    return blocks;
+  }
+  if (!byPage?.size) return blocks;
+  const out = [];
+  const pages = [...new Set(blocks.map((block) => block.page).filter(Boolean))];
+  const lastIndexOfPage = new Map();
+  blocks.forEach((block, index) => { if (block.page) lastIndexOfPage.set(block.page, index); });
+  const queue = new Map([...byPage].map(([page, urls]) => [page, [...urls]]));
+  blocks.forEach((block, index) => {
+    if (block.type === "figure" && !block.image && block.page && queue.get(block.page)?.length) block.image = queue.get(block.page).shift();
+    out.push(block);
+    const leftovers = queue.get(block.page);
+    if (block.page && lastIndexOfPage.get(block.page) === index && leftovers?.length) {
+      for (const url of leftovers.splice(0)) out.push({ type: "figure", alt_text: `Picture on page ${block.page}`, caption: "", image: url, page: block.page });
+    }
+  });
+  void pages;
+  return out;
 }
 
 /**
@@ -859,7 +1012,9 @@ async function extractPdfViaMarkdown(file) {
     markdown += "\n\n> Note: this document is longer than the converter's output limit, so the end was cut off.";
   }
 
-  const { blocks, equations } = markdownToBlocks(markdown);
+  const parsed = markdownToBlocks(markdown);
+  const equations = parsed.equations;
+  const blocks = await embedPdfFigures(file, parsed.blocks);
   const firstHeading = blocks.find((b) => b.type === "heading")?.text || "";
   const title = firstHeading && !/^\d/.test(firstHeading) ? firstHeading : (file.name || "Untitled").replace(/\.pdf$/i, "");
   const cdm = buildCdmFromAiResponse({ title, equations, sections: [{ blocks }] }, { sourceType: "pdf", fileName: file.name });

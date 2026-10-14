@@ -147,7 +147,10 @@ function BlockRenderer({ block = {} }) {
   }
   if (type === "figure" && typeof block?.image === "string" && block.image.startsWith("data:image/")) {
     const alt = String(block?.alt_text || "").trim();
-    return createNode("figure", {}, [createNode("img", { src: block.image, alt: alt || String(block?.caption || "Figure"), style: "max-width:100%;height:auto" })]);
+    const caption = String(block?.caption || "").trim();
+    const figureChildren = [createNode("img", { src: block.image, alt: alt || caption || "Figure", style: "max-width:100%;height:auto" })];
+    if (caption) figureChildren.push(createNode("figcaption", {}, [caption]));
+    return createNode("figure", {}, figureChildren);
   }
 
   if (type === "figure") {
@@ -169,6 +172,14 @@ function SectionComponent({ section = {} }) {
   const nodes = [];
 
   for (const block of blocks) {
+    // A thin grey line with the page number where a page of the original starts (PDFs).
+    if (Number(block?.page_start) > 0) {
+      nodes.push(createNode("div", { class: "luna-page-break", "data-page": String(block.page_start), role: "separator", "aria-label": `Page ${block.page_start}`, style: "display:flex;align-items:center;gap:10px;margin:22px 0 14px;color:#9a9aa0;font-size:11px;font-weight:600;letter-spacing:.04em" }, [
+        createNode("span", { style: "flex:1;border-top:1px solid #d8d8de" }, []),
+        createNode("span", {}, [`Page ${block.page_start}`]),
+        createNode("span", { style: "flex:1;border-top:1px solid #d8d8de" }, [])
+      ]));
+    }
     nodes.push(BlockRenderer({ block }));
   }
 

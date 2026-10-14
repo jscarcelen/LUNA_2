@@ -61,3 +61,29 @@ describe("matching them to the paragraphs on screen", () => {
     expect(groups[0].labels).toEqual(["Question 1"]);
   });
 });
+
+// @ts-ignore - plain JS modules
+import { buildSections } from "../modules/reader/coverageMap.js";
+
+const fake = (tag: string, top: number, height: number, selector = "", text = "x") => ({
+  tagName: tag.toUpperCase(),
+  textContent: text,
+  getBoundingClientRect: () => ({ top, height }),
+  matches: (sel: string) => sel.split(",").map((part) => part.trim()).some((part) => part === tag || (part && part === selector)),
+  querySelector: () => null
+});
+
+describe("buildSections", () => {
+  it("groups paragraphs, formulas, figures and tables under their heading and merges short sections", () => {
+    const pieces = [
+      fake("h1", 0, 40, "", "Returns"),
+      fake("p", 50, 100), fake("div", 160, 80, ".katex-display"), fake("figure", 250, 200),
+      fake("h2", 460, 40, "", "Net return"), fake("p", 510, 60),
+      fake("h2", 600, 40, "", "Gross"), fake("table", 650, 100)
+    ];
+    const sections = buildSections(pieces, { top: 0 });
+    expect(sections.map((section: any) => section.title)).toEqual(["Returns", "Net return"]);
+    expect(sections[0].counts).toEqual({ formula: 1, image: 1, table: 0 });
+    expect(sections[1].counts.table).toBe(1);
+  });
+});

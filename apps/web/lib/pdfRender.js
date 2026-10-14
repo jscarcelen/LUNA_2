@@ -47,3 +47,4 @@ export async function pdfToHtml(parser) {
   }
   return { html: imageCount ? sections.join("\n") : "", imageCount, skipped };
 }
+

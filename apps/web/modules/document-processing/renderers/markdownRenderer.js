@@ -78,7 +78,7 @@ function renderBlock(block = {}) {
     const listItems = Array.isArray(block?.list_items) ? block.list_items : [];
     if (listItems.length) {
       return listItems
-        .map((item) => `- ${renderInlineChildren(item?.children || []).trim()}`)
+        .map((item) => `${"  ".repeat(Math.max(0, Number(item?.depth) || 0))}${block?.list_type === "numbered" ? "1." : "-"} ${renderInlineChildren(item?.children || []).trim()}`)
         .join("\n");
     }
     return (Array.isArray(block?.items) ? block.items : [])

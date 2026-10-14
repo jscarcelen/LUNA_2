@@ -365,7 +365,8 @@ function normalizeBlockFields(block) {
         list_type: String(block.list_type || "bullet"),
         level: Number(block.level) || 0,
         list_items: (Array.isArray(block.list_items) ? block.list_items : Array.isArray(block.items) ? block.items : []).map((item) => ({
-          children: normalizeChildren(item.children || (item.text ? [{ type: "text", text: String(item.text) }] : []))
+          depth: Math.max(0, Math.min(5, Number(item.depth) || 0)),
+          children: normalizeChildren(item.children || (item.text ? markdownInlineChildren(String(item.text)) : []))
         }))
       };
 
@@ -820,8 +821,12 @@ function markdownToBlocks(markdown) {
       flushPara();
       const ordered = /^\s*\d/.test(lines[i]);
       const items = [];
+      const indents = [];
       while (i < lines.length && listRe.test(lines[i])) {
-        items.push({ text: lines[i].match(listRe)[2].trim() });
+        const indent = lines[i].match(/^\s*/)[0].replace(/\t/g, "    ").length;
+        while (indents.length && indent < indents[indents.length - 1]) indents.pop();
+        if (!indents.length || indent > indents[indents.length - 1]) indents.push(indent);
+        items.push({ text: lines[i].match(listRe)[2].trim(), depth: indents.length - 1 });
         i++;
       }
       blocks.push({ type: "list", list_type: ordered ? "numbered" : "bullet", level: 0, list_items: items });
@@ -987,30 +992,66 @@ async function embedPdfFigures(file, blocks) {
  * charts and formulas work without server-side rendering.
  * Returns { cdm, markdown }.
  */
-async function extractPdfViaMarkdown(file) {
-  console.log(`[aiVisionExtractor] PDF "${file.name}": converting to Markdown with ${DOCUMENT_MODEL}`);
+const PDF_PAGES_PER_CALL = 5;
+const PDF_PARALLEL_CALLS = 4;
+
+/** The PDF cut into page batches (a PDF of 99 slides does not fit one answer): [{ from, base64 }], from = first page, 1-based. */
+async function splitPdfIntoBatches(file) {
+  const { PDFDocument } = await import("pdf-lib");
+  const source = await PDFDocument.load(base64ToBuffer(file.contentBase64), { ignoreEncryption: true });
+  const total = source.getPageCount();
+  if (total <= PDF_PAGES_PER_CALL) return { total, batches: [{ from: 1, base64: file.contentBase64 }] };
+  const batches = [];
+  for (let from = 0; from < total; from += PDF_PAGES_PER_CALL) {
+    const part = await PDFDocument.create();
+    const indices = Array.from({ length: Math.min(PDF_PAGES_PER_CALL, total - from) }, (_, k) => from + k);
+    for (const page of await part.copyPages(source, indices)) part.addPage(page);
+    batches.push({ from: from + 1, base64: Buffer.from(await part.save()).toString("base64") });
+  }
+  return { total, batches };
+}
+
+async function convertPdfBatch(file, batch, total) {
   const { text, finishReason } = await callOpenAIText([
     { role: "system", content: MARKDOWN_SYSTEM_PROMPT },
     {
       role: "user",
       content: [
-        {
-          type: "file",
-          file: {
-            filename: file.name || "document.pdf",
-            file_data: `data:application/pdf;base64,${file.contentBase64}`
-          }
-        },
-        { type: "text", text: "Convert this entire document to Markdown following the rules." }
+        { type: "file", file: { filename: file.name || "document.pdf", file_data: `data:application/pdf;base64,${batch.base64}` } },
+        { type: "text", text: `This file holds pages ${batch.from} onward of a ${total}-page document. Convert every page of it to Markdown following the rules, numbering the markers from <!-- page 1 -->. Slides: transcribe every bullet at every nesting level (indent the sub-bullets), every line of text in diagrams and images, every formula and every table; the logo and slide numbers are the only things to leave out.` }
       ]
     }
-  ]);
+  ], { maxTokens: DOCUMENT_MAX_TOKENS });
+  const shifted = text.trim()
+    .replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1")
+    .replace(/<!--\s*page\s+(\d+)\s*-->/gi, (_, n) => `<!-- page ${Number(n) + batch.from - 1} -->`);
+  return { markdown: shifted, truncated: finishReason === "length" };
+}
 
-  let markdown = text.trim().replace(/^```(?:markdown|md)?\s*\n([\s\S]*?)\n```$/i, "$1").trim();
+async function extractPdfViaMarkdown(file) {
+  console.log(`[aiVisionExtractor] PDF "${file.name}": converting to Markdown with ${DOCUMENT_MODEL}`);
+  const { total, batches } = await splitPdfIntoBatches(file);
+  const results = new Array(batches.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < batches.length) {
+      const k = next++;
+      let lastError;
+      for (let attempt = 0; attempt < 2 && !results[k]; attempt += 1) {
+        try { results[k] = await convertPdfBatch(file, batches[k], total); } catch (error) { lastError = error; }
+      }
+      if (!results[k]) results[k] = { markdown: "", failed: lastError };
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(PDF_PARALLEL_CALLS, batches.length) }, worker));
+  if (results.every((r) => r.failed || r.markdown.length < 20)) throw results.find((r) => r.failed)?.failed || new Error("OpenAI returned no usable Markdown for the PDF");
+
+  let markdown = results.map((r, k) => {
+    if (r.failed) return `<!-- page ${batches[k].from} -->\n\n> Note: pages ${batches[k].from}–${Math.min(batches[k].from + PDF_PAGES_PER_CALL - 1, total)} could not be converted.`;
+    return r.markdown + (r.truncated ? "\n\n> Note: part of this page group was cut off by the converter's output limit." : "");
+  }).join("\n\n");
+  markdown = markdown.trim();
   if (markdown.length < 20) throw new Error("OpenAI returned no usable Markdown for the PDF");
-  if (finishReason === "length") {
-    markdown += "\n\n> Note: this document is longer than the converter's output limit, so the end was cut off.";
-  }
 
   const parsed = markdownToBlocks(markdown);
   const equations = parsed.equations;

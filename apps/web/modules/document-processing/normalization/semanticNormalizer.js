@@ -129,6 +129,13 @@ function normalizeInlineChildren(children = [], equationLatexById = {}) {
 
 function normalizeListItems(block = {}, equationLatexById = {}) {
   const items = [];
+  const existing = Array.isArray(block.list_items) ? block.list_items : [];
+  if (existing.length) {
+    return existing.map((item) => ({
+      ...item,
+      children: normalizeInlineChildren(item?.children || [], equationLatexById)
+    }));
+  }
   const itemChildren = normalizeInlineChildren(block.children || [], equationLatexById);
 
   if (itemChildren.length) {

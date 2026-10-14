@@ -122,10 +122,23 @@ function BlockRenderer({ block = {} }) {
   if (type === "list") {
     const listItems = Array.isArray(block?.list_items) ? block.list_items : [];
     if (listItems.length) {
-      return createNode("ul", {}, listItems.map((item) => {
+      const tag = block?.list_type === "numbered" ? "ol" : "ul";
+      const root = createNode(tag, {}, []);
+      const stack = [root];
+      for (const item of listItems) {
+        const depth = Math.max(0, Number(item?.depth) || 0);
+        while (stack.length - 1 < depth) {
+          const parentList = stack[stack.length - 1];
+          const lastLi = parentList.children[parentList.children.length - 1];
+          const nested = createNode(tag, {}, []);
+          if (lastLi) lastLi.children.push(nested); else parentList.children.push(createNode("li", {}, [nested]));
+          stack.push(nested);
+        }
+        while (stack.length - 1 > depth) stack.pop();
         const children = Array.isArray(item?.children) ? item.children : [];
-        return createNode("li", {}, InlineContent({ children }));
-      }));
+        stack[stack.length - 1].children.push(createNode("li", {}, InlineContent({ children })));
+      }
+      return root;
     }
     const items = Array.isArray(block?.items) ? block.items : [];
     return createNode("ul", {}, items.map((item) => createNode("li", {}, [String(item || "")])));

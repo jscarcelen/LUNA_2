@@ -43,6 +43,7 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 300; // a long PDF is converted in page batches
 
 function cfgError() {
   return NextResponse.json({

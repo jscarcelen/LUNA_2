@@ -56,8 +56,8 @@ function flattenBlock(block = {}) {
   if (type === "list") {
     if (Array.isArray(block?.list_items) && block.list_items.length) {
       return block.list_items
-        .map((item) => flattenInlineChildren(item?.children || []).trim())
-        .filter(Boolean)
+        .map((item) => `${"  ".repeat(Math.max(0, Number(item?.depth) || 0))}${flattenInlineChildren(item?.children || []).trim()}`)
+        .filter((line) => line.trim())
         .join("\n");
     }
     return (Array.isArray(block?.items) ? block.items : []).map((item) => String(item || "")).join("\n");

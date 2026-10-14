@@ -80,7 +80,7 @@ describe("legal texts", () => {
   });
 
   it("takes the operator from the environment", () => {
-    const o = operatorDetails({ LUNA_LEGAL_NAME: "Luna Labs S.L.", LUNA_LEGAL_ADDRESS: "Calle 1, Madrid", LUNA_PRIVACY_EMAIL: "privacy@luna.test" });
+    const o = operatorDetails({ LUNA_LEGAL_NAME: "Luna Labs S.L.", LUNA_LEGAL_ADDRESS: "Calle 1, Madrid", LUNA_PRIVACY_EMAIL: "privacy@luna.test"  } as any);
     expect(o.name).toBe("Luna Labs S.L.");
     expect(o.contact).toBe("privacy@luna.test");
   });

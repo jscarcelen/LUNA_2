@@ -320,6 +320,16 @@ live at the same time) to groups and students. Table `exam_dates`; code in `lib/
   **Who has planned** (per recipient: a plan is linked or not, from `exam_date_plans`; "Show progress" reads the planned students'
   workspaces through the link-authorised members route and shows the % done of the linked plan, read-only).
 
+## Class join codes and school sign-up (under 14)
+
+Migration `supabase/migrations/202610140001_class_codes.sql` (feature-detected; every route below answers `503 setupNeeded` naming it until applied; needs the groups migration too).
+
+- A **teacher** creates a class in Connections ("Your class code"): a class is an `account_groups` row plus a `class_codes` row with a 6-letter code (alphabet `ABCDEFGHJKMNPRSTWXYZ`, unique), an on/off switch and a regenerate button (the old code stops working at once). The card lists the students who joined.
+- A **student** enters the code at sign-up (optional field next to the date of birth, student profile only) or later in Connections ("Join a class with a code"). It creates the teacher-student link **already accepted** (no request) and adds the student to the class. Only student accounts can join.
+- **Brute force**: wrong codes count against the address and (when logged in) the account, 10 per 15 minutes (`lib/accountLimits.js`). An unknown and a switched-off code give the same answer; the sign-up pre-check (`POST /api/accounts/classes/check`) reveals only `valid` and `schoolConsent`, never the class or teacher.
+- **Under 14 (school consent)**: when creating a class the teacher can tick "I confirm the school holds parental consent for students under 14 who join with this code". The class then stores `school_consent_at` and `school_consent_by` (the teacher). Only such a class lets a student under 14 sign up with its code and be approved by that confirmation instead of the guardian email (`decideClassJoin` in `lib/classCodes.js`; checked on the server before the account is created, so a wrong or non-consenting code creates nothing). Any other class keeps the guardian email flow (`needsGuardian`). `class_joins.school_consent` records which joins relied on it. The Terms/Privacy texts (EN/ES) say so in the Children section.
+- Routes: `GET/POST /api/accounts/classes` (create, regenerate, enable, disable, join), `POST /api/accounts/classes/check`; sign-up accepts `classCode`. Code: `lib/classCodes.js` (pure, tested in `tests/class-codes.test.ts`), `lib/classesRepository.js`, `modules/accounts/ClassCodeCard.js`.
+
 ## Not done yet
 
 * SMS verification of the phone number (needs an SMS provider; the column is ready), email deliverability (SPF/DKIM/DMARC

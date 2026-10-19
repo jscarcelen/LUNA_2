@@ -74,6 +74,8 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   const [step, setStep] = useState(1);
   const [role, setRole] = useState('student');
   const [birthDate, setBirthDate] = useState('');
+  const [classCode, setClassCode] = useState('');
+  const [schoolOk, setSchoolOk] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [guardian, setGuardian] = useState({ name: '', email: '' });
   const [form, setForm] = useState({ email: '', password: '', passwordConfirm: '', phone: '', name: '' });
@@ -101,13 +103,30 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     if (result.setupNeeded) setSetupMigration(result.migration || ACCOUNTS_MIGRATION);
     const field = result.data?.field;
     if (result.data?.needsGuardian) { setView('guardian'); return; }
+    if (field === 'classCode') { setStep(1); setError(result.error); return; }
     if (field && ['phone', 'password', 'passwordConfirm', 'acceptTerms'].includes(field)) setFieldErrors((current) => ({ ...current, [field]: result.error }));
     else setError(result.error);
   }
 
-  function continueFromProfile() {
+  async function continueFromProfile() {
     if (age === null) { setError('Enter your date of birth to continue.'); return; }
     setError('');
+    setSchoolOk(false);
+    const code = role === 'student' ? classCode.trim() : '';
+    if (code) {
+      // A class code is checked now so the student knows at once whether it works (and, under 14, whether the school consent covers them).
+      if (busy) return;
+      setBusy(true);
+      const result = await accountsApi.checkClassCode(code);
+      setBusy(false);
+      if (result.setupNeeded) { setSetupMigration(result.migration || ACCOUNTS_MIGRATION); return; }
+      if (!result.ok) { setError(result.error); return; }
+      if (!result.data?.valid) { setError('That class code did not work. Check it with your teacher, or leave it empty.'); return; }
+      if (needsGuardian && !result.data?.schoolConsent) { setError('This class cannot approve students under 14 on its own. Clear the code to ask a parent or guardian instead.'); return; }
+      if (needsGuardian) setSchoolOk(true);
+      setStep(2);
+      return;
+    }
     if (needsGuardian) { setView('guardian'); return; }
     setStep(2);
   }
@@ -153,13 +172,14 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           role,
           birthDate,
           acceptTerms,
+          classCode: role === 'student' ? classCode.trim() : '',
           invites: (INVITE_FIELDS[role] || []).flatMap((field) => parseEmailList(invites[field.key]).map((email) => ({ email, relation: field.relation }))),
         })
       : await accountsApi.login({ email: form.email, password: form.password });
     setBusy(false);
     if (result.ok) {
       if (isSignUp && result.data?.confirmation) {
-        setNotice({ confirmation: result.data.confirmation, queued: Number(result.data.invitesQueued || 0) });
+        setNotice({ confirmation: result.data.confirmation, queued: Number(result.data.invitesQueued || 0), classJoin: result.data.classJoin || null });
         setView('done');
         return;
       }
@@ -241,6 +261,8 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
             {confirmation?.devPreview?.links?.length ? (
               <div style={{ fontSize: 12, color: T.sub, overflowWrap: 'anywhere' }}>Development only, the link is also in the server console: <a href={confirmation.devPreview.links[0]} style={{ color: T.accent }}>confirm email</a></div>
             ) : null}
+            {notice?.classJoin?.ok ? <div role="status" style={{ fontSize: 12.5, color: T.ink }}>You joined the class {notice.classJoin.className}.</div> : null}
+            {notice?.classJoin && !notice.classJoin.ok ? <div role="alert" style={{ fontSize: 12.5, color: T.red }}>{notice.classJoin.error}</div> : null}
             {notice?.queued ? <div style={{ fontSize: 12.5, color: T.sub }}>The {notice.queued} connection request{notice.queued === 1 ? '' : 's'} you added will be sent once your email is confirmed.</div> : null}
             {notice?.resent ? <div role="status" style={{ fontSize: 12.5, color: T.sub }}>Sent again.</div> : null}
             {notice?.resendError ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{notice.resendError}</div> : null}
@@ -320,16 +342,24 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
               <input id="luna-birth" type="date" autoComplete="bday" value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => { setBirthDate(event.target.value); setError(''); }} style={{ ...inputStyle, marginTop: 6 }} />
               <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>We use it only to check your age. Under 14, a parent or guardian has to agree first.</div>
               {needsGuardian && (
-                <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>Under 14: we will ask your parent or guardian to agree. Nothing else about you is saved until they do.</div>
+                <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>{role === 'student' && classCode.trim() ? 'Under 14: your class code must come from a school that holds parental consent.' : 'Under 14: we will ask your parent or guardian to agree. Nothing else about you is saved until they do.'}</div>
               )}
             </div>
+            {role === 'student' && (
+              <div style={{ padding: 14, background: T.bg, borderRadius: 12 }}>
+                <label htmlFor="luna-class-code" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>Class code <span style={{ color: T.sub, fontWeight: 400 }}>(optional)</span></label>
+                <input id="luna-class-code" value={classCode} maxLength={9} autoCapitalize="characters" autoComplete="off" spellCheck={false} onChange={(event) => { setClassCode(event.target.value.toUpperCase()); setError(''); }} placeholder="ABC DEF" style={{ ...inputStyle, marginTop: 6, letterSpacing: 3, textTransform: 'uppercase' }} />
+                <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>If your teacher gave you a code, enter it to join their class straight away. You can also do it later in People.</div>
+              </div>
+            )}
             {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-            <button type="button" onClick={continueFromProfile} style={{ ...primaryButton(false), marginTop: 6 }}>Continue →</button>
+            <button type="button" onClick={continueFromProfile} disabled={busy} style={{ ...primaryButton(busy), marginTop: 6 }}>{busy ? 'One moment…' : 'Continue →'}</button>
           </div>
         )}
 
         {view === 'form' && (!isSignUp || step === 2) && (
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
+            {isSignUp && schoolOk ? <div role="status" style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.5, background: T.bg, borderRadius: 10, padding: '10px 12px' }}>Your school confirmed it holds parental consent for this class, so you do not need to wait for a parent or guardian email.</div> : null}
             {isSignUp && (
               <div>
                 <label htmlFor="luna-name" style={labelStyle}>Full name</label>

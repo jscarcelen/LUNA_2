@@ -136,3 +136,4 @@ Supported actions currently mirror the mock route:
 
 - `202610130003_inactive_accounts.sql` — `last_login_at`, `inactivity_warned_at` (inactive-account policy; feature-detected).
 - `202610130004_mark_reviews.sql` — `mark_reviews` table (teacher review of AI marks; routes answer 503 `setupNeeded` until applied).
+- `202610140001_class_codes.sql` — `class_codes` (6-letter join code per class = group, on/off switch, teacher's school-consent confirmation) and `class_joins` (audit). Needs the groups migration `202610070001` first. Routes `/api/accounts/classes*` answer 503 `setupNeeded` until applied. **Apply it before the rollout.**

@@ -14,6 +14,7 @@ flows and the setup step.
   (`requestShare`, `useSharingAvailable`, `requestLeaveShare`); AppShell owns the one dialog.
 - `shared.js` also holds `SHARED_WITH_ME_SUBJECT`, `isReservedSubjectName`, `sharedInfoOf` (the `shared` marker on tree nodes) and `relationLabel`.
 - `LinkedStudentsPage.js` — "My students" / "My children": Groups bar, student chips (with group dots), `PerformancePage` read-only, plans overview, Sent, Exam dates; a selected group shows `GroupView`.
+- `ClassCodeCard.js` — Connections card: teacher "Your class code" (create class, big code, copy, new code, joining on/off, joined students, school-consent tick) and student "Join a class with a code"; `classCodeText.js` re-exports the browser-safe pieces of `lib/classCodes.js`.
 - `groups.js` — **pure** group rules (palette, caps, `activeMembership`, `resolveRecipients` de-duplication, `selectionStats`, per-person `summarizeResults`, `runPool` with a time budget). `GroupsBar.js` — the Groups bar, member picker, per-student "Groups…". `GroupView.js` + `groupData.js` (pure: the members as one synthetic class workspace, comparison, plan table, `examPlanStatus`) — the group view.
 - `examDates.js` — **pure** exam date rules (validation, recipient shape, ordering). `ExamDatesTab.js` — the teacher's list / send / edit / cancel / who has planned.
 - `shared.js` also holds `dueInfoOf` (imposed vs own date of a copy: `due:` + protected `due-by:`, the student's `due-own:`).

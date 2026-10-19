@@ -4,7 +4,7 @@ import { PwaSetup } from "../modules/pwa/PwaSetup";
 
 export const metadata = {
   title: "LUNA Platform",
-  description: "Scalable placeholder UI for LUNA",
+  description: "Study platform for students, teachers and parents: AI-made quizzes, study plans and shared progress.",
   applicationName: "LUNA",
   // Added to the home screen on an iPhone it opens full screen, like an app.
   appleWebApp: { capable: true, title: "LUNA", statusBarStyle: "default" },

@@ -1276,3 +1276,9 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Formula editor: MathLive visual dialog (`reader/FormulaEditor.js`, fonts self-hosted in `public/mathlive`). Converter prompt keeps underbraces/labels.
 - Charts: new `chart` block (`renderers/chartSvg.js`) holding the plotted numbers, drawn as SVG in the reader/exports; click a chart to change its numbers (`reader/ChartEditor.js`); saved with "Edit content". Converter emits a fenced `chart` JSON block for plotted charts.
 - Dashboard U1 updated (batching, chart block); run `npm run dashboard:publish`.
+
+## 2026-10-19 — rollout onboarding: class codes, school consent, legal placeholders
+- Class join codes: migration `202610140001_class_codes.sql` (`class_codes`, `class_joins`), `lib/classCodes.js` (pure: generator, validation, under-14 decision), `lib/classesRepository.js`, routes `/api/accounts/classes` and `/classes/check`, sign-up `classCode`, teacher card "Your class code" and student "Join a class with a code" in Connections. Joining creates the teacher-student link already accepted; wrong codes are rate limited (10 per 15 minutes per address and account).
+- School sign-up under 14: a class created with the teacher's "school holds parental consent" confirmation (stored with teacher id and time) approves under-14s who join with its code; other classes keep the guardian email flow. One sentence added to the Children section of the Privacy Policy (EN/ES).
+- Legal pages never show a placeholder: `operatorDetails` treats empty or placeholder values (e.g. `privacy@yourdomain`) as unset and says to use the in-app Feedback button; site description is now a real one-liner.
+- Tests: `tests/class-codes.test.ts`. Owner must apply the migration in Supabase before the rollout and set `LUNA_PRIVACY_EMAIL`, `LUNA_LEGAL_NAME`, `LUNA_LEGAL_ADDRESS` in Vercel.

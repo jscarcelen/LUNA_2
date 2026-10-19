@@ -10,11 +10,23 @@
 import { TERMS_VERSION } from "./accountsCore.js";
 import { aiNoticeEs, privacyPolicyEs, termsOfServiceEs } from "./legalTextsEs.js";
 
+/** A value that is empty or still a template placeholder ("privacy@yourdomain", "example.com", "<your address>") counts as not set. */
+export function isPlaceholderValue(value) {
+  const text = String(value || "").trim();
+  return !text || /yourdomain|your-domain|example\.(com|org|net)|changeme|placeholder|^<.*>$|^todo$/i.test(text);
+}
+
+const cleanValue = (value) => (isPlaceholderValue(value) ? "" : String(value).trim());
+
+/**
+ * The operator named in the legal pages. A missing (or placeholder) email is never printed: `contact` then says to use the
+ * in-app Feedback button (`contactEs` for the Spanish texts), so no page shows a fake address.
+ */
 export function operatorDetails(env = process.env) {
-  const name = String(env.LUNA_LEGAL_NAME || "").trim() || "LUNA (legal entity being incorporated in Madrid, Spain)";
-  const address = String(env.LUNA_LEGAL_ADDRESS || "").trim() || "Madrid, Spain";
-  const email = String(env.LUNA_PRIVACY_EMAIL || "").trim() || "";
-  return { name, address, email, contact: email || "the contact address shown in the app" };
+  const name = cleanValue(env.LUNA_LEGAL_NAME) || "LUNA (legal entity being incorporated in Madrid, Spain)";
+  const address = cleanValue(env.LUNA_LEGAL_ADDRESS) || "Madrid, Spain";
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(env.LUNA_PRIVACY_EMAIL || "").trim()) ? cleanValue(env.LUNA_PRIVACY_EMAIL) : "";
+  return { name, address, email, contact: email || "the Feedback button inside LUNA", contactEs: email || "el botón de Feedback dentro de LUNA" };
 }
 
 const op = () => operatorDetails();
@@ -41,7 +53,7 @@ export function privacyPolicy(lang = "en") {
         "To send service emails: confirm your email, reset a password, connection and sharing requests (contract / legitimate interest).",
         "For children under 14: only after a parent or guardian consents (consent, Article 8 GDPR and LOPDGDD art. 7; COPPA verifiable parental consent in the US). For school accounts, the school’s authorisation."
       ] },
-      { h: "Children", p: ["Under 14 (13 in the US) a child cannot open an account alone. Until a parent or guardian agrees, we keep only the child’s first name, birth date and the guardian’s email, and delete them after 48 hours. We store no IP address and set no cookie for that request.", "Once consent is given, the guardian gets a parent account and can see, export and delete the child’s data at any time. Accounts of under-18s get extra protection: they cannot sell in the marketplace or make open-network connections with people they do not know, and their content is sent to AI providers with the strictest privacy settings available. We never use children’s data for advertising or to build marketing profiles."] },
+      { h: "Children", p: ["Under 14 (13 in the US) a child cannot open an account alone. Until a parent or guardian agrees, we keep only the child’s first name, birth date and the guardian’s email, and delete them after 48 hours. We store no IP address and set no cookie for that request.", "When a student under 14 joins with a class code from a teacher who confirmed that the school holds parental consent, that confirmation (kept with the teacher’s name and the date) replaces the guardian’s email approval; the school is then responsible for having that consent. Once consent is given, the guardian gets a parent account and can see, export and delete the child’s data at any time. Accounts of under-18s get extra protection: they cannot sell in the marketplace or make open-network connections with people they do not know, and their content is sent to AI providers with the strictest privacy settings available. We never use children’s data for advertising or to build marketing profiles."] },
       { h: "Who we share it with", p: ["Only service providers that run LUNA for us (processors), under contracts that limit them to our instructions:"], ul: [
         "Hosting and database: Vercel and Supabase.",
         "AI: OpenAI and Anthropic process the text, images and questions needed to generate content and grade answers. We ask them not to retain data for training. Mathpix may process images of formulas.",

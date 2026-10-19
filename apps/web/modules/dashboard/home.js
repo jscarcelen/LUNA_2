@@ -172,12 +172,13 @@ export function nextSteps(entries = [], limit = 5) {
  * @returns {{ kind: "step"|"upload"|"plan"|"practise"|"review", title: string, detail: string, cta: string, step?: object }}
  */
 export function nextBestAction({ hasMaterial = false, hasPlans = false, steps = [], hasEvidence = false, role = "student" } = {}) {
+  // A parent never gets the child's task as their own to-do: only a way to see how the child is doing.
+  if (role === "parent") return { kind: "review", title: "See how your child is doing", detail: "Progress shows what is going well and where help is needed.", cta: "Open progress" };
   if (steps.length) {
     const step = steps[0];
     const when = step.days === null || step.days === undefined ? "" : step.days < 0 ? "late" : step.days === 0 ? "due today" : step.days === 1 ? "due tomorrow" : `due in ${step.days} days`;
     return { kind: "step", title: step.title, detail: [step.planName, when].filter(Boolean).join(" · "), cta: "Start", step };
   }
-  if (role === "parent") return { kind: "review", title: "See how your child is doing", detail: "Progress shows what is going well and where help is needed.", cta: "Open progress" };
   if (!hasMaterial) return { kind: "upload", title: "Add your course material", detail: "Upload notes, slides or a textbook. Luna reads them and builds everything else from them.", cta: "Upload material" };
   if (!hasPlans) return { kind: "plan", title: "Let Luna plan your studying", detail: "A plan with deadlines and activities, built from your material.", cta: "Plan it for me" };
   return { kind: "practise", title: hasEvidence ? "Practise what needs work" : "Do a first quiz", detail: "A short quiz shows Luna what you know, so it can tell you what to study next.", cta: "Make a quiz" };

@@ -44,11 +44,13 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner, viewingStudentId = "" }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner, viewer = "", viewingStudentId = "", studentName = "", onSendQuestions }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
   const isOwn = role === "student";
+  // A teacher or parent reading a student's page (LinkedStudentsPage): read-only; the weak-topic button sends questions (teacher) or explains how to help (parent).
+  const looking = viewer === "teacher" || viewer === "parent";
 
   const [learners, setLearners] = useState([]);
   const [learner, setLearner] = useState("");
@@ -303,9 +305,11 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),
     // Clicking a student in a class panel filters to them; a group view (My students) also opens their individual view.
     onPickLearner: (name) => { setLearner(name); onOpenLearner?.(name); },
-    onOpenPage,
-    onPractise: (action) => practise(action),
-    onSchedule: () => onOpenPage?.("plans"),
+    onOpenPage: looking ? undefined : onOpenPage,
+    viewer,
+    studentName,
+    onPractise: viewer === "parent" ? undefined : viewer === "teacher" ? (action) => onSendQuestions?.(action) : (action) => practise(action),
+    onSchedule: looking ? undefined : () => onOpenPage?.("plans"),
     renderGoals
   };
 
@@ -479,10 +483,10 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       {evidence.length ? (
         <div className={`${card} grid gap-3 p-5`}>
           <p className={`${kicker} flex items-center gap-1.5`}>Work on these next</p>
-          {actions.length ? <NextActions actions={actions} onOpen={(action) => practise(action)} /> : <p className="m-0 text-sm text-soft-ink">Nothing is lagging right now. Keep going with your plan.</p>}
+          {actions.length ? <NextActions actions={actions} viewer={viewer} studentName={studentName} onOpen={viewer === "teacher" ? (action) => onSendQuestions?.(action) : (action) => practise(action)} /> : <p className="m-0 text-sm text-soft-ink">Nothing is lagging right now. Keep going with your plan.</p>}
         </div>
       ) : (
-        <EmptyState title="No results yet" text={trackBy === "plan" && plans.length === 0 ? "Progress fills in as you answer quizzes. Make a study plan, then do a first quiz." : "Progress fills in as you answer quizzes and flashcards."} action="Make a quiz" onAction={() => onOpenPage?.("create")} secondary={plans.length ? undefined : "Plan it for me"} onSecondary={() => onOpenPage?.("plans?generate=1")} />
+        <EmptyState title="No results yet" text={trackBy === "plan" && plans.length === 0 ? "Progress fills in as you answer quizzes. Make a study plan, then do a first quiz." : "Progress fills in as you answer quizzes and flashcards."} action={looking ? undefined : "Make a quiz"} onAction={() => onOpenPage?.("create")} secondary={looking || plans.length ? undefined : "Plan it for me"} onSecondary={() => onOpenPage?.("plans?generate=1")} />
       )}
 
       <details className="group" open={customising || undefined}>
@@ -618,7 +622,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                   </div>
                   {isSelected ? (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {onOpenPage ? (
+                      {onOpenPage && !looking ? (
                         <>
                           <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspaces", { topicFilter: topic.name }); }}>Open in Courses →</button>
                           <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>Open in Practice →</button>

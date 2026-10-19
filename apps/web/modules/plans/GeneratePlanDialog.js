@@ -308,52 +308,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
                 {[60, 120, 180, 240, 360, 600, 900].map((value) => <option key={value} value={value}>{value / 60} hour{value > 60 ? "s" : ""} a week</option>)}
               </select>
             </label>
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Most in one day
-              <select className={input} value={maxPerDay} onChange={(event) => setMaxPerDay(Number(event.target.value))}>
-                {[60, 90, 120, 180, 240, 300].map((value) => <option key={value} value={value}>{value < 120 ? `${value} minutes` : `${value / 60} hours`} a day</option>)}
-              </select>
-            </label>
           </div>
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Instructions for your plan <span className="font-normal text-soft-ink">(optional)</span>
-            <textarea className={input} rows={3} value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="The kinds of activity you prefer, what each exam or deadline covers (e.g. “Midterm 1: chapters 1–4”), anything that makes the plan fit you." />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Format of the material to build <span className="font-normal text-soft-ink">(optional)</span>
-            <textarea className={input} rows={2} value={formatNotes} onChange={(event) => setFormatNotes(event.target.value)} placeholder="How the exams, worksheets and flashcards should look: e.g. “exams: 10 multiple choice + 2 problems, 60 minutes; flashcards with a formula on the back”." />
-          </label>
-          {material.length ? (
-            <details className="rounded-xl border border-ink/10 px-2.5 py-1.5">
-              <summary className="cursor-pointer text-[11px] font-semibold text-soft-ink">Copy the format of an example{formatDocIds.length ? ` (${formatDocIds.length} chosen)` : ""}</summary>
-              <p className="m-0 mt-1 text-[11px] text-soft-ink">Pick a past exam, worksheet or flashcard set: what Luna builds follows its style and layout.</p>
-              <div className="mt-1 grid max-h-28 gap-0.5 overflow-y-auto">
-                {material.map((doc) => (
-                  <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-xs text-ink hover:bg-ink/5">
-                    <input type="checkbox" className="shrink-0" checked={formatDocIds.includes(doc.id)} onChange={() => setFormatDocIds((prev) => (prev.includes(doc.id) ? prev.filter((id) => id !== doc.id) : [...prev, doc.id]))} />
-                    <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
-                  </label>
-                ))}
-              </div>
-            </details>
-          ) : null}
-          <div>
-            <p className="m-0 text-xs font-semibold text-soft-ink">Agents the plan can use</p>
-            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">A scope, not a checklist: Luna only uses the ones the plan needs, and nothing outside this list.</p>
-            <div className="mt-1.5 grid max-h-44 gap-1 overflow-y-auto rounded-xl border border-ink/10 p-1.5">
-              {agents.map((agent) => (
-                <label key={agent.id} className={`flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 transition ${agentIds.includes(agent.id) ? "bg-[var(--accent)]/6" : "hover:bg-ink/5"}`}>
-                  <input type="checkbox" className="mt-0.5 shrink-0" checked={agentIds.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
-                      <span className="truncate">{agent.label}</span>
-                      {agent.custom ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{agent.bought ? "bought" : "mine"}</span> : null}
-                    </span>
-                    {agent.purpose ? <span className="block truncate text-[11px] text-soft-ink">{agent.purpose}</span> : null}
-                  </span>
-                </label>
-              ))}
-            </div>
-            {!agentIds.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">No agent selected — the plan will only schedule studying your material.</p> : null}
-          </div>
-
           {/* Material picker — collapsible folder tree */}
           <div>
             <p className="m-0 text-xs font-semibold text-soft-ink">Material to study</p>
@@ -398,6 +353,56 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
               </div>
             )}
           </div>
+
+          <details className="rounded-xl border border-ink/10 px-3 py-2">
+            <summary className="cursor-pointer text-sm font-semibold text-ink">More options</summary>
+            <div className="mt-3 grid gap-3">
+              <label className="grid gap-1 text-xs font-semibold text-soft-ink">Most in one day
+              <select className={input} value={maxPerDay} onChange={(event) => setMaxPerDay(Number(event.target.value))}>
+                {[60, 90, 120, 180, 240, 300].map((value) => <option key={value} value={value}>{value < 120 ? `${value} minutes` : `${value / 60} hours`} a day</option>)}
+              </select>
+            </label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Instructions for your plan <span className="font-normal text-soft-ink">(optional)</span>
+            <textarea className={input} rows={3} value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="The kinds of activity you prefer, what each exam or deadline covers (e.g. “Midterm 1: chapters 1–4”), anything that makes the plan fit you." />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Format of the material to build <span className="font-normal text-soft-ink">(optional)</span>
+            <textarea className={input} rows={2} value={formatNotes} onChange={(event) => setFormatNotes(event.target.value)} placeholder="How the exams, worksheets and flashcards should look: e.g. “exams: 10 multiple choice + 2 problems, 60 minutes; flashcards with a formula on the back”." />
+          </label>
+          {material.length ? (
+            <details className="rounded-xl border border-ink/10 px-2.5 py-1.5">
+              <summary className="cursor-pointer text-[11px] font-semibold text-soft-ink">Copy the format of an example{formatDocIds.length ? ` (${formatDocIds.length} chosen)` : ""}</summary>
+              <p className="m-0 mt-1 text-[11px] text-soft-ink">Pick a past exam, worksheet or flashcard set: what Luna builds follows its style and layout.</p>
+              <div className="mt-1 grid max-h-28 gap-0.5 overflow-y-auto">
+                {material.map((doc) => (
+                  <label key={doc.id} className="flex items-center gap-2 rounded-lg px-1 py-0.5 text-xs text-ink hover:bg-ink/5">
+                    <input type="checkbox" className="shrink-0" checked={formatDocIds.includes(doc.id)} onChange={() => setFormatDocIds((prev) => (prev.includes(doc.id) ? prev.filter((id) => id !== doc.id) : [...prev, doc.id]))} />
+                    <span className="truncate">{resourceByDocumentId.get(doc.id)?.name || doc.name}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          <div>
+            <p className="m-0 text-xs font-semibold text-soft-ink">Agents the plan can use</p>
+            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">A scope, not a checklist: Luna only uses the ones the plan needs, and nothing outside this list.</p>
+            <div className="mt-1.5 grid max-h-44 gap-1 overflow-y-auto rounded-xl border border-ink/10 p-1.5">
+              {agents.map((agent) => (
+                <label key={agent.id} className={`flex cursor-pointer items-start gap-2 rounded-lg px-2 py-1.5 transition ${agentIds.includes(agent.id) ? "bg-[var(--accent)]/6" : "hover:bg-ink/5"}`}>
+                  <input type="checkbox" className="mt-0.5 shrink-0" checked={agentIds.includes(agent.id)} onChange={() => toggleAgent(agent.id)} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+                      <span className="truncate">{agent.label}</span>
+                      {agent.custom ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{agent.bought ? "bought" : "mine"}</span> : null}
+                    </span>
+                    {agent.purpose ? <span className="block truncate text-[11px] text-soft-ink">{agent.purpose}</span> : null}
+                  </span>
+                </label>
+              ))}
+            </div>
+            {!agentIds.length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">No agent selected — the plan will only schedule studying your material.</p> : null}
+          </div>
+            </div>
+          </details>
 
           <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={buildNow} onChange={(event) => setBuildNow(event.target.checked)} />Generate the quizzes and summaries now, and file them in my workspace</label>
           {performance ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-[11px] text-soft-ink">Luna will use your results: {performance.activities} activities, {Math.round(performance.average * 100)}% average{performance.weakConcepts.length ? `, weakest on ${performance.weakConcepts.slice(0, 3).join(", ")}` : ""}.</p> : null}

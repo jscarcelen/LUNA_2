@@ -1,5 +1,20 @@
 # Implementation Log
 
+## 2026-10-19 (teacher and parent are no longer the student app with other labels)
+
+- **Home by role**: teacher "Your classes" (a card per group: who is behind, due this week, "Send practice to {class}…" which picks an
+  activity/plan and opens the existing Assign dialog preset; `modules/dashboard/ui/TeacherHome.js`), parent "Your child this week" (on
+  track or not, where they struggle, one way to help; no Start button, none of the child's tasks). Pure view-models in
+  `modules/dashboard/roleHome.js` with tests. Tour, page help and Home copy are role-specific (`components/helpContent.js`).
+- **Progress opens on My students / My children** for a teacher or parent with an account (`navModel.landingOf`; the tab comes first).
+- **A student's weak topic**: teacher "Send 10 questions to {name}" (makes the set, saves it in the teacher's workspace, opens Assign with the
+  student chosen), parent "How to help" (plain panel from the topic data, no AI call). `NextActions` takes `viewer`.
+- **Read-only parent**: the plan page hides date pickers, Open, Update…, ✕, Materials & resources… and Update from performance; the child's
+  Progress shows no Make a quiz / Plan it for me; "Delete their account" moved to a danger zone behind a dialog naming the child (type the name + password).
+- **Topic chips** no longer list "Shared documents" / "Shared with me" (Courses only). **Plan it for me** asks What, Exam date, Time per week; the rest is under "More options" (defaults unchanged).
+- **One "Ask Luna" button** replaces "Chat with Luna" + "Feedback" (menu: Ask Luna / Send feedback; small bottom-right on desktop with page bottom padding, an icon in the top bar on a phone).
+- **Top bar** shows the page name and a short phone title from `navModel.shortTitleOf` ("Students", "Make", "Study").
+
 ## 2026-10-06 (landing: promo video + 16 tester notes)
 
 - **Promo video** (`tools/promo-video`, README there): 58 s, 1920x1080, music only, nine scenes from the real screenshots,

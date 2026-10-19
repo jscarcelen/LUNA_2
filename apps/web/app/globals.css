@@ -5741,3 +5741,14 @@ select.input {
   }
 
 }
+
+/* Top bar: a short page name on a phone ("Students", "Make", "Study") so a title is never cut. */
+.top-title-short { display: none; }
+@media (max-width: 760px) {
+  .top-title-full { display: none; }
+  .top-title-short { display: inline; }
+}
+/* The single "Ask Luna" button floats bottom-right on a computer: leave room under every page so it never covers a row action. */
+@media (min-width: 761px) {
+  .page-content { padding-bottom: 76px; }
+}

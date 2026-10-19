@@ -1,12 +1,14 @@
 "use client";
 
+import { visibleSubjects } from "./subjects.js";
+
 /**
  * Which main folder (subject) a screen is about. Activities, study plans and performance each read
  * one subject at a time; with more than one in the workspace (Accounting, Statistics…) these chips
  * switch between them. Nothing is drawn when there is only one.
  */
 export function SubjectTabs({ workspaces = [], selectedWorkspaceId, selectedSubjectId, onSelectSubject }) {
-  const subjects = workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects || [];
+  const subjects = visibleSubjects(workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects || []);
   if (subjects.length < 2 || typeof onSelectSubject !== "function") return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Main topic">

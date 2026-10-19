@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { KINDS, areaLabelOf, areaKeyOf } from "../../lib/feedbackCore.js";
 import { getFeedbackContext } from "./feedbackContext.js";
+import { FEEDBACK_EVENT } from "./feedbackEvents.js";
 import { describeElement, imageToDataUrl, captureScreen, pickElement } from "./capture.js";
 
 /**
@@ -13,7 +14,7 @@ import { describeElement, imageToDataUrl, captureScreen, pickElement } from "./c
 const ink = "text-[var(--ink,#1d1d1f)]";
 const chip = "inline-flex items-center gap-1 rounded-full border border-black/10 bg-white px-3 py-1 text-xs font-semibold";
 
-export function FeedbackWidget({ page = "", title = "", role = "", account = null, standalone = false }) {
+export function FeedbackWidget({ page = "", title = "", role = "", account = null, standalone = false, launcher = true }) {
   const [open, setOpen] = useState(false);
   const [hidden, setHidden] = useState(false); // while picking or capturing, the panel steps out of the way
   const [kind, setKind] = useState("idea");
@@ -34,6 +35,13 @@ export function FeedbackWidget({ page = "", title = "", role = "", account = nul
     selectionRef.current = "";
     setOpen((value) => !value);
   }
+
+  // With `launcher={false}` the button is the merged "Ask Luna" menu, which opens this panel through an event.
+  useEffect(() => {
+    const show = () => { selectionRef.current = ""; setOpen(true); };
+    window.addEventListener(FEEDBACK_EVENT, show);
+    return () => window.removeEventListener(FEEDBACK_EVENT, show);
+  }, []);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -92,7 +100,7 @@ export function FeedbackWidget({ page = "", title = "", role = "", account = nul
 
   return (
     <div className="tw-scope">
-      <button
+      {launcher ? <button
         type="button"
         onPointerDown={remember}
         onClick={toggle}
@@ -101,7 +109,7 @@ export function FeedbackWidget({ page = "", title = "", role = "", account = nul
         className={`fixed ${standalone ? "bottom-4 right-4" : "bottom-[104px] right-3 min-[761px]:bottom-4 min-[761px]:right-4"} z-[55] rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-bold shadow-[0_6px_20px_rgba(0,0,0,0.16)] transition active:scale-95 ${ink} ${hidden ? "hidden" : ""}`}
       >
         <span aria-hidden>✎</span> Feedback
-      </button>
+      </button> : null}
 
       {open && !hidden ? (
         <div className={`fixed inset-x-2 ${standalone ? "bottom-16" : "bottom-[104px] min-[761px]:bottom-16"} z-[56] max-h-[78dvh] overflow-y-auto rounded-3xl border border-black/10 bg-white p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)] min-[761px]:inset-x-auto min-[761px]:right-4 min-[761px]:w-[400px]`} role="dialog" aria-label="Send feedback">

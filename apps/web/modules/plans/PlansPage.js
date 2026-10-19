@@ -335,6 +335,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
   const [revising, setRevising] = useState(null); // { plan, newUploadedIds } while the re-plan preview is open
   const [updatingPlan, setUpdatingPlan] = useState(null); // plan row whose "Update this plan…" dialog is open
+  // A parent only reads a plan (their child's): no date pickers, no Open / Update… / ✕ on a step, no editing or rebuilding of the plan.
+  const readOnly = role === "parent";
   const [updatingResource, setUpdatingResource] = useState(null); // { document, resource } whose "Update…" dialog is open
   const [rebuildPreview, setRebuildPreview] = useState(null); // { newConcepts, newPrereqs, prevConcepts, prevPrereqs }
 
@@ -751,7 +753,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Tools used: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none, just your material"}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
-              {!isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>✎ Update this plan…</button> : null}
+              {!readOnly && !isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>✎ Update this plan…</button> : null}
               {plan.items.some((item) => item.generate && !item.resourceId) ? (
                 <button type="button" className={primaryBtn} disabled={building === open.document.id} onClick={() => build(open)}>
                   {building === open.document.id ? "Building…" : `✦ Build the ${plan.items.filter((item) => item.generate && !item.resourceId).length} missing resources`}
@@ -837,10 +839,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent" disabled={origin.locked} value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
                     {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
                   </select>
-                  <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent disabled:text-ink" disabled={origin.locked} title={origin.locked ? `🔒 Set by ${origin.by}` : undefined} aria-label={origin.locked ? `Date, locked, set by ${origin.by}` : "Date"} value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
+                  <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent disabled:text-ink" disabled={origin.locked || readOnly} title={origin.locked ? `🔒 Set by ${origin.by}` : undefined} aria-label={origin.locked ? `Date, locked, set by ${origin.by}` : "Date"} value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
                   <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date)}</span>
-                  {origin.locked ? (
-                    <span className="text-xs text-soft-ink" title={origin.tooltip} aria-label={origin.tooltip}>🔒</span>
+                  {origin.locked || readOnly ? (
+                    <span className="text-xs text-soft-ink" title={origin.tooltip} aria-label={origin.tooltip}>{origin.locked ? "🔒" : null}</span>
                   ) : (
                     <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" aria-label="Remove this deadline" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
                   )}
@@ -919,13 +921,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             <p className={kicker}>The plan</p>
             <div className="flex flex-wrap items-center gap-2">
               {/* Single button → opens MaterialPickerModal */}
-              <button type="button" className={ghostBtn} onClick={() => setMaterialPickerOpen(true)}>
+              {readOnly ? null : <button type="button" className={ghostBtn} onClick={() => setMaterialPickerOpen(true)}>
                 ＋ Materials &amp; resources…
-              </button>
+              </button>}
               {/* Update from performance */}
-              <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
+              {readOnly ? null : <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
                 {replanning ? "Checking…" : "↺ Update from performance"}
-              </button>
+              </button>}
               {/* List / Calendar view toggle */}
               <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
                 {[["list", "List"], ["calendar", "Calendar"]].map(([value, label]) => (
@@ -1006,7 +1008,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                 </p>
                               )}
                             </span>
-                            {plan.receivedFrom && item.dueDate ? (
+                            {readOnly ? (item.dueDate ? <span className="text-xs text-soft-ink">{dueLabel(item.dueDate)}</span> : null) : plan.receivedFrom && item.dueDate ? (
                               <span className="flex flex-wrap items-center gap-1.5">
                                 {/* A step of a plan somebody sent you: their date is locked; your own (earlier) date goes next to it. */}
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-[#1d1d1f] px-2 py-1 text-xs font-semibold text-white" title={`🔒 Set by ${plan.receivedFrom.name || "your teacher"}. You cannot change it; add your own date next to it.`}>
@@ -1031,7 +1033,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                               />
                             )}
                             {/* Every step can be opened: the quiz or flashcards to do, the summary to read, the document to study. */}
-                            {activity ? (
+                            {readOnly ? null : activity ? (
                               <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>Do activity</button>
                             ) : itemResource ? (
                               <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Open</button>
@@ -1040,8 +1042,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             ) : (
                               <button type="button" className={primaryBtn} disabled title={item.generate ? "Not generated yet — build the plan's material first" : "Nothing is attached to this step yet"}>Open</button>
                             )}
-                            {itemResource && canUpdateResource(itemResource) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdatingResource({ document: itemResourceDoc, resource: itemResource })}>✦ Update…</button> : null}
-                            <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
+                            {!readOnly && itemResource && canUpdateResource(itemResource) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdatingResource({ document: itemResourceDoc, resource: itemResource })}>✦ Update…</button> : null}
+                            {readOnly ? null : <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>}
                           </div>
                         );
                       })}
@@ -1320,8 +1322,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
             {[["plans", "Plans"], ["calendar", "Calendar"], ...(examDates.length ? [["exams", `Exam dates (${examDates.filter((entry) => !entry.dismissedAt).length})`]] : [])].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
           </div>
-          <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>
-          <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan (manual)</button>
+          {readOnly ? null : <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>}
+          {readOnly ? null : <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan (manual)</button>}
         </div>
       </div>
 

@@ -688,7 +688,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                 const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: practiceSaved.documentId || "", activityId: attempt.activityId || "", learner: profileName || "", attempt }, null, 2);
                 await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Practice"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }).catch(() => {});
               }
-              setPractising(null);
+              // The player stays open on the results (it used to close here, right after checking): the learner leaves with "Done".
             }}
             onClose={() => setPractising(null)}
           />

@@ -29,6 +29,12 @@ export const MAX_ITEMS = 40;
 /** Photos of working attached to one model call, and the size of one (a downscaled data URL). */
 export const MAX_IMAGES = 6;
 export const MAX_IMAGE_CHARS = 700000;
+/**
+ * How long one model call may take. The route may run for 60 s on Vercel (`maxDuration`); a call that is still out
+ * after this is abandoned and those answers are marked locally, so the route always answers in time and the player
+ * never waits on a function the platform is about to kill (long written / maths answers with photos are the slow case).
+ */
+export const MODEL_TIMEOUT_MS = 40000;
 
 const clean = (value) => String(value ?? "").trim();
 const clip = (value, length) => clean(value).slice(0, length);
@@ -183,9 +189,11 @@ function userContent(items, language) {
   return [{ type: "text", text }, ...pictures.flatMap((item, number) => [{ type: "text", text: `Photo ${number + 1}: the working for item ${item.id}` }, { type: "image_url", image_url: { url: item.image, detail: "low" } }])];
 }
 
-async function callModel(items, { language, apiKey, model, fetcher }) {
+async function callModel(items, { language, apiKey, model, fetcher, timeoutMs = MODEL_TIMEOUT_MS }) {
+  const signal = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(timeoutMs) : undefined;
   const response = await fetcher("https://api.openai.com/v1/chat/completions", {
     method: "POST",
+    signal,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
@@ -208,7 +216,7 @@ async function callModel(items, { language, apiKey, model, fetcher }) {
  * Returns { results, graded: "ai" | "local" | "mixed", model, usage, note }.
  * `fetcher` is injectable for tests.
  */
-export async function gradeAnswers(items, { language = "", apiKey = process.env.OPENAI_API_KEY, model, fetcher = openAiFetch } = {}) {
+export async function gradeAnswers(items, { language = "", apiKey = process.env.OPENAI_API_KEY, model, fetcher = openAiFetch, timeoutMs = MODEL_TIMEOUT_MS } = {}) {
   const seen = new Set();
   const list = (Array.isArray(items) ? items : [items]).filter(Boolean).slice(0, MAX_ITEMS * 2).map(normaliseItem).map((item) => {
     // Ids key the results; a repeated one would overwrite its twin.
@@ -236,12 +244,13 @@ export async function gradeAnswers(items, { language = "", apiKey = process.env.
     for (let at = 0; at < pending.length; at += MAX_BATCH) batches.push(pending.slice(at, at + MAX_BATCH));
     await Promise.all(batches.map(async (batch) => {
       try {
-        const { rows, usage: used } = await callModel(batch, { language, apiKey, model: usedModel, fetcher });
+        const { rows, usage: used } = await callModel(batch, { language, apiKey, model: usedModel, fetcher, timeoutMs });
         for (const key of Object.keys(usage)) usage[key] += Number(used?.[key]) || 0;
         const byId = new Map(rows.map((row) => [String(row.id), row]));
         batch.forEach((item, index) => results.set(item.id, reconcile(item, byId.get(item.id) || (rows.length === batch.length ? rows[index] : null), language)));
       } catch (error) {
-        note = `The checker could not be reached (${String(error?.message || error).slice(0, 120)}): graded by comparing words.`;
+        const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+        note = timedOut ? "The checker took too long: graded by comparing words." : `The checker could not be reached (${String(error?.message || error).slice(0, 120)}): graded by comparing words.`;
         for (const item of batch) results.set(item.id, localResult(item, language));
       }
     }));

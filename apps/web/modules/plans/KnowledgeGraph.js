@@ -253,7 +253,7 @@ export function KnowledgeGraph({
     <div className="tw-scope relative select-none">
       {/* Legend */}
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-soft-ink">
-        <span className="font-semibold text-ink">Mastery:</span>
+        <span className="font-semibold text-ink">How well you know it:</span>
         {[["Not practiced", "#e5e7eb"], ["< 40%", "#ff3b30"], ["40–70%", "#ff9500"], ["> 70%", "#34c759"]].map(([label, color]) => (
           <span key={label} className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-full" style={{ background: color }} />
@@ -280,7 +280,7 @@ export function KnowledgeGraph({
           <p className="m-0 text-xs text-soft-ink">{tooltip.concept.topic}</p>
           {tooltip.mastery !== undefined && (
             <p className="m-0 mt-1 text-xs font-semibold" style={{ color: masteryColor(tooltip.mastery) }}>
-              Mastery: {Math.round(tooltip.mastery * 100)}%
+              You know this: {Math.round(tooltip.mastery * 100)}%
             </p>
           )}
           <p className="m-0 mt-1 text-xs text-soft-ink">

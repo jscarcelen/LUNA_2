@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { CREDITS_EVENT, formatLunas, readCredits, topUp } from "./credits";
 
+/** Flip to true when there is a shop to spend lunas in; until then the balance in the top bar only confuses. */
+export const SHOW_LUNAS = false;
+
 /** Header account widget: remaining lunas (AI credit) with a small usage popover. */
 export function CreditsBadge() {
   const [ledger, setLedger] = useState(null);
@@ -13,7 +16,7 @@ export function CreditsBadge() {
     window.addEventListener(CREDITS_EVENT, onChange);
     return () => window.removeEventListener(CREDITS_EVENT, onChange);
   }, []);
-  if (!ledger) return null;
+  if (!SHOW_LUNAS || !ledger) return null;
   const pct = ledger.granted ? Math.max(0, Math.min(100, Math.round((ledger.balance / ledger.granted) * 100))) : 0;
   const low = pct < 15;
   return (

@@ -1297,3 +1297,12 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - **Tour per account**: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected), `POST /api/accounts/tour`;
   without the migration the flag is kept in localStorage under the account id.
 
+## 2026-10-19 — student rollout fixes (branch feat/rollout-student)
+- Practice card (A6): full title (up to 3 lines), one big Start button, and the deadline / Update / Delete controls in a "⋯" menu (Delete confirms). Same on desktop and phone.
+- Names (C1): `modules/ui/displayName.js` hides `.resource.json` everywhere a name is shown (rename keeps the stored suffix). Courses rows are Open + "⋯" only (folder hover icons, star and download buttons moved into the menu).
+- Summaries (C2): a generated document opens in the reader; "What it teaches", Regenerate and Delete are in its "⋯" menu.
+- Coach (C3): the coach prompt writes to the reader ("you" for a student) and every action needs its own reason; the local "Work on these next" list builds a per-topic `why` from that topic's score, mistakes and trend (`whyThisTopic`). Coach cache key bumped to v5.
+- Plain words (C4): "Covers all N topics", "Tools used", "How well you know it"; one name "Tool" for tool / agent / Agent Studio; lunas balance hidden behind `SHOW_LUNAS` in `modules/credits/CreditsBadge.js`.
+- Quiz (C5): the quiz overlay is a full-screen dialog with a "← Leave" button.
+- Reader (C8): `repairLatexEscapes` typesets `\bar{x}` (also when the backslash was lost); an empty "Figure" label with no picture is no longer drawn.
+- Progress first (C9): `modules/activities/catchUp.js` — "N quizzes done this week" before late items, one catch-up message instead of a wall of late badges, first late chip red and the rest amber (Practice and student Home).

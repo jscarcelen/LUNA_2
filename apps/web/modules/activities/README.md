@@ -17,3 +17,8 @@ The interactive form of a generated resource: the learner answers inside LUNA an
 - The model says whether the question needs maths; the cause is then derived: close → accuracy, wrong + maths → analytical, wrong + no maths → topic knowledge. A blank has no cause until the rest of the topic is known (`performance/errors.js`).
 - No `OPENAI_API_KEY`, or a failed call: local marking, flagged `graded: "local"`. The learner is never blocked.
 - Model: Luna 3 Pro floor, `LUNA_GRADE_MODEL` to override. Catalogue entry: dashboard request F2.
+
+## Practice list and catch-up
+
+- `catchUp.js`: pure helpers for "lead with progress" (`doneThisWeek`, `weekHeadline`, `summariseCatchUp`, `lateTone`). Used by the Practice list and the student Home; tested in `tests/catch-up.test.ts`.
+- The Practice card is title, chips, one Start button and a "⋯" menu (deadline, Update, Delete with a confirm). The quiz opens as a full-screen dialog with a "← Leave" button.

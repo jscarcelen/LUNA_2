@@ -15,6 +15,8 @@ import { AskLuna } from "../chat/AskLuna";
 import { parseSourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { SourcePeek } from "./SourcePeek";
 import { CoverageLines } from "./CoverageLines";
+import { RowMenu } from "../ui/RowMenu";
+import { displayName } from "../ui/displayName";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -34,7 +36,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * material and knowing what is on screen. `chat` says what this is: { documentId, planId, sourceDocumentIds, subjectId,
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
-export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null, coverage = null }) {
+export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null, coverage = null, menuItems = [] }) {
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -298,11 +300,11 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   const noted = list.filter((entry) => String(entry.note || "").trim()).length;
 
   return (
-    <div className="tw-scope fixed inset-0 z-50 flex flex-col bg-[var(--bg)]">
+    <div className={`tw-scope fixed inset-0 ${playable ? "z-[70]" : "z-50"} flex flex-col bg-[var(--bg)]`} role={playable ? "dialog" : undefined} aria-modal={playable ? "true" : undefined}>
       <style>{MARKDOWN_CSS}{READER_CSS}</style>
       <header className="relative flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink/10 bg-white px-4 py-2.5">
         <div className="min-w-0 flex-1 basis-40">
-          <p className="m-0 truncate text-sm font-bold text-ink">{title || resource?.name || "Document"}</p>
+          <p className="m-0 truncate text-sm font-bold text-ink">{displayName(title || resource?.name) || "Document"}</p>
           <p className="m-0 text-[11px] text-soft-ink">{playable ? "Interactive view — read, highlight and answer" : view === "notes" ? "Select text to highlight it or add a note" : "Original text"}</p>
         </div>
         {!playable && !editing ? (
@@ -319,7 +321,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         {onUpdate && !editing ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={onUpdate}>✦<span className="ml-1">Update…</span></button> : null}
         {onDownloadOriginal && !editing ? <button type="button" className={ghostBtn} title="The file you uploaded, in the format it was uploaded in" onClick={onDownloadOriginal}>⤓<span className="ml-1">Original file</span></button> : null}
         <button type="button" className={ghostBtn} aria-label="Download" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">Download</span></button>
-        <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
+        {menuItems.filter(Boolean).length ? <RowMenu label="More" items={menuItems} /> : null}
+        {playable && onClose ? <button type="button" className={`${ghostBtn} order-first`} onClick={onClose} aria-label="Leave the quiz">← Leave</button> : <button type="button" className={ghostBtn} onClick={onClose}>Close</button>}
         {downloadOpen ? (
           <>
             <button type="button" aria-label="Close download" className="fixed inset-0 z-10 cursor-default bg-black/20" onClick={() => setDownloadOpen(false)} />

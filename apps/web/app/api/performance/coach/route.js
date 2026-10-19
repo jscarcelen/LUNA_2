@@ -7,8 +7,8 @@ export const maxDuration = 120;
 const SCHEMA = {
   type: "object", additionalProperties: false,
   properties: {
-    headline: { type: "string", description: "One sentence naming the single most useful thing to know about this learner right now. Never a compliment, never a scold — a diagnosis." },
-    diagnosis: { type: "string", description: "Two or three sentences explaining what the pattern of mistakes says about what is actually going wrong, in plain words." },
+    headline: { type: "string", description: "One sentence naming the single most useful thing to know right now. Never a compliment, never a scold — a diagnosis. Addressed to the reader ('you' for a student)." },
+    diagnosis: { type: "string", description: "Two or three sentences explaining what the pattern of mistakes says about what is actually going wrong, in plain words, in the reader's voice ('you' for a student)." },
     actions: {
       type: "array",
       description: "Exactly five things to do next, most useful first — a mix of fixing the way answers go wrong, the plan steps that are due soonest, the weakest topics and topics that are slipping. Each one must be doable on Luna this week.",
@@ -16,7 +16,7 @@ const SCHEMA = {
         type: "object", additionalProperties: false,
         properties: {
           title: { type: "string", description: "The action in under 8 words, as an instruction ('Re-read the mitosis notes, then 10 questions')." },
-          why: { type: "string", description: "One sentence: which evidence makes this the right next move." },
+          why: { type: "string", description: "One sentence, different for every action: the evidence of THIS action (its topic's score, its own mistakes, its due date) that makes it the right next move. Same voice as the headline ('you' for a student)." },
           topic: { type: "string", description: "The topic it addresses, exactly as given in the evidence, or an empty string." },
           kind: { type: "string", enum: ["practise", "reteach", "review", "spaced-recall", "exam-technique", "habit", "deadline", "skill-primer"] },
           effort: { type: "string", enum: ["10 minutes", "30 minutes", "an hour", "a few sessions"] },
@@ -69,13 +69,18 @@ Existing versus new actions:
 - Every other action is new (a gap the plan does not cover yet): set planStep to an empty string. Luna offers to create it and add it to the plan, and it has no due date because it is in no plan yet.
 - Decide this from the plan list alone, because an invented step title would be shown as existing when it is not. Put kind "deadline" only on existing steps.
 
+Who is reading (the evidence says "This is read by a student / parent / teacher"):
+- A student reads the headline, the diagnosis, every action title and every "why" as "you", because they are written to that person: "You're mixing up…", "You got 40% of the questions right". Never write "the learner" or "the student" in text a student reads.
+- A parent reads it as "your child"; a teacher reads it as "the student". The "messages" object always has all three voices, whoever is reading.
+- Give every action its own "why", built from that action's own evidence (its topic's score, the kind and number of its mistakes, whether it is slipping, or its due date). Two actions must never share the same sentence, even when they fix the same kind of mistake, because the learner reads them one after another and a repeated reason looks like nothing was read.
+
 Wording:
 - Pair any practice with a reason or a method (what to practise and why), because "do more questions" on its own does not tell the learner what to change.
 - Describe results as a diagnosis; report time spent only as context, because time is not an achievement.
 - Copy topic names exactly as the evidence writes them, so Luna can link each action to the right material.
 - Use plain words and honest, specific encouragement, because jargon and inflated praise hide what to do.
 
-Before answering, check that there are exactly five actions, that each topic string appears in the evidence (or is empty), and that no mistake in a question without maths is called analytical.`;
+Before answering, check that there are exactly five actions, that no two "why" sentences are the same, that the voice matches the reader, that each topic string appears in the evidence (or is empty), and that no mistake in a question without maths is called analytical.`;
 
 /**
  * The coach.
@@ -100,7 +105,7 @@ export async function POST(request) {
 
     const evidence = [
       "<evidence>",
-      `Learner: ${learner}. This is read by a ${role}.`,
+      `Learner: ${learner}. This is read by a ${role}${role === "student" ? ", so write to them as \"you\"" : ""}.`,
       plan ? `Study plan being tracked: “${plan.name}”${plan.deadline ? `, next deadline ${plan.deadline}` : ""}${plan.done !== undefined ? `, ${plan.done} of ${plan.total} steps done` : ""}${plan.late ? `, ${plan.late} steps late` : ""}.` : "No study plan is being tracked.",
       ...(Array.isArray(plan?.upcoming) && plan.upcoming.length ? ["Plan steps still to do, soonest first (title · due · kind):", ...plan.upcoming.slice(0, 8).map((step) => `- ${String(step.title).slice(0, 120)} · ${step.dueDate || "no date"} · ${step.kind || ""}`)] : []),
       ...(body?.skills && (body.skills.weakSkills?.length || body.skills.topics?.length)

@@ -30,6 +30,7 @@ import { canUpdateResource } from "../resources/update";
 import { deadlineOrigin, effectiveDue, examDeadline } from "./deadlines.js";
 import { DeadlineOrigin, OriginBadge } from "./DeadlineBadge";
 import { ExamDatePicker, ExamDatesCard, PlanExamLink } from "./ExamDates";
+import { displayName } from "../ui/displayName";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -155,7 +156,7 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
   }), [shown, allFolderIds]);
 
   const toggle = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  const docLabel = (doc) => (doc && (resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
+  const docLabel = (doc) => (doc && displayName(resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
   const badgeOf = (doc) => (builtByPlan.has(doc.id) ? "built by this plan" : "");
   const label = (id) => docLabel(documents.find((d) => d.id === id) || { id, name: id });
   const pickedUploaded = picked.filter((id) => !generatedIds.has(id));
@@ -738,16 +739,16 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 const names = conceptNames(graphConcepts);
                 if (!names.length) return null;
                 const cov = planCoverage(plan, names);
-                if (cov.complete) return <p className="m-0 mt-1.5 text-xs font-semibold text-[#1f7a3a]">✓ Exhaustive: all {cov.total} concepts of the material are studied and tested in this plan.</p>;
+                if (cov.complete) return <p className="m-0 mt-1.5 text-xs font-semibold text-[#1f7a3a]">✓ Covers all {cov.total} topics of your material: you study each one and get quizzed on it.</p>;
                 const missing = [...new Set([...cov.missingStudy, ...cov.missingTest])];
                 return (
                   <p className="m-0 mt-1.5 text-xs text-[var(--color-warn)]">
-                    Coverage: {cov.testedCount} of {cov.total} concepts are tested. Missing: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` +${missing.length - 6} more` : ""}.{" "}
+                    Covers {cov.testedCount} of {cov.total} topics with a quiz. Missing: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` +${missing.length - 6} more` : ""}.{" "}
                     <button type="button" className="font-semibold text-[var(--accent)] underline" onClick={() => { const fixed = ensureCoverage(plan.items, names); updateOpen((current) => ({ ...current, items: fixed.items })); setStatus(`Added ${fixed.repairs.filter((entry) => entry.as !== "exam").length} concept${fixed.repairs.length === 1 ? "" : "s"} to the plan's steps.`); }}>Add them to the plan</button>
                   </p>
                 );
               })()}
-              {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Agents in scope: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none — studying the material only"}</p> : null}
+              {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Tools used: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none, just your material"}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               {!isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>✎ Update this plan…</button> : null}
@@ -1054,8 +1055,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
-          <p className={`${kicker} flex items-center gap-1.5`}>Student model<InfoDot info={METRIC_INFO.studentModel} label="the student model" /></p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept, ordered by concept map hierarchy. Updated live after each activity.</p>
+          <p className={`${kicker} flex items-center gap-1.5`}>What you know<InfoDot info={METRIC_INFO.studentModel} label="what you know" /></p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">How well you know each topic. It updates after every activity.</p>
           <ConceptMasteryList concepts={graphConcepts} prerequisites={graphPrereqs} masteryByConceptId={masteryByConceptId} />
         </section>
 
@@ -1063,9 +1064,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className={kicker}>Concept map</p>
+              <p className={kicker}>Topic map</p>
               <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">
-                All concepts from your reference material — sized by importance, coloured by mastery.
+                All topics from your material, sized by importance and coloured by how well you know them.
                 Arrows show prerequisites. Drag to rearrange, scroll to zoom, click to highlight a concept{"'"}s chain.
               </p>
             </div>

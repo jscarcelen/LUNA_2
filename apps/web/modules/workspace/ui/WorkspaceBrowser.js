@@ -24,6 +24,7 @@ import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../pl
 import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
 import { requestLeaveShare } from "../../accounts/shareEvents";
+import { displayName, keepStorageSuffix } from "../../ui/displayName";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -163,7 +164,6 @@ export function WorkspaceBrowser({
   const [preview, setPreview] = useState(null);
   // Opened from a source tag in a generated document: where in the original to start reading.
   const [previewScroll, setPreviewScroll] = useState(null);
-  const [formatFor, setFormatFor] = useState("");
   const [uploadPicker, setUploadPicker] = useState(null); // { files }: choosing where an upload goes
   const [uploadProgress, setUploadProgress] = useState(null);
   const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
@@ -393,7 +393,6 @@ export function WorkspaceBrowser({
   }
 
   async function downloadOne(document, format = "") {
-    setFormatFor("");
     const row = rowsByDocumentId.get(document.id);
     // Anything a resource already holds is written here; only the original files need the server.
     if (row && format === "template") { setOpenId(document.id); setStatus("Pick the view and the format in Downloads."); return; }
@@ -411,7 +410,7 @@ export function WorkspaceBrowser({
       return;
     }
     if (!onDownloadDocument) return;
-    setStatus(`Preparing “${document.name}”${format && format !== "original" ? ` as ${format.toUpperCase()}` : ""}…`);
+    setStatus(`Preparing “${displayName(document.name)}”${format && format !== "original" ? ` as ${format.toUpperCase()}` : ""}…`);
     const file = await onDownloadDocument(document, format);
     if (!file) { setStatus("Nothing to download for this item."); return; }
     download(file.fileName || document.name, file.contentBase64, file.mimeType);
@@ -594,41 +593,30 @@ export function WorkspaceBrowser({
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
         {/* On a phone (max-sm: beats the inline-flex inside ghostBtn, which a plain "hidden" does not) Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
         <button type="button" className={`${ghostBtn} max-sm:hidden`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
-        <button type="button" className={`${ghostBtn} max-sm:hidden`} title={isFavourite(document) ? "Remove from favourites" : "Mark as favourite"} aria-label="Favourite" onClick={() => toggleFavourite(document)}>{isFavourite(document) ? "★" : "☆"}</button>
-        <span className="relative max-sm:hidden">
-          <button type="button" className={ghostBtn} title="Download in any format" aria-label="Download" onClick={() => setFormatFor(formatFor === document.id ? "" : document.id)}>⤓</button>
-          {formatFor === document.id ? (
-            <span className="absolute right-0 top-full z-30 mt-1 grid w-44 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]" onMouseLeave={() => setFormatFor("")}>
-              {(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => (
-                <button key={value} type="button" className="rounded-lg px-2 py-1 text-left text-xs text-ink hover:bg-[var(--surface-soft)]" onClick={() => downloadOne(document, value)}>{label}</button>
-              ))}
-            </span>
-          ) : null}
-        </span>
         <RowMenu
           items={[
             { label: row ? "Open" : "Preview", icon: "👁", className: "sm:hidden", onSelect: () => (row ? setOpenId(document.id) : setPreview(document)) },
-            { label: isFavourite(document) ? "Remove from favourites" : "Add to favourites", icon: isFavourite(document) ? "★" : "☆", className: "sm:hidden", onSelect: () => toggleFavourite(document) },
-            ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => ({ label: `Download · ${label}`, icon: "⤓", className: "sm:hidden", onSelect: () => downloadOne(document, value) })),
-            reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${document.name}” approved.`)) } : null,
-            reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${document.name}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
+            { label: isFavourite(document) ? "Remove from favourites" : "Add to favourites", icon: isFavourite(document) ? "★" : "☆", onSelect: () => toggleFavourite(document) },
+            ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => ({ label: `Download · ${label}`, icon: "⤓", onSelect: () => downloadOne(document, value) })),
+            reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${displayName(document.name)}” approved.`)) } : null,
+            reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${displayName(document.name)}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
             !row && onMakeFrom ? { label: "Make a quiz", icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Make a level test", icon: "◎", onSelect: () => onMakeFrom("level-test", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Make a problem set", icon: "∑", onSelect: () => onMakeFrom("math-problem-set", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("concept-flashcards", [document.id]) } : null,
             !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("document-summarizer", [document.id]) } : null,
             row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow({ document, resource: { name: document.name } }) },
-            { label: "Ask Luna", icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: `Help me study “${document.name}”.` }) },
+            { label: "Ask Luna", icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: `Help me study “${displayName(document.name)}”.` }) },
             row && canUpdateResource(row.resource) ? { label: "Update…", icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
             ...(locked ? [] : [
             onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
             row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
             onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? `Move ${selectedIds.length} selected to…` : "Move to…", icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
             { label: "Tags", icon: "🏷", onSelect: () => editTags(document) },
-            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } },
-            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${document.name}”?`)) removeDocuments([document.id]); } }
+            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } },
+            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${displayName(document.name)}”?`)) removeDocuments([document.id]); } }
             ]),
-            sharedWithMe?.permission === "edit" ? { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", document.name); if (name?.trim()) onRenameDocument?.(document.id, name.trim(), document.subjectId); } } : null,
+            sharedWithMe?.permission === "edit" ? { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } } : null,
             sharedWithMe?.root ? { label: "Leave this share", icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
             locked && sharedWithMe ? { label: sharedWithMe.permission === "edit" ? "Shared with you · you can edit" : "Shared with you · view only", icon: "🔒", onSelect: () => setStatus(sharedWithMe.permission === "edit" ? `Shared by ${sharedWithMe.ownerName}. Your edits change the original: everyone who has it sees them. Only the owner can delete, move or share it.` : `Shared by ${sharedWithMe.ownerName} as view only. You can read, highlight, take notes and answer it.`) } : locked ? { label: "Read-only — sent to you", icon: "🔒", onSelect: () => setStatus("Documents sent to you are read-only. You can read, highlight, take notes and answer them.") } : null
           ]}
@@ -797,7 +785,7 @@ export function WorkspaceBrowser({
               <div key={document.id} className="flex items-center gap-2 rounded-xl border border-[rgba(255,149,0,0.25)] bg-[rgba(255,149,0,0.04)] px-3 py-2">
                 <span className="shrink-0 text-sm" aria-hidden>📄</span>
                 <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
-                  <p className="m-0 truncate text-sm font-medium text-ink">{document.name}</p>
+                  <p className="m-0 truncate text-sm font-medium text-ink">{displayName(document.name)}</p>
                   {meta(document)}
                 </div>
                 {actions(document)}
@@ -872,25 +860,19 @@ export function WorkspaceBrowser({
                       ) : null}
                       {/* On a phone there is no hover: the same actions, and "Move to…", live in the ⋯ menu. */}
                       {!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
-                        <span className={folder.isSubject || !onMoveFolder ? "sm:hidden" : ""} onClick={(e) => e.stopPropagation()}>
+                        <span onClick={(e) => e.stopPropagation()}>
                         <RowMenu
                           label={`Actions for ${folder.name}`}
                           items={[
-                            (onCreateFolder || onCreateSubject) ? { label: "New subfolder", icon: "＋", className: "sm:hidden", onSelect: () => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
-                            { label: "Rename", icon: "✎", className: "sm:hidden", onSelect: () => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
-                            onShareDocument ? { label: "Share…", icon: "↗", className: "sm:hidden", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
+                            (onCreateFolder || onCreateSubject) ? { label: "New subfolder", icon: "＋", onSelect: () => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
+                            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
+                            onShareDocument ? { label: "Share…", icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
                             onMoveFolder && !folder.isSubject ? { label: "Move to…", icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
-                            { label: "Delete", icon: "🗑", danger: true, className: "sm:hidden", onSelect: () => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); } }
+                            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); } }
                           ]}
                         />
                         </span>
                       ) : null}
-                      <span className={`shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 ${folder.shared || isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? "hidden" : "hidden sm:flex"}`} onClick={(e) => e.stopPropagation()}>
-                        {onShareDocument ? <button type="button" title="Share…" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name })}>↗</button> : null}
-                        {(onCreateFolder || onCreateSubject) ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
-                        <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button>
-                        <button type="button" title="Delete" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-[rgba(255,59,48,0.1)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); }}>🗑</button>
-                      </span>
                     </div>
 
                     {isOpen && (
@@ -914,11 +896,11 @@ export function WorkspaceBrowser({
                             className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}
                             style={{ paddingLeft: paddingLeft + 20 }}>
                             {onMoveDocuments && !isSharedDocument(document) ? (
-                              <input type="checkbox" aria-label={`Select “${document.name}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
+                              <input type="checkbox" aria-label={`Select “${displayName(document.name)}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
                             ) : null}
                             <span className="shrink-0 text-sm max-sm:hidden" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                             <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
-                              <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
+                              <p className="m-0 truncate text-sm leading-tight text-ink">{displayName(document.name)}</p>
                               {meta(document)}
                             </div>
                             {actions(document)}
@@ -944,7 +926,7 @@ export function WorkspaceBrowser({
                     className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]">
                     <span className="shrink-0 text-sm" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                     <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
-                      <p className="m-0 truncate text-sm leading-tight text-ink">{document.name}</p>
+                      <p className="m-0 truncate text-sm leading-tight text-ink">{displayName(document.name)}</p>
                       {meta(document)}
                     </div>
                     {actions(document)}

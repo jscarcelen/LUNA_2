@@ -23,3 +23,4 @@ The old sample-data dashboards and `insights.js` were removed.
 
 **What Luna suggests** never blocks the first paint: the coach read (`CoachPanel`, a model call) is mounted about 1.5 s after Home is
 shown, or as soon as the person opens the fold, with a skeleton in the meantime.
+Student Home shows "N quizzes done this week" first and, when two or more steps are late, one catch-up message (`activities/catchUp.js`).

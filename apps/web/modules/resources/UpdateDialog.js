@@ -9,6 +9,7 @@ import { isSharedDocument } from "../accounts/shared";
 import { parseResource, resourceStats } from "./resource";
 import { UpdateCompare } from "./UpdateCompare";
 import { UpdateError, agentDocumentsOf, applyUpdate, buildUpdateConfig, chooseAgent, decideMode, describeResource, hasMaterial, kindOfResource, answersForResource, resolveAgent, resolveMaterial, suggestionsFor, updateResource } from "./update";
+import { displayName } from "../ui/displayName";
 
 const fieldClass = "w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink placeholder:text-soft-ink/70 outline-none transition focus:border-[var(--accent)] focus:ring-4 focus:ring-[var(--accent-soft)]";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-50";
@@ -162,7 +163,7 @@ export function UpdateDialog({ document = null, resource, workspace = null, fall
         {phase === "form" ? (
           <>
             <p className={kicker}>Update</p>
-            <h4 className="m-0 mt-1 text-lg font-bold text-ink">{resource.name}</h4>
+            <h4 className="m-0 mt-1 text-lg font-bold text-ink">{displayName(resource.name)}</h4>
             <p className="m-0 mt-0.5 text-xs text-soft-ink">{describeResource(resource, document)}</p>
             <p className="m-0 mt-2 text-xs text-soft-ink">Say what to change. Luna runs the same agent again, with the same choices and material, and shows you what is different before anything is saved.</p>
 
@@ -213,7 +214,7 @@ export function UpdateDialog({ document = null, resource, workspace = null, fall
         {phase === "result" && outcome ? (
           <>
             <p className={kicker}>The new version</p>
-            <h4 className="m-0 mt-1 text-lg font-bold text-ink">{resource.name}</h4>
+            <h4 className="m-0 mt-1 text-lg font-bold text-ink">{displayName(resource.name)}</h4>
             {outcome.understood ? <p className="m-0 mt-1.5 rounded-xl bg-[var(--surface-soft)] px-3 py-2 text-xs text-ink"><strong>Luna understood:</strong> {outcome.understood}</p> : null}
             {outcome.agent.fallback ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Written with the built-in {outcome.agent.label}, because the original agent is gone.</p> : null}
             <div className="mt-3"><UpdateCompare diff={outcome.diff} /></div>

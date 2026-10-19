@@ -174,6 +174,8 @@ function BlockRenderer({ block = {} }) {
   }
 
   if (type === "figure") {
+    // No picture and nothing to say about it: an empty "Figure" label is noise, so nothing is drawn.
+    if (!String(block?.caption || "").trim() && !String(block?.alt_text || "").trim()) return "";
     const children = [createNode("figcaption", {}, [String(block?.caption || "Figure")])];
     if (block?.alt_text) {
       children.push(createNode("p", { class: "cdm-alt-text" }, [String(block.alt_text)]));

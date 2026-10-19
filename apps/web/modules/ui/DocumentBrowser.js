@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { displayName } from "./displayName";
 
 /**
  * The documents of the selected folder, as a grid of cards or an indented list.
@@ -141,7 +142,7 @@ export function DocumentBrowser({
               <article key={document.id} {...common} className={`cursor-pointer rounded-2xl border p-3 transition ${isSelected ? "border-[var(--accent)] bg-[var(--accent-soft)]/40" : "border-ink/10 bg-white hover:border-ink/20"}`}>
                 {renderCard ? renderCard(document, isSelected) : (
                   <>
-                    <p className="m-0 truncate text-sm font-semibold text-ink">{document.name}</p>
+                    <p className="m-0 truncate text-sm font-semibold text-ink">{displayName(document.name)}</p>
                     {renderMeta ? <div className="mt-1">{renderMeta(document)}</div> : <p className="m-0 mt-1 line-clamp-2 text-xs text-soft-ink">{document.preview || ""}</p>}
                     {renderActions ? <div className="mt-2">{renderActions(document)}</div> : null}
                   </>
@@ -153,7 +154,7 @@ export function DocumentBrowser({
             <div key={document.id} {...common} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${isSelected ? "border-[var(--accent)] bg-[var(--accent-soft)]/40" : "border-transparent hover:bg-[var(--surface-soft)]"}`}>
               <span aria-hidden className="text-sm">{document.sourceType === "generated" ? "✨" : "📄"}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-ink">{document.name}</span>
+                <span className="block truncate text-sm font-medium text-ink">{displayName(document.name)}</span>
                 {renderMeta ? renderMeta(document) : <span className="block truncate text-[11px] text-soft-ink">{document.preview || ""}</span>}
               </span>
               {renderActions ? renderActions(document) : (onOpen ? <button type="button" className="shrink-0 rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink" onClick={(event) => { event.stopPropagation(); onOpen(document); }}>Open</button> : null)}

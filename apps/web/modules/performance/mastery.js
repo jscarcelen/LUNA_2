@@ -224,6 +224,40 @@ export function errorRecovery(evidence = []) {
   return { value: measurable ? improved / measurable : null, topics: measurable, improved, withErrors };
 }
 
+/** How each kind of mistake sounds when it is said to the learner. */
+const MISTAKE_IN_PLAIN_WORDS = {
+  knowledge: "the idea itself got mixed up",
+  analytical: "the working went wrong along the way",
+  accuracy: "you were close but slipped on a detail"
+};
+
+/**
+ * Why THIS topic is on the list, in second person, from this topic's own numbers (score, how many questions, its own
+ * mistakes and whether it is slipping). Two topics with the same kind of mistake still get different sentences because
+ * the figures differ; a topic with too little evidence says so instead of inventing a reason.
+ */
+export function whyThisTopic(topic, errors = []) {
+  const questions = Number(topic?.questions) || 0;
+  const score = Math.round((Number(topic?.accuracy) || 0) * 100);
+  const wrong = errors.reduce((sum, entry) => sum + (Number(entry.count) || 0), 0);
+  const main = errors[0] || null;
+  if (!questions || (topic.coverage !== undefined && topic.coverage < 0.4 && !main)) {
+    return `You have only answered ${questions} question${questions === 1 ? "" : "s"} here, so Luna cannot tell yet how well you know it.`;
+  }
+  const parts = [`You got ${score}% of ${questions} question${questions === 1 ? "" : "s"} right`];
+  const slipping = Number(topic.trend) <= -0.05;
+  const recent = topic.recentAccuracy === undefined ? null : Math.round(topic.recentAccuracy * 100);
+  if (slipping && recent !== null) parts[0] += `, and your latest answers are at ${recent}%`;
+  let text = `${parts[0]}.`;
+  if (main && wrong) {
+    const phrase = MISTAKE_IN_PLAIN_WORDS[main.id] || main.label.toLowerCase();
+    text += main.count === wrong ? ` Your ${wrong === 1 ? "mistake" : `${wrong} mistakes`} here: ${phrase}.` : ` ${main.count} of your ${wrong} mistakes here: ${phrase}.`;
+  } else if (!main) {
+    text += " Your recent answers are still going wrong here.";
+  }
+  return text;
+}
+
 /**
  * What to do next: the weakest topics with enough evidence to be believed, each with the reason it
  * is weak and a concrete amount of practice.
@@ -238,6 +272,7 @@ export function nextActions(topics = [], errorsByTopic = new Map(), limit = 3) {
       return {
         topic: topic.topic,
         mastery: topic.mastery,
+        why: whyThisTopic(topic, errors),
         reason: main ? main.label : topic.coverage < 0.4 ? "Barely practised" : "Recent answers still wrong",
         reasonId: main?.id || (topic.coverage < 0.4 ? "coverage" : "accuracy"),
         advice: main?.advice || (topic.coverage < 0.4 ? "Do a short set to get a real reading of this topic." : "Practise it again, then review the mistakes."),

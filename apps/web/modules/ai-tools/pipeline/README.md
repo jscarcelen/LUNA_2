@@ -49,6 +49,19 @@ The important design rule is: the pipeline stages stay stable, while each tool c
 - `retrieval.js`: query scoring and top chunk selection
 - `provider-local.js`: local deterministic provider that outputs quiz JSON
 - `quizGenerator.js`: orchestration entry point for the quiz pipeline
+- `readingParts.js`: the Reading Splitter (agent spec `pipeline: "split"`). The CODE cuts the WHOLE documents into reading parts
+  from their structure (headings → sections → units that never break a table, list, formula or code block), merges or splits them
+  to the minutes per part (≈ 200 words a minute) and copies every passage exactly; the model only writes each part's title,
+  "Why read this", difficulty and "Check yourself" questions, 6 parts per call, 4 calls at a time (`lightSystemPrompt`). Every
+  heading and word of the documents is in exactly one part, in order, and no part is empty (`readingCoverage`, tested in
+  `tests/ai-tools/reading-parts.test.ts`). A plan's reading step passes `readingFocus` (its topics) and gets only those sections.
+  Before this the splitter was one block-agent call over the best-ranked ≈ 48k characters with ≈ 6k output tokens, which is why
+  long documents came back as two or three parts with empty bodies.
+- `itemCount.js`: count-based agents (quiz, flashcards, problem sets). `requestedCount` reads the count asked for, `outputTokenBudget`
+  sizes the call (6k–16k tokens), and a short set is topped up by up to 3 follow-up calls listing what already exists
+  (`topUpInstruction`, `freshItems` drops repeats); a follow-up that brings nothing new means the material has no more distinct ideas,
+  and the shorter set is accepted (`countOutcome.exhausted`). `config.topUp = { items, root, want }` ("Make more" in the runner) skips
+  the first call and asks only for the missing items. `splitChecks` separates a count shortfall (information) from real problems.
 
 ## JSON-first contract
 

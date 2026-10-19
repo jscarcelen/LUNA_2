@@ -29,7 +29,9 @@ import { LOOSE_FOLDER } from "../../../plans/folders";
 import { WorkspaceDocumentPicker } from "./WorkspaceDocumentPicker";
 import { MASTER_TAG } from "../../pipeline/masterDocument";
 import { SaveAndExportDialog, SaveProgressView } from "./SaveExportViews";
-import { useLocale } from "../../../../lib/i18n/LocaleProvider.js";
+import { CountNotice } from "./CountNotice";
+import { shortfallOf } from "../../pipeline/itemCount";
+import { useLocale, useT } from "../../../../lib/i18n/LocaleProvider.js";
 import { LANGUAGE_NAME } from "../../../../lib/i18n/index.js";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -273,6 +275,7 @@ function legacyToFieldDefs(fields = []) {
  */
 export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent = null }) {
   const { locale: uiLocale } = useLocale();
+  const t = useT();
   const workspaces = toolContext?.workspaces || [];
   const workspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
   const subjectId = toolContext?.selectedSubjectId || "";
@@ -324,6 +327,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
+  /** "Make more" is asking for the items missing from a short set. */
+  const [toppingUp, setToppingUp] = useState(false);
   /** A node of the workspace tree ("s:<subject>" or "f:<subject>:<folder>"); empty means the open subject. */
   const [saveFolderId, setSaveFolderId] = useState("");
   const filingTarget = (node) => {
@@ -607,6 +612,26 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       if (note && !(data?.items || []).length) setStatusMessage(note);
     } catch {
       // The hook exposes the error state to the preview pane.
+    }
+  }
+
+  /** "Make more": asks only for the items missing from a short set, listing the ones made so none is repeated. */
+  async function handleMakeMore() {
+    const short = shortfallOf(output, runConfig);
+    if (!runConfig || !output || !short || generation.isGenerating) return;
+    setStatusMessage("");
+    setToppingUp(true);
+    try {
+      const { items: _items, ...root } = output.data || {};
+      const before = Array.isArray(output.items) ? output.items.length : 0;
+      const data = await generation.generate({ ...runConfig, topUp: { items: output.items || [], root, want: short.requested } });
+      chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
+      setOutput(data);
+      if ((data?.items || []).length <= before) setStatusMessage(t("misc.run.noMore"));
+    } catch {
+      // The hook exposes the error state to the preview pane; the current result stays.
+    } finally {
+      setToppingUp(false);
     }
   }
 
@@ -1205,14 +1230,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}
-      {Array.isArray(output?.checks) && output.checks.some((check) => !check.ok) ? (
-        <div className="rounded-xl border border-[rgba(215,0,21,0.25)] bg-[rgba(215,0,21,0.06)] px-3 py-2">
-          <p className="m-0 text-xs font-semibold text-[var(--color-danger)]">Some checks did not pass — generate again or adjust your choices.</p>
-          <ul className="m-0 mt-1 grid list-none gap-1 p-0 sm:grid-cols-2">
-            {output.checks.filter((check) => !check.ok).map((check) => <li key={check.rule} className="text-xs text-[var(--color-danger)]">✗ {check.message}</li>)}
-          </ul>
-        </div>
-      ) : null}
+      {output && !outputIsBlocks ? <CountNotice shortfall={shortfallOf(output, runConfig)} checks={output.checks} agentName={agentConfig?.name || ""} busy={toppingUp || generation.isGenerating} onMakeMore={handleMakeMore} /> : null}
     </section>
   );
 }

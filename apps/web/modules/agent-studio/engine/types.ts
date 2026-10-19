@@ -89,9 +89,10 @@ export interface AgentSpec {
   };
   /**
    * Built-in agents whose run is not one model call. "consolidate" = the Summary Notes Consolidator's
-   * map, organise, merge and check pipeline (`ai-tools/pipeline/consolidator.js`).
+   * map, organise, merge and check pipeline (`ai-tools/pipeline/consolidator.js`); "split" = the Reading
+   * Splitter, whose parts are cut by code from the whole documents (`ai-tools/pipeline/readingParts.js`).
    */
-  pipeline?: "consolidate";
+  pipeline?: "consolidate" | "split";
   createdAt: string;
   updatedAt: string;
 }

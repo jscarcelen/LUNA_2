@@ -5,6 +5,8 @@ import { validateOutput } from "../../agent-studio/engine/validate";
 import { buildJsonSchema as buildBlockJsonSchema, conformBlocks, BLOCKS } from "../blocks/blockRegistry.js";
 import { consolidationOptions, estimateConsolidationTokens, prepareSources, runConsolidation } from "./consolidator.js";
 import { isMasterDocument } from "./masterDocument.js";
+import { buildReadingParts, estimateReadingSplitTokens, runReadingSplit, splitOptions } from "./readingParts.js";
+import { MAX_TOP_UP_ROUNDS, countOutcome, freshItems, outputTokenBudget, requestedCount, topUpInstruction, withCount } from "./itemCount.js";
 import { GROUNDING_INSTRUCTION, QUOTE_FIELD, SUPPORT_FIELD, groundBlocks, groundItems } from "./grounding.js";
 import { splitSentences } from "../../../lib/regexCompat.js";
 
@@ -281,6 +283,7 @@ async function prepareMaterial(config, emit = () => {}) {
  */
 export async function estimateAgentRun(config) {
   if (isConsolidation(config)) return estimateConsolidation(config);
+  if (isReadingSplit(config)) return estimateReadingSplit(config);
   const fields = Array.isArray(config?.template?.fields) ? config.template.fields : [];
   const material = await prepareMaterial(config);
   const schema = injectSourceFieldIntoSchema(config.outputJsonSchema || buildJsonSchemaFromFields(fields));
@@ -754,10 +757,10 @@ function injectSourceFieldIntoSchema(schema) {
 /** The consolidator is an agent spec flagged with `pipeline: "consolidate"`; it has its own multi-pass pipeline. */
 export const isConsolidation = (config) => config?.spec?.pipeline === "consolidate";
 
-/** The documents the consolidator reads: every picked document, from any subject, in the order picked. */
-async function loadConsolidationDocuments(config) {
+/** The documents the consolidator (and the Reading Splitter) reads: every picked document, from any subject, in the order picked. */
+async function loadConsolidationDocuments(config, emptyMessage = "Choose the documents to consolidate.") {
   const ids = [...new Set((config.scope?.documentIds || []).filter(Boolean))];
-  if (!ids.length) throw new Error("Choose the documents to consolidate.");
+  if (!ids.length) throw new Error(emptyMessage);
   const workspaces = await loadWorkspaceTreeForAi();
   const found = collectScopedDocuments(workspaces, { workspaceId: config.scope?.workspaceId, documentIds: ids });
   const order = new Map(ids.map((id, index) => [id, index]));
@@ -845,6 +848,76 @@ async function runConsolidationAgent(config, emit) {
   return payload;
 }
 
+/* ---------------------------------------------------------------- Reading Splitter */
+
+/**
+ * The Reading Splitter is an agent spec flagged `pipeline: "split"`: the parts are cut by code from the
+ * whole documents (readingParts.js) and the model only titles them and writes the "Check yourself"
+ * questions, so nothing of the material is ranked out, truncated or left to the model to copy.
+ */
+export const isReadingSplit = (config) => config?.spec?.pipeline === "split";
+
+/** The documents to split: the picked ones, or the pasted text as one document. */
+async function loadSplitDocuments(config) {
+  const pasted = String(config.contextPrompt || "").trim();
+  if (!(config.scope?.documentIds || []).filter(Boolean).length && pasted) return [{ id: "", name: "Pasted text", content: pasted }];
+  return loadConsolidationDocuments(config, "Choose the documents to split.");
+}
+
+async function estimateReadingSplit(config) {
+  const documents = await loadSplitDocuments(config).catch(() => []);
+  const options = splitOptions(config);
+  const { parts } = buildReadingParts(documents, options);
+  const model = resolveAgentModel(config.model);
+  const { inputTokens, outputTokens } = estimateReadingSplitTokens(parts);
+  const price = MODEL_PRICING[model] || MODEL_PRICING[MIN_AGENT_MODEL];
+  return {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUsd: Number(((inputTokens * price.input + outputTokens * price.output) / 1e6).toFixed(5)),
+    documentCount: documents.length,
+    chunkCount: parts.length,
+    // Every passage of every document is split: nothing is ranked or left out.
+    truncated: false,
+    llmConfigured: isAgentLlmConfigured()
+  };
+}
+
+async function runReadingSplitAgent(config, emit) {
+  emit({ step: "scope", status: "start" });
+  const documents = await loadSplitDocuments(config);
+  if (!documents.length) throw new Error("None of the chosen documents could be read (they must be approved, uploaded documents).");
+  emit({ step: "scope", status: "end", documentCount: documents.length });
+  const llm = isAgentLlmConfigured();
+  const model = llm ? resolveAgentModel(config.model) : "local-heuristic-v1";
+  emit({ step: "retrieve", status: "end", chunkCount: 0, note: "The whole of every document is split: nothing is ranked or left out" });
+  emit({ step: "generate", status: "start", model });
+  const result = await runReadingSplit({
+    documents,
+    options: splitOptions(config),
+    deps: { emit, callModel: llm ? (request) => callConsolidationModel(config, request) : null }
+  });
+  emit({ step: "generate", status: "end", model, blockCount: result.blocks.length });
+  const payload = {
+    blocks: result.blocks,
+    items: result.blocks,
+    data: { title: result.title, coverage: result.coverage, parts: result.parts },
+    model,
+    usage: result.usage.total_tokens ? result.usage : null,
+    fallbackReason: llm ? "" : "No OpenAI key: the parts follow the headings and are titled by them; no questions were written.",
+    checks: [],
+    referenceDocumentCount: documents.length,
+    referenceChunkCount: result.parts.length,
+    sources: [],
+    isBlockOutput: true,
+    readingSplit: { coverage: result.coverage, stats: result.stats }
+  };
+  emit({ step: "done", status: "end", ...payload });
+  return payload;
+}
+
 /**
  * Runs one agent generation. `onProgress` (optional) receives step events so callers can
  * stream a live "building" state to the UI:
@@ -858,6 +931,8 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
 
   // ── Summary Notes Consolidator: its own multi-pass pipeline (map → organise → merge → check) ──
   if (isConsolidation(config)) return runConsolidationAgent(config, emit);
+  // ── Reading Splitter: parts cut by code from the whole documents, the model only titles them ──
+  if (isReadingSplit(config)) return runReadingSplitAgent(config, emit);
 
   // ── Block-based generation path ──────────────────────────────────────
   // When the agent spec uses the new block registry (output.selectedBlocks), we bypass
@@ -936,20 +1011,29 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   let result = null;
   let fallbackReason = "";
 
+  // Count-based agents: the number asked for, an output budget that fits it, and (for "Make more") the items already made.
+  const existingItems = Array.isArray(config.topUp?.items) ? config.topUp.items.filter((item) => item && typeof item === "object") : null;
+  const requested = existingItems ? Math.max(0, Math.round(Number(config.topUp.want) || 0)) || requestedCount(config) : requestedCount(config);
+  const maxTokens = outputTokenBudget(estimateOutputTokens(config));
+
   const model = resolveAgentModel(config.model);
   emit({ step: "generate", status: "start", model: isAgentLlmConfigured() ? model : "local-heuristic-v1" });
-  if (isAgentLlmConfigured()) {
+  if (existingItems && isAgentLlmConfigured()) {
+    // "Make more": no first call; the follow-up calls below write only the missing items.
+    result = { items: [], root: config.topUp.root && typeof config.topUp.root === "object" ? { ...config.topUp.root } : {}, model, usage: null };
+  } else if (isAgentLlmConfigured()) {
     try {
       result = await callOpenAiAgent(config, rankedChunks, schema, {
         styleChunks,
+        maxTokens,
         onToken: (delta, content) => emit({ step: "generate", status: "token", delta, chars: content.length })
       });
     } catch (error) {
       // A single retry at low temperature, non-streaming, before giving up on the model: small models
-      // occasionally loop or truncate structured output.
+      // occasionally loop or truncate structured output. Same output budget: a smaller one cut long sets short.
       emit({ step: "generate", status: "retry", reason: String(error.message || error) });
       try {
-        result = await callOpenAiAgent({ ...config, creativity: "low" }, rankedChunks, schema, { styleChunks, maxTokens: 3000 });
+        result = await callOpenAiAgent({ ...config, creativity: "low" }, rankedChunks, schema, { styleChunks, maxTokens });
       } catch (retryError) {
         fallbackReason = String(retryError.message || retryError);
       }
@@ -957,7 +1041,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   }
 
   if (!result) {
-    result = generateAgentOutputLocally(rankedChunks, fields, config);
+    result = existingItems ? { items: [], root: config.topUp.root || {}, model: "local-heuristic-v1" } : generateAgentOutputLocally(rankedChunks, fields, config);
   }
   emit({ step: "generate", status: "end", model: result.model, itemCount: result.items.length, fallbackReason });
 
@@ -980,7 +1064,7 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   // buildChunksContext uses the same indexing, so S1 = rankedChunks[0], S2 = rankedChunks[1], etc.
   const chunkContextForResolution = buildChunksContext(rankedChunks);
   const sourceIdMap = new Map(chunkContextForResolution.map((entry) => [entry.sourceId, entry]));
-  result.items = result.items.map((item) => {
+  const resolveSources = (items) => items.map((item) => {
     const rawSourceId = String(item._source || "").trim();
     const resolved = rawSourceId ? sourceIdMap.get(rawSourceId) : null;
     return {
@@ -994,12 +1078,22 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   // Grounding checks (grounding.js): the quote of each item must be in the passage it cites, a second pass confirms support,
   // and items that fail are dropped when the run is strict and enough remain. Not for the offline fallback, which quotes nothing.
   let grounding = null;
-  if (result.model !== "local-heuristic-v1" && rankedChunks.length && result.items.length && config.grounding !== false) {
+  const addGrounding = (summary) => {
+    if (!summary) return;
+    if (!grounding) { grounding = { ...summary }; return; }
+    for (const key of ["total", "verified", "inferred", "unverified", "dropped"]) grounding[key] = (Number(grounding[key]) || 0) + (Number(summary[key]) || 0);
+  };
+  const checkItems = async (items) => {
+    const withSources = resolveSources(items);
+    if (result.model === "local-heuristic-v1" || !rankedChunks.length || !withSources.length || config.grounding === false) return withSources;
+    const checked = await groundItems(withSources, chunkContextForResolution, { strict: config.groundingStrict !== false });
+    addGrounding(checked.summary);
+    return checked.items;
+  };
+  if (result.items.length) {
     emit({ step: "ground", status: "start" });
-    const checked = await groundItems(result.items, chunkContextForResolution, { strict: config.groundingStrict !== false });
-    result.items = checked.items;
-    grounding = checked.summary;
-    emit({ step: "ground", status: "end", ...grounding });
+    result.items = await checkItems(result.items);
+    if (grounding) emit({ step: "ground", status: "end", ...grounding });
   }
 
   // Enforce a hard cap on item count.
@@ -1008,10 +1102,44 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
   // flashcards — prevents a 100-card set from being produced for a large document.
   const autoMax = looksLikeFlashcards(config) ? FLASHCARD_MAX_ITEMS : Infinity;
   const effectiveMax = Math.min(Number(config.maxItems) > 0 ? Number(config.maxItems) : Infinity, autoMax);
-  if (Number.isFinite(effectiveMax) && result.items.length > effectiveMax) {
-    emit({ step: "generate", status: "capped", originalCount: result.items.length, cappedTo: effectiveMax });
-    result.items = result.items.slice(0, effectiveMax);
+
+  // Top up a short set (itemCount.js): ask for the missing items, listing what exists so none is repeated, and stop
+  // when a call brings nothing new — then the material has no more distinct ideas and fewer items is the right answer.
+  let all = existingItems ? [...existingItems, ...freshItems(existingItems, result.items)] : result.items;
+  const target = requested ? Math.min(requested, effectiveMax) : 0;
+  let rounds = 0;
+  let exhausted = false;
+  let usage = result.usage ? { ...result.usage } : null;
+  if (target && result.model !== "local-heuristic-v1" && isAgentLlmConfigured()) {
+    while (all.length < target && rounds < MAX_TOP_UP_ROUNDS) {
+      rounds += 1;
+      const missing = target - all.length;
+      emit({ step: "generate", status: "progress", phase: "top-up", done: all.length, total: target, label: `Writing ${missing} more (${all.length} of ${target} so far)` });
+      let extra = null;
+      try {
+        extra = await callOpenAiAgent({ ...config, instructions: `${config.instructions || ""}${topUpInstruction(missing, all)}`, questionAnswers: withCount(config, missing) }, rankedChunks, schema, { styleChunks, maxTokens: outputTokenBudget(estimateOutputTokens({ ...config, questionAnswers: withCount(config, missing) })) });
+      } catch {
+        break; // the set stands as it is; the runner can ask for more
+      }
+      if (extra?.usage) {
+        usage = usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+        for (const key of ["prompt_tokens", "completion_tokens", "total_tokens"]) usage[key] = (Number(usage[key]) || 0) + (Number(extra.usage[key]) || 0);
+      }
+      const fresh = freshItems(all, await checkItems(Array.isArray(extra?.items) ? extra.items : []));
+      if (!fresh.length) { exhausted = true; break; }
+      all = [...all, ...fresh.slice(0, missing)];
+    }
+    if (grounding) emit({ step: "ground", status: "end", ...grounding });
   }
+  result.items = all;
+  if (usage) result.usage = usage;
+  // Never more than asked: a set of 20 is 20.
+  const ceiling = Math.min(effectiveMax, requested || Infinity);
+  if (Number.isFinite(ceiling) && result.items.length > ceiling) {
+    emit({ step: "generate", status: "capped", originalCount: result.items.length, cappedTo: ceiling });
+    result.items = result.items.slice(0, ceiling);
+  }
+  const counted = countOutcome({ requested: target, made: result.items.length, exhausted, rounds });
 
   // Agent Studio specs carry validation rules — structural checks the creator can rely on.
   let checks = [];
@@ -1032,6 +1160,8 @@ export async function runAgentGeneration(config, { onProgress } = {}) {
     referenceDocumentCount: scopedDocuments.length,
     referenceChunkCount: rankedChunks.length,
     grounding,
+    // Asked for vs made, and whether the material ran out (shown as a calm note with "Make more", not as an error).
+    countOutcome: counted,
     // The passages the answer came from: used to link each question back to its source material.
     sources: sourcesFromChunks(rankedChunks, scopedDocuments)
   };

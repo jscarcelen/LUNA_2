@@ -1818,7 +1818,7 @@ export function TemplateBuilderPage({ toolContext }) {
           </div>
           <div className="tplb-preview-surface">
             {previewFormat === "html" ? (
-              previewHtml ? <iframe className="tplb-preview-frame" title="HTML template preview" srcDoc={previewHtml} /> : <p className="hint">Generate an HTML preview to inspect the rendered layout.</p>
+              previewHtml ? <iframe className="tplb-preview-frame" title="HTML template preview" sandbox="allow-scripts" srcDoc={previewHtml} /> : <p className="hint">Generate an HTML preview to inspect the rendered layout.</p>
             ) : (
               previewPdfUrl ? <iframe className="tplb-preview-frame" title="PDF template preview" src={previewPdfUrl} /> : <p className="hint">Generate a PDF preview to inspect the rendered document.</p>
             )}

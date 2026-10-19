@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ Before answering, check that core keeps the original intent, adds no new input o
  * field descriptions completed. The creator never sees prompts; they see better results.
  */
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const spec = body?.spec;

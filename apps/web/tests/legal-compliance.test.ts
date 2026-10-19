@@ -64,6 +64,7 @@ describe("data export and deletion", () => {
     expect(OWNER_TABLES[OWNER_TABLES.length - 1]).toBe("workspaces");
     expect(OWNER_TABLES).toContain("attempts");
     expect(OWNER_TABLES).toContain("student_concept_state");
+    expect(OWNER_TABLES).toContain("activity_drafts"); // unfinished quiz answers go with the account too
   });
 });
 

@@ -16,7 +16,7 @@ export const INACTIVE_MONTHS = 24;
 export const INACTIVITY_NOTICE_DAYS = 30;
 export const FEEDBACK_SCREENSHOT_DAYS = 90;
 /** Deleted explicitly, in this order (children before parents), by `owner_user_id`. Missing tables are skipped. */
-export const OWNER_TABLES = ["mark_reviews", "attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
+export const OWNER_TABLES = ["activity_drafts", "mark_reviews", "attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
 const HEAVY_KEY = /base64|render_?html|screenshot/i;
 
 /** A copy of a value without the heavy original-file payloads (they are the user's own uploads: download them from the app). */
@@ -44,13 +44,16 @@ export async function exportAccountData(accountId, now = new Date()) {
   const account = await findAccountById(accountId);
   if (!account) return null;
   const client = createSupabaseAdminClient();
-  const [workspaces, attempts, mastery, plans, links, feedback] = await Promise.all([
+  const [workspaces, attempts, mastery, plans, links, linksToYou, feedback, drafts, reviews] = await Promise.all([
     listWorkspaceTree(accountId).catch(() => []),
     rowsOf(client, "attempts", "owner_user_id", accountId),
     rowsOf(client, "student_concept_state", "owner_user_id", accountId),
     rowsOf(client, "study_plans", "owner_user_id", accountId),
     rowsOf(client, "account_links", "requester_id", accountId),
-    rowsOf(client, "feedback_items", "owner_user_id", accountId)
+    rowsOf(client, "account_links", "target_id", accountId),
+    rowsOf(client, "feedback_items", "owner_user_id", accountId),
+    rowsOf(client, "activity_drafts", "owner_user_id", accountId),
+    rowsOf(client, "mark_reviews", "owner_user_id", accountId)
   ]);
   const attemptIds = attempts.map((row) => row.id).filter(Boolean);
   let attemptResults = [];
@@ -70,6 +73,9 @@ export async function exportAccountData(accountId, now = new Date()) {
     masteryPerConcept: mastery,
     studyPlans: plans,
     connectionsYouRequested: links,
+    connectionsRequestedOfYou: linksToYou,
+    unfinishedQuizAnswers: drafts,
+    markReviews: reviews,
     feedbackYouSent: feedback
   });
 }

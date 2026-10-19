@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { scrubPii } from "../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { planUpdateSchema } from "../../../../modules/plans/updatePlan.js";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ const list = (items, render) => (items.length ? items.map(render).join("\n") : "
  * by `applyPlanUpdate` on the client, whatever this answers. Luna 3 Pro at least.
  */
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const instruction = scrubPii(String(body?.instruction || "").trim());

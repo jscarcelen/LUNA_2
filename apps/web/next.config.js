@@ -1,6 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Basic hardening for every page and API answer: no framing by other sites, no MIME sniffing, no full URLs (with
+  // ids or tokens) sent to other sites, and no camera/microphone/location for embedded content.
+  async headers() {
+    return [{
+      source: "/:path*",
+      headers: [
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "Permissions-Policy", value: "camera=(self), microphone=(), geolocation=()" }
+      ]
+    }];
+  },
   // Enable instrumentation.js (server-startup polyfills for pdfjs-dist etc.)
   experimental: {
     instrumentationHook: true,

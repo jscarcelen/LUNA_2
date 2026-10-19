@@ -34,7 +34,8 @@ import {
 } from "../../../lib/workspacesRepository";
 import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } from "../../../lib/supabaseClient";
 import { accountIdForFresh, hasRevokedSession, ownerUserIdForFresh } from "../../../lib/session.js";
-import { guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
+import { guardDemoAction, guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
+import { denyAnonymousAi } from "../../../lib/aiAccess.js";
 import { loadGrantContext, purgeGrantsFor } from "../../../lib/grantsRepository.js";
 import { loadExamDatesMap, syncPlanLinks } from "../../../lib/examDatesRepository.js";
 import { listTreeWithShared } from "../../../lib/sharedTree.js";
@@ -101,6 +102,15 @@ export async function POST(request) {
       if (!verdict.ok) return NextResponse.json({ error: verdict.error }, { status: verdict.status });
       payload = verdict.payload;
       if (verdict.shared?.ownerId) dataOwnerId = verdict.shared.ownerId;
+    } else {
+      // Reading an upload uses the AI providers (PDF vision, formula OCR, concepts): an account is needed for that in production.
+      if (action === "uploadDocuments" || action === "reprocessDocument") {
+        const blocked = await denyAnonymousAi(request);
+        if (blocked) return blocked;
+      }
+      // The public demo has no grants, but every id it names must still be the demo owner's own.
+      const verdict = await guardDemoAction({ client: createSupabaseAdminClient(), payload, ownerUserId });
+      if (!verdict.ok) return NextResponse.json({ error: verdict.error }, { status: verdict.status });
     }
 
     if (action === "createWorkspace") {

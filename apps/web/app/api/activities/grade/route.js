@@ -17,12 +17,15 @@
  */
 import { NextResponse } from "next/server";
 import { MAX_ITEMS, gradeAnswers } from "../../../../modules/activities/gradeBatch.js";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   let body = null;
   try {
     body = await request.json();

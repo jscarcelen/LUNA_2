@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { runQuizGeneration } from "../../../../modules/ai-tools/pipeline/quizGenerator.js";
 import { renderQuizExports } from "../../../../modules/ai-tools/render/exporters.js";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ function normalizeConfig(input = {}) {
 }
 
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const config = normalizeConfig(body?.config || {});

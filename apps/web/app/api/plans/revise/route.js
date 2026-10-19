@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +56,8 @@ const list = (items, render) => (items.length ? items.map(render).join("\n") : "
  * is left, keeping the learner's pace and leaving the last fifth for review.
  */
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const today = String(body?.today || new Date().toISOString().slice(0, 10));

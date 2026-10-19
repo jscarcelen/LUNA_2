@@ -1,6 +1,7 @@
 import { runAgentGeneration } from "../../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { normalizeConfig } from "../../../../../modules/ai-tools/pipeline/agentConfig.js";
 import { ownerUserIdForFresh, runAsOwner } from "../../../../../lib/session.js";
+import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
 
 // Streams generation progress as newline-delimited JSON. Node runtime is required (Supabase +
 // chunking); streaming keeps the connection alive on Vercel so long generations don't hit the
@@ -11,6 +12,8 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   const body = await request.json().catch(() => ({}));
   const config = normalizeConfig(body?.config || {});
   const encoder = new TextEncoder();

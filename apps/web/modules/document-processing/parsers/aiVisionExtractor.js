@@ -14,7 +14,7 @@ import JSZip from "jszip";
 import { normalizeChart } from "../renderers/chartSvg.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFileSync, existsSync, unlinkSync } from "fs";
+import { writeFileSync, existsSync, unlinkSync, renameSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 // Note: zlib import removed — extraction handled by pdfjs in child process
@@ -312,12 +312,13 @@ function buildCdmFromAiResponse(aiJson, { sourceType, fileName } = {}) {
   };
 }
 
-/** normalizeBlock, keeping what the PDF path adds to a block: its page, where a page starts, and a figure's real picture. */
+/** normalizeBlock, keeping what the PDF path adds to a block: its page, where a page starts, a figure's real picture, a chart drawn by that picture. */
 function normalizeBlock(block) {
   const out = normalizeBlockFields(block);
   if (Number(block?.page) > 0) out.page = Number(block.page);
   if (Number(block?.page_start) > 0) out.page_start = Number(block.page_start);
   if (out.type === "figure" && typeof block?.image === "string" && block.image.startsWith("data:image/")) out.image = block.image;
+  if (out.type === "chart" && block?.behind_picture) out.behind_picture = true;
   return out;
 }
 
@@ -678,7 +679,7 @@ RULES:
 3. Formulas: LaTeX. Inline as $...$, standalone equations on their own lines as $$ ... $$. Convert every symbol and fraction faithfully, and keep every annotation drawn on the formula: braces with a label under or over them are \\underbrace{...}_{\\text{label}} / \\overbrace{...}^{\\text{label}}, words inside a formula are \\text{...}, equation numbers are \\tag{...}. A formula without the words printed around it is incomplete.
 4. Tables: GitHub Markdown tables with a header row. Keep every row and column.
 5. Lists: - for bullets, 1. for numbered, indent for nesting.
-6. Figures, charts, graphs, diagrams, schemes and pictures that carry information: put ![detailed description](figure) on its own line. The description must say what it shows: type of chart, axis titles and ranges, series, key values, shapes, labels and the point it makes. Put the caption, if any, on the next line in italics. For a chart or graph, ALSO add, right after the figure line, the numbers it plots as a fenced block tagged chart holding one JSON object: {"type":"bar" or "line","title":"...","xLabel":"...","yLabel":"...","categories":["x label of each group, in order"],"series":[{"name":"series name from the legend","values":[one number per category, null where there is none]}]}. Read the values off the chart as exactly as you can (use the printed numbers when there are any); numbers only, no units or % signs inside values. Pie charts and diagrams that are not plotted numbers stay a figure line only. The figure line with its detailed description is ALWAYS written for every informative picture, chart, table-like scheme or diagram, even when the chart numbers or a table follow it: the picture, the numbers and the words describing it all travel together. Never describe a logo, a decorative banner, a background or an icon: they are not content, so write nothing for them (no figure line).
+6. Figures, charts, graphs, diagrams, schemes and pictures that carry information: put ![detailed description](figure) on its own line. The description must say what it shows: type of chart, axis titles and ranges, series, key values, shapes, labels and the point it makes. Put the figure's caption, if any, on the next line in italics: only a caption printed outside the picture (such as "Figure 2: ..."); a title drawn inside a chart is part of the picture, so it goes in the description, not in the caption. For a chart or graph, ALSO add, right after the figure line, the numbers it plots as a fenced block tagged chart holding one JSON object: {"type":"bar" or "line","title":"...","xLabel":"...","yLabel":"...","categories":["x label of each group, in order"],"series":[{"name":"series name from the legend","values":[one number per category, null where there is none]}]}. Read the values off the chart as exactly as you can (use the printed numbers when there are any); numbers only, no units or % signs inside values. Pie charts and diagrams that are not plotted numbers stay a figure line only. The figure line with its detailed description is ALWAYS written for every informative picture, chart, table-like scheme or diagram, even when the chart numbers or a table follow it: the picture, the numbers and the words describing it all travel together. Never describe a logo, a decorative banner, a background or an icon: they are not content, so write nothing for them (no figure line).
 7. Bold and italic: **bold**, *italic*. Code: fenced blocks with the language.
 8. Handwriting or scanned pages: transcribe faithfully.
 9. Running page headers, footers and page numbers (text repeated at the top or bottom of every page, e.g. the document or course name) are NOT content: omit them entirely, but keep the <!-- page N --> markers.
@@ -876,7 +877,7 @@ function markdownToBlocks(markdown) {
 
 // ─── PDF pictures ────────────────────────────────────────────────────────────
 
-const IMAGE_WORKER_VERSION = "v3";
+const IMAGE_WORKER_VERSION = "v4";
 const PDF_MIN_IMAGE_SIDE = 120;
 const PDF_MAX_IMAGE_SIDE = 900;
 const PDF_MAX_IMAGES = 150;
@@ -931,13 +932,16 @@ for (let n = 1; n <= pdf.numPages; n += 1) {
   }
 }
 const repeated = (name) => name.startsWith("g_") && (pagesOf.get(name)?.size || 0) >= 3;
-outer: for (let n = 1; n <= pdf.numPages; n += 1) {
+// The same picture on several pages (a logo, a banner) is decoration even when each page holds its own copy:
+// recognise copies by size and a sample of their pixels.
+const found = [];
+const copiesOf = new Map();
+for (let n = 1; n <= pdf.numPages; n += 1) {
   const page = await pdf.getPage(n);
   const ops = await page.getOperatorList();
   for (let i = 0; i < ops.fnArray.length; i += 1) {
     if (ops.fnArray[i] !== pdfjs.OPS.paintImageXObject) continue;
     const name = ops.argsArray[i][0];
-    if (repeated(name)) continue;
     const key = \`\${n}:\${name}\`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -948,6 +952,19 @@ outer: for (let n = 1; n <= pdf.numPages; n += 1) {
       store.get(name, (value) => { done = true; clearTimeout(t); resolve(value); });
     });
     if (!img || !img.data || img.width < +minSide || img.height < +minSide || (img.width <= 200 && img.height <= 200)) continue;
+    // pdfjs shares a picture used on several pages under one "g_" name, but the first page can hold it under its own name.
+    let sample = 0;
+    const step = Math.max(1, Math.floor(img.data.length / 4096));
+    for (let k = 0; k < img.data.length; k += step) sample = (sample * 31 + img.data[k]) >>> 0;
+    const print = img.width + "x" + img.height + ":" + sample;
+    if (!copiesOf.has(print)) copiesOf.set(print, new Set());
+    copiesOf.get(print).add(n);
+    if (!repeated(name)) found.push({ n, img, print });
+  }
+}
+for (const { n, img, print } of found) {
+  if (copiesOf.get(print).size >= 3) continue;
+  {
     let raw = img.data;
     let channels = img.kind === 3 ? 4 : img.kind === 2 ? 3 : 0;
     if (img.kind === 1) {
@@ -962,10 +979,10 @@ outer: for (let n = 1; n <= pdf.numPages; n += 1) {
     try {
       const buf = await sharp(Buffer.from(raw.buffer, raw.byteOffset, raw.length), { raw: { width: img.width, height: img.height, channels } })
         .flatten({ background: "#ffffff" }).resize({ width: +maxSide, height: +maxSide, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 78 }).toBuffer();
-      if (total + buf.length > +maxBytes) break outer;
+      if (total + buf.length > +maxBytes) break;
       total += buf.length;
       out.push({ page: n, url: \`data:image/jpeg;base64,\${buf.toString("base64")}\` });
-      if (out.length >= +maxImages) break outer;
+      if (out.length >= +maxImages) break;
     } catch { /* skip */ }
   }
 }
@@ -994,54 +1011,199 @@ process.stdout.write(JSON.stringify({ images: out }), () => process.exit(0));
   }
 }
 
-/**
- * Whole pages as JPEG data URLs, for figures that are drawn (vector charts, diagrams) and so have no embedded picture:
- * Map(page → url). Needs a canvas (@napi-rs/canvas); where it cannot load, nothing is returned and the description stays.
- */
-async function renderPdfPages(buf, pages) {
-  const workerPath = path.join(tmpdir(), `luna-pdfPageWorker-${IMAGE_WORKER_VERSION}.mjs`);
-  writeFileSync(workerPath, `import path from "path";
+// Plain Node script (no template interpolation inside): finds where each drawn figure sits on its page and cuts it out.
+const PDF_FIGURE_WORKER_VERSION = "v3";
+const PDF_FIGURE_WORKER_SOURCE = `import path from "path";
 import { createRequire } from "module";
 import { pathToFileURL } from "url";
 import { readFileSync } from "fs";
-const [,, inputFile, pdfjsPath, pagesCsv] = process.argv;
+const [,, inputFile, pdfjsPath, wantedCsv] = process.argv;
 const require = createRequire(pathToFileURL(pdfjsPath).href);
 const { createCanvas } = require("@napi-rs/canvas");
 const pdfjs = await import(pathToFileURL(pdfjsPath).href);
 pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(path.dirname(pdfjsPath), "pdf.worker.mjs")).href;
-const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(inputFile)), disableFontFace: true, isEvalSupported: false, useWorkerFetch: false, stopAtErrors: false }).promise;
+const OPS = pdfjs.OPS;
+// The standard fonts (Helvetica, Times… that PDFs often do not embed) are needed to draw axis numbers and labels.
+const pdfjsRoot = path.resolve(path.dirname(pdfjsPath), "../..");
+const pdf = await pdfjs.getDocument({ data: new Uint8Array(readFileSync(inputFile)), standardFontDataUrl: path.join(pdfjsRoot, "standard_fonts") + path.sep, cMapUrl: path.join(pdfjsRoot, "cmaps") + path.sep, cMapPacked: true, disableFontFace: true, isEvalSupported: false, useWorkerFetch: false, stopAtErrors: false }).promise;
+
+// wantedCsv: "page:figures,page:figures" — how many figures the converter found on each page.
+const wanted = wantedCsv.split(",").map((pair) => pair.split(":").map(Number)).filter(([n, k]) => n >= 1 && n <= pdf.numPages && k >= 1);
+const PAINT = new Set([OPS.stroke, OPS.closeStroke, OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+const IMAGE = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject, OPS.paintImageMaskXObject, OPS.paintImageXObjectRepeat, OPS.paintSolidColorImageMask]);
+const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+function boxOf(mm, m) {
+  const xs = [], ys = [];
+  for (const [x, y] of [[mm[0], mm[1]], [mm[2], mm[1]], [mm[0], mm[3]], [mm[2], mm[3]]]) { xs.push(x * m[0] + y * m[2] + m[4]); ys.push(x * m[1] + y * m[3] + m[5]); }
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+}
+const union = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[2], b[2]), Math.max(a[3], b[3])];
+const gap = (a, b) => Math.max(0, Math.max(a[0], b[0]) - Math.min(a[2], b[2]), Math.max(a[1], b[1]) - Math.min(a[3], b[3]));
+// Same place and size on many pages: the same logo or theme bar (pdfjs names a shared picture differently on its first page).
+const keyOf = (item) => item.box.map((v) => Math.round(v)).join(",");
+
+// Everything painted on a page that is not text: filled or stroked paths (pdfjs gives their bounds) and pictures, in page space.
+async function drawingsOf(page) {
+  const ops = await page.getOperatorList();
+  const out = [];
+  let ctm = [1, 0, 0, 1, 0, 0];
+  const stack = [];
+  for (let i = 0; i < ops.fnArray.length; i += 1) {
+    const fn = ops.fnArray[i];
+    const args = ops.argsArray[i];
+    if (fn === OPS.save) stack.push(ctm);
+    else if (fn === OPS.restore) ctm = stack.pop() || ctm;
+    else if (fn === OPS.transform) ctm = mul(ctm, args);
+    else if (fn === OPS.paintFormXObjectBegin) { stack.push(ctm); if (args?.[0] && args[0].length === 6) ctm = mul(ctm, Array.from(args[0])); }
+    else if (fn === OPS.paintFormXObjectEnd) ctm = stack.pop() || ctm;
+    else if (fn === OPS.constructPath) {
+      // pdfjs 4: [ops, coords, minMax] then a paint op; pdfjs 5: [paintOp, [path], minMax]. A path that is only a clip is not drawn.
+      const painted = typeof args[0] === "number" ? args[0] !== OPS.endPath : PAINT.has(ops.fnArray[i + 1]);
+      const mm = args[args.length - 1];
+      if (painted && mm && mm.length >= 4 && [0, 1, 2, 3].every((k) => Number.isFinite(mm[k]))) out.push({ box: boxOf(mm, ctm) });
+    } else if (IMAGE.has(fn)) {
+      out.push({ box: boxOf([0, 0, 1, 1], ctm), name: typeof args?.[0] === "string" ? "img:" + args[0] : "" });
+    }
+  }
+  return out;
+}
+
+// What repeats on many pages (a logo, the theme's bars and rules) is decoration, not a figure.
+const sampled = Math.min(pdf.numPages, 120);
+const pagesOf = new Map();
+const cache = new Map();
+for (let n = 1; n <= sampled; n += 1) {
+  try {
+    const items = await drawingsOf(await pdf.getPage(n));
+    cache.set(n, items);
+    for (const key of new Set(items.map(keyOf))) pagesOf.set(key, (pagesOf.get(key) || 0) + 1);
+  } catch { /* an unreadable page only drops out of the count */ }
+}
+const repeatLimit = Math.max(3, Math.ceil(sampled * 0.25));
+
+// The figures of one page, as page-space boxes in reading order (top to bottom, then left to right).
+async function figureBoxes(page, n) {
+  const [vx0, vy0, vx1, vy1] = page.view;
+  const pw = vx1 - vx0, ph = vy1 - vy0, unit = Math.max(pw, ph);
+  const items = (cache.get(n) || await drawingsOf(page)).filter((item) => {
+    const [x0, y0, x1, y1] = item.box;
+    if ((pagesOf.get(keyOf(item)) || 0) >= repeatLimit) return false;
+    if (x1 - x0 >= pw * 0.85 || y1 - y0 >= ph * 0.85) return false; // backgrounds, frames, full-width rules
+    return x1 > vx0 && x0 < vx1 && y1 > vy0 && y0 < vy1;
+  }).slice(0, 4000);
+  // Group what touches or nearly touches (bars, axes, gridlines, curves of one chart).
+  const parent = items.map((_, k) => k);
+  const find = (k) => (parent[k] === k ? k : (parent[k] = find(parent[k])));
+  const near = unit * 0.025;
+  for (let a = 0; a < items.length; a += 1) for (let b = a + 1; b < items.length; b += 1) {
+    if (gap(items[a].box, items[b].box) <= near) parent[find(a)] = find(b);
+  }
+  const groups = new Map();
+  items.forEach((item, k) => { const root = find(k); groups.set(root, groups.has(root) ? union(groups.get(root), item.box) : item.box); });
+  let boxes = [...groups.values()].filter(([x0, y0, x1, y1]) => x1 - x0 >= pw * 0.06 && y1 - y0 >= ph * 0.06 && (x1 - x0) * (y1 - y0) >= pw * ph * 0.015);
+  if (!boxes.length) return [];
+  // Add the words that belong to the drawing: axis numbers and titles, the chart's title, legends, labels.
+  const text = (await page.getTextContent()).items.filter((item) => String(item.str || "").trim()).map((item) => {
+    const t = item.transform, h = item.height || Math.abs(t[3]) || 8;
+    return [t[4], t[5] - h * 0.25, t[4] + (item.width || 0), t[5] + h];
+  });
+  boxes = boxes.map((box) => {
+    for (let round = 0; round < 4; round += 1) {
+      let grown = false;
+      for (const word of text) {
+        if (word[0] >= box[0] && word[2] <= box[2] && word[1] >= box[1] && word[3] <= box[3]) continue;
+        if (word[2] - word[0] > (box[2] - box[0]) * 1.2 || word[3] - word[1] > (box[3] - box[1]) * 0.5) continue;
+        if (gap(word, box) <= unit * 0.02) { box = union(box, word); grown = true; }
+      }
+      if (!grown) break;
+    }
+    return box;
+  });
+  // Charts that grew into each other are one figure.
+  for (let merged = true; merged;) {
+    merged = false;
+    for (let a = 0; a < boxes.length && !merged; a += 1) for (let b = a + 1; b < boxes.length && !merged; b += 1) {
+      if (gap(boxes[a], boxes[b]) <= unit * 0.005) { boxes[a] = union(boxes[a], boxes[b]); boxes.splice(b, 1); merged = true; }
+    }
+  }
+  return boxes.sort((a, b) => (Math.abs(b[3] - a[3]) > unit * 0.03 ? b[3] - a[3] : a[0] - b[0]));
+}
+
 const out = [];
-for (const n of pagesCsv.split(",").map(Number)) {
-  if (!(n >= 1 && n <= pdf.numPages)) continue;
+for (const [n, figures] of wanted) {
   try {
     const page = await pdf.getPage(n);
+    let boxes = await figureBoxes(page, n);
+    // More drawings than figures the converter described: the last figure takes all the rest (one figure made of parts).
+    if (boxes.length > figures) boxes = [...boxes.slice(0, figures - 1), boxes.slice(figures - 1).reduce(union)];
     const base = page.getViewport({ scale: 1 });
-    const viewport = page.getViewport({ scale: 1100 / base.width });
+    const viewport = page.getViewport({ scale: Math.min(4, 2000 / base.width) });
     const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
-    await page.render({ canvasContext: canvas.getContext("2d"), viewport, canvas }).promise;
-    out.push({ page: n, url: "data:image/jpeg;base64," + canvas.toBuffer("image/jpeg", 80).toString("base64") });
+    const context = canvas.getContext("2d");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: context, viewport, canvas }).promise;
+    const cut = (rect, maxWidth) => {
+      const [ax, ay, bx, by] = rect;
+      const sx = Math.max(0, Math.floor(Math.min(ax, bx))), sy = Math.max(0, Math.floor(Math.min(ay, by)));
+      const sw = Math.min(canvas.width, Math.ceil(Math.max(ax, bx))) - sx, sh = Math.min(canvas.height, Math.ceil(Math.max(ay, by))) - sy;
+      const k = Math.min(1, maxWidth / sw);
+      const piece = createCanvas(Math.max(1, Math.round(sw * k)), Math.max(1, Math.round(sh * k)));
+      const pc = piece.getContext("2d");
+      pc.fillStyle = "#ffffff";
+      pc.fillRect(0, 0, piece.width, piece.height);
+      pc.drawImage(canvas, sx, sy, sw, sh, 0, 0, piece.width, piece.height);
+      return "data:image/jpeg;base64," + piece.toBuffer("image/jpeg", 85).toString("base64");
+    };
+    let urls;
+    if (boxes.length) {
+      const pad = Math.max(base.width, base.height) * 0.012;
+      urls = boxes.map((b) => cut(viewport.convertToViewportRectangle([b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad]), 1400));
+    } else {
+      // Nothing drawn to cut out (a figure made of text, or one we cannot place): show the whole page.
+      urls = [cut([0, 0, canvas.width, canvas.height], 1100)];
+    }
+    out.push({ page: n, urls, whole: !boxes.length });
   } catch { /* skip this page */ }
 }
 process.stdout.write(JSON.stringify({ pages: out }), () => process.exit(0));
-`, "utf8");
-  const inputPath = path.join(tmpdir(), `luna-pdf-pg-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
+`;
+
+/**
+ * Pictures cut out of the rendered page for figures that are drawn (vector charts, graphs, diagrams, schemes) and so have no
+ * embedded picture: Map(page → { urls: [jpeg data URL per figure, in reading order], whole }). The worker finds each drawing
+ * from the page's drawing operators, leaves out what repeats on many pages (logos, theme bars) and backgrounds, adds the
+ * labels around it (axis numbers, titles, legends) and cuts that area out of the page rendered with @napi-rs/canvas; with
+ * nothing to cut out it gives the whole page. `figures` is Map(page → how many figures the converter found there).
+ */
+async function renderPdfFigures(buf, figures) {
+  const workerPath = path.join(tmpdir(), `luna-pdfFigureWorker-${PDF_FIGURE_WORKER_VERSION}.mjs`);
+  // Versioned name: write it once, so a call never rewrites the script while another call's process is loading it.
+  if (!existsSync(workerPath)) {
+    const draft = `${workerPath}.${process.pid}-${Date.now()}`;
+    writeFileSync(draft, PDF_FIGURE_WORKER_SOURCE, "utf8");
+    renameSync(draft, workerPath);
+  }
+  const inputPath = path.join(tmpdir(), `luna-pdf-fig-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
   writeFileSync(inputPath, buf);
   try {
-    const { stdout } = await execFileAsync(process.execPath, [workerPath, inputPath, PDFJS_PATH, pages.join(",")], { maxBuffer: 64 * 1024 * 1024, timeout: 90_000 });
+    const wanted = [...figures].map(([page, count]) => `${page}:${count}`).join(",");
+    const { stdout } = await execFileAsync(process.execPath, [workerPath, inputPath, PDFJS_PATH, wanted], { maxBuffer: 96 * 1024 * 1024, timeout: 120_000 });
     const jsonStart = String(stdout || "").indexOf('{"pages"');
     const parsed = jsonStart >= 0 ? JSON.parse(String(stdout).slice(jsonStart)) : {};
-    return new Map((parsed.pages || []).map((entry) => [entry.page, entry.url]));
+    return new Map((parsed.pages || []).map((entry) => [entry.page, entry]));
   } finally {
     try { unlinkSync(inputPath); } catch { /* ignore */ }
   }
 }
 
 /**
- * The PDF's embedded pictures, put back where the converter only described a figure. Pictures of a page fill that page's figure
- * blocks in order; pictures left over follow the page's last block. Vector drawings are not embedded pictures, so a figure
- * with nothing to show keeps its description.
+ * The PDF's figures as real pictures. Embedded pictures of a page fill that page's figure blocks in order; pictures left
+ * over follow the page's last block. Figures that are drawings (vector charts, diagrams) get the drawing cut out of the
+ * rendered page. The converter's description stays under every picture. A chart's numbers read off by the converter are
+ * only an estimate, so when the real picture is there they are kept for the text and Markdown (search, agents) but not drawn.
  */
-async function embedPdfFigures(file, blocks) {
+export async function embedPdfFigures(file, blocks) {
   let byPage;
   try {
     byPage = await extractPdfPageImages(base64ToBuffer(file.contentBase64));
@@ -1051,7 +1213,6 @@ async function embedPdfFigures(file, blocks) {
   }
   if (!byPage?.size) byPage = new Map();
   const out = [];
-  const pages = [...new Set(blocks.map((block) => block.page).filter(Boolean))];
   const lastIndexOfPage = new Map();
   blocks.forEach((block, index) => { if (block.page) lastIndexOfPage.set(block.page, index); });
   const queue = new Map([...byPage].map(([page, urls]) => [page, [...urls]]));
@@ -1063,17 +1224,26 @@ async function embedPdfFigures(file, blocks) {
       for (const url of leftovers.splice(0)) out.push({ type: "figure", alt_text: `Picture on page ${block.page}`, caption: "", image: url, page: block.page });
     }
   });
-  void pages;
-  // Figures that are drawings (no embedded picture): show the page itself, as a screenshot of the slide.
   const bare = out.filter((block) => block.type === "figure" && !block.image && block.page);
   if (bare.length) {
+    const counts = new Map();
+    for (const block of bare) if (counts.size < 80 || counts.has(block.page)) counts.set(block.page, (counts.get(block.page) || 0) + 1);
     try {
-      const shots = await renderPdfPages(base64ToBuffer(file.contentBase64), [...new Set(bare.map((block) => block.page))].slice(0, 60));
-      for (const block of bare) if (shots.get(block.page)) block.image = shots.get(block.page);
+      const shots = await renderPdfFigures(base64ToBuffer(file.contentBase64), counts);
+      const used = new Map();
+      for (const block of bare) {
+        const shot = shots.get(block.page);
+        const k = used.get(block.page) || 0;
+        if (shot?.urls?.[k]) { block.image = shot.urls[k]; used.set(block.page, k + 1); }
+      }
     } catch (error) {
-      console.warn("[aiVisionExtractor] could not render PDF pages:", error.message);
+      console.warn("[aiVisionExtractor] could not render PDF figures:", error.message);
     }
   }
+  out.forEach((block, index) => {
+    const before = out[index - 1];
+    if (block.type === "chart" && before?.type === "figure" && before.image) block.behind_picture = true;
+  });
   return out;
 }
 

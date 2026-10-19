@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^0.1.80",
     "@supabase/supabase-js": "^2.57.0",
     "@xmldom/xmldom": "^0.8.13",
     "cfb": "^1.2.2",

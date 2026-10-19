@@ -1359,3 +1359,10 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - **Save / rename names:** the Save dialog's Name can be empty while typing and is checked on Save ("Give it a name."); Courses
   rename re-asks on an empty name (Cancel keeps it; `.resource.json` kept), folder-tree rename shows the hint. `ui/displayName.js nameToSave`.
 - Dashboard: P1 and A1 updated, new A15 (splitter light pass); `npm run dashboard:check` clean.
+## 2026-10-19 — PDF figures shown as real pictures
+- Cause: in production no PDF figure ever got a picture (0 of 38 in the reported deck). The picture and page-render workers run as child processes that load pdfjs, sharp and `@napi-rs/canvas` by path, so the Vercel file trace left them out; drawn charts (vector) also need the canvas. Only the converter's re-drawn `chart` blocks showed, with estimated numbers.
+- `next.config.js` `outputFileTracingIncludes` ships them for `/api/**`; `@napi-rs/canvas` is now a direct dependency.
+- Drawn figures (`aiVisionExtractor.js` figure worker): the page's paths and pictures are grouped, what repeats on many pages (logos, theme bars) and backgrounds are left out, nearby labels (axis numbers, titles, legends) are added, and that area is cut out of the rendered page (standard fonts loaded so labels draw). A page with nothing to cut out gives the whole page. Description stays under the picture; a figure with no picture shows its description without the bare "Figure" label.
+- Embedded pictures: a logo stored separately on each page is recognised by size + pixel sample and skipped.
+- A converter `chart` right after a figure with a real picture is kept for text/Markdown (`behind_picture`) but not drawn. Converter prompt: a title inside a chart is not its caption.
+- Test: `tests/document-processing/pdf-figure-pictures.test.js` (fixture `slides-with-charts.pdf`). Applies to new uploads (re-upload existing PDFs).

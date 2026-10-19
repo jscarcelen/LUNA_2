@@ -367,7 +367,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
           <div className={`relative ${coverageOn && coverage?.refs?.length && html && !playable && !editing ? "pt-10" : ""}`}>
           <div ref={rootRef}>
             {playable
-              ? <ErrorBoundary onClose={onClose} title={t("courses.rv.activityProblem")}><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
+              ? <ErrorBoundary onClose={onClose} title={t("courses.rv.activityProblem")}><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} documentId={chat?.documentId || ""} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
               : html
                 ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
                 : <p className="mx-auto max-w-3xl text-sm text-soft-ink">{t("courses.rv.nothing")}</p>}
@@ -403,7 +403,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
             </div>
           </aside>
         ) : null}
-        {askOn ? <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="aside" launcherClassName={notesOpen && noting ? "lg:right-[21rem]" : ""} /> : null}
+        {askOn ? <AskLuna open={chatOpen} onOpenChange={setChatOpen} item={askItem} view={askView} layout="aside" launcherClassName={`${notesOpen && noting ? "lg:right-[21rem]" : ""} ${playable && !flashcards ? "max-[760px]:bottom-[calc(116px+env(safe-area-inset-bottom))]" : ""}`} /> : null}
       </div>
       {chartEdit ? <ChartEditor initial={chartEdit.chart} canSave={editing} onCancel={() => setChartEdit(null)} onApply={applyChart} /> : null}
       {formula ? <FormulaEditor initial={formula.initial} onCancel={() => setFormula(null)} onDone={(latex) => { const apply = formula.apply; setFormula(null); if (latex) apply(latex); }} /> : null}

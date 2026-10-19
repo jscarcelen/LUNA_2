@@ -42,6 +42,8 @@
   --animate-shimmer: shimmer 1.6s linear infinite;
   --animate-rise: rise 0.35s ease-out both;
   --animate-pulse-soft: pulse-soft 1.8s ease-in-out infinite;
+  /* One question per screen in the quiz player: the next card slides in (180ms, the design language's --ease). */
+  --animate-step: step-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
   @keyframes shimmer {
     from { background-position: 200% 0; }
@@ -50,6 +52,10 @@
   @keyframes rise {
     from { opacity: 0; transform: translateY(8px); }
     to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes step-in {
+    from { opacity: 0; transform: translateX(14px); }
+    to { opacity: 1; transform: translateX(0); }
   }
   @keyframes pulse-soft {
     0%, 100% { opacity: 0.55; }

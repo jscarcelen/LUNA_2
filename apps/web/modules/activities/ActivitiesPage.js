@@ -1,7 +1,7 @@
 "use client";
 
 import { EmptyState } from "../../components/EmptyState";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { defaultLearner } from "../performance/learners";
 import { daysUntil, dueLabel, parsePlan } from "../plans/plan";
@@ -14,6 +14,10 @@ import { RowMenu } from "../ui/RowMenu";
 import { displayName } from "../ui/displayName";
 import { LATE_CHIP, lateTone, summariseCatchUp } from "./catchUp";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { usePhone } from "../ui/PhoneCollapse";
+import { draftProgress } from "./drafts.js";
+import { loadAllDrafts } from "./draftStore.js";
+import { PhotoQuizMaker } from "./PhotoQuizMaker";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -37,14 +41,27 @@ function scoreTone(pct) {
  * subject, with due dates and results. Attempts are recorded per question so mistakes can be
  * reviewed and, later, fed into performance tracking.
  */
-export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject }) {
+export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject, onUploadTxt }) {
   const t = useT();
+  const phone = usePhone();
   const dateLocale = t.locale === "es" ? "es-ES" : undefined;
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const docs = subject?.documents || [];
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
   const attempts = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity-attempt")).map((d) => parse(d)).filter((p) => p?.attempt).map((p) => p), [docs]);
   const [playing, setPlaying] = useState(null);
+  // Quizzes started and saved for later ("Save and finish later"): activity document id -> draft. Never attempts.
+  const [drafts, setDrafts] = useState(() => new Map());
+  useEffect(() => {
+    if (playing) return undefined;
+    let cancelled = false;
+    // Read again whenever a quiz is closed: it may just have been saved for later, or submitted.
+    const timer = window.setTimeout(() => { loadAllDrafts().then((map) => { if (!cancelled) setDrafts(map); }).catch(() => {}); }, 250);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [playing]);
+  // "Make a quiz from your notes" (photos): open while making, then the new quiz is opened as soon as it is in the list.
+  const [photoMaker, setPhotoMaker] = useState(false);
+  const [openWhenReady, setOpenWhenReady] = useState("");
   const [updating, setUpdating] = useState(null); // an activity row whose "Update…" dialog is open
   const [updateStatus, setUpdateStatus] = useState("");
   const [view, setView] = useState("todo");
@@ -109,6 +126,11 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
       .map((group) => ({ ...group, rows: visible.filter((row) => (row.plan?.id || "") === group.id) }))
     : [{ id: "", name: "", colour: "", rows: visible }];
   const active = withPlans.find((r) => r.document.id === selected) || null;
+  useEffect(() => {
+    if (!openWhenReady) return;
+    const row = withPlans.find((entry) => entry.document.id === openWhenReady);
+    if (row) { setOpenWhenReady(""); setSelected(row.document.id); setPlaying(row); }
+  }, [openWhenReady, withPlans]);
 
   const allErrors = useMemo(() => {
     const out = [];
@@ -147,7 +169,8 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", t("practice.tab.todo")], ["done", t("practice.tab.done")], ["all", t("practice.tab.all")], ["errors", t("practice.tab.errors", { count: allErrors.length })]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
-          {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("create")}>{t("practice.make")}</button> : null}
+          {onUploadTxt && onSaveGeneratedQuizDocument && role !== "parent" ? <button type="button" className={phone ? primaryBtn : ghostBtn + " py-2 text-sm"} onClick={() => setPhotoMaker(true)}>📷 {phone ? t("practice.photo.makeShort") : t("practice.photo.fromPhotos")}</button> : null}
+          {onOpenTool && !(phone && onUploadTxt && onSaveGeneratedQuizDocument && role !== "parent") ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("create")}>{t("practice.make")}</button> : null}
           {/* Phone: the study-plan, topic and sort filters sit behind this button so the activities are what you see. */}
           {view !== "errors" ? <button type="button" className={`grid size-10 place-items-center rounded-full border text-lg leading-none md:hidden ${filtersOpen ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink"}`} aria-label={t("practice.filterSort")} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>⚙</button> : null}
         </div>
@@ -214,6 +237,8 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 const pct = Math.round(r.best * 100);
                 const overdue = r.due && !r.done && r.due < new Date().toISOString().slice(0, 10);
                 const lateChip = overdue ? LATE_CHIP[lateTone(lateOrder.get(r.document.id) ?? 1)] : "";
+                // A saved draft: "In progress · 3/6 answered" and Continue (it is not an attempt, so the row is not done because of it).
+                const inProgress = drafts.has(r.document.id) ? draftProgress(drafts.get(r.document.id), r.parsed.activity) : null;
                 const menu = [
                   { label: r.dueInfo.imposed ? t("practice.menu.ownDate") : t("practice.menu.deadline"), icon: "◷", onSelect: () => setEditingDue(r.document.id) },
                   canUpdateResource(r.parsed) ? { label: t("practice.menu.update"), icon: "✦", title: t("practice.menu.updateHint"), onSelect: () => setUpdating(r) } : null,
@@ -225,7 +250,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                       <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(r.document.id)}>
                         <span className="m-0 block break-words text-sm font-bold leading-snug text-ink [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">{displayName(r.parsed.activity.title)}</span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>{t("practice.chip.done")}</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("practice.chip.todo")}</span>}
+                          {inProgress ? <span className={`${chip} bg-[var(--accent-soft)] text-[var(--accent-ink)]`}>{t("practice.draft.inProgress")} · {t("practice.draft.answered", { answered: inProgress.answered, total: inProgress.total })}</span> : r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>{t("practice.chip.done")}</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("practice.chip.todo")}</span>}
                           {overdue ? <span className={`${chip} ${lateChip}`}>{dueLabel(r.due, t)}</span> : null}
                         </span>
                         <span className="m-0 mt-1.5 block text-xs text-soft-ink">{t.plural("practice.questions", q)}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${t.plural("practice.attempts", r.attempts.length)} · ${t("practice.best")} ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</span>
@@ -247,7 +272,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                         <button type="button" className={ghostBtn} onClick={() => setEditingDue("")}>{t("practice.done")}</button>
                       </label>
                     ) : null}
-                    <button type="button" className={`${primaryBtn} w-full py-2.5 text-base`} onClick={() => setPlaying(r)}>{r.done ? t("practice.tryAgain") : t("practice.start")}</button>
+                    <button type="button" className={`${primaryBtn} w-full py-2.5 text-base`} onClick={() => setPlaying(r)}>{inProgress ? t("practice.draft.continue") : r.done ? t("practice.tryAgain") : t("practice.start")}</button>
                   </div>
                 );
               })}
@@ -286,6 +311,18 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
           onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
           onUpdateGeneratedDocument={onUpdateGeneratedDocument}
           onDone={(message) => { setUpdateStatus(message); setPlaying(null); }}
+        />
+      ) : null}
+      {photoMaker ? (
+        <PhotoQuizMaker
+          workspaceId={selectedWorkspaceId}
+          subjectId={selectedSubjectId}
+          subjectName={subject.name}
+          onUploadTxt={onUploadTxt}
+          onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
+          onClose={() => setPhotoMaker(false)}
+          onMoreOptions={onOpenTool ? () => { setPhotoMaker(false); onOpenTool("create"); } : undefined}
+          onDone={(documentId) => { setPhotoMaker(false); setView("todo"); setOpenWhenReady(documentId); }}
         />
       ) : null}
       {playing ? (

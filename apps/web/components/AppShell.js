@@ -297,6 +297,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
           onRemoveDocument={handleRemoveDocument}
           onOpenTool={(target) => setPage(target)}
           onSelectSubject={handleSelectSubject}
+          onUploadTxt={handleUploadTxt}
         />
       );
     }

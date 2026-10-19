@@ -214,9 +214,9 @@ export function NextActions({ actions = [], onOpen }) {
         <li key={action.topic} className="rounded-xl border border-ink/10 p-3">
           <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
             <span>{index + 1}. {action.topic}</span>
-            <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).ink }}>{action.mastery}% mastery</span>
+            <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).ink }}>{action.mastery}% known</span>
           </p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Main issue: {action.reason}. {action.advice}</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">{action.why || `Main issue: ${action.reason}.`} {action.advice}</p>
           {onOpen ? <button type="button" className={`${ghostBtn} mt-2`} onClick={() => onOpen(action)}>Practise {action.questions} questions</button> : null}
         </li>
       ))}

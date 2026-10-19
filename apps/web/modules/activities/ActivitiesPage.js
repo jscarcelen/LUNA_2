@@ -10,6 +10,9 @@ import { UpdateDialog } from "../resources/UpdateDialog";
 import { canUpdateResource } from "../resources/update";
 import { DUE_OWN_PREFIX, dueInfoOf, senderNameOf } from "../accounts/shared";
 import { OriginBadge } from "../plans/DeadlineBadge";
+import { RowMenu } from "../ui/RowMenu";
+import { displayName } from "../ui/displayName";
+import { LATE_CHIP, lateTone, summariseCatchUp } from "./catchUp";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -44,6 +47,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   const [view, setView] = useState("todo");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [selected, setSelected] = useState("");
+  const [editingDue, setEditingDue] = useState("");
   const [errorFilter, setErrorFilter] = useState("all");
   const [planFilter, setPlanFilter] = useState("");
   const [topicFilter, setTopicFilter] = useState("");
@@ -91,6 +95,11 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
     .filter((r) => (planFilter === "" ? true : planFilter === "__none" ? !r.plan : r.plan?.id === planFilter))
     .filter((r) => (topicFilter === "" ? true : (r.document.tags || []).includes(`topic:${topicFilter}`)))
     .sort(sorters[sort] || sorters.priority);
+  /** Late rows in the order shown: the first keeps the red chip, the rest are amber. */
+  const lateOrder = new Map();
+  for (const row of visible) if (row.due && !row.done && row.due < new Date().toISOString().slice(0, 10)) lateOrder.set(row.document.id, lateOrder.size);
+  const summary = summariseCatchUp(rows, { attempts });
+  const firstLate = visible.find((row) => lateOrder.get(row.document.id) === 0) || null;
   /** Grouping puts each plan's work together, with everything unplanned at the end. */
   const groups = grouped
     ? [...new Map(visible.map((row) => [row.plan?.id || "", { id: row.plan?.id || "", name: row.plan?.name || "Not in a plan", colour: row.plan?.colour || "#8e98ab" }])).values()]
@@ -126,8 +135,12 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
           <p className={kicker}>Activities · {subject.name}</p>
+          {role !== "teacher" && summary.headline ? <p className="m-0 mt-1 text-sm font-semibold text-[#1f7a3a]">✓ {summary.headline}</p> : null}
           <h3 className="m-0 mt-1 text-xl font-bold text-ink">{rows.filter((r) => !r.done).length} to do · {rows.filter((r) => r.done).length} done</h3>
           <p className="m-0 mt-1 text-sm text-soft-ink">{role === "teacher" ? "Everything you created for this subject; results per activity and a list of every mistake." : "Quizzes, exams, puzzles and flashcards to do here on Luna. Your results are kept so you can review your mistakes."}</p>
+          {role !== "teacher" && summary.catchUp && firstLate ? (
+            <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-sm text-ink">{summary.catchUp}<button type="button" className={ghostBtn} onClick={() => setPlaying(firstLate)}>Start it</button></p>
+          ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", "To do"], ["done", "Done"], ["all", "All"], ["errors", `Mistakes (${allErrors.length})`]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
@@ -197,24 +210,41 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 const q = r.parsed.activity.questions.length;
                 const pct = Math.round(r.best * 100);
                 const overdue = r.due && !r.done && r.due < new Date().toISOString().slice(0, 10);
+                const lateChip = overdue ? LATE_CHIP[lateTone(lateOrder.get(r.document.id) ?? 1)] : "";
+                const menu = [
+                  { label: r.dueInfo.imposed ? "Set my own date…" : "Set my deadline…", icon: "◷", onSelect: () => setEditingDue(r.document.id) },
+                  canUpdateResource(r.parsed) ? { label: "Update…", icon: "✦", title: "Say what to change and Luna rewrites it", onSelect: () => setUpdating(r) } : null,
+                  onRemoveDocument ? { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete "${displayName(r.parsed.activity.title)}"? This cannot be undone.`)) onRemoveDocument(r.document.id); } } : null
+                ];
                 return (
-                  <div key={r.document.id} className={`flex flex-wrap items-center gap-3 rounded-2xl border p-3 transition ${selected === r.document.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10"}`}>
-                    <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(r.document.id)}>
-                      <p className="m-0 flex flex-wrap items-center gap-2 text-sm font-bold text-ink"><span className="truncate">{r.parsed.activity.title}</span>{r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>done</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>to do</span>}{overdue ? <span className={`${chip} bg-[rgba(255,59,48,0.12)] text-[var(--color-danger)]`}>overdue</span> : null}</p>
-                      <p className="m-0 mt-0.5 text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</p>
-                    </button>
+                  <div key={r.document.id} className={`grid gap-3 rounded-2xl border p-3 transition ${selected === r.document.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10"}`}>
+                    <div className="flex items-start gap-2">
+                      <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(r.document.id)}>
+                        <span className="m-0 block break-words text-sm font-bold leading-snug text-ink [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">{displayName(r.parsed.activity.title)}</span>
+                        <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          {r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>done</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>to do</span>}
+                          {overdue ? <span className={`${chip} ${lateChip}`}>{dueLabel(r.due)}</span> : null}
+                        </span>
+                        <span className="m-0 mt-1.5 block text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</span>
+                      </button>
+                      <RowMenu label="More for this activity" items={menu} />
+                    </div>
                     {r.dueInfo.imposed ? (
-                      <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink" title={`Set by ${r.dueBy || "your teacher"}. You cannot change it; add your own earlier date next to it.`}>
+                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink" title={`Set by ${r.dueBy || "your teacher"}. You cannot change it; add your own earlier date.`}>
                         <OriginBadge imposed by={r.dueBy} />
                         <span className="font-semibold text-ink">{dueLabel(r.dueInfo.imposed.date)}</span>
-                        <label className="flex items-center gap-1">Your date<input type="date" className="rounded-lg border border-ink/25 px-2 py-1 text-xs" max={r.dueInfo.imposed.date} value={r.dueInfo.own?.date || ""} onChange={(event) => setDue(r, event.target.value)} /></label>
-                      </span>
-                    ) : (
-                      <label className="flex items-center gap-1.5 text-[11px] text-soft-ink"><OriginBadge imposed={false} /><input type="date" aria-label="Your deadline" className="rounded-lg border border-ink/15 px-2 py-1 text-xs" value={r.due} onChange={(event) => setDue(r, event.target.value)} /></label>
-                    )}
-                    <button type="button" className={primaryBtn} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
-                    {canUpdateResource(r.parsed) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdating(r)}>✦ Update…</button> : null}
-                    {onRemoveDocument ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${r.parsed.activity.title}"?`)) onRemoveDocument(r.document.id); }}>Delete</button> : null}
+                        {r.dueInfo.own?.date ? <span>· your date {dueLabel(r.dueInfo.own.date)}</span> : null}
+                      </p>
+                    ) : r.due ? (
+                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink"><OriginBadge imposed={false} /><span className="font-semibold text-ink">{dueLabel(r.due)}</span></p>
+                    ) : null}
+                    {editingDue === r.document.id ? (
+                      <label className="flex flex-wrap items-center gap-2 text-xs text-soft-ink">{r.dueInfo.imposed ? "My own date" : "My deadline"}
+                        <input type="date" className="rounded-lg border border-ink/25 px-2 py-1 text-xs" max={r.dueInfo.imposed?.date || undefined} value={r.dueInfo.imposed ? r.dueInfo.own?.date || "" : r.due} onChange={(event) => setDue(r, event.target.value)} />
+                        <button type="button" className={ghostBtn} onClick={() => setEditingDue("")}>Done</button>
+                      </label>
+                    ) : null}
+                    <button type="button" className={`${primaryBtn} w-full py-2.5 text-base`} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
                   </div>
                 );
               })}

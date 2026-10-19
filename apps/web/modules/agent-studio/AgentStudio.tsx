@@ -38,9 +38,9 @@ function SavedAgents({ docs, onOpen, onNew, onStarter }: { docs: { id: string; n
   return (
     <section className="tw-scope grid gap-4">
       <div className={`${card} p-6`}>
-        <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">Agent Studio</span>
-        <h3 className="m-0 mt-3 text-[26px] font-bold tracking-tight text-ink">Create an AI agent</h3>
-        <p className="m-0 mt-1 max-w-2xl text-sm text-soft-ink">An agent is a recipe: what it creates, what people can customise, what it reads, and what each item contains. Luna handles the AI behind the scenes.</p>
+        <span className="rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--accent-ink)]">Tool builder</span>
+        <h3 className="m-0 mt-3 text-[26px] font-bold tracking-tight text-ink">Build your own tool</h3>
+        <p className="m-0 mt-1 max-w-2xl text-sm text-soft-ink">A tool is a recipe: what it creates, what people can customise, what it reads, and what each item contains. Luna handles the AI behind the scenes.</p>
         <div className="mt-5 flex flex-wrap gap-2">
           <button type="button" className={primaryBtn} onClick={onNew}>Start from scratch</button>
           <button type="button" className={ghostBtn} onClick={() => onStarter("flashcards")}>Example: Vocabulary Flashcards</button>

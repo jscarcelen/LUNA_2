@@ -11,3 +11,5 @@ A **resource** is one generated document: the agent output plus everything neede
 - `UpdateDialog.js` — the dialog every "Update…" button opens (form → progress with `PlanProgress` → result with `UpdateCompare` → Replace / Save as new version / Discard). Props: `document` (null for a result that is not saved yet), `resource`, `workspace`, `fallbackSubjectId`, `onSaveGeneratedQuizDocument`, `onUpdateGeneratedDocument`, `onReplaceUnsaved`, `onDone`, `onClose`.
 - `UpdateCompare.js`, `VersionsPanel.js` — the before/after view and the "Versions" tab.
 - The same idea for study plans lives in `modules/plans/updatePlan.js` + `UpdatePlanDialog.js` (+ `app/api/plans/update/route.js`): the model proposes, `applyPlanUpdate` enforces what may change (finished steps, built resources, deadlines with `setBy`, the plan's agent scope).
+
+A generated document (summary, notes) opens straight in the reader; "What it teaches", Regenerate and Delete are in the reader's "⋯" menu. Names are shown through `ui/displayName.js` (no `.resource.json`).

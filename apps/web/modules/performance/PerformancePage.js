@@ -27,6 +27,7 @@ import { onTrackStatus } from "./headline";
 import { EmptyState } from "../../components/EmptyState";
 import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
+import { displayName } from "../ui/displayName";
 
 /** A filter control never grows past this, whatever the longest option is called. */
 const field = "min-w-[9rem] max-w-[15rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
@@ -228,7 +229,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
               {resources.map((row) => (
                 <label key={row.document.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs text-ink hover:bg-white">
                   <input type="checkbox" checked={goalDraft.resourceIds.includes(row.document.id)} onChange={(event) => setGoalDraft({ ...goalDraft, resourceIds: event.target.checked ? [...goalDraft.resourceIds, row.document.id] : goalDraft.resourceIds.filter((id) => id !== row.document.id) })} />
-                  <span className="min-w-0 truncate">{row.resource.name}</span>
+                  <span className="min-w-0 truncate">{displayName(row.resource.name)}</span>
                 </label>
               ))}
               {!resources.length ? <p className="m-0 text-xs text-soft-ink">No resources yet.</p> : null}

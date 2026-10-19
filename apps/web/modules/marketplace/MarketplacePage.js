@@ -198,7 +198,7 @@ export function MarketplacePage({
         ))}
         {!visible.length ? (
           <p className={`${card} col-span-full p-6 text-center text-sm text-soft-ink`}>
-            Nothing here yet. {kind === "agent" ? "Build an agent in Agent Studio and sell it." : kind === "template" || kind === "component" ? "Design it in Template Studio and sell it." : kind === "plan" ? "Build a study plan and sell it with its material." : "Generate a resource and sell it."}
+            Nothing here yet. {kind === "agent" ? "Build a tool in the tool builder and sell it." : kind === "template" || kind === "component" ? "Design it in Template Studio and sell it." : kind === "plan" ? "Build a study plan and sell it with its material." : "Generate a resource and sell it."}
           </p>
         ) : null}
       </div>

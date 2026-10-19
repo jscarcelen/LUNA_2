@@ -43,7 +43,7 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
         <h4 className="m-0 text-base font-bold text-ink">{parsed.name || document.name.replace(/\.agent\.json$/, "")}</h4>
         <span className={tag.className}>{tag.label}</span>
       </div>
-      <p className="m-0 line-clamp-2 text-xs text-soft-ink">{parsed.description || parsed.tagline || String(parsed.instructions || "").slice(0, 120) || "Custom agent."}</p>
+      <p className="m-0 line-clamp-2 text-xs text-soft-ink">{parsed.description || parsed.tagline || String(parsed.instructions || "").slice(0, 120) || "Custom tool."}</p>
       <div className="flex flex-wrap gap-1">
         {inputs.slice(0, 4).map((q) => <span key={q.id} className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{q.text}</span>)}
         {fields.slice(0, 4).map((f) => <span key={f.name} className={`${chip} border border-ink/10 text-ink`}>{f.label || f.name}</span>)}
@@ -55,7 +55,7 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
         {typeof onDelete === "function" ? (
           <button
             type="button"
-            title="Delete this agent"
+            title="Delete this tool"
             className="rounded-full border border-ink/12 px-2 py-1.5 text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]"
             onClick={() => { if (window.confirm(`Delete “${parsed.name || document.name}”? This cannot be undone.`)) onDelete(document.id); }}
           >

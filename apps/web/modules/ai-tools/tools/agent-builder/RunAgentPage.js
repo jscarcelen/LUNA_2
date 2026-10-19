@@ -202,7 +202,7 @@ function SegmentedControl({ value, options, onChange }) {
 
 function HowItWorks({ agent, open, onToggle }) {
   const steps = Array.isArray(agent.howItWorks) && agent.howItWorks.length ? agent.howItWorks : [
-    { title: "Choose your material", text: "Pick the documents the agent should learn from." },
+    { title: "Choose your material", text: "Pick the documents this tool should learn from." },
     { title: "Answer a few questions", text: "The agent asks only what it needs to tailor the result." },
     { title: "Pick formats and colors", text: "Style each component with Template Studio's formats and colors, or apply a saved template." },
     { title: "Export or save", text: "PDF, Word, HTML — or straight into your workspace." }
@@ -1032,7 +1032,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <p className={kicker}>1 · Material</p>
-              <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the agent read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the tool read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
               {agentConfig.materialSlots?.[0]?.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{agentConfig.materialSlots[0].description}</p> : null}
               <div className="mt-3 grid gap-3">
                 {!consolidating ? <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} /> : null}
@@ -1057,7 +1057,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
             <section className={cardClass}>
               <p className={kicker}>2 · A few choices</p>
-              <h4 className="m-0 mt-1 text-base font-bold text-ink">Tell the agent what you need</h4>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">Tell the tool what you need</h4>
               <div className="mt-3 grid gap-4">
                 {questions.map((question) => (
                   <div key={question.id}>

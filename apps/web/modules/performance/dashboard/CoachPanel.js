@@ -14,7 +14,7 @@ const KIND_LABEL = {
   "skill-primer": "Refresh a skill"
 };
 
-const cacheKey = (signature) => `luna.performance.coach.v4.${signature}`;
+const cacheKey = (signature) => `luna.performance.coach.v5.${signature}`;
 
 /**
  * Luna's read of the results.

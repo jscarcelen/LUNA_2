@@ -8,6 +8,7 @@ import { ReaderView } from "../reader/ReaderView";
 import { SKILLS } from "../activities/engine/activity";
 import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
 import { VersionsPanel } from "./VersionsPanel";
+import { displayName } from "../ui/displayName";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -50,7 +51,10 @@ export function ResourceDetail({
   onSubmitAttempt,
   onStatus
 }) {
-  const [reading, setReading] = useState(false);
+  // A document (summary, notes…) opens straight in the reading view; the editor and the rest sit in the "⋯" menu.
+  const readsFirst = Boolean(resourceBlocks(row.resource)) && !row.resource.activity?.questions?.length;
+  const [landed, setLanded] = useState(readsFirst);
+  const [reading, setReading] = useState(readsFirst);
   const [tab, setTab] = useState(row.resource.activity?.questions?.length ? "do" : "concepts");
   const [concepts, setConcepts] = useState(resourceConcepts(row.resource));
   const [context, setContext] = useState(row.resource.context || "");
@@ -100,11 +104,15 @@ export function ResourceDetail({
 
   return (
     <div className="tw-scope fixed inset-0 z-40 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
-      {reading ? <ReaderView resource={row.resource} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onUpdate={onUpdate ? () => onUpdate(row) : undefined} onClose={() => setReading(false)} /> : null}
+      {reading ? <ReaderView resource={row.resource} menuItems={landed ? [
+        { label: "What it teaches", icon: "◎", onSelect: () => { setLanded(false); setReading(false); setTab("concepts"); } },
+        onRegenerate ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerate(row) } : null,
+        onDelete ? { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete "${displayName(row.resource.name)}"? This cannot be undone.`)) { onDelete(row); onClose?.(); } } } : null
+      ] : []} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onUpdate={onUpdate ? () => onUpdate(row) : undefined} onClose={() => { if (landed) onClose?.(); else setReading(false); }} /> : null}
       <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
           <div className="min-w-0">
-            <h3 className="m-0 truncate text-2xl font-bold tracking-tight text-ink">{row.resource.name}</h3>
+            <h3 className="m-0 truncate text-2xl font-bold tracking-tight text-ink">{displayName(row.resource.name)}</h3>
             <p className="m-0 mt-1 text-sm text-soft-ink">
               {new Date(row.resource.createdAt).toLocaleString()}
               {row.resource.meta.agentName ? ` · ✦ ${row.resource.meta.agentName}` : ""}
@@ -118,7 +126,7 @@ export function ResourceDetail({
             {resourceBlocks(row.resource) || row.resource.activity?.questions?.length ? <button type="button" className={primaryBtn} onClick={() => setReading(true)}>{row.resource.activity?.questions?.length ? "Open HTML view" : "Read"}</button> : null}
             {onUpdate ? <button type="button" className={ghostBtn} onClick={() => onUpdate(row)}>✦ Update…</button> : null}
             {onRegenerate ? <button type="button" className={ghostBtn} onClick={() => onRegenerate(row)}>Regenerate / edit</button> : null}
-            {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${row.resource.name}"?`)) { onDelete(row); onClose?.(); } }}>Delete</button> : null}
+            {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete "${displayName(row.resource.name)}"?`)) { onDelete(row); onClose?.(); } }}>Delete</button> : null}
             <button type="button" className={ghostBtn} onClick={onClose}>Close</button>
           </div>
         </header>

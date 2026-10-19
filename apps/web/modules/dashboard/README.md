@@ -20,3 +20,5 @@ No plans yet → one line and a "Plan it for me" (`plans?generate=1`) or "Upload
 
 `home.js` is pure (greeting, plan ranking, coach input) and tested in `tests/dashboard/home.test.js`.
 The old sample-data dashboards and `insights.js` were removed.
+
+Student Home shows "N quizzes done this week" first and, when two or more steps are late, one catch-up message (`activities/catchUp.js`).

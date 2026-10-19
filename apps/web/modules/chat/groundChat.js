@@ -1,4 +1,5 @@
 import { judgeSupport, ungroundedNumbers } from "../ai-tools/pipeline/grounding.js";
+import { splitSentencesAndLines } from "../../lib/regexCompat.js";
 
 /**
  * After a chat answer: does the material really say what the answer says? (docs: pipeline/grounding.js)
@@ -9,8 +10,7 @@ import { judgeSupport, ungroundedNumbers } from "../ai-tools/pipeline/grounding.
  * Returns null when there is nothing to say (no search was made).
  */
 export function citedSentences(text) {
-  return String(text || "")
-    .split(/(?<=[.!?])\s+|\n+/)
+  return splitSentencesAndLines(String(text || ""))
     .map((sentence) => sentence.trim())
     .filter((sentence) => /\[P\d+\]/.test(sentence))
     .map((sentence) => ({ text: sentence.replace(/\[P\d+\]/g, "").replace(/\s+/g, " ").trim(), cites: [...sentence.matchAll(/\[P(\d+)\]/g)].map((match) => `P${match[1]}`) }))

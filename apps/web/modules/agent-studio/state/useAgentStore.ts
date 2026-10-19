@@ -22,7 +22,7 @@ function reducer(state: State, action: Action): State {
     case "open": return { ...initial, spec: action.spec, savedId: action.savedId, wizard: action.wizard, dirty: !action.savedId };
     case "close": return initial;
     case "update": { if (!state.spec) return state; return { ...state, spec: { ...action.updater(state.spec), updatedAt: new Date().toISOString() }, history: [...state.history.slice(-30), state.spec], lastChanges: action.changes || [], dirty: true }; }
-    case "undo": { const previous = state.history.at(-1); return previous ? { ...state, spec: previous, history: state.history.slice(0, -1), lastChanges: [], dirty: true } : state; }
+    case "undo": { const previous = state.history[state.history.length - 1]; return previous ? { ...state, spec: previous, history: state.history.slice(0, -1), lastChanges: [], dirty: true } : state; }
     case "step": return { ...state, step: action.step };
     case "wizard": return { ...state, wizard: action.on };
     case "run": return { ...state, lastRun: action.run };

@@ -13,6 +13,8 @@ import { skillsForQuestion } from "../../skills/taxonomy.js";
 import { workSummary } from "../workImage.js";
 import { causeFor, gradeLocally, scoreOf } from "../grading.js";
 import { isQuantitative } from "../quantitative.js";
+// @ts-ignore - plain JS module
+import { splitSentencesAndLines } from "../../../lib/regexCompat.js";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
@@ -328,8 +330,7 @@ export function headingFor(passage: SourcePassage, extract: string): string {
 export function bestSentences(content: string, keys: string[]): string {
   const clean = String(content).replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/^#{1,6}\s+.*$/gm, "");
   // Sentences, but also list items and lines: slides and notes are mostly bullets without full stops.
-  const sentences = clean
-    .split(/(?<=[.!?])\s+|\n+/)
+  const sentences = splitSentencesAndLines(clean)
     .map((sentence) => sentence.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/\*\*|__/g, "").replace(/\s+/g, " ").trim())
     .filter((sentence) => sentence.length > 20 && !/^\$\$?/.test(sentence));
   if (!sentences.length) return clean.replace(/\s+/g, " ").trim().slice(0, 280);

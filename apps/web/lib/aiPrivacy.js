@@ -6,13 +6,13 @@
  */
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 // +34 612 345 678, (415) 555-2671, 612345678 ... 8 to 15 digits with the usual separators; a short number (a year, a score) is left alone.
-const PHONE = /(?<![\w.])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}(?:[\s.-]\d{2,4}){1,4}(?![\w.])/g;
+const PHONE = /(^|[^\w.])((?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?)?\d{2,4}(?:[\s.-]\d{2,4}){1,4})(?![\w.])/g;
 
 export function scrubPii(value) {
   if (typeof value !== "string" || !value) return value;
   return value
     .replace(EMAIL, "[email]")
-    .replace(PHONE, (match) => (match.replace(/\D/g, "").length >= 8 ? "[phone]" : match));
+    .replace(PHONE, (match, before, number) => (number.replace(/\D/g, "").length >= 8 ? `${before}[phone]` : match));
 }
 
 /** Scrubs every `content` string of chat messages (the model sees the conversation, not the person's contact details). */

@@ -86,7 +86,7 @@ export function decodeXmlEntities(text = "") {
 export function normalizeText(text = "") {
   return decodeXmlEntities(String(text || ""))
     .replace(/\r/g, "")
-    .replaceAll("\u0000", "")
+    .replace(/\u0000/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

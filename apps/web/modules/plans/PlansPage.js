@@ -396,12 +396,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   // If no concepts exist yet but the plan has linked material, auto-trigger extraction.
   useEffect(() => {
     if (!open || !selectedWorkspaceId) return;
-    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
     const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
 
     Promise.all([
       fetch(conceptsUrl(selectedWorkspaceId, open.plan.materialIds)).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
-      fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
+      fetch(`/api/student/mastery?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
     ]).then(([conceptData, masteryData]) => {
       const graph = normalizeConceptGraph(conceptData);
       const fetchedConcepts = graph.concepts;

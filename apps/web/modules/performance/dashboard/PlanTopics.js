@@ -13,7 +13,7 @@ const colour = (mastery) => (mastery === undefined ? "#9ca3af" : mastery < 0.4 ?
  * behind, the five that are strongest, and how many have not been assessed at all. One plan at a
  * time — the most recently active one to begin with, others one tap away.
  */
-export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId = "" }) {
+export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId = "", studentId = "" }) {
   const plan = plans.find((entry) => entry.id === planId) || plans[0] || null;
   const [data, setData] = useState({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} });
   const [showUnassessed, setShowUnassessed] = useState(false);
@@ -23,10 +23,11 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
     if (!plan || !workspaceId) { setData({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} }); return undefined; }
     let cancelled = false;
     setData((current) => ({ ...current, status: "loading" }));
-    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
+    // Whose data is read is decided on the server: the session, or (teacher/parent view) the linked student named by `studentId`.
+    const asStudent = studentId ? `&studentId=${encodeURIComponent(studentId)}` : "";
     Promise.all([
-      fetch(`/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent(materialKey)}`).then((response) => response.json()).catch(() => ({})),
-      fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${workspaceId}`).then((response) => response.json()).catch(() => ({}))
+      fetch(`/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent(materialKey)}${asStudent}`).then((response) => response.json()).catch(() => ({})),
+      fetch(`/api/student/mastery?workspaceId=${workspaceId}${asStudent}`).then((response) => response.json()).catch(() => ({}))
     ]).then(([conceptData, masteryData]) => {
       if (cancelled) return;
       const graph = capConceptTree(Array.isArray(conceptData?.concepts) ? conceptData.concepts : [], Array.isArray(conceptData?.prerequisites) ? conceptData.prerequisites : []);
@@ -43,7 +44,7 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
       setData({ status: "done", concepts: graph.concepts, prerequisites: graph.prerequisites, mastery, accuracy });
     });
     return () => { cancelled = true; };
-  }, [plan?.id, workspaceId, materialKey]);
+  }, [plan?.id, workspaceId, materialKey, studentId]);
 
   const view = useMemo(() => {
     const { roots, childrenById } = buildConceptForest(data.concepts, data.prerequisites);

@@ -24,7 +24,7 @@ export const SECTION_INFO = {
 };
 
 const PREFIXES = [
-  ["study", ["workspaces", "plans", "activities", "resources"]],
+  ["study", ["workspaces", "plans", "activities", "resources", "study", "library"]],
   ["progress", ["performance", "students"]],
   ["create", ["create", "ai-tools", "ai-tool:", "custom-agent:", "agent-edit:", "templates", "marketplace", "builder", "revenue"]]
 ];
@@ -129,7 +129,9 @@ export const PAGE_TITLES = {
   builder: "Build a tool",
   revenue: "Creator earnings",
   connections: "People",
-  students: "My students"
+  students: "My students",
+  study: "Study",
+  library: "Library"
 };
 
 /** Phone-sized names: the top bar has little room, so a long title would be cut ("Make study…"). */
@@ -146,7 +148,9 @@ export const SHORT_TITLES = {
   builder: "Build",
   revenue: "Earnings",
   connections: "People",
-  students: "Students"
+  students: "Students",
+  study: "Study",
+  library: "Library"
 };
 
 const HOME_TITLE = { student: "Home", teacher: "Classes", parent: "Children" };
@@ -170,4 +174,47 @@ export function shortTitleOf(page = "", role = "student", t = tEn) {
   if (SHORT_TITLES[base]) return t(`nav.short.${base}`);
   if (sectionOf(value) === "create") return t("nav.short.make");
   return titleOf(value, role, "", t);
+}
+
+/*
+ * The phone app for students: four tabs under the thumb (Home, Study, Library, Progress) instead of the website's
+ * sections. "study" and "library" are page keys of their own, drawn only on a phone; on a larger screen they open the
+ * website page that holds the same things (Practice or Study plans, and Courses).
+ */
+
+const MOBILE_TAB_SPECS = [
+  { key: "dashboard", tab: "home", glyph: "home" },
+  { key: "study", tab: "study", glyph: "practice" },
+  { key: "library", tab: "library", glyph: "library" },
+  { key: "performance", tab: "progress", glyph: "progress" }
+];
+
+/** The bottom tabs of the student phone app: `{ key (page it opens), tab, label, glyph }`. */
+export function mobileTabs(t = tEn) {
+  return MOBILE_TAB_SPECS.map((spec) => ({ ...spec, label: t(`mobile.tab.${spec.tab}`) }));
+}
+
+/** Which phone tab a page belongs to, so the right tab stays lit on pages reached from it ("" for none). */
+export function mobileTabOf(page = "") {
+  const base = String(page || "").split("?")[0].split(":")[0];
+  if (!base || base === "dashboard") return "home";
+  if (["study", "plans", "activities"].includes(base)) return "study";
+  if (["library", "workspaces", "resources", "create", "ai-tools", "ai-tool", "custom-agent", "agent-edit", "marketplace"].includes(base)) return "library";
+  if (base === "performance") return "progress";
+  return "";
+}
+
+/** The four pages the phone app draws itself (the rest are the website's pages, which work on a phone too). */
+export function isMobileRoot(page = "") {
+  return ["dashboard", "study", "library", "performance"].includes(String(page || "").split("?")[0]);
+}
+
+/** On a larger screen, the website page for a phone-only page key. Other keys are returned as they are. */
+export function desktopPageFor(page = "") {
+  const value = String(page || "");
+  const [base, query = ""] = value.split("?");
+  const params = new URLSearchParams(query);
+  if (base === "study") return params.get("view") === "plan" ? "plans" : "activities";
+  if (base === "library") return "workspaces";
+  return value;
 }

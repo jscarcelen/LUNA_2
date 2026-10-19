@@ -6,6 +6,7 @@ import dialogs from "./en/dialogs.js";
 import help from "./en/help.js";
 import home from "./en/home.js";
 import misc from "./en/misc.js";
+import mobile from "./en/mobile.js";
 import nav from "./en/nav.js";
 import people from "./en/people.js";
 import plans from "./en/plans.js";
@@ -23,6 +24,7 @@ export default {
   ...help,
   ...home,
   ...misc,
+  ...mobile,
   ...nav,
   ...people,
   ...plans,

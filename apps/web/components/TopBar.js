@@ -10,14 +10,19 @@ import { PageHelp } from "./PageHelp";
 import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
 import { useT } from "../lib/i18n/LocaleProvider.js";
 import { LanguageSwitch } from "../lib/i18n/LanguageSwitch.js";
+import { LunaLogo } from "./brand/LunaLogo.js";
 
 const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "?";
 
 /**
  * Top bar: where you are on the left, who you are on the right. The account cluster holds the
  * credit balance, the storage left and the profile (which is also where the role is switched).
+ *
+ * `compact` is the student phone app on one of its four tab pages: the page draws its own large title, so the bar shows
+ * the LUNA mark, and there is no menu button (the tabs are the navigation). `moreLinks` (`{ label, page }`) are the
+ * website pages a phone student reaches from the profile menu instead of the side rail.
  */
-export function TopBar({ title, shortTitle = "", page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, askLunaClaimed = false, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 } }) {
+export function TopBar({ title, shortTitle = "", page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, askLunaClaimed = false, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 }, compact = false, hideMenuButton = false, moreLinks = [] }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -32,11 +37,11 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
   const pct = Math.max(0, Math.min(100, Math.round((storage.usedGb / storage.totalGb) * 100)));
   return (
     <>
-    <header className="top-bar">
-      <button className="mobile-menu-btn" type="button" onClick={onOpenMenu} aria-label={t("shell.openMenu")}><span aria-hidden>☰</span></button>
+    <header className={`top-bar${compact ? " top-bar-compact" : ""}`}>
+      {hideMenuButton ? null : <button className="mobile-menu-btn" type="button" onClick={onOpenMenu} aria-label={t("shell.openMenu")}><span aria-hidden>☰</span></button>}
       <div className="top-bar-title-wrap">
-        <h2>{shortTitle && shortTitle !== title ? <><span className="top-title-full">{title}</span><span className="top-title-short">{shortTitle}</span></> : title}</h2>
-        <PageHelp page={page} role={role} />
+        {compact ? <LunaLogo size={24} label="LUNA" /> : <h2>{shortTitle && shortTitle !== title ? <><span className="top-title-full">{title}</span><span className="top-title-short">{shortTitle}</span></> : title}</h2>}
+        {compact ? null : <PageHelp page={page} role={role} />}
       </div>
       <div className="top-account">
         <LanguageSwitch className="top-lang" />
@@ -62,6 +67,11 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
               )}
               <p className="profile-menu-storage">{t("shell.storage", { used: storage.usedGb, total: storage.totalGb })}</p>
               <div className="storage-meter"><span style={{ width: `${pct}%` }} /></div>
+              {moreLinks.length ? (
+                <nav className="profile-menu-more" aria-label={t("mobile.more")}>
+                  {moreLinks.map((link) => <button key={link.page} type="button" onClick={() => { setOpen(false); onOpenPage?.(link.page); }}>{link.label}</button>)}
+                </nav>
+              ) : null}
               {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); onOpenPage?.("connections"); }}>{t("shell.people")}</button> : null}
               {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); setSettingsOpen(true); }}>{t("shell.settings")}{account.emailVerified === false ? t("shell.confirmEmail") : ""}</button> : null}
               {account ? <button type="button" className="profile-menu-logout" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={logOut}>{t("shell.logout")}</button> : null}

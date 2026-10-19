@@ -6,7 +6,7 @@ import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
 import { roleProfiles } from "./data";
-import { isPageAllowed, navFor, sectionOf, shortTitleOf, tabKeyOf, tabsFor, titleOf } from "./navModel";
+import { desktopPageFor, isMobileRoot, isPageAllowed, mobileTabs, navFor, sectionOf, shortTitleOf, tabKeyOf, tabsFor, titleOf } from "./navModel";
 import { SectionTabs } from "./SectionTabs";
 import { friendlyMessage } from "./friendlyError";
 import { FirstRunTour } from "./FirstRunTour";
@@ -39,6 +39,14 @@ import { cacheKeyFor, invalidateWorkspaces, loadWorkspaces as fetchWorkspaces, p
 import { useT } from "../lib/i18n/LocaleProvider.js";
 import { defaultSubjectId, visibleSubjects } from "../modules/ui/subjects.js";
 import { isReservedSubjectName } from "../modules/accounts/shared.js";
+import { MobileHome } from "../modules/mobile/MobileHome";
+import { MobileStudy } from "../modules/mobile/MobileStudy";
+import { MobileLibrary } from "../modules/mobile/MobileLibrary";
+import { MobileProgress } from "../modules/mobile/MobileProgress";
+import { useOpener } from "../modules/mobile/MobileOpener";
+import { STUDENT_PHONE_QUERY } from "../modules/mobile/phone";
+import { loadAllDrafts } from "../modules/activities/draftStore";
+import { draftProgress } from "../modules/activities/drafts";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -163,6 +171,42 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
   const title = titleOf(page, role, currentAiTool ? currentAiTool.name : "", t);
   const shortTitle = currentAiTool ? t("nav.short.make") : shortTitleOf(page, role, t);
   const navItems = navFor(role, Boolean(account), t);
+  // A student on a phone gets the phone app (four tabs, its own Home / Study / Library / Progress, modules/mobile);
+  // everyone else, and every larger screen, gets the website. `null` until the screen size is known, so no page is
+  // redirected too early.
+  const [phone, setPhone] = useState(null);
+  useEffect(() => {
+    const media = window.matchMedia(STUDENT_PHONE_QUERY);
+    const sync = () => setPhone(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  const mobileStudent = phone === true && role === "student";
+  const currentWorkspace = workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null;
+  // Quizzes started and not handed in ("Continue learning", "In progress"): { activity document id → { answered, total } }.
+  const [drafts, setDrafts] = useState({});
+  const refreshDrafts = useCallback(() => {
+    loadAllDrafts().then((all) => setDrafts(Object.fromEntries([...all.entries()].map(([key, draft]) => [key, draftProgress(draft)]).filter(([, value]) => value && value.answered)))).catch(() => {});
+  }, []);
+  useEffect(() => { if (mobileStudent && isMobileRoot(page)) refreshDrafts(); }, [mobileStudent, page, refreshDrafts]);
+  // "study" and "library" are the phone app's pages; on a larger screen they open the website page that holds the same things.
+  useEffect(() => {
+    if (phone === null || mobileStudent) return;
+    const alias = desktopPageFor(page);
+    if (alias === page) return;
+    pageRef.current = alias;
+    setPageState(alias);
+    try { window.history.replaceState({ ...(window.history.state || {}), lunaPage: alias }, ""); } catch { /* history unavailable */ }
+  }, [phone, mobileStudent, page]);
+  /** What the side rail and section tabs hold that a phone student reaches from the profile menu instead. */
+  const phoneMoreLinks = mobileStudent ? [
+    { label: t("mobile.more.make"), page: "create" },
+    { label: t("mobile.more.plans"), page: "plans" },
+    { label: t("mobile.more.practice"), page: "activities" },
+    { label: t("mobile.more.courses"), page: "workspaces" },
+    { label: t("mobile.more.browse"), page: "marketplace" }
+  ] : [];
   const section = sectionOf(page);
   const sectionTabs = tabsFor(section, role, Boolean(account), t);
 
@@ -253,7 +297,26 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     return result.data;
   }
 
+  const [openerOverlay, openItem] = useOpener({
+    workspace: currentWorkspace,
+    profileName,
+    onSaveGeneratedQuizDocument: handleSaveGeneratedQuizDocument,
+    onUpdateGeneratedDocument: handleUpdateGeneratedDocument,
+    onDownloadDocument: handleDownloadDocument,
+    onUpdateDocumentContent: handleUpdateDocumentContent,
+    onClosed: refreshDrafts
+  });
+
   const content = useMemo(() => {
+    if (mobileStudent && isMobileRoot(page)) {
+      const [base, query = ""] = page.split("?");
+      const params = new URLSearchParams(query);
+      const shared = { workspace: currentWorkspace, loading: isWorking || statusMessage === "Loading workspaces...", drafts, onOpen: openItem, onOpenPage: (target) => setPage(target) };
+      if (base === "dashboard") return <MobileHome {...shared} profileName={profileName} examDates={examDates} />;
+      if (base === "study") return <MobileStudy key={page} {...shared} initialView={params.get("view") || ""} />;
+      if (base === "library") return <MobileLibrary key={page} {...shared} startAdding={params.get("add") === "1"} selectedSubjectId={selectedSubjectId} onUpload={handleUploadTxt} onCreateSubject={handleCreateSubject} onCreateFolder={handleCreateFolder} />;
+      if (base === "performance") return <MobileProgress {...shared} />;
+    }
     const home = (
       <DashboardPage
         role={role}
@@ -522,7 +585,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (page === "builder") return <BuilderView />;
     if (page === "revenue") return <RevenueView />;
     return home;
-  }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking, examDates]);
+  }, [page, role, currentAiTool, currentCustomAgentId, editAgentDocumentId, openTemplateId, workspaces, selectedWorkspaceId, selectedSubjectId, statusMessage, isWorking, examDates, mobileStudent, drafts, openItem]);
 
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);
@@ -990,7 +1053,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} shortTitle={shortTitle} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} askLunaClaimed={readerClaims > 0} />
+        <TopBar title={title} shortTitle={shortTitle} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} askLunaClaimed={readerClaims > 0} compact={mobileStudent && isMobileRoot(page)} hideMenuButton={mobileStudent} moreLinks={phoneMoreLinks} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (
@@ -1000,13 +1063,14 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
             </div>
           ) : null}
           <AskLunaProvider value={askLunaValue}>
-            <SectionTabs tabs={sectionTabs} active={tabKeyOf(page)} onChange={(next) => setPage(next)} />
+            {mobileStudent ? null : <SectionTabs tabs={sectionTabs} active={tabKeyOf(page)} onChange={(next) => setPage(next)} />}
             {content}
             <GlobalAskLuna title={title} hidden={readerClaims > 0} />
           </AskLunaProvider>
         </div>
       </main>
-      <BottomTabs navItems={navItems} page={page} onPageChange={setPage} />
+      <BottomTabs navItems={mobileStudent ? mobileTabs(t) : navItems} page={page} onPageChange={setPage} />
+      {openerOverlay}
       {account && shareTarget ? (
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
@@ -1031,7 +1095,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
           onAssign={(document) => { const target = questionsTarget; setQuestionsTarget(null); setShareTarget({ kind: "document", id: document.id, name: document.name, document, initial: { mode: "assign", groupIds: [], recipientIds: [target.student.id] } }); }}
         />
       ) : null}
-      <FirstRunTour role={role} accountId={account?.id || ""} serverSeen={tourSeen} />
+      <FirstRunTour role={role} accountId={account?.id || ""} serverSeen={tourSeen} phone={mobileStudent} />
       <UiCritic enabled={criticOn} />
       {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
       <FeedbackWidget page={page} title={title} role={role} account={account} launcher={false} />

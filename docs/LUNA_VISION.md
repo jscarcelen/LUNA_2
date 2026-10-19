@@ -414,6 +414,27 @@ document. Completeness is the point: nothing may be dropped, however long the do
 agent works in passes — read every part, outline by topic, merge each section, check formulas — rather
 than in one model call).
 
+### 5.1q The student phone app (founder spec, 2026-10-19)
+
+Jonathan has an Apple developer account; a native iPhone app will be deployed later. First, the phone experience of the
+web app becomes a purpose-built student iPhone app, so the later wrapper reuses it.
+
+- **Four tabs**: Home, Study, Library, Progress. Account and secondary options behind the profile avatar. No desktop
+  sidebar, no dense tables, no leaderboards or guilt streaks. Calm, light, Apple-like (no dark mode, no blur).
+- **Home**: greeting, "Ready to make progress?", one NEXT STEP from real plan/recommendation data (duration only when it
+  exists, an honest empty state otherwise), Continue learning, up to 2 upcoming items, quick actions.
+- **Study**: "For you" (subject chips, recommended activities with type, what they cover and count) and "Study plan"
+  (steps with Not started / In progress / Completed and an obvious Start or Continue). No invented scheduling.
+- **Activity player**: one question at a time, compact top bar, thin progress bar, large controls, sticky bottom action
+  that never covers content or the keyboard; optional photo of the working (never claimed as analysed unless it was);
+  optional confidence (Sure / Fairly sure / Guessing); feedback with explanation; compact completion screen, no confetti.
+  Mistakes feed performance tracking; an in-progress answer is never lost.
+- **Library**: search, Add material, grouped by subject, source material distinct from what Luna made.
+- **Add material**: Take a photo / Choose photos / Choose a file / Paste text, real upload state and errors, then real
+  next steps (quiz, flashcards, summary, plan). No Agent Studio or Template Studio on the phone.
+- **Progress**: Your learning, Needs more practice, Recent activity, Next steps — only from real data.
+- Advanced features stay on the website (still reachable), nothing is deleted; URLs keep working; auth and access rules unchanged.
+
 ## 6. AI agent generator
 
 - Before generating the agent written by the user, run an **AI model / skill that automatically
@@ -628,7 +649,205 @@ Set de guardrails
 
 In study plan, when there are multiple uploaded reference materials, the first step is to create a master document with all the information of all documents. It would be nice to include how it traces back to each original document. Then, whenever making a reference from a generated material (e.g., quiz) to the source, it will refer to this consolidated document, which will make it easier. Hence, you need to make a pre-built agent in the agent tab that is called something like 'Summary notes consolidator', allows selecting the different documents from the workspaces, the language, and generates an exhaustive structured document with all the information. It is key to make sure that all the information is there, but many times the documents have overlapping information, that should only appear once — my point is that it is consolidated and comprehensive, not just a stack of all documents one after the other, because then it is useless. Include formulas, tables, image descriptions, etc.
 
+### 2026-10-19 — Student iPhone app (verbatim)
+
+```
+in parallel, we need to work on the iphone app - i have an apple developer accout, so it will be delpoyed later
+
+You are working on LUNA, an AI-powered learning platform. Redesign the existing mobile experience so it feels like a purpose-built student iPhone app, not the desktop website squeezed onto a small screen. Before coding, inspect the repository, especially LUNA_HANDOVER.md, CLAUDE.md, docs/LUNA_VISION.md, docs/IMPLEMENTATION_LOG.md, docs/ROADMAP.md, and the existing mobile navigation, activity player, library, study plan, and performance implementations. Treat the code and documentation as the source of truth. Do not assume a native iOS app or APIs exist; identify the actual app framework and work within it. Preserve working functionality and existing backend contracts.
+
+PRODUCT DIRECTION
+LUNA is a learning companion. The student should open it and immediately understand what to study next, start practising quickly, receive useful feedback, and understand mistakes. The web app remains the place for complex content creation, bulk organization, advanced Agent/Template Studio configuration, and detailed teacher/parent analytics. The mobile app prioritizes practice, guidance, capture of study material, and quick progress checks.
+
+DESIGN PRINCIPLES
+- Create a calm, polished, Apple-like light interface designed for iPhone first, with iPad layouts supported where feasible.
+- White or very light neutral surfaces, subtle borders, clear typography, restrained color, rounded cards (roughly 12–18px), pill-shaped primary actions, generous spacing, and subtle transitions.
+- No dark mode as part of this task, no glassmorphism, no blurred decorative backgrounds, no cluttered dashboard, no desktop-style sidebar, and no dense tables.
+- Use plain language appropriate for students. Avoid leaderboards, guilt-inducing streaks, and activity-volume gamification.
+- Respect safe areas, dynamic text where supported, keyboard behavior, touch targets, loading states, empty states, errors, and accessibility.
+- Reuse the existing design system and components where sensible; do not introduce a new UI library without a clear reason.
+
+FIRST: AUDIT THE EXISTING APP
+1. Identify the framework, current routes, navigation, reusable components, activity player, upload flow, data models, and API/backend functions.
+2. Identify which pages are shared with the desktop website and how mobile rendering currently works.
+3. Make a short implementation plan that distinguishes existing working features from proposed changes. Do not fabricate API routes, data, or native capabilities.
+4. Then implement the redesign in the existing architecture. Avoid breaking desktop/web functionality.
+
+NEW MOBILE INFORMATION ARCHITECTURE
+Use a persistent bottom navigation with four destinations:
+1. Home
+2. Study
+3. Library
+4. Progress
+
+Use a simple icon and short label for each destination, clear selected states, and adequate bottom safe-area padding. Remove or hide desktop navigation patterns on mobile. Put account settings, profile, and secondary options behind a small profile/avatar control rather than adding more bottom tabs.
+
+SCREEN 1 — HOME: “WHAT SHOULD I STUDY NEXT?”
+This is the default landing screen. It should feel personal, focused, and actionable—not like a metrics dashboard.
+
+Header:
+- A short greeting such as “Hi, Alex” if the student's name is available; otherwise use a neutral greeting.
+- A small profile/avatar button.
+- A concise prompt: “Ready to make progress?” or “What would you like to work on?”
+
+Main content, in this order:
+A. NEXT STEP card — the most prominent component on the screen.
+- Show the subject/topic, a clear activity title, a short reason for the recommendation, and an estimated duration only if the data exists.
+- Example: “Maths · Fractions” / “Practise the questions you found tricky last time” / “About 10 minutes” / primary button “Start studying”.
+- Populate this from the existing recommendation/study-plan logic if available. Do not hardcode fake personalized recommendations. If no recommendation exists, show an honest empty state with actions to choose a subject, continue an activity, or upload material.
+B. CONTINUE LEARNING, only when there is an unfinished activity or recent resource.
+- Compact card with subject, activity name, progress if available, and “Continue”.
+C. UPCOMING, only when there are real upcoming study-plan items or due dates.
+- Show at most one or two items and link to Study for the full plan.
+D. QUICK ACTIONS, compact and secondary:
+- “Practise a topic”
+- “Upload material”
+- “My resources”
+Do not show every feature on the home screen. Do not make charts, statistics, or a long list of recent documents the main focus. Hide sections that have no relevant data rather than filling them with placeholders.
+
+SCREEN 2 — STUDY
+Purpose: help students choose what to practise and work through their study plan.
+
+Top area:
+- Title “Study”.
+- A compact segmented control or tabs, if supported by the existing architecture: “For you” and “Study plan”.
+
+“For you” view:
+- Subject/topic selection using simple cards or chips.
+- Recommended activities derived from existing study-plan, performance, or recommendation data.
+- Clear activity types such as Quiz, Flashcards, Exam, Problem set, or other activity types actually supported by LUNA.
+- Each card should explain what the activity covers, and show duration/question count only when known.
+- Tapping an activity opens the existing activity player, not a redundant preview page unless the existing flow requires one.
+
+“Study plan” view:
+- A mobile-friendly sequence of topics and tasks, grouped by date or subject where appropriate.
+- Clear status: not started, in progress, completed. Use restrained labels, not large colorful badges.
+- Make “Start” or “Continue” obvious.
+- Preserve current study-plan functionality. Do not invent scheduling logic or new backend fields as part of the visual redesign.
+
+ACTIVITY PLAYER — THE MOST IMPORTANT MOBILE EXPERIENCE
+All supported activity types should share a consistent, focused player shell while preserving each activity type's own interaction model.
+
+Layout:
+- A compact top bar with a back/close action, activity title or subject, and progress such as “Question 3 of 10” when applicable.
+- A thin progress indicator.
+- One question or task at a time. Use comfortable line length, readable type, and large touch-friendly answer controls.
+- Keep navigation and controls reachable on a phone. Avoid desktop two-column layouts.
+- Use a sticky bottom action area where appropriate, but ensure it never covers the answer or keyboard.
+- Preserve existing answer types and grading behavior.
+
+Answer flow:
+1. Student reads the question and enters/selects an answer.
+2. Where appropriate, the student can optionally attach a photo of their working/reasoning.
+3. The student can optionally indicate confidence: “Sure”, “Fairly sure”, or “Guessing”.
+4. Student submits the answer.
+5. LUNA shows feedback and a clear explanation, then lets the student continue.
+
+OPTIONAL “ADD A PHOTO OF YOUR WORK” FEATURE
+- For open-ended, maths, science, or other questions where reasoning is useful, offer a secondary action labelled “Add a photo of your work” or “Show my working”.
+- This is optional, not a blocker for submitting an answer. Do not show it on every question if it is not relevant to that question type.
+- Use the actual upload/camera/file capabilities supported by the current app framework. Do not simulate a successful upload.
+- Show a thumbnail/preview after a real attachment is selected, with actions to remove, replace, or retry. Support appropriate file validation and upload errors. Allow multiple images only if the backend and UX support them reliably.
+- Associate the uploaded image with the correct question and attempt. Do not send it to an unrelated generic chat or lose it when moving between questions.
+- If image understanding or grading is not implemented, build only the UI and safe integration seam, clearly documenting what backend work is still required. Do not pretend the photo was analyzed.
+
+OPTIONAL CONFIDENCE CHECK
+- Present a compact, optional choice: “How sure are you?” with “Sure”, “Fairly sure”, and “Guessing”.
+- Keep the choice unselected by default. Never force the student to answer it.
+- Make it quick to tap and visually calm. Avoid judgmental labels or implying that guessing is bad.
+- Save confidence together with the relevant question attempt only if the existing backend supports it or after implementing a compatible, documented persistence path. Do not silently discard selected confidence.
+
+FEEDBACK AFTER SUBMISSION
+- Clearly show whether the answer is correct, incorrect, or partially correct, based on the actual grading result.
+- Provide a concise explanation and, when possible, a step-by-step solution.
+- When confidence and/or a work photo is available, use it only if the backend actually supports analyzing those signals. Help identify possible error types such as a conceptual misunderstanding, wrong method, calculation/sign error, or uncertain guess. Do not overstate the diagnosis when evidence is insufficient.
+- Include a clear “Continue” action.
+- At the end of an activity, show a compact completion screen: result if available, topics/questions to revisit if supported, and one useful next action such as “Review mistakes” or “Practise this topic”. Avoid confetti-heavy celebration or competitive scoring.
+- Ensure mistakes can feed into existing performance tracking and next-step recommendations where the existing architecture supports it.
+
+SCREEN 3 — LIBRARY
+Purpose: let a student quickly find and use their study materials and AI-generated resources.
+
+Header:
+- Title “Library”.
+- A search field that works with existing search functionality, if available.
+- A clear primary action “Add material”.
+
+Content:
+- Use a mobile-friendly list or compact card layout, grouped by subject or existing folders/tags where supported.
+- Distinguish source materials from generated resources without making the screen visually busy.
+- Support existing resource types, such as summaries, quizzes, flashcards, exams, worksheets, or other types the app actually implements.
+- Each item should show a clear title, resource type, and subject/folder when available. Use simple icons or subtle labels, not large decorative illustrations.
+- Tapping a resource should open its actual preview or activity flow. Preserve existing download/open behavior.
+- Provide sensible empty states: “Your library is empty” with “Upload material” and “Create a resource” actions.
+
+ADD MATERIAL FLOW
+When the student taps “Add material”, open a native-feeling mobile action sheet or dedicated simple screen with supported options:
+- Take a photo or scan pages, if camera support exists.
+- Choose photos, if image selection is supported.
+- Choose a document from Files, if supported.
+- Paste or enter text, if supported.
+
+Then:
+1. Show the selected file/material, name, and upload/progress state.
+2. Validate the file type/size using actual app/backend constraints.
+3. Show processing status only if the backend provides it; do not show fake progress or claim completion prematurely.
+4. Once processed, offer the real supported next steps: generate or open a summary, quiz, flashcards, exam, worksheet, or study plan. Show only options the backend supports.
+5. Let the student start studying the result immediately, and ensure saved resources appear in Library.
+6. Handle cancellation, unsupported files, failed uploads, processing errors, and retry cleanly.
+
+Resource creation should be streamlined on mobile. Do not move the full advanced Agent Studio or Template Studio configuration experience into the iPhone app. If the existing product supports quick generation, provide a few student-friendly choices such as “Make a quiz”, “Make flashcards”, or “Make a summary”. Keep complex prompt/template customization on the website and provide an appropriate explanation or link if needed.
+
+SCREEN 4 — PROGRESS
+Purpose: help the student understand what they know and what to practise next, without turning learning into a competition.
+
+Top:
+- Title “Progress”.
+- A simple time range selector only if historical data supports it.
+
+Main sections:
+A. “Your learning” — a concise overview of mastery or progress by subject/topic, based on actual tracked data.
+B. “Needs more practice” — topics or skills that have real evidence of difficulty.
+C. “Recent activity” — a short, useful history of completed activities.
+D. “Next steps” — actionable recommendations connected to weak areas or upcoming work.
+
+Use simple mobile charts only where they genuinely clarify trends and real data is available. Prefer compact progress bars, topic cards, and short trend lines over dense analytics. Explain metrics in student-friendly language. Do not invent scores, retention estimates, confidence measures, or mastery values. If no data exists, explain that completing a first activity will help LUNA show progress, with a “Start studying” action.
+
+RESPONSIVE BEHAVIOR AND WEB PRESERVATION
+- On narrow screens, use the four-tab bottom navigation and single-column content.
+- On larger screens, use responsive spacing and layout consistent with the current web app. Do not force the phone-specific bottom-tab layout onto desktop if the desktop already has a suitable navigation pattern.
+- Keep advanced resource authoring, Agent Studio, Template Studio, bulk library management, and deep parent/teacher dashboards on the web unless the repository already has a well-supported mobile version.
+- Do not delete features merely because they are secondary on mobile. Make them accessible through appropriate routes or leave them in the desktop experience.
+- Avoid duplicating pages or creating parallel components that drift apart when existing shared components can be adapted safely.
+
+FUNCTIONAL REQUIREMENTS
+- Every visible button must perform a real action or be explicitly disabled with an explanation. No fake success states or decorative controls pretending to work.
+- Use real API/data integrations already in the repository. Inspect types, server actions, database schemas, and error handling before changing persistence.
+- Preserve authentication, authorization, access controls, and existing RLS assumptions.
+- Keep upload images and question attempts correctly associated, and clean up temporary state when a user cancels or removes an attachment.
+- Provide loading, empty, error, retry, and success states.
+- Prevent accidental loss of an in-progress answer when navigating, where feasible.
+- Avoid breaking existing URLs, desktop workflows, or persisted data.
+
+IMPLEMENTATION APPROACH
+1. Inspect the code and summarize the current state and proposed changes.
+2. Identify which components/routes can be reused and which need mobile-specific layouts.
+3. Implement the navigation and screen hierarchy first, then Home, Study, activity player, Library/upload, and Progress.
+4. Connect controls to existing functionality and only implement new persistence when it can be done safely within the current architecture.
+5. Test at common iPhone widths, a larger phone, tablet, and desktop. Check safe areas, scroll behavior, keyboard overlap, long titles, empty states, and narrow-screen overflow.
+6. Run the available lint, type-check, and test commands. Fix regressions introduced by the change.
+7. Review the git diff to ensure you did not accidentally modify unrelated functionality or expose secrets.
+
+DELIVERABLES
+- Implement the redesign, not just a written plan.
+- Report the routes/components/files changed and the purpose of each.
+- Explain which features are fully functional, which rely on existing backend support, and which require additional backend/API work.
+- List the checks/tests run and any remaining issues.
+- Do not claim that camera uploads, image reasoning, confidence persistence, or recommendation logic work unless verified in the actual code and tested.
+```
+
 ## Appendix B — Change log of this document
+- 2026-10-19 — Added §5.1q: the student phone app (four tabs, one-question player with photo of work and confidence, add-material sheet, honest empty states).
 - 2026-10-07 — Anything Luna generates can be updated: "any generated material, for example by the AI study planner, can be updated — like run it again on the agent, and the user can write in the iterate prompt what to change." Every saved quiz, flashcard set, summary, master document and custom-agent output has an **Update…** action (same agent, same choices and material, the user's words as the change; replace in place or save as a new version, last five versions kept), and the study plan has **Update this plan…** (finished work, built material and deadlines set by others never change).
 - 2026-10-05 — Error classification refined: Analytical only for maths/analytical process errors, Topic knowledge for every other wrong answer, Accuracy for close-but-not-exact; open answers are marked by an AI model (verdict, score, "makes sense", feedback) instead of string matching.
 - 2026-10-05 — Added "Your network, and sharing with permissions" (§7): open network (any role with any role), live shares of files/folders/plans with view or edit rights, agents/templates/components shared as copies (see docs/ACCOUNTS.md).

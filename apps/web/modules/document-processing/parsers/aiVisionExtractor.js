@@ -1240,9 +1240,12 @@ export async function embedPdfFigures(file, blocks) {
       console.warn("[aiVisionExtractor] could not render PDF figures:", error.message);
     }
   }
+  // The converter does not always put the chart's numbers right after its figure (a caption or bullets can sit between):
+  // a chart on a page that already shows a real picture of a figure is that picture's estimate.
+  const pictured = new Set(out.filter((block) => block.type === "figure" && block.image && block.page).map((block) => block.page));
   out.forEach((block, index) => {
     const before = out[index - 1];
-    if (block.type === "chart" && before?.type === "figure" && before.image) block.behind_picture = true;
+    if (block.type === "chart" && ((before?.type === "figure" && before.image) || (block.page && pictured.has(block.page)))) block.behind_picture = true;
   });
   return out;
 }

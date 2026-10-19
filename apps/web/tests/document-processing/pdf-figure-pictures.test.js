@@ -38,4 +38,14 @@ describe("PDF figures become real pictures", () => {
     expect(html).not.toContain("luna-chart");
     expect(html).not.toMatch(/<figcaption>Figure<\/figcaption>/);
   }, 60_000);
+
+  it("hides the estimated chart even when bullets sit between it and the pictured figure", async () => {
+    const out = await embedPdfFigures(file, [
+      { type: "figure", alt_text: "Line chart", caption: "", page: 2 },
+      { type: "list", list_type: "bullet", list_items: [{ text: "Takeaway", depth: 0 }], page: 2 },
+      { type: "chart", chart: { type: "line", categories: ["0", "50"], series: [{ name: "a", values: [60, 25] }] }, page: 2 }
+    ]);
+    expect(out[0].image).toMatch(/^data:image\/jpeg;base64,/);
+    expect(out[2].behind_picture).toBe(true);
+  }, 60_000);
 });

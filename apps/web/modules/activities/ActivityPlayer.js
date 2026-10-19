@@ -218,6 +218,14 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
   const stepMode = phone || preferStep;
   const [index, setIndex] = useState(0);
   const [reviewing, setReviewing] = useState(false);
+  /*
+   * On a phone each question is checked on its own: Check marks it and shows why, then Continue. `checked` holds those
+   * marks by question id, and `modelGrades` the grader's verdicts behind them, so Submit reuses them instead of asking
+   * again. A computer keeps marking everything at the end, in either layout.
+   */
+  const instant = phone;
+  const [checked, setChecked] = useState({});
+  const modelGrades = useRef({});
   const togglePreferStep = () => setPreferStep((value) => { const next = !value; try { window.localStorage.setItem(STEP_PREF, next ? "1" : "0"); } catch { /* not remembered */ } return next; });
 
   // Time per question: the clock runs on whichever question the child is interacting with.
@@ -323,7 +331,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
     if (!window.confirm(t("practice.draft.confirmStartOver"))) return;
     await clearDraft({ scope: draftRef.current.scope, server: draftRef.current.server, key: draftKey });
     draftRef.current.dirty = false;
-    setAnswers({}); setConfidence({}); setWork({}); setIndex(0); setReviewing(false); setResumed(null); setSaveState("");
+    setAnswers({}); setConfidence({}); setWork({}); setChecked({}); modelGrades.current = {}; setIndex(0); setReviewing(false); setResumed(null); setSaveState("");
     timing.current = { durations: {}, current: "", since: Date.now() };
     setStartedAt(Date.now());
   }
@@ -339,9 +347,12 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
   async function check() {
     if (checking || attempt) return;
     let graded = gradeActivity(activity, answers, startedAt, closeTiming(), confidence, work);
+    // Questions already checked one by one keep the grader's verdict they were shown.
+    const known = modelGrades.current;
+    if (Object.keys(known).length) graded = applyGrades(graded, known);
     // The grader reads written answers, and any wrong answer that comes with working: that is where the reason for the mistake is.
     const wrongWithWork = new Set(graded.results.filter((row) => row.correct === false && cleanWork(work[row.id])).map((row) => row.id));
-    const written = questions.filter((question) => wrongWithWork.has(question.id) || needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer }));
+    const written = questions.filter((question) => !known[question.id]).filter((question) => wrongWithWork.has(question.id) || needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer }));
     if (written.length) {
       setChecking(true);
       const controller = new AbortController();
@@ -369,6 +380,41 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
     if (mounted.current) sectionRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
   }
 
+  /** Phone: marks the question on screen, the same way Submit would, and shows its feedback before Continue. Nothing is saved as an attempt yet. */
+  async function checkOne(question) {
+    if (!question || checking || attempt || checked[question.id]) return;
+    const graded = gradeActivity(activity, answers, startedAt, { ...timing.current.durations }, confidence, work);
+    let row = graded.results.find((item) => item.id === question.id);
+    const wantsModel = (row?.correct === false && cleanWork(work[question.id])) || needsModel({ kind: question.kind, given: answers[question.id], expected: question.answer });
+    if (wantsModel) {
+      setChecking(true);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 55000);
+      try {
+        const { grades, note } = await gradeWritten(activity, [question], answers, controller.signal, work);
+        if (grades[question.id]) {
+          modelGrades.current = { ...modelGrades.current, [question.id]: grades[question.id] };
+          row = applyGrades(graded, grades).results.find((item) => item.id === question.id);
+        } else if (mounted.current) setGradingNote(note || t("practice.gradingNote"));
+      } catch {
+        if (mounted.current) setGradingNote(t("practice.gradingNote"));
+      } finally {
+        clearTimeout(timer);
+        if (mounted.current) setChecking(false);
+      }
+    }
+    if (!mounted.current || !row) return;
+    markDirty();
+    setChecked((previous) => ({ ...previous, [question.id]: row }));
+    // The feedback is under the answer: bring its end into view above the bottom bar.
+    window.requestAnimationFrame(() => document.getElementById(`checked-${question.id}`)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" }));
+  }
+  /** Phone, last question: straight to the result when everything is answered, else the review list shows what is missing. */
+  function finishSteps() {
+    if (unanswered === 0) { check(); return; }
+    markDirty(); setReviewing(true); sectionRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  }
+
   const field = phone ? input.replace("text-sm", "text-base") : input;
   const current = questions[index] || null;
   const isLast = index >= questions.length - 1;
@@ -376,9 +422,9 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
   const savedNote = saveState && SAVE_LABEL[saveState] ? <span className={`inline-flex items-center gap-1 text-xs ${saveState === "error" ? "text-[var(--color-danger)]" : "text-soft-ink"}`} role="status" aria-live="polite">{saveState === "server" || saveState === "local" ? <span aria-hidden>✓</span> : null}{t(SAVE_LABEL[saveState])}</span> : null;
   const saveLaterButton = draftKey && !attempt ? <button type="button" className={ghostBtn} disabled={checking || !answered} onClick={saveAndLeave}>{t("practice.draft.saveLater")}</button> : null;
   const renderQuestion = (q, index) => {
-        const result = resultById[q.id];
+        const result = resultById[q.id] || checked[q.id];
         const tone = !result ? "" : result.correct ? "border-[rgba(52,199,89,0.5)] bg-[rgba(52,199,89,0.06)]" : result.verdict === "close" ? "border-[rgba(255,159,10,0.55)] bg-[rgba(255,159,10,0.06)]" : result.correct === false ? "border-[rgba(255,59,48,0.45)] bg-[rgba(255,59,48,0.05)]" : "";
-        const locked = Boolean(attempt) || checking;
+        const locked = Boolean(attempt) || checking || Boolean(checked[q.id]);
         return (
           <article key={q.id} className={`${card} border-2 p-5 ${tone} ${stepMode && !attempt ? "animate-step motion-reduce:animate-none" : ""}`}>
             <div className="flex items-start gap-3">
@@ -499,7 +545,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                   <WorkBox value={work[q.id]} locked={locked} onChange={(next) => setWorkFor(q.id, next)} />
                 ) : null}
 
-                {!attempt && answers[q.id] !== undefined && answers[q.id] !== "" ? (
+                {!attempt && !checked[q.id] && answers[q.id] !== undefined && answers[q.id] !== "" ? (
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-soft-ink">{t("practice.q.howSure")}</span>
                     {CONFIDENCE.map(([value, label]) => (
@@ -521,6 +567,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                     {result.correct === true && result.confidence === "low" ? t("practice.q.gotRight") : ""}
                   </p>
                 ) : null}
+                {result && checked[q.id] && !attempt && !(result.graded && result.verdict) && typeof result.correct === "boolean" ? <p className="m-0 mt-2" role="status"><span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${VERDICT_CHIP[result.correct ? "correct" : "incorrect"][1]}`}>{t(VERDICT_CHIP[result.correct ? "correct" : "incorrect"][0])}</span></p> : null}
                 {result ? <MarkNote result={result} /> : null}
                 {result && Array.isArray(q.steps) && q.steps.length ? (
                   <div className="mt-2 grid gap-1.5 rounded-xl bg-[var(--surface-soft)] p-3">
@@ -532,7 +579,8 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                 {result ? <SourceNote source={q.source} question={q} result={result} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink"><Rich text={q.tex?.explanation || q.explanation} /></p> : null}
-                {result && documentId && q.kind !== "match" && q.kind !== "tiles" ? <ReviewRequest documentId={documentId} question={q} result={result} existing={reviews[q.id]} onSent={(review) => setReviews((current) => ({ ...current, [q.id]: review }))} /> : null}
+                {result && attempt && documentId && q.kind !== "match" && q.kind !== "tiles" ? <ReviewRequest documentId={documentId} question={q} result={result} existing={reviews[q.id]} onSent={(review) => setReviews((current) => ({ ...current, [q.id]: review }))} /> : null}
+                {checked[q.id] && !attempt ? <span id={`checked-${q.id}`} aria-hidden /> : null}
               </div>
             </div>
           </article>
@@ -553,7 +601,13 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
           <>
             <button type="button" className={`${ghostBtn} min-h-[48px] flex-1 text-base sm:flex-none`} disabled={index === 0 || checking} onClick={() => goTo(index - 1)}>← {t("practice.step.back")}</button>
             <span className="hidden flex-1 text-center text-xs font-semibold text-soft-ink sm:block">{t("practice.step.of", { n: index + 1, total: questions.length })}</span>
-            {isLast
+            {instant ? (() => {
+              const done = Boolean(current && checked[current.id]);
+              const hasAnswer = Boolean(current && isAnswered(current, answers[current.id]));
+              const label = checking ? t("practice.checking") : done ? (isLast ? t("practice.step.finish") : `${t("practice.step.continue")} →`) : hasAnswer ? t("practice.step.check") : isLast ? t("practice.step.finish") : `${t("practice.step.skip")} →`;
+              const act = () => { if (done || !hasAnswer) { if (isLast) finishSteps(); else goTo(index + 1); } else checkOne(current); };
+              return <button type="button" className={`${done || hasAnswer ? primaryBtn : ghostBtn} min-h-[48px] flex-[2] text-base sm:flex-none`} disabled={checking} onClick={act}>{label}</button>;
+            })() : isLast
               ? <button type="button" className={`${primaryBtn} min-h-[48px] flex-[2] text-base sm:flex-none`} disabled={checking} onClick={() => { markDirty(); setReviewing(true); sectionRef.current?.scrollIntoView?.({ block: "start", behavior: "smooth" }); }}>{t("practice.step.review")}</button>
               : <button type="button" className={`${primaryBtn} min-h-[48px] flex-[2] text-base sm:flex-none`} disabled={checking} onClick={() => goTo(index + 1)}>{t("practice.step.next")} →</button>}
           </>
@@ -619,7 +673,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
       {stepMode && reviewing && !attempt ? (
         <div className={`${card} animate-step p-5 motion-reduce:animate-none`}>
           <p className="m-0 text-base font-bold text-ink">{t("practice.step.reviewTitle")}</p>
-          <p className="m-0 mt-1 text-sm text-soft-ink">{t("practice.step.reviewHint")}</p>
+          <p className="m-0 mt-1 text-sm text-soft-ink">{instant && Object.keys(checked).length ? t("practice.step.reviewHintChecked") : t("practice.step.reviewHint")}</p>
           {unanswered ? <p className="m-0 mt-2 text-sm font-semibold text-[#8a4a00]">{t.plural("practice.step.unansweredCount", unanswered)}</p> : null}
           <ol className="m-0 mt-3 grid list-none gap-2 p-0">
             {questions.map((q, i) => {

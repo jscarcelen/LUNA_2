@@ -13,6 +13,9 @@
   per-file states and retry, then make a quiz / flashcards / summary / plan from it. Phone-specific first-run tour (`tour.phone.*`).
 - Quizzes open in the same reader and one-question-per-screen player as Practice. All new text in English and Spanish
   (`lib/i18n/messages/*/mobile.js`). No backend, API, prompt or schema change.
+- Phone quizzes now give feedback after each question (Jonathan's call): Check marks the question on screen with the same
+  local marking and grader as Submit, shows why, then Continue; the last one goes to the result. Submit reuses those marks, so
+  the grader is never asked twice. A computer still marks everything at the end.
 
 ## 2026-10-19 (teacher and parent are no longer the student app with other labels)
 

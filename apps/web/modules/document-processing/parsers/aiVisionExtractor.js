@@ -14,7 +14,7 @@ import JSZip from "jszip";
 import { normalizeChart } from "../renderers/chartSvg.js";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFileSync, existsSync, unlinkSync } from "fs";
+import { writeFileSync, existsSync, unlinkSync, renameSync } from "fs";
 import { tmpdir } from "os";
 import path from "path";
 // Note: zlib import removed — extraction handled by pdfjs in child process
@@ -1012,7 +1012,7 @@ process.stdout.write(JSON.stringify({ images: out }), () => process.exit(0));
 }
 
 // Plain Node script (no template interpolation inside): finds where each drawn figure sits on its page and cuts it out.
-const PDF_FIGURE_WORKER_VERSION = "v2";
+const PDF_FIGURE_WORKER_VERSION = "v3";
 const PDF_FIGURE_WORKER_SOURCE = `import path from "path";
 import { createRequire } from "module";
 import { pathToFileURL } from "url";
@@ -1073,9 +1073,11 @@ const sampled = Math.min(pdf.numPages, 120);
 const pagesOf = new Map();
 const cache = new Map();
 for (let n = 1; n <= sampled; n += 1) {
-  const items = await drawingsOf(await pdf.getPage(n));
-  cache.set(n, items);
-  for (const key of new Set(items.map(keyOf))) pagesOf.set(key, (pagesOf.get(key) || 0) + 1);
+  try {
+    const items = await drawingsOf(await pdf.getPage(n));
+    cache.set(n, items);
+    for (const key of new Set(items.map(keyOf))) pagesOf.set(key, (pagesOf.get(key) || 0) + 1);
+  } catch { /* an unreadable page only drops out of the count */ }
 }
 const repeatLimit = Math.max(3, Math.ceil(sampled * 0.25));
 
@@ -1176,7 +1178,12 @@ process.stdout.write(JSON.stringify({ pages: out }), () => process.exit(0));
  */
 async function renderPdfFigures(buf, figures) {
   const workerPath = path.join(tmpdir(), `luna-pdfFigureWorker-${PDF_FIGURE_WORKER_VERSION}.mjs`);
-  writeFileSync(workerPath, PDF_FIGURE_WORKER_SOURCE, "utf8");
+  // Versioned name: write it once, so a call never rewrites the script while another call's process is loading it.
+  if (!existsSync(workerPath)) {
+    const draft = `${workerPath}.${process.pid}-${Date.now()}`;
+    writeFileSync(draft, PDF_FIGURE_WORKER_SOURCE, "utf8");
+    renameSync(draft, workerPath);
+  }
   const inputPath = path.join(tmpdir(), `luna-pdf-fig-${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`);
   writeFileSync(inputPath, buf);
   try {

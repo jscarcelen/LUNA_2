@@ -6,6 +6,7 @@ import { buildJsonSchema as buildBlockJsonSchema, conformBlocks, BLOCKS } from "
 import { consolidationOptions, estimateConsolidationTokens, prepareSources, runConsolidation } from "./consolidator.js";
 import { isMasterDocument } from "./masterDocument.js";
 import { GROUNDING_INSTRUCTION, QUOTE_FIELD, SUPPORT_FIELD, groundBlocks, groundItems } from "./grounding.js";
+import { splitSentences } from "../../../lib/regexCompat.js";
 
 export const AGENT_MODEL_OPTIONS = [
   { value: "gpt-4o", label: "Luna 3 Pro (Recommended, high quality)", tier: "standard" },
@@ -684,7 +685,7 @@ function generateAgentOutputLocally(chunks, fields, config = {}) {
     String(config.contextPrompt || ""),
     answerText
   ].join(" ").trim();
-  const sentences = sampleText.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean);
+  const sentences = splitSentences(sampleText).map((sentence) => sentence.trim()).filter(Boolean);
   const itemCount = sentences.length ? Math.min(6, Math.max(2, Math.ceil(sentences.length / 3))) : 3;
   const items = [];
 

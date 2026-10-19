@@ -98,7 +98,7 @@ export const PANELS = [
     size: "full",
     modes: ["value"],
     info: METRIC_INFO.topicAccuracy,
-    render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} />
+    render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} studentId={ctx.viewingStudentId} />
   },
   {
     id: "next-actions",

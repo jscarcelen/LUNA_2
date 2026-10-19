@@ -1,11 +1,13 @@
 /**
- * GET /api/concepts?workspaceId=&documentIds=id1,id2
+ * GET /api/concepts?workspaceId=&documentIds=id1,id2[&studentId=]
+ * `studentId` (teacher/parent only): the linked student's workspace, through the accepted account link (lib/linkedStudentRead.js).
  * Returns concepts + prerequisites for a workspace. When `documentIds` is present the result is
  * restricted to concepts extracted from those documents (an empty list returns nothing).
  */
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "../../../lib/supabaseClient.js";
 import { denyUnlessOwner } from "../../../lib/resourceAccess.js";
+import { resolveLinkedStudentRead } from "../../../lib/linkedStudentRead.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +21,13 @@ export async function GET(request) {
       return NextResponse.json({ concepts: [], prerequisites: [] });
     }
 
-    const denied = await denyUnlessOwner(request, { workspaceId });
-    if (denied) return denied;
+    // A teacher or parent reading a linked student's concepts (`studentId`): decided by the account link, not by the client.
+    const linked = await resolveLinkedStudentRead(request, { studentId: searchParams.get("studentId"), workspaceId });
+    if (linked?.response) return linked.response;
+    if (!linked) {
+      const denied = await denyUnlessOwner(request, { workspaceId });
+      if (denied) return denied;
+    }
 
     const restrictToDocs = searchParams.has("documentIds");
     const documentIds = String(searchParams.get("documentIds") || "").split(",").map((id) => id.trim()).filter(Boolean);

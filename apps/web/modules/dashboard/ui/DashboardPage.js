@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlanCard } from "../../plans/PlanCard";
 import { PLAN_TAG, dueLabel } from "../../plans/plan";
 import { ExamDatesCard } from "../../plans/ExamDates";
@@ -32,6 +32,14 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
   const steps = useMemo(() => nextSteps(entries, 5), [entries]);
   const hasMaterial = documents.some((document) => document.sourceType !== "generated" && !(document.tags || []).includes(PLAN_TAG));
   const hasEvidence = coach.topics.length > 0 || coach.errorTypes.length > 0;
+  // "What Luna suggests" calls the model (4-5 s): it never blocks the first paint. The panel is mounted (and so reads) only
+  // after Home has been on screen for a moment, or as soon as the person opens it; until then a skeleton holds the place.
+  const [coachReady, setCoachReady] = useState(false);
+  useEffect(() => {
+    if (coachReady) return undefined;
+    const timer = setTimeout(() => setCoachReady(true), 1500);
+    return () => clearTimeout(timer);
+  }, [coachReady]);
   // Exam dates teachers or parents sent (students only; the card is absent when there are none), right under the plan gallery.
   const examCard = examDates.some((entry) => !entry.dismissedAt) ? (
     <ExamDatesCard
@@ -114,10 +122,16 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
           ) : null}
 
           {entries.length ? (
-            <details className="group">
+            <details className="group" onToggle={(event) => { if (event.currentTarget.open) setCoachReady(true); }}>
               <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>What Luna suggests</summary>
               <div className={`${card} mt-3`}>
-                {hasEvidence ? (
+                {hasEvidence && !coachReady ? (
+                  <div className="grid gap-2" aria-busy="true" aria-label="Luna is getting ready">
+                    <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--surface-soft)]" />
+                    <div className="h-4 w-full animate-pulse rounded bg-[var(--surface-soft)]" />
+                    <div className="h-4 w-1/2 animate-pulse rounded bg-[var(--surface-soft)]" />
+                  </div>
+                ) : hasEvidence ? (
                   <CoachPanel
                     role={role}
                     learner={profileName}

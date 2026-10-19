@@ -229,6 +229,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage }) {
                   key={selectedId}
                   role="student"
                   profileName={student.displayName || ""}
+                  viewingStudentId={selectedId}
                   workspaces={data.workspaces}
                   selectedWorkspaceId={workspaceId}
                   selectedSubjectId={subjectId}

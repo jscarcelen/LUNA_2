@@ -1,6 +1,6 @@
+import { splitSentences } from "../../../lib/regexCompat.js";
 function sentenceSplit(text) {
-  return String(text || "")
-    .split(/(?<=[.!?])\s+/)
+  return splitSentences(String(text || ""))
     .map((sentence) => sentence.trim())
     .filter((sentence) => sentence.length >= 24);
 }

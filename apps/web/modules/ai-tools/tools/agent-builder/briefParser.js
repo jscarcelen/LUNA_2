@@ -3,6 +3,8 @@
  * as the sections it is made of (what it does, style, rules, what it returns, the blocks it may
  * write) instead of one wall of text.
  */
+import { splitAfterSentenceEnd } from "../../../../lib/regexCompat.js";
+import { execInstructionsMarker } from "../../../../lib/regexCompat.js";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const sentenceCase = (value) => { const text = clean(value).replace(/^[-•\s]+/, ""); return text ? text.charAt(0).toUpperCase() + text.slice(1) : ""; };
@@ -17,7 +19,7 @@ export function firstSentence(text, max = 170) {
 }
 
 const MARKERS = [
-  ["instructions", /(?<!OUTPUT\s)\bINSTRUCTIONS\b/],
+  ["instructions", { exec: execInstructionsMarker }],
   ["style", /\bStyle:/],
   ["rules", /\bRules:/],
   ["structure", /\bOUTPUT STRUCTURE\b/],
@@ -28,7 +30,7 @@ const MARKERS = [
 export function parseAgentPrompt(prompt) {
   const text = String(prompt || "");
   const found = MARKERS.map(([key, pattern]) => ({ key, match: pattern.exec(text) })).filter((entry) => entry.match).sort((a, b) => a.match.index - b.match.index);
-  if (!found.length) return { plain: true, paragraphs: text.split(/\n{2,}|(?<=[.!?])\s+(?=[A-Z])/).map(clean).filter(Boolean) };
+  if (!found.length) return { plain: true, paragraphs: splitAfterSentenceEnd(text, { after: /\s+(?=[A-Z])/g, always: /\n{2,}/g, alwaysFirst: true }).map(clean).filter(Boolean) };
   const sections = {};
   found.forEach((entry, index) => {
     const start = entry.match.index + entry.match[0].length;

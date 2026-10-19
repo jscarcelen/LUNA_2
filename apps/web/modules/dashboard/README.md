@@ -20,3 +20,6 @@ No plans yet → one line and a "Plan it for me" (`plans?generate=1`) or "Upload
 
 `home.js` is pure (greeting, plan ranking, coach input) and tested in `tests/dashboard/home.test.js`.
 The old sample-data dashboards and `insights.js` were removed.
+
+**What Luna suggests** never blocks the first paint: the coach read (`CoachPanel`, a model call) is mounted about 1.5 s after Home is
+shown, or as soon as the person opens the fold, with a skeleton in the meantime.

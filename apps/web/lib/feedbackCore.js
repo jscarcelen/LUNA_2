@@ -5,6 +5,7 @@
  * mount in AppShell and the table feedback_items) is meant to be deleted once the beta ends; see
  * modules/feedback/README.md for the removal list.
  */
+import { splitAfterSentenceEnd } from "./regexCompat.js";
 
 export const FEEDBACK_MIGRATION = "202610080001_feedback_items.sql";
 
@@ -23,7 +24,7 @@ export const STATUSES = [
 
 const LIMITS = { message: 4000, quote: 1500, selector: 320, snippet: 300, section: 120, page: 120, location: 200, name: 80, viewport: 24, context: 4000, screenshot: 1_200_000 };
 const IMAGE_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
-const text = (value, max) => String(value || "").replaceAll("\u0000", "").trim().slice(0, max);
+const text = (value, max) => String(value || "").split("\u0000").join("").trim().slice(0, max);
 
 /**
  * Where in the code each page lives, so a piece of feedback can be handed to Claude with "start here".
@@ -88,7 +89,7 @@ export function sanitizeFeedback(body = {}) {
 /** A short title for a card: the first sentence of what the person wrote. */
 export function titleOf(item) {
   const source = String(item.message || item.quote || (item.target && item.target.text) || "(screenshot only)").replace(/\s+/g, " ").trim();
-  const first = source.split(/(?<=[.!?])\s/)[0] || source;
+  const first = splitAfterSentenceEnd(source, { after: /\s/g })[0] || source;
   return first.length > 90 ? `${first.slice(0, 87)}…` : first;
 }
 export const shortId = (id) => String(id || "").replace(/-/g, "").slice(0, 8);

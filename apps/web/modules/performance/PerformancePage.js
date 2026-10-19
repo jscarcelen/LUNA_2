@@ -43,7 +43,7 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner, viewingStudentId = "" }) {
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
@@ -295,6 +295,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     focusPlanId: focusPlan?.id || "",
     setFocusPlanId: setTopicPlanId,
     workspaceId: selectedWorkspaceId,
+    // Set only in a teacher/parent read-only view: the linked student whose concepts and mastery are read.
+    viewingStudentId,
     selectedTopic,
     selected: topics.find((entry) => entry.topic === selectedTopic) || null,
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),

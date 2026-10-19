@@ -32,6 +32,8 @@ import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
 import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
 import { renameInResource } from "../modules/workspace/renameCascade";
 
+import { cacheKeyFor, invalidateWorkspaces, loadWorkspaces as fetchWorkspaces, peekWorkspaces, storeWorkspaces } from "../lib/workspacesClientCache.js";
+
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
 
@@ -122,7 +124,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  const [workspaces, setWorkspaces] = useState([]);
+  // The tree is cached in memory (stale-while-revalidate, one shared request): a remount or a second consumer paints at once.
+  const workspacesKey = cacheKeyFor(account);
+  const [workspaces, setWorkspaces] = useState(() => peekWorkspaces(cacheKeyFor(account)) || []);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [statusMessage, setStatusMessage] = useState("Loading workspaces...");
@@ -153,7 +157,8 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   const sectionTabs = tabsFor(section, role, Boolean(account));
 
   useEffect(() => {
-    loadWorkspaces();
+    // Fresh enough (loaded in the last seconds, e.g. a remount) is not asked again; otherwise stale-while-revalidate.
+    loadWorkspaces({ force: false });
   }, []);
 
   function selectFallback(workspaceList) {
@@ -162,17 +167,15 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     setSelectedSubjectId(firstWorkspace?.subjects?.[0]?.id || "");
   }
 
-  async function loadWorkspaces() {
+  async function loadWorkspaces({ force = true } = {}) {
     try {
-      setIsWorking(true);
-      const response = await fetch(WORKSPACES_API, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load workspace data");
-      }
-      setWorkspaces(data.workspaces || []);
-      if (!selectedWorkspaceId && data.workspaces?.length) {
-        const firstWorkspace = data.workspaces[0];
+      // Show the cached tree straight away; the request refreshes it behind (and is shared with any other caller).
+      const cached = peekWorkspaces(workspacesKey);
+      if (cached) setWorkspaces(cached); else setIsWorking(true);
+      const list = await fetchWorkspaces(workspacesKey, { force });
+      setWorkspaces(list);
+      if (!selectedWorkspaceId && list.length) {
+        const firstWorkspace = list[0];
         setSelectedWorkspaceId(firstWorkspace.id);
         setSelectedSubjectId(firstWorkspace.subjects?.[0]?.id || "");
       }
@@ -199,7 +202,10 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       if (!response.ok && !data.error) data.error = uploadFailureMessage(response.status, raw);
       if (response.ok) {
         if (Array.isArray(data.workspaces)) {
+          storeWorkspaces(workspacesKey, data.workspaces);
           setWorkspaces(data.workspaces);
+        } else {
+          invalidateWorkspaces(workspacesKey);
         }
         setStatusMessage("");
         return { ok: true, status: response.status, data };

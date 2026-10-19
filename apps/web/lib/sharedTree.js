@@ -148,7 +148,13 @@ export async function listTreeWithShared(accountId) {
   const owners = people.map((row) => ({ id: row.id, displayName: row.display_name, email: row.email }));
   if (!owners.length) return listWorkspaceTree(accountId);
 
-  const structure = await ensureSharedWithMe(createSupabaseAdminClient(), accountId, owners);
+  // The sharers' trees do not depend on the "Shared with me" structure: load them while it is ensured, and in parallel
+  // with each other (each owner once for this request, however many grants they gave).
+  const [structure, ownerTrees] = await Promise.all([
+    ensureSharedWithMe(createSupabaseAdminClient(), accountId, owners),
+    Promise.all(owners.map(async (owner) => [owner.id, await listWorkspaceTree(owner.id)]))
+  ]);
+  const ownerTreeById = new Map(ownerTrees);
   const tree = await listWorkspaceTree(accountId);
   const workspace = tree.find((entry) => entry.id === structure.workspaceId);
   const subject = workspace?.subjects?.find((entry) => entry.id === structure.subjectId);
@@ -157,7 +163,7 @@ export async function listTreeWithShared(accountId) {
   const seenFolders = new Set((subject.folders || []).map((folder) => folder.id));
   const seenDocuments = new Set((subject.documents || []).map((document) => document.id));
   for (const owner of owners) {
-    const ownerTree = await listWorkspaceTree(owner.id);
+    const ownerTree = ownerTreeById.get(owner.id);
     const nodes = buildSharedNodes({ ownerTree, grants: grants.filter((grant) => grant.ownerId === owner.id), owner, ownerFolderId: structure.folderByOwner.get(owner.id) });
     for (const folder of nodes.folders) if (!seenFolders.has(folder.id)) { seenFolders.add(folder.id); subject.folders.push(folder); }
     for (const document of nodes.documents) if (!seenDocuments.has(document.id)) { seenDocuments.add(document.id); subject.documents.push(document); }

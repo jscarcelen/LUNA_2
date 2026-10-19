@@ -24,7 +24,7 @@ export function storeWorkspaces(key, workspaces) {
 /** After a change the cached tree is stale: keep it for display, but the next load must go to the server. */
 export function invalidateWorkspaces(key) {
   const hit = entries.get(key);
-  if (hit) hit.at = 0;
+  if (hit) hit.at = -Infinity;
 }
 
 export function clearWorkspacesCache() {

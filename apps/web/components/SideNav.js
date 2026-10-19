@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { appName } from "./data";
 import { LunaLogo } from "./brand/LunaLogo.js";
 import { sectionOf } from "./navModel";
+import { useT } from "../lib/i18n/LocaleProvider.js";
 
 /**
  * The navigation rail: the Luna mark and the sections of the app, collapsible to icons.
@@ -13,6 +14,7 @@ import { sectionOf } from "./navModel";
  * are going. The collapsed state is remembered per browser.
  */
 export function SideNav({ navItems = [], page, onPageChange, onClose }) {
+  const t = useT();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     try { setCollapsed(window.localStorage.getItem("luna.nav.collapsed") === "1"); } catch { /* ignore */ }
@@ -34,10 +36,10 @@ export function SideNav({ navItems = [], page, onPageChange, onClose }) {
         {collapsed
           ? <LunaLogo mark size={28} label={appName} />
           : <LunaLogo size={26} label={appName} />}
-        <button className="nav-rail-toggle" type="button" onClick={toggle} title={collapsed ? "Expand menu" : "Collapse menu"} aria-label={collapsed ? "Expand menu" : "Collapse menu"}>{collapsed ? "›" : "‹"}</button>
-        <button className="mobile-close-btn" type="button" onClick={onClose} aria-label="Close menu">✕</button>
+        <button className="nav-rail-toggle" type="button" onClick={toggle} title={collapsed ? t("shell.expandMenu") : t("shell.collapseMenu")} aria-label={collapsed ? t("shell.expandMenu") : t("shell.collapseMenu")}>{collapsed ? "›" : "‹"}</button>
+        <button className="mobile-close-btn" type="button" onClick={onClose} aria-label={t("shell.closeMenu")}>✕</button>
       </div>
-      <nav className="nav-rail-items" aria-label="Sections">
+      <nav className="nav-rail-items" aria-label={t("shell.sections")}>
         {navItems.map((item) => (
           <button
             key={item.key}

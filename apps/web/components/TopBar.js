@@ -8,6 +8,8 @@ import { AccountSettings } from "../modules/accounts/AccountSettings";
 import { NotificationsBell } from "../modules/accounts/NotificationsBell";
 import { PageHelp } from "./PageHelp";
 import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
+import { useT } from "../lib/i18n/LocaleProvider.js";
+import { LanguageSwitch } from "../lib/i18n/LanguageSwitch.js";
 
 const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "?";
 
@@ -16,11 +18,12 @@ const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).sl
  * credit balance, the storage left and the profile (which is also where the role is switched).
  */
 export function TopBar({ title, shortTitle = "", page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, askLunaClaimed = false, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 } }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // In the real platform the profile is the logged-in account: its role is fixed, so there is no role switch, and it can log out.
   const profile = account
-    ? { name: account.displayName, subtitle: `${ROLE_LABEL[account.role] || account.role} · ${account.email}`, initials: initialsOf(account.displayName) }
+    ? { name: account.displayName, subtitle: `${ROLE_LABEL[account.role] ? t(`shell.role.${account.role}`) : account.role} · ${account.email}`, initials: initialsOf(account.displayName) }
     : (roleProfiles[role] || roleProfiles.student);
   async function logOut() {
     await accountsApi.logout();
@@ -30,17 +33,18 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
   return (
     <>
     <header className="top-bar">
-      <button className="mobile-menu-btn" type="button" onClick={onOpenMenu} aria-label="Open menu"><span aria-hidden>☰</span></button>
+      <button className="mobile-menu-btn" type="button" onClick={onOpenMenu} aria-label={t("shell.openMenu")}><span aria-hidden>☰</span></button>
       <div className="top-bar-title-wrap">
         <h2>{shortTitle && shortTitle !== title ? <><span className="top-title-full">{title}</span><span className="top-title-short">{shortTitle}</span></> : title}</h2>
         <PageHelp page={page} role={role} />
       </div>
       <div className="top-account">
+        <LanguageSwitch className="top-lang" />
         <AskLunaMenu variant="bar" claimed={askLunaClaimed} />
         {account ? <NotificationsBell onOpenPage={onOpenPage} /> : null}
         <CreditsBadge />
         <div className="profile-wrap">
-          <button type="button" className="profile-btn" onClick={() => setOpen((value) => !value)} aria-label="Account">
+          <button type="button" className="profile-btn" onClick={() => setOpen((value) => !value)} aria-label={t("shell.account")}>
             <span className="avatar">{profile.initials}</span>
           </button>
           {open ? (
@@ -48,19 +52,19 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
               <p className="profile-menu-name">{profile.name}</p>
               <p className="profile-menu-sub">{profile.subtitle}</p>
               {account ? null : (
-                <div className="role-switch" role="tablist" aria-label="Role selector">
+                <div className="role-switch" role="tablist" aria-label={t("shell.roleSelector")}>
                   {["student", "teacher", "parent"].map((value) => (
                     <button key={value} type="button" className={role === value ? "on" : ""} onClick={() => { onRoleChange?.(value); setOpen(false); }}>
-                      {value[0].toUpperCase() + value.slice(1)}
+                      {t(`shell.role.${value}`)}
                     </button>
                   ))}
                 </div>
               )}
-              <p className="profile-menu-storage">{storage.usedGb} GB of {storage.totalGb} GB used</p>
+              <p className="profile-menu-storage">{t("shell.storage", { used: storage.usedGb, total: storage.totalGb })}</p>
               <div className="storage-meter"><span style={{ width: `${pct}%` }} /></div>
-              {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); onOpenPage?.("connections"); }}>People &amp; connections</button> : null}
-              {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); setSettingsOpen(true); }}>Account settings{account.emailVerified === false ? " · confirm email" : ""}</button> : null}
-              {account ? <button type="button" className="profile-menu-logout" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={logOut}>Log out</button> : null}
+              {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); onOpenPage?.("connections"); }}>{t("shell.people")}</button> : null}
+              {account ? <button type="button" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={() => { setOpen(false); setSettingsOpen(true); }}>{t("shell.settings")}{account.emailVerified === false ? t("shell.confirmEmail") : ""}</button> : null}
+              {account ? <button type="button" className="profile-menu-logout" style={{ marginTop: 10, width: "100%", padding: "8px 12px", borderRadius: 980, border: "1px solid var(--line, #e5e5ea)", background: "#fff", color: "var(--ink, #1d1d1f)", fontSize: 13, fontWeight: 600, cursor: "pointer" }} onClick={logOut}>{t("shell.logout")}</button> : null}
             </div>
           ) : null}
         </div>

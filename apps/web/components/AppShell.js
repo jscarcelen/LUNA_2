@@ -36,6 +36,7 @@ import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
 import { renameInResource } from "../modules/workspace/renameCascade";
 
 import { cacheKeyFor, invalidateWorkspaces, loadWorkspaces as fetchWorkspaces, peekWorkspaces, storeWorkspaces } from "../lib/workspacesClientCache.js";
+import { useT } from "../lib/i18n/LocaleProvider.js";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -46,6 +47,7 @@ const WORKSPACES_API = "/api/workspaces-supabase";
  * the account, there is no role switcher, and Connections / My students are in the menu).
  */
 export function AppShell({ account: accountProp = null, initialPage = "", tourSeen = null }) {
+  const t = useT();
   // Saved profile changes (name, age…) replace the server-rendered account so every screen shows them at once.
   const [accountOverride, setAccountOverride] = useState(null);
   const account = accountOverride || accountProp;
@@ -71,9 +73,9 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     setSharingAvailable(true);
     const stop = onShareRequested(openShare);
     const stopLeave = onLeaveRequested(async (grantId) => {
-      if (!window.confirm("Leave this share? It disappears from your workspace. Your own notes and answers stay yours. The owner can share it with you again.")) return;
+      if (!window.confirm(t("shell.leaveConfirm"))) return;
       const result = await accountsApi.leaveGrant(grantId);
-      setShareNotice(result.ok ? "You left the share." : result.error);
+      setShareNotice(result.ok ? t("shell.leftShare") : result.error);
       if (result.ok) loadWorkspaces();
     });
     return () => { stop(); stopLeave(); setSharingAvailable(false); };
@@ -92,7 +94,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
       }
       await accountsApi.markComponentsImported(list.map((entry) => entry.id));
       const names = [...new Set(list.map((entry) => entry.sender?.displayName).filter(Boolean))];
-      if (alive && imported) setShareNotice(`${imported} shared component${imported === 1 ? "" : "s"} from ${names.join(", ") || "your network"} ${imported === 1 ? "was" : "were"} added to your blocks (My blocks in Template Studio). They are your own copies.`);
+      if (alive && imported) setShareNotice(t.plural("shell.componentsAdded", imported, { names: names.join(", ") || t("shell.yourNetwork") }));
     })();
     return () => { alive = false; };
   }, [account?.id]);
@@ -156,11 +158,11 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
   const startGenerating = Boolean(planParams?.get("generate"));
   const startExamDateId = planParams?.get("exam") || "";
   const startDocumentIds = (planParams?.get("docs") || "").split(",").map((id) => id.trim()).filter(Boolean);
-  const title = titleOf(page, role, currentAiTool ? currentAiTool.name : "");
-  const shortTitle = currentAiTool ? "Make" : shortTitleOf(page, role);
-  const navItems = navFor(role, Boolean(account));
+  const title = titleOf(page, role, currentAiTool ? currentAiTool.name : "", t);
+  const shortTitle = currentAiTool ? t("nav.short.make") : shortTitleOf(page, role, t);
+  const navItems = navFor(role, Boolean(account), t);
   const section = sectionOf(page);
-  const sectionTabs = tabsFor(section, role, Boolean(account));
+  const sectionTabs = tabsFor(section, role, Boolean(account), t);
 
   useEffect(() => {
     // Fresh enough (loaded in the last seconds, e.g. a remount) is not asked again; otherwise stale-while-revalidate.
@@ -966,7 +968,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
   return (
     <div className={`app-shell${menuOpen ? " nav-open" : ""}`}>
       {/* Phone only: tapping the dimmed page closes the workspace sheet. */}
-      <button className="nav-scrim" type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
+      <button className="nav-scrim" type="button" aria-label={t("shell.closeMenu")} onClick={() => setMenuOpen(false)} />
       <SideNav
         navItems={navItems}
         page={page}

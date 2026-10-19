@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { MASTERY_THRESHOLD, RECOVERY_GAP_DAYS, statusOf } from "../mastery";
 import { typeOf } from "../errors";
+import { howToHelp } from "../../dashboard/roleHome";
 
 export const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 export const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -205,21 +206,37 @@ export function MasteryTrend({ points = [], height = 88 }) {
   );
 }
 
-/** What to do next — the screen's point, not an afterthought. */
-export function NextActions({ actions = [], onOpen }) {
+/**
+ * What to do next — the screen's point, not an afterthought. For a student the button practises; for a teacher reading a
+ * student's page (`viewer="teacher"`) it sends that student questions; for a parent (`viewer="parent"`) it opens a short,
+ * plain "How to help" panel built from the topic data (no AI call).
+ */
+export function NextActions({ actions = [], onOpen, viewer = "", studentName = "" }) {
+  const [helpTopic, setHelpTopic] = useState("");
   if (!actions.length) return <p className="m-0 rounded-xl bg-[#eaf7ef] p-4 text-sm text-[#1d7a44]">Nothing is lagging. Keep going.</p>;
+  const label = (action) => (viewer === "teacher" ? `Send ${action.questions} questions to ${studentName || "the student"}` : `Practise ${action.questions} questions`);
   return (
     <ol className="m-0 grid list-none gap-2 p-0">
-      {actions.map((action, index) => (
-        <li key={action.topic} className="rounded-xl border border-ink/10 p-3">
-          <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
-            <span>{index + 1}. {action.topic}</span>
-            <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).ink }}>{action.mastery}% mastery</span>
-          </p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Main issue: {action.reason}. {action.advice}</p>
-          {onOpen ? <button type="button" className={`${ghostBtn} mt-2`} onClick={() => onOpen(action)}>Practise {action.questions} questions</button> : null}
-        </li>
-      ))}
+      {actions.map((action, index) => {
+        const help = viewer === "parent" && helpTopic === action.topic ? howToHelp(action, studentName) : null;
+        return (
+          <li key={action.topic} className="rounded-xl border border-ink/10 p-3">
+            <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
+              <span>{index + 1}. {action.topic}</span>
+              <span className="text-xs font-semibold" style={{ color: statusOf(action.mastery).ink }}>{action.mastery}% mastery</span>
+            </p>
+            <p className="m-0 mt-1 text-[11px] text-soft-ink">Main issue: {action.reason}. {action.advice}</p>
+            {viewer === "parent" ? <button type="button" className={`${ghostBtn} mt-2`} aria-expanded={Boolean(help)} onClick={() => setHelpTopic(help ? "" : action.topic)}>How to help</button> : onOpen ? <button type="button" className={`${ghostBtn} mt-2`} onClick={() => onOpen(action)}>{label(action)}</button> : null}
+            {help ? (
+              <div className="mt-2 rounded-xl bg-[var(--surface-soft)] p-3" role="region" aria-label={help.title}>
+                <p className="m-0 text-sm font-bold text-ink">{help.title}</p>
+                <p className="m-0 mt-1 text-xs text-soft-ink">{help.intro}</p>
+                <ul className="m-0 mt-1.5 grid list-none gap-1 p-0 text-xs text-ink">{help.steps.map((step) => <li key={step}>· {step}</li>)}</ul>
+              </div>
+            ) : null}
+          </li>
+        );
+      })}
     </ol>
   );
 }

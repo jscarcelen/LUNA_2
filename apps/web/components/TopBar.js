@@ -7,6 +7,7 @@ import { ROLE_LABEL, accountsApi } from "../modules/accounts/api";
 import { AccountSettings } from "../modules/accounts/AccountSettings";
 import { NotificationsBell } from "../modules/accounts/NotificationsBell";
 import { PageHelp } from "./PageHelp";
+import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
 
 const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0].toUpperCase()).join("") || "?";
 
@@ -14,7 +15,7 @@ const initialsOf = (name) => String(name || "?").split(/\s+/).filter(Boolean).sl
  * Top bar: where you are on the left, who you are on the right. The account cluster holds the
  * credit balance, the storage left and the profile (which is also where the role is switched).
  */
-export function TopBar({ title, page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 } }) {
+export function TopBar({ title, shortTitle = "", page = "dashboard", role = "student", onRoleChange, onOpenMenu, onOpenPage, askLunaClaimed = false, account = null, onAccountChange, storage = { usedGb: 2.4, totalGb: 10 } }) {
   const [open, setOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // In the real platform the profile is the logged-in account: its role is fixed, so there is no role switch, and it can log out.
@@ -31,10 +32,11 @@ export function TopBar({ title, page = "dashboard", role = "student", onRoleChan
     <header className="top-bar">
       <button className="mobile-menu-btn" type="button" onClick={onOpenMenu} aria-label="Open menu"><span aria-hidden>☰</span></button>
       <div className="top-bar-title-wrap">
-        <h2>{title}</h2>
-        <PageHelp page={page} />
+        <h2>{shortTitle && shortTitle !== title ? <><span className="top-title-full">{title}</span><span className="top-title-short">{shortTitle}</span></> : title}</h2>
+        <PageHelp page={page} role={role} />
       </div>
       <div className="top-account">
+        <AskLunaMenu variant="bar" claimed={askLunaClaimed} />
         {account ? <NotificationsBell onOpenPage={onOpenPage} /> : null}
         <CreditsBadge />
         <div className="profile-wrap">

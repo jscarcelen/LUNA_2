@@ -38,8 +38,9 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
 
   const [connections, setConnections] = useState(null);
   const [setup, setSetup] = useState(null);
-  const [picked, setPicked] = useState([]);
-  const [mode, setMode] = useState("share");
+  // `item.initial` ({ mode, groupIds, recipientIds }) opens the dialog already set up, e.g. "Send practice to this class" from Home.
+  const [picked, setPicked] = useState(() => itemProp?.initial?.recipientIds || []);
+  const [mode, setMode] = useState(() => itemProp?.initial?.mode || "share");
   const [permission, setPermission] = useState("view");
   const [dueDate, setDueDate] = useState("");
   const [note, setNote] = useState("");
@@ -50,7 +51,7 @@ export function ShareDialog({ account, item: itemProp, document: legacyDocument,
   const [access, setAccess] = useState(null);
   // Groups of students (teacher / parent): choosing a group selects all its currently connected members.
   const [groups, setGroups] = useState([]);
-  const [groupIds, setGroupIds] = useState([]);
+  const [groupIds, setGroupIds] = useState(() => itemProp?.initial?.groupIds || []);
   const [outcome, setOutcome] = useState(null);
 
   useEffect(() => {

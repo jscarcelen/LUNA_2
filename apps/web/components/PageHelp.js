@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { TOUR_EVENT, helpFor } from "./helpContent";
 
 /** The "?" button beside the page title: what this page is for, the one thing to try, and the tour. */
-export function PageHelp({ page }) {
+export function PageHelp({ page, role = "student" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
-  const help = helpFor(page);
+  const help = helpFor(page, role);
   useEffect(() => {
     if (!open) return undefined;
     const onDown = (event) => { if (ref.current && !ref.current.contains(event.target)) setOpen(false); };

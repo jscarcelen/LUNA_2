@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TOUR_EVENT, TOUR_KEY, TOUR_STEPS } from "./helpContent";
+import { TOUR_EVENT, TOUR_KEY, tourStepsFor } from "./helpContent";
 
 /**
- * A four-step tour of the four sections. It opens once for a new browser (remembered in localStorage), and again
+ * A short tour of the sections (four for a student or teacher, three for a parent, each in that role's words). It opens once for a new browser (remembered in localStorage), and again
  * whenever someone chooses "Take the tour" in a page's "?" help. A step plays a short clip when it has one.
  */
-export function FirstRunTour() {
+export function FirstRunTour({ role = "student" }) {
+  const TOUR_STEPS = tourStepsFor(role);
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -21,7 +22,7 @@ export function FirstRunTour() {
     try { window.localStorage.setItem(TOUR_KEY, "1"); } catch { /* ignore */ }
   }
   if (!open) return null;
-  const step = TOUR_STEPS[index];
+  const step = TOUR_STEPS[Math.min(index, TOUR_STEPS.length - 1)];
   const last = index === TOUR_STEPS.length - 1;
   return (
     <div className="tw-scope fixed inset-0 z-[400] grid place-items-center bg-black/40 p-4" onClick={close}>

@@ -6,7 +6,7 @@ import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
 import { roleProfiles } from "./data";
-import { PAGE_TITLES, isPageAllowed, navFor, sectionOf, tabKeyOf, tabsFor } from "./navModel";
+import { isPageAllowed, navFor, sectionOf, shortTitleOf, tabKeyOf, tabsFor, titleOf } from "./navModel";
 import { SectionTabs } from "./SectionTabs";
 import { friendlyMessage } from "./friendlyError";
 import { FirstRunTour } from "./FirstRunTour";
@@ -14,6 +14,8 @@ import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
 import { PlatformNotice } from "../modules/accounts/PlatformNotice";
 import { ShareDialog } from "../modules/accounts/ShareDialog";
+import { SendPracticeDialog } from "../modules/accounts/SendPracticeDialog";
+import { SendQuestionsDialog } from "../modules/accounts/SendQuestionsDialog";
 import { accountsApi } from "../modules/accounts/api";
 import { onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
 import { saveBlockToLibrary } from "../modules/template-studio/engine/blocks";
@@ -29,6 +31,7 @@ import { UiCritic } from "../modules/ui/UiCritic";
 import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
+import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
 import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
 import { renameInResource } from "../modules/workspace/renameCascade";
 
@@ -54,6 +57,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     return known ? initialPage : start;
   });
   const [shareTarget, setShareTarget] = useState(null);
+  // Teacher: "Send practice to {class}…" (pick what to send) and "Send 10 questions to {student}" (make, then assign).
+  const [practiceTarget, setPracticeTarget] = useState(null);
+  const [questionsTarget, setQuestionsTarget] = useState(null);
   const [shareNotice, setShareNotice] = useState("");
   // "Share…" opens one dialog for everything: a file/folder/topic/plan (live share with a permission) or an
   // agent/template/component (a copy). Older callers pass a bare document, which still works.
@@ -146,9 +152,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   const startGenerating = Boolean(planParams?.get("generate"));
   const startExamDateId = planParams?.get("exam") || "";
   const startDocumentIds = (planParams?.get("docs") || "").split(",").map((id) => id.trim()).filter(Boolean);
-  const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
-  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (PAGE_TITLES[page.split("?")[0]] || "LUNA")));
-  const navItems = navFor(role);
+  const title = titleOf(page, role, currentAiTool ? currentAiTool.name : "");
+  const shortTitle = currentAiTool ? "Make" : shortTitleOf(page, role);
+  const navItems = navFor(role, Boolean(account));
   const section = sectionOf(page);
   const sectionTabs = tabsFor(section, role, Boolean(account));
 
@@ -241,12 +247,13 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
         examDates={examDates}
         onDismissExamDate={dismissExamDate}
         account={Boolean(account)}
+        onSendPractice={(target) => setPracticeTarget(target)}
       />
     );
     if (page === "dashboard") return home;
     // The real platform only: connections to other accounts, and a connected student's performance.
     if (account && page === "connections") return <ConnectionsPage account={account} onOpenPage={setPage} />;
-    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} />;
+    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} initialGroupId={new URLSearchParams(page.split("?")[1] || "").get("group") || ""} onSendQuestions={(action, student) => setQuestionsTarget({ action, student })} />;
     if (page === "performance") {
       return (
         <PerformancePage
@@ -939,7 +946,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   }, []);
 
   // "Ask Luna" next to any reader finds the workspace tree here.
-  // A reader that shows its own Ask Luna button "claims" the corner, and the page-level "Chat with Luna" steps aside.
+  // A reader that shows its own Ask Luna button "claims" the corner, and the page-level "Ask Luna" menu then offers only feedback.
   const [readerClaims, setReaderClaims] = useState(0);
   const claimAskLuna = useCallback(() => { setReaderClaims((count) => count + 1); return () => setReaderClaims((count) => count - 1); }, []);
   const askLunaValue = useMemo(() => ({ workspaces, selectedWorkspaceId, selectedSubjectId, claim: claimAskLuna }), [workspaces, selectedWorkspaceId, selectedSubjectId, claimAskLuna]);
@@ -961,7 +968,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} />
+        <TopBar title={title} shortTitle={shortTitle} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} askLunaClaimed={readerClaims > 0} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (
@@ -981,10 +988,32 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       {account && shareTarget ? (
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
-      <FirstRunTour />
+      {account && practiceTarget ? (
+        <SendPracticeDialog
+          target={practiceTarget}
+          workspaces={workspaces}
+          onClose={() => setPracticeTarget(null)}
+          onMake={() => { setPracticeTarget(null); setPage("create"); }}
+          onPick={(document) => { const target = practiceTarget; setPracticeTarget(null); setShareTarget({ kind: "document", id: document.id, name: document.name, document, initial: { mode: "assign", groupIds: target.groupIds || [], recipientIds: target.recipientIds || [] } }); }}
+        />
+      ) : null}
+      {account && questionsTarget ? (
+        <SendQuestionsDialog
+          action={questionsTarget.action}
+          student={questionsTarget.student}
+          workspaces={workspaces}
+          workspaceId={selectedWorkspaceId}
+          subjectId={selectedSubjectId}
+          onSave={(payload) => handleSaveGeneratedQuizDocument(payload)}
+          onClose={() => setQuestionsTarget(null)}
+          onAssign={(document) => { const target = questionsTarget; setQuestionsTarget(null); setShareTarget({ kind: "document", id: document.id, name: document.name, document, initial: { mode: "assign", groupIds: [], recipientIds: [target.student.id] } }); }}
+        />
+      ) : null}
+      <FirstRunTour role={role} />
       <UiCritic enabled={criticOn} />
       {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
-      <FeedbackWidget page={page} title={title} role={role} account={account} />
+      <FeedbackWidget page={page} title={title} role={role} account={account} launcher={false} />
+      <AskLunaMenu variant="floating" claimed={readerClaims > 0} />
     </div>
   );
 }

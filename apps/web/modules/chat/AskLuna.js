@@ -36,7 +36,7 @@ const SUGGESTIONS = {
  *          "floating" a floating card (an in-place view), a bottom sheet on a phone
  *   open / onOpenChange   controlled by the host, so it can keep the notes panel and this one apart
  */
-export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material", prefill = null }) {
+export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material", prefill = null, hideLauncher = false }) {
   const { workspaces, selectedWorkspaceId, selectedSubjectId, claim } = useAskLunaWorkspace();
   // A reader's own Ask Luna button replaces the page-level one (never two buttons for the same corner).
   useEffect(() => (mode === "page" ? undefined : claim?.()), [mode, claim]);
@@ -116,13 +116,13 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
   const panelClass = layout === "aside"
     ? "fixed inset-x-0 bottom-0 z-[61] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:static lg:z-auto lg:h-auto lg:w-96 lg:shrink-0 lg:rounded-none lg:border-l lg:border-t-0 lg:shadow-none"
     : "fixed inset-x-0 bottom-0 z-[46] flex h-[70vh] flex-col rounded-t-2xl border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:inset-x-auto lg:bottom-4 lg:right-4 lg:top-20 lg:h-auto lg:w-96 lg:rounded-2xl lg:border lg:shadow-[0_16px_48px_rgba(0,0,0,0.2)]";
-  const launcherBase = launcherPosition || (layout === "aside" ? "fixed bottom-[152px] right-3 z-[56] min-[761px]:bottom-[4.5rem] min-[761px]:right-4" : "fixed bottom-5 right-5 z-[45]");
+  const launcherBase = launcherPosition || (layout === "aside" ? "fixed bottom-[100px] right-3 z-[56] min-[761px]:bottom-[4.5rem] min-[761px]:right-4" : "fixed bottom-5 right-5 z-[45]");
 
   return (
     <>
-      {!open ? (
-        <button type="button" aria-label={page ? "Chat with Luna" : "Ask Luna about this material"} onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
-          <span aria-hidden>✦</span> {page ? "Chat with Luna" : "Ask Luna"}
+      {!open && !hideLauncher ? (
+        <button type="button" aria-label={page ? "Ask Luna" : "Ask Luna about this material"} onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
+          <span aria-hidden>✦</span> Ask Luna
         </button>
       ) : null}
       {open ? (

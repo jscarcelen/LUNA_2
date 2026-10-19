@@ -85,8 +85,8 @@ export const PANELS = [
         skillDiagnosis={ctx.diagnosis}
         stuck={ctx.stuck}
         plan={ctx.planSummary}
-        onPractise={(action) => ctx.onPractise?.(action)}
-        onSchedule={(action) => ctx.onSchedule?.(action)}
+        onPractise={ctx.onPractise ? (action) => ctx.onPractise(action) : undefined}
+        onSchedule={ctx.onSchedule ? (action) => ctx.onSchedule(action) : undefined}
       />
     )
   },
@@ -111,7 +111,7 @@ export const PANELS = [
       meaning: "The topics that most need practice, weakest first, with the main reason each one is lagging.",
       formula: `listed when a topic has 2+ answered questions and mastery below ${MASTERY_THRESHOLD + 10}%  ·  mastery is explained under "Overall accuracy" and "Mastery over time"`
     },
-    render: (ctx) => <NextActions actions={ctx.actions} onOpen={ctx.onPractise} />
+    render: (ctx) => <NextActions actions={ctx.actions} onOpen={ctx.onPractise} viewer={ctx.viewer} studentName={ctx.studentName} />
   },
   {
     id: "error-breakdown",
@@ -160,7 +160,7 @@ export const PANELS = [
             <span className="flex items-center gap-3">
               <span className={`text-sm font-bold ${stats.late.length ? "text-[var(--color-danger)]" : "text-[#2f9e5b]"}`}>{stats.late.length ? "behind" : "on track"}</span>
               {stats.days !== null ? <span className="text-sm text-ink">{stats.days} days left</span> : null}
-              <button type="button" className={ghostBtn} onClick={() => ctx.onOpenPage?.("plans")}>Open the plan</button>
+              {ctx.onOpenPage ? <button type="button" className={ghostBtn} onClick={() => ctx.onOpenPage("plans")}>Open the plan</button> : null}
             </span>
           </div>
           <div className="grid gap-1.5">

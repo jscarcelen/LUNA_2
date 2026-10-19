@@ -16,8 +16,23 @@ export const PAGE_HELP = {
   connections: { what: "People are the teachers, students and parents you are connected to.", tip: "Send a request by email. Both sides must accept." }
 };
 
-export function helpFor(page = "") {
+/** Home and Progress read differently for a teacher or a parent: classes and a child, not "your studying". */
+const ROLE_HELP = {
+  teacher: {
+    dashboard: { what: "Your classes shows, for each class, who is behind and what is due this week.", tip: "Press Send practice on a class to assign it a quiz in one go." },
+    performance: { what: "Overview is your own work. My students shows how each student and class is doing.", tip: "Open My students and pick a class or a student." },
+    students: { what: "Here you see your classes and students and how each is doing.", tip: "Open a student to see where they struggle and send them 10 questions." }
+  },
+  parent: {
+    dashboard: { what: "Your child this week shows whether they are on track, where they struggle and one way you can help.", tip: "Open your child's progress for the detail." },
+    performance: { what: "Overview is your own account. My children shows how each child is doing.", tip: "Open My children and pick a child." },
+    students: { what: "Here you see how each of your children is doing. You can look, not change.", tip: "Open a topic your child struggles with and press How to help." }
+  }
+};
+
+export function helpFor(page = "", role = "student") {
   const base = String(page).split("?")[0];
+  if (ROLE_HELP[role]?.[base]) return ROLE_HELP[role][base];
   if (PAGE_HELP[base]) return PAGE_HELP[base];
   if (/^(ai-tool:|custom-agent:|agent-edit:)/.test(String(page)) || ["ai-tools", "builder", "revenue"].includes(base)) return PAGE_HELP.create;
   return null;
@@ -30,6 +45,23 @@ export const TOUR_STEPS = [
   { id: "progress", title: "Progress: how you are doing", text: "See your accuracy, how much you remember, and which topics to work on next.", icon: "◴", video: "" },
   { id: "create", title: "Create: make anything from your notes", text: "Pick a quiz, flashcards or a summary, tick your material, and go. Press the ? on any page for help.", icon: "✦", video: "" }
 ];
+
+/** The tour for a teacher (classes) or a parent (their child): the student's tour talks about studying, which is not their job here. */
+const ROLE_TOUR = {
+  teacher: [
+    { id: "home", title: "Classes: who needs you", text: "Each class shows who is behind and what is due this week. Press Send practice and the class gets a quiz.", icon: "⌂", video: "" },
+    { id: "study", title: "Courses: your material", text: "Upload notes and slides in Courses. Luna builds quizzes and plans from them, and you send them to a class.", icon: "📚", video: "" },
+    { id: "progress", title: "Progress: your students", text: "Open My students to see each student and class, where they struggle, and send 10 questions on a weak topic.", icon: "◴", video: "" },
+    { id: "create", title: "Create: make practice", text: "Pick a quiz, flashcards or a worksheet, tick your material, and go. Press the ? on any page for help.", icon: "✦", video: "" }
+  ],
+  parent: [
+    { id: "home", title: "Your child this week", text: "Home shows whether your child is on track, where they struggle and one way you can help. Nothing here is a task for you.", icon: "⌂", video: "" },
+    { id: "study", title: "Study: what they have planned", text: "Look at your child's courses and study plans. You can read them, not change them.", icon: "📚", video: "" },
+    { id: "progress", title: "Progress: how they are doing", text: "Open My children for accuracy, what they remember and which topics need support. Press How to help for ideas.", icon: "◴", video: "" }
+  ]
+};
+
+export const tourStepsFor = (role = "student") => ROLE_TOUR[role] || TOUR_STEPS;
 
 export const TOUR_KEY = "luna.tour.v1";
 export const TOUR_EVENT = "luna:tour";

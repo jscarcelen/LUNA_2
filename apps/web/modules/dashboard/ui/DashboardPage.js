@@ -7,6 +7,8 @@ import { ExamDatesCard } from "../../plans/ExamDates";
 import { OriginBadge } from "../../plans/DeadlineBadge";
 import { joinAttempts } from "../../performance/metrics";
 import { CoachPanel } from "../../performance/dashboard/CoachPanel";
+import { TeacherHome } from "./TeacherHome";
+import { ParentHome } from "./ParentHome";
 import { HOME_PLAN_LIMIT, coachInputFor, documentsOf, firstRunChecklist, greeting, homeShortcuts, nextBestAction, nextSteps, planRowsOf, rankPlans } from "../home";
 
 const card = "rounded-[18px] border border-ink/8 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -22,7 +24,7 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * `onOpenPlan({ documentId, subjectId })` opens one plan in Study plans; `onOpenPage(target)` goes
  * to any other page.
  */
-export function DashboardPage({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate, account = false }) {
+function StudentHome({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate, account = false }) {
   const workspace = workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null;
   const documents = useMemo(() => documentsOf(workspace), [workspace]);
   const rows = useMemo(() => planRowsOf(workspace), [workspace]);
@@ -155,4 +157,15 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
       )}
     </section>
   );
+}
+
+/**
+ * Home is different for each role: a student gets their next step, a teacher "Your classes" (who is behind, what is due,
+ * send practice) and a parent "Your child this week" (read-only). `onSendPractice({ name, groupIds, recipientIds })` opens the
+ * Send practice flow.
+ */
+export function DashboardPage({ role = "student", account = false, onSendPractice, onOpenPage, ...rest }) {
+  if (role === "teacher") return <TeacherHome account={account} onSendPractice={onSendPractice} onOpenPage={onOpenPage} />;
+  if (role === "parent") return <ParentHome account={account} onOpenPage={onOpenPage} />;
+  return <StudentHome role={role} account={account} onOpenPage={onOpenPage} {...rest} />;
 }

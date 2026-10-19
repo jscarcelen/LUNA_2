@@ -40,10 +40,19 @@ export function sectionsFor(role = "student") {
 
 const HOME_LABEL = { student: "Home", teacher: "Classes", parent: "Children" };
 
+/**
+ * The page a section opens. Progress opens on "My students" / "My children" for a teacher or parent with an account:
+ * their own stats are empty, the people they follow are the point.
+ */
+export function landingOf(section, role = "student", account = false) {
+  if (section === "progress" && account && role !== "student") return "students";
+  return SECTION_INFO[section].landing;
+}
+
 /** The rail / bottom bar items: `{ key (the page it opens), section, label, icon }`. */
-export function navFor(role = "student") {
+export function navFor(role = "student", account = false) {
   return sectionsFor(role).map((section) => ({
-    key: SECTION_INFO[section].landing,
+    key: landingOf(section, role, account),
     section,
     label: section === "dashboard" ? HOME_LABEL[role] || "Home" : SECTION_INFO[section].label,
     icon: SECTION_INFO[section].icon
@@ -62,7 +71,8 @@ export function tabsFor(section, role = "student", account = false) {
   ];
   if (section === "progress") {
     const tabs = [{ key: "performance", label: role === "student" ? "My progress" : "Overview", hint: "Accuracy, retention and what to work on" }];
-    if (account && role !== "student") tabs.push({ key: "students", label: role === "parent" ? "My children" : "My students", hint: "See how each person is doing" });
+    // Teachers and parents see the people they follow first: that is what Progress is for them.
+    if (account && role !== "student") tabs.unshift({ key: "students", label: role === "parent" ? "My children" : "My students", hint: "See how each person is doing" });
     return tabs;
   }
   if (section === "create") {
@@ -114,3 +124,43 @@ export const PAGE_TITLES = {
   connections: "People",
   students: "My students"
 };
+
+/** Phone-sized names: the top bar has little room, so a long title would be cut ("Make study…"). */
+export const SHORT_TITLES = {
+  dashboard: "Home",
+  workspaces: "Courses",
+  plans: "Study",
+  activities: "Practice",
+  performance: "Progress",
+  create: "Make",
+  "ai-tools": "Make",
+  templates: "Styles",
+  marketplace: "Browse",
+  builder: "Build",
+  revenue: "Earnings",
+  connections: "People",
+  students: "Students"
+};
+
+const HOME_TITLE = { student: "Home", teacher: "Classes", parent: "Children" };
+const HOME_SHORT = { student: "Home", teacher: "Classes", parent: "Children" };
+
+/** The page name shown in the top bar. Tools and agents (`ai-tool:…`) pass their own name as `toolName`. */
+export function titleOf(page = "", role = "student", toolName = "") {
+  const value = String(page || "");
+  if (toolName) return toolName;
+  if (!value || value === "dashboard") return HOME_TITLE[role] || "Home";
+  const base = value.split("?")[0];
+  if (base === "students" && role === "parent") return "My children";
+  return PAGE_TITLES[base] || (sectionOf(value) === "create" ? "Make something" : "LUNA");
+}
+
+/** The short top-bar name for a phone ("My students" → "Students", "Make something" → "Make", "Study plans" → "Study"). */
+export function shortTitleOf(page = "", role = "student") {
+  const value = String(page || "");
+  if (!value || value === "dashboard") return HOME_SHORT[role] || "Home";
+  const base = value.split("?")[0];
+  if (SHORT_TITLES[base]) return SHORT_TITLES[base];
+  if (sectionOf(value) === "create") return "Make";
+  return titleOf(value, role);
+}

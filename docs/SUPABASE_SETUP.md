@@ -140,11 +140,9 @@ Supported actions currently mirror the mock route:
 - `202610190001_account_tour_seen.sql` — `accounts.tour_seen_at` (first-run tour remembered per account; feature-detected, falls back to localStorage keyed by account id).
 - `202610190002_activity_drafts.sql` — `activity_drafts` (quiz "Save and finish later": one draft per account and activity, deleted on submit; never counted as an attempt). Feature-detected: `/api/activities/drafts` answers `setupNeeded` and the player keeps drafts in localStorage keyed by account + activity until it is applied.
 
-## Function region (owner TODO)
+## Function region
 
-Project ref `fekeupkjljbgimntxpnv`. The Supabase region is **not recorded in this repo** (see `docs/PROVIDER_DPA_STEPS.md`: "check which region it is today").
-Home/tab loads make several Supabase round trips per request, so a Vercel function in another continent adds a lot of latency.
-TODO (owner): read the region in Supabase -> Project Settings -> General, then in Vercel -> Project -> Settings -> Functions -> Function Region pick
-the matching one (e.g. Frankfurt `fra1` for `eu-central-1`, Paris `cdg1` for `eu-west-3`, London `lhr1` for `eu-west-2`, Ireland `dub1` for `eu-west-1`), or add
-`"regions": ["<id>"]` to the root `vercel.json`, and redeploy. Not set here on purpose: guessing a region could make it slower.
+Project ref `fekeupkjljbgimntxpnv` is in Supabase **`eu-west-2` (London)** (checked 2026-10-19). The root `vercel.json` pins the
+functions to **`"regions": ["lhr1"]`** (London) so each Supabase round trip stays in the same city; before that the functions ran in
+`iad1` (Washington) and Home took 5–7 s after login. If the database ever moves, change this region to match.
 

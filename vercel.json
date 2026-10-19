@@ -4,6 +4,9 @@
   "outputDirectory": "apps/web/.next",
   "installCommand": "npm install",
   "buildCommand": "npm run build --workspace @luna/web -- --webpack",
+  "regions": [
+    "lhr1"
+  ],
   "github": {
     "silent": true
   },

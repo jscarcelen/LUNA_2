@@ -104,19 +104,9 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
               </div>
             ))}
           </div>
-          {result.messages ? (
-            <details className="rounded-xl bg-[var(--surface-soft)] p-3">
-              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("progress.coach.sameThing")}</summary>
-              <div className="mt-2 grid gap-2">
-                {[["student", t("progress.coach.toLearner")], ["parent", t("progress.coach.toParent")], ["teacher", t("progress.coach.toTeacher")]].map(([key, label]) => (
-                  <p key={key} className="m-0 text-[12px] text-ink"><span className="font-semibold text-soft-ink">{label}: </span>{result.messages[key]}</p>
-                ))}
-              </div>
-            </details>
-          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={ghostBtn} disabled={status === "reading"} onClick={read}>{status === "reading" ? t("progress.coach.reading") : t("progress.coach.readAgain")}</button>
-            <span className="text-[10px] text-soft-ink">{t("progress.coach.readAt", { when: result.readAt ? formatDate(result.readAt, locale, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" }) : t("progress.coach.earlier") })}</span>
+            <span className="text-[10px] text-soft-ink">{t("progress.coach.readAt", { when: result.readAt ? formatDate(result.readAt, locale, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : t("progress.coach.earlier") })}</span>
           </div>
         </>
       ) : (

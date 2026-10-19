@@ -3,6 +3,8 @@
 import { EmptyState } from "../../components/EmptyState";
 import { useEffect, useMemo, useState } from "react";
 import { SubjectTabs } from "../ui/SubjectTabs";
+import { FirstSubjectCard } from "../ui/FirstSubjectCard";
+import { needsOwnSubject } from "../ui/subjects.js";
 import { defaultLearner } from "../performance/learners";
 import { daysUntil, dueLabel, parsePlan } from "../plans/plan";
 import { ReaderView } from "../reader/ReaderView";
@@ -41,7 +43,7 @@ function scoreTone(pct) {
  * subject, with due dates and results. Attempts are recorded per question so mistakes can be
  * reviewed and, later, fed into performance tracking.
  */
-export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject, onUploadTxt }) {
+export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject, onUploadTxt, onCreateSubject }) {
   const t = useT();
   const phone = usePhone();
   const dateLocale = t.locale === "es" ? "es-ES" : undefined;
@@ -152,6 +154,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
     await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: date ? [...tags, `${prefix}${date}`] : tags });
   }
 
+  if (onCreateSubject && needsOwnSubject(workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects, selectedSubjectId)) return <FirstSubjectCard onCreateSubject={onCreateSubject} />;
   if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>{t("practice.selectSubject")}</p></section>;
 
   return (

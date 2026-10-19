@@ -1366,3 +1366,9 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Embedded pictures: a logo stored separately on each page is recognised by size + pixel sample and skipped.
 - A converter `chart` right after a figure with a real picture is kept for text/Markdown (`behind_picture`) but not drawn. Converter prompt: a title inside a chart is not its caption.
 - Test: `tests/document-processing/pdf-figure-pictures.test.js` (fixture `slides-with-charts.pdf`). Applies to new uploads (re-upload existing PDFs).
+## 2026-10-19 — Rollout verification leftovers
+- Speed: root `vercel.json` pins functions to `lhr1` (London), next to Supabase `eu-west-2`; they ran in `iad1` and Home took 5–7 s after login.
+- Study plans / Practice / Progress open on the first topic of your own (`ui/subjects.js defaultSubjectId`); a teacher or parent with only "Shared documents" / "Shared with me" gets `ui/FirstSubjectCard.js` ("Start with a subject of your own") instead of planning inside the shared folder.
+- Reader: maths stored with a doubled backslash (`\\bar{x}` showed as "barx") is typeset again from `data-latex` (`reader/storedMath.js`); new uploads collapse it before KaTeX. Test: `tests/reader-stored-math.test.js`.
+- Inside a reader that has its own "Ask Luna", the app-wide button becomes a plain "Send feedback" button (no second "Ask Luna").
+- "What Luna suggests": the three-audience block is gone and the time reads "Updated Oct 19, 7:16 PM"; teacher/parent cards say "21% known" instead of "mastery 21%".

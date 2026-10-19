@@ -16,6 +16,8 @@ import { isGeneratedDocument, splitDocuments } from "./revise";
 import { BUILTIN_PLAN_AGENTS, planAgentCatalog } from "./agents";
 import { ReaderView } from "../reader/ReaderView";
 import { SubjectTabs } from "../ui/SubjectTabs";
+import { FirstSubjectCard } from "../ui/FirstSubjectCard";
+import { needsOwnSubject } from "../ui/subjects.js";
 import { DocumentReader } from "../reader/DocumentReader";
 import { masterOriginals, originalDownloader } from "../reader/downloadOriginal";
 import { conceptNames, ensureCoverage, planCoverage } from "./coverage";
@@ -300,7 +302,7 @@ function normalizeConceptGraph(conceptData) {
   return capConceptTree(concepts, prerequisites);
 }
 
-export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, startDocumentIds = [], startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
+export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, onCreateSubject, openPlanId = "", startGenerating = false, startDocumentIds = [], startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
   const t = useT();
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
@@ -1313,6 +1315,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   }
 
   /* ---------------------------------------------------------------- all plans */
+  if (onCreateSubject && needsOwnSubject(workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects, selectedSubjectId)) return <FirstSubjectCard onCreateSubject={onCreateSubject} />;
   return (
     <section className="tw-scope grid gap-4">
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />

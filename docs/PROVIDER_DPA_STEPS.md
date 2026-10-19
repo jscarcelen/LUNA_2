@@ -3,12 +3,12 @@
 Not legal advice. Provider menus and terms change: where a step says *verify*, confirm it on the provider's current page before relying on it, then record the date and a PDF of the signed DPA in your records (`docs/PRIVACY_OPERATIONS.md`, processor table). Sign as the company (SL) once it exists, not as an individual.
 
 ## Supabase (database + files — the one that holds everything)
-1. **Region**: Project → Settings → General shows the region. A region cannot be changed in place; if it is not in the EU (Frankfurt, Ireland, London, Paris, …), create a new project in the EU and migrate (dump/restore + storage copy), then update `SUPABASE_URL` and keys. Project ref `fekeupkjljbgimntxpnv`: *check which region it is today*.
+1. **Region**: Project → Settings → General shows the region. A region cannot be changed in place; if it is not in the EU (Frankfurt, Ireland, London, Paris, …), create a new project in the EU and migrate (dump/restore + storage copy), then update `SUPABASE_URL` and keys. Project ref `fekeupkjljbgimntxpnv` is in `eu-west-2` (London), checked 2026-10-19.
 2. **DPA**: Supabase publishes a DPA (with SCCs) on its legal pages; the organisation Owner requests/signs it from the dashboard (Organization → Legal documents) or the DPA form on supabase.com/legal/dpa. *verify exact location*.
 3. Keep RLS on (migration `202610130002`), apply the new migrations, and enable backups (paid plan for point-in-time recovery).
 
 ## Vercel (hosting, cron)
-1. **Region**: Project → Settings → Functions → Function Region: choose the EU region closest to Supabase (e.g. `fra1` Frankfurt or `cdg1` Paris). Redeploy. Static assets are served from the global CDN; that carries no personal data.
+1. **Region**: Project → Settings → Functions → Function Region: pinned to `lhr1` (London, next to Supabase `eu-west-2`) by `"regions"` in the root `vercel.json`; change it there if the database moves. Static assets are served from the global CDN; that carries no personal data.
 2. **DPA**: Vercel's DPA is incorporated by reference in its terms and is also downloadable from vercel.com/legal/dpa; Pro/Enterprise accounts can countersign through sales/support. *verify*.
 3. Logs: keep log retention short and never log request bodies (code already avoids it).
 

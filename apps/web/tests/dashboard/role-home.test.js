@@ -29,7 +29,7 @@ describe("standingOf", () => {
     expect(standing.reasons[0]).toBe("1 late step");
   });
   it("is behind when mastery is low, and new when there is nothing yet", () => {
-    expect(standingOf(member("cy", "Cy", [quiz("q1"), attempt("q1", 0), attempt("q1", 0, 2)])).reasons.join()).toMatch(/mastery/);
+    expect(standingOf(member("cy", "Cy", [quiz("q1"), attempt("q1", 0), attempt("q1", 0, 2)])).reasons.join()).toMatch(/% known/);
     expect(standingOf(member("di", "Di", [])).status).toBe("new");
   });
 });
@@ -69,7 +69,7 @@ describe("weeklySummaryOf (parent)", () => {
 describe("howToHelp", () => {
   it("is plain language built from the topic data", () => {
     const help = howToHelp({ topic: "Osmosis", mastery: 40, reason: "Topic knowledge gap", reasonId: "knowledge", questions: 10 }, "Maria");
-    expect(help.intro).toContain("Maria is finding Osmosis (40% mastery)");
+    expect(help.intro).toContain("Maria is finding Osmosis (40% known)");
     expect(help.steps.join(" ")).toContain("in their own words");
   });
 });

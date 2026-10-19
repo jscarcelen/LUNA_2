@@ -1,4 +1,5 @@
 import { markdownToHtml } from "./markdown.js";
+import { repairStoredMath } from "./storedMath.js";
 
 /**
  * Uploaded documents in the reader: their HTML, their text as blocks (so they can be laid out for a
@@ -21,7 +22,7 @@ export function cleanDocumentHtml(source = "") {
 
 /** What the reader shows for a document: its rendering when it has one, else its text. */
 export function htmlOfDocument(document) {
-  const rendered = cleanDocumentHtml(document?.sourceRenderHtml || "");
+  const rendered = repairStoredMath(cleanDocumentHtml(document?.sourceRenderHtml || ""));
   if (rendered.trim()) return rendered;
   const text = String(document?.content || document?.preview || "").trim();
   return text ? markdownToHtml(text) : "";

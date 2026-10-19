@@ -32,6 +32,7 @@ import { moveDocumentsTo, moveFolderTree } from "./workspaceMove.js";
 import JSZip from "jszip";
 import katex from "katex";
 import { mathStyleTag } from "../modules/ai-tools/render/mathHtml.js";
+import { repairDoubledLatex } from "../modules/reader/storedMath.js";
 import TurndownService from "turndown";
 
 let folderHierarchySupported;
@@ -733,7 +734,8 @@ function isProseLatex(latex = "") {
 }
 
 function renderKatexSafe(latex, displayMode) {
-  const clean = String(latex || "").trim();
+  // `\\bar{x}` (LaTeX escaped twice on the way in) is a line break plus the word "bar": collapse it before typesetting.
+  const clean = repairDoubledLatex(String(latex || "").trim(), displayMode);
   if (!clean) return "";
   try {
     return katex.renderToString(clean, { displayMode, throwOnError: false, output: "html" });

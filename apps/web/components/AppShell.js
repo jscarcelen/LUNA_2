@@ -37,6 +37,8 @@ import { renameInResource } from "../modules/workspace/renameCascade";
 
 import { cacheKeyFor, invalidateWorkspaces, loadWorkspaces as fetchWorkspaces, peekWorkspaces, storeWorkspaces } from "../lib/workspacesClientCache.js";
 import { useT } from "../lib/i18n/LocaleProvider.js";
+import { defaultSubjectId, visibleSubjects } from "../modules/ui/subjects.js";
+import { isReservedSubjectName } from "../modules/accounts/shared.js";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -169,10 +171,19 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     loadWorkspaces({ force: false });
   }, []);
 
+  // Study plans, Practice and Progress read your own topics: a shared one ("Shared documents", "Shared with me")
+  // picked in Courses gives way to your first own topic when you open them.
+  useEffect(() => {
+    if (!/^(plans|activities|performance)/.test(page)) return;
+    const subjects = workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects || [];
+    const selected = subjects.find((subject) => subject.id === selectedSubjectId);
+    if (selected && isReservedSubjectName(selected.name) && visibleSubjects(subjects).length) setSelectedSubjectId(defaultSubjectId(subjects));
+  }, [page, workspaces, selectedWorkspaceId, selectedSubjectId]);
+
   function selectFallback(workspaceList) {
     const firstWorkspace = workspaceList[0];
     setSelectedWorkspaceId(firstWorkspace?.id || "");
-    setSelectedSubjectId(firstWorkspace?.subjects?.[0]?.id || "");
+    setSelectedSubjectId(defaultSubjectId(firstWorkspace?.subjects));
   }
 
   async function loadWorkspaces({ force = true } = {}) {
@@ -185,7 +196,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
       if (!selectedWorkspaceId && list.length) {
         const firstWorkspace = list[0];
         setSelectedWorkspaceId(firstWorkspace.id);
-        setSelectedSubjectId(firstWorkspace.subjects?.[0]?.id || "");
+        setSelectedSubjectId(defaultSubjectId(firstWorkspace.subjects));
       }
       setStatusMessage("");
     } catch (error) {
@@ -286,6 +297,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (page === "activities") {
       return (
         <ActivitiesPage
+          onCreateSubject={handleCreateSubject}
           role={role}
           profileName={profileName}
           workspaces={workspaces}
@@ -361,6 +373,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (page === "plans" || page.startsWith("plans?")) {
       return (
         <PlansPage
+          onCreateSubject={handleCreateSubject}
           onShareDocument={account ? openShare : undefined}
           onUpdateDocumentMeta={handleUpdateDocumentMeta}
           onCreateFolder={handleCreateFolder}
@@ -514,7 +527,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
   function handleSelectWorkspace(workspaceId) {
     setSelectedWorkspaceId(workspaceId);
     const workspace = workspaces.find((item) => item.id === workspaceId);
-    setSelectedSubjectId(workspace && workspace.subjects[0] ? workspace.subjects[0].id : "");
+    setSelectedSubjectId(defaultSubjectId(workspace?.subjects));
   }
 
   function handleSelectSubject(subjectId) {
@@ -630,7 +643,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (result.ok) {
       if (subjectId === selectedSubjectId) {
         const workspace = (result.data.workspaces || []).find((item) => item.id === selectedWorkspaceId);
-        setSelectedSubjectId(workspace?.subjects?.[0]?.id || "");
+        setSelectedSubjectId(defaultSubjectId(workspace?.subjects));
       }
       return;
     }
@@ -646,7 +659,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
       });
       if (forced.ok && subjectId === selectedSubjectId) {
         const workspace = (forced.data.workspaces || []).find((item) => item.id === selectedWorkspaceId);
-        setSelectedSubjectId(workspace?.subjects?.[0]?.id || "");
+        setSelectedSubjectId(defaultSubjectId(workspace?.subjects));
       }
     }
   }

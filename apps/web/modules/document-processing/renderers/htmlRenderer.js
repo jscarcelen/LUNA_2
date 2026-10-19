@@ -146,6 +146,8 @@ function BlockRenderer({ block = {} }) {
     return createNode("ul", {}, items.map((item) => createNode("li", {}, [String(item || "")])));
   }
   if (type === "chart") {
+    // The real picture of this chart is shown just above; its numbers (read off by the converter) stay in text and Markdown only.
+    if (block?.behind_picture) return null;
     return { raw: chartToHtml(block?.chart) };
   }
   if (type === "table") {
@@ -174,11 +176,13 @@ function BlockRenderer({ block = {} }) {
   }
 
   if (type === "figure") {
-    const children = [createNode("figcaption", {}, [String(block?.caption || "Figure")])];
-    if (block?.alt_text) {
-      children.push(createNode("p", { class: "cdm-alt-text" }, [String(block.alt_text)]));
-    }
-    return createNode("figure", {}, children);
+    // No picture could be kept: the description stands in for it, without a bare "Figure" label.
+    const caption = String(block?.caption || "").trim();
+    const alt = String(block?.alt_text || "").trim();
+    const children = [];
+    if (caption) children.push(createNode("figcaption", {}, [caption]));
+    if (alt && alt !== caption) children.push(createNode("p", { class: "cdm-alt-text" }, [alt]));
+    return children.length ? createNode("figure", {}, children) : null;
   }
   if (type === "footnote" || type === "endnote") {
     return createNode("p", { class: `cdm-${type}` }, [String(block?.text || "")]);

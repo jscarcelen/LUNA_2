@@ -1276,3 +1276,19 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Formula editor: MathLive visual dialog (`reader/FormulaEditor.js`, fonts self-hosted in `public/mathlive`). Converter prompt keeps underbraces/labels.
 - Charts: new `chart` block (`renderers/chartSvg.js`) holding the plotted numbers, drawn as SVG in the reader/exports; click a chart to change its numbers (`reader/ChartEditor.js`); saved with "Edit content". Converter emits a fenced `chart` JSON block for plotted charts.
 - Dashboard U1 updated (batching, chart block); run `npm run dashboard:publish`.
+
+## 2026-10-19 (older Safari, speed, linked-student reads, tour per account)
+
+- **Older Safari**: every regex lookbehind (`(?<=`, `(?<!`) removed from `apps/web` source (it is a parse-time SyntaxError before Safari 16.4);
+  `lib/regexCompat.js` holds the replacements and `tests/regex-compat.test.js` fuzzes them against the original patterns and fails if a
+  lookbehind literal is reintroduced. `browserslist` (safari/ios_saf >= 14, chrome/firefox/edge >= 90) added to `apps/web/package.json`
+  (Next reads it for SWC/CSS targets). `replaceAll` and `Array.prototype.at` calls in shared code replaced by `replace(/x/g)` / index.
+- **Speed**: the workspace tree is cached in the browser (`lib/workspacesClientCache.js`: one shared request, stale-while-revalidate, 20 s
+  freshness, kept in sync by mutation answers). `GET /api/workspaces-supabase` loads the tree once (was twice), the 11 column probes are
+  memoised per process and run in parallel, the independent document queries and the sharers' trees load with `Promise.all`.
+  "What Luna suggests" mounts after 1.5 s (or when opened) behind a skeleton. **Owner TODO**: Vercel function region, see `docs/SUPABASE_SETUP.md`.
+- **Linked student read-only view**: `/api/concepts` and `/api/student/mastery` accept `studentId` and authorise it with the accepted
+  teacher_student/parent_student link (`lib/linkedStudentRead.js`); the client no longer sends `learnerId=anonymous`.
+- **Tour per account**: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected), `POST /api/accounts/tour`;
+  without the migration the flag is kept in localStorage under the account id.
+

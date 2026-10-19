@@ -42,7 +42,7 @@ const WORKSPACES_API = "/api/workspaces-supabase";
  * connections) and the logged-in account for the real platform (/platform: the role and name come from
  * the account, there is no role switcher, and Connections / My students are in the menu).
  */
-export function AppShell({ account: accountProp = null, initialPage = "" }) {
+export function AppShell({ account: accountProp = null, initialPage = "", tourSeen = null }) {
   // Saved profile changes (name, age…) replace the server-rendered account so every screen shows them at once.
   const [accountOverride, setAccountOverride] = useState(null);
   const account = accountOverride || accountProp;
@@ -987,7 +987,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       {account && shareTarget ? (
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
-      <FirstRunTour />
+      <FirstRunTour accountId={account?.id || ""} serverSeen={tourSeen} />
       <UiCritic enabled={criticOn} />
       {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
       <FeedbackWidget page={page} title={title} role={role} account={account} />

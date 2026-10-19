@@ -34,3 +34,9 @@ Notes:
 - For LaTeX or placeholder examples, always wrap text as JSX string literals:
 	- `<code>{"$\\lim_{x\\to 0}$"}</code>`
 	- `{" {{text}}, {{html}}, {{latex}} "}`
+
+## Browser support
+
+`package.json` `browserslist` is safari/ios_saf >= 14, chrome/firefox/edge >= 90. Regex lookbehind (`(?<=` / `(?<!`) is a syntax error before Safari 16.4 and
+is banned in source (`tests/regex-compat.test.js` fails on it); use `lib/regexCompat.js`. Avoid load-time use of newer APIs (`structuredClone`, `Object.hasOwn`, `findLast`, `replaceAll`, `.at()`).
+The workspace tree is cached in the browser by `lib/workspacesClientCache.js`.

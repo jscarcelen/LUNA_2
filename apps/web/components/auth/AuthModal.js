@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { accountsApi } from '../../modules/accounts/api';
 import { ACCOUNTS_MIGRATION } from '../../modules/accounts/SetupNotice';
 import { PHONE_HELP, normalizePhone } from '../../lib/phone.js';
+import { useT } from '../../lib/i18n/LocaleProvider.js';
+import { LanguageSwitch } from '../../lib/i18n/LanguageSwitch.js';
 
 // ─── Design tokens (the same crisp, light language as the landing page) ─────────
 const T = {
@@ -31,20 +33,20 @@ const primaryButton = (disabled) => ({
 });
 
 const PROFILES = [
-  { id: 'student', emoji: '🎓', title: 'Student', desc: 'Generate and track your own study material' },
-  { id: 'parent', emoji: '👨‍👩‍👧', title: 'Parent', desc: 'Follow your children’s progress and send them work' },
-  { id: 'teacher', emoji: '🏫', title: 'Teacher', desc: 'Manage a class, build curriculum, assign work to students' },
+  { id: 'student', emoji: '🎓' },
+  { id: 'parent', emoji: '👨‍👩‍👧' },
+  { id: 'teacher', emoji: '🏫' },
 ];
 
 // Who each profile can ask to connect with at sign-up. `relation` is the role of the person asked ('' = anyone:
 // the network is open, any account can connect with any other; the kind of connection is settled from the roles).
-const OTHERS_FIELD = { key: 'others', relation: '', label: 'Anyone else you want to connect with', hint: 'Optional. Classmates, colleagues, other parents… you can build your network later too.' };
+const OTHERS_FIELD = { key: 'others', relation: '', labelKey: 'auth.invite.others.label', hintKey: 'auth.invite.others.hint' };
 const INVITE_FIELDS = {
-  teacher: [{ key: 'students', relation: 'student', label: 'Your students’ emails', hint: 'Optional. One per line or separated by commas.' }, OTHERS_FIELD],
-  parent: [{ key: 'children', relation: 'student', label: 'Your children’s emails', hint: 'Optional. One per line or separated by commas.' }, OTHERS_FIELD],
+  teacher: [{ key: 'students', relation: 'student', labelKey: 'auth.invite.students.label', hintKey: 'auth.invite.list.hint' }, OTHERS_FIELD],
+  parent: [{ key: 'children', relation: 'student', labelKey: 'auth.invite.children.label', hintKey: 'auth.invite.list.hint' }, OTHERS_FIELD],
   student: [
-    { key: 'parents', relation: 'parent', label: 'Parent emails', hint: 'Optional.' },
-    { key: 'teachers', relation: 'teacher', label: 'Teacher emails', hint: 'Optional.' },
+    { key: 'parents', relation: 'parent', labelKey: 'auth.invite.parents.label', hintKey: 'auth.invite.optional.hint' },
+    { key: 'teachers', relation: 'teacher', labelKey: 'auth.invite.teachers.label', hintKey: 'auth.invite.optional.hint' },
     OTHERS_FIELD,
   ],
 };
@@ -71,6 +73,7 @@ export function parseEmailList(text) {
  * On success the browser goes to `next` (the real platform, /platform, by default).
  */
 export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
+  const t = useT();
   const [step, setStep] = useState(1);
   const [role, setRole] = useState('student');
   const [birthDate, setBirthDate] = useState('');
@@ -97,7 +100,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   const needsGuardian = age !== null && age < 14;
   // The mismatch message appears as soon as both fields have something, and the form cannot be sent until they match.
   const mismatch = isSignUp && form.passwordConfirm.length > 0 && form.password !== form.passwordConfirm;
-  const passwordConfirmError = fieldErrors.passwordConfirm || (mismatch ? 'The two passwords do not match.' : '');
+  const passwordConfirmError = fieldErrors.passwordConfirm || (mismatch ? t("auth.passwordMismatch") : '');
 
   function showFailure(result) {
     if (result.setupNeeded) setSetupMigration(result.migration || ACCOUNTS_MIGRATION);
@@ -109,7 +112,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   }
 
   async function continueFromProfile() {
-    if (age === null) { setError('Enter your date of birth to continue.'); return; }
+    if (age === null) { setError(t("auth.enterBirth")); return; }
     setError('');
     setSchoolOk(false);
     const code = role === 'student' ? classCode.trim() : '';
@@ -121,8 +124,8 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
       setBusy(false);
       if (result.setupNeeded) { setSetupMigration(result.migration || ACCOUNTS_MIGRATION); return; }
       if (!result.ok) { setError(result.error); return; }
-      if (!result.data?.valid) { setError('That class code did not work. Check it with your teacher, or leave it empty.'); return; }
-      if (needsGuardian && !result.data?.schoolConsent) { setError('This class cannot approve students under 14 on its own. Clear the code to ask a parent or guardian instead.'); return; }
+      if (!result.data?.valid) { setError(t("auth.codeInvalid")); return; }
+      if (needsGuardian && !result.data?.schoolConsent) { setError(t("auth.codeNoConsent")); return; }
       if (needsGuardian) setSchoolOk(true);
       setStep(2);
       return;
@@ -135,7 +138,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     event?.preventDefault();
     if (busy) return;
     setError('');
-    if (!guardian.name.trim() || !guardian.email.trim()) { setError('Enter your first name and your parent or guardian’s email.'); return; }
+    if (!guardian.name.trim() || !guardian.email.trim()) { setError(t("auth.guardianNeedFields")); return; }
     setBusy(true);
     const result = await accountsApi.guardianRequest({ studentName: guardian.name, birthDate, guardianEmail: guardian.email });
     setBusy(false);
@@ -152,10 +155,10 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     setSetupMigration('');
     if (isSignUp) {
       const problems = {};
-      if (form.password !== form.passwordConfirm) problems.passwordConfirm = 'The two passwords do not match.';
+      if (form.password !== form.passwordConfirm) problems.passwordConfirm = t("auth.passwordMismatch");
       const phone = normalizePhone(form.phone, { required: !(age !== null && age < 18) });
       if (!phone.ok) problems.phone = phone.error;
-      if (!acceptTerms) problems.acceptTerms = 'Accept the Terms of Service and the Privacy Policy to continue.';
+      if (!acceptTerms) problems.acceptTerms = t("auth.acceptRequired");
       if (Object.keys(problems).length) {
         setFieldErrors(problems);
         return;
@@ -202,7 +205,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
       return;
     }
     if (result.setupNeeded) setSetupMigration(result.migration || ACCOUNTS_MIGRATION);
-    setError(result.data?.mailSetupNeeded ? 'Email is not set up yet, so reset emails cannot be sent. Ask the person who runs this Luna to configure email.' : result.error);
+    setError(result.data?.mailSetupNeeded ? t("auth.mailNotSet") : result.error);
   }
 
   async function resendConfirmation() {
@@ -216,7 +219,7 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
   const goTo = (name) => { setError(''); setFieldErrors({}); setNotice(null); setView(name); };
   const errorProps = (id, text) => (text ? { 'aria-invalid': true, 'aria-describedby': id } : {});
 
-  const heading = view === 'guardian' ? 'Ask a parent or guardian' : view === 'guardianSent' ? 'Check with your parent' : view === 'forgot' ? 'Reset your password' : view === 'done' ? 'Check your email' : isSignUp ? (step === 1 ? 'Choose your profile' : 'Create your account') : 'Welcome back';
+  const heading = view === 'guardian' ? t("auth.h.guardian") : view === 'guardianSent' ? t("auth.h.guardianSent") : view === 'forgot' ? t("auth.h.forgot") : view === 'done' ? t("auth.h.done") : isSignUp ? (step === 1 ? t("auth.h.profile") : t("auth.h.create")) : t("auth.h.welcome");
   const confirmation = notice?.confirmation;
   const infoBox = { fontSize: 13.5, color: T.ink, lineHeight: 1.55, background: T.bg, borderRadius: 12, padding: '12px 14px' };
   const linkButton = { background: 'none', border: 'none', color: T.accent, cursor: 'pointer', fontSize: 13, fontWeight: 500, padding: 0 };
@@ -228,18 +231,19 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
     >
       <div role="dialog" aria-modal="true" aria-label={heading} style={{ background: T.paper, borderRadius: 22, padding: 'clamp(22px, 6vw, 40px)', width: '100%', maxWidth: 440, boxShadow: '0 24px 72px rgba(0,0,0,0.2)', position: 'relative', margin: 'auto', boxSizing: 'border-box' }}>
         {onClose && (
-          <button type="button" onClick={onClose} aria-label="Close" style={{ position: 'absolute', top: 16, right: 16, background: T.bg, border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', fontSize: 16, color: T.sub, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+          <button type="button" onClick={onClose} aria-label={t("auth.close")} style={{ position: 'absolute', top: 16, right: 16, background: T.bg, border: 'none', borderRadius: '50%', width: 30, height: 30, cursor: 'pointer', fontSize: 16, color: T.sub, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
         )}
 
+        <div style={{ position: 'absolute', top: 18, left: 18 }}><LanguageSwitch /></div>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ margin: '0 auto 12px', display: 'flex', justifyContent: 'center' }}><LunaLogo size={44} mark tile /></div>
           <h2 style={{ fontSize: 22, fontWeight: 700, color: T.ink, margin: 0 }}>{heading}</h2>
-          {view === 'form' && isSignUp && step === 1 && <p style={{ fontSize: 13, color: T.sub, margin: '6px 0 0' }}>Pick the profile that fits you best</p>}
+          {view === 'form' && isSignUp && step === 1 && <p style={{ fontSize: 13, color: T.sub, margin: '6px 0 0' }}>{t("auth.pickProfile")}</p>}
         </div>
 
         {setupMigration ? (
           <div role="alert" style={{ fontSize: 12.5, color: T.ink, background: 'rgba(255,149,0,0.1)', border: '1px solid rgba(255,149,0,0.35)', borderRadius: 12, padding: '10px 12px', lineHeight: 1.5, marginBottom: 14, overflowWrap: 'anywhere' }}>
-            <strong>Accounts need one database step.</strong> Apply <code>{setupMigration}</code> in Supabase, then try again. The demo (<a href="/app" style={{ color: T.accent }}>/app</a>) works without it.
+            <strong>{t("auth.dbStep")}</strong> {t('auth.dbStep.a')}<code>{setupMigration}</code>{t('auth.dbStep.b')}<a href="/app" style={{ color: T.accent }}>/app</a>{t('auth.dbStep.c')}
           </div>
         ) : null}
 
@@ -247,44 +251,44 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {confirmation?.mailSetupNeeded ? (
               <div role="status" style={infoBox}>
-                Your account is ready. <strong>Email is not set up yet</strong> on this Luna, so we could not send the confirmation link. You can use your workspace now; connecting with other people needs a confirmed email.
+                {t('auth.done.noMail.a')}<strong>{t('auth.done.noMail.b')}</strong>{t('auth.done.noMail.c')}
               </div>
             ) : confirmation?.delivered ? (
               <div role="status" style={infoBox}>
-                We sent a confirmation link to <strong style={{ overflowWrap: 'anywhere' }}>{form.email}</strong>. It works once and expires in 48 hours. Until you confirm, you can use your own workspace but not connect, share or assign.
+                {t('auth.done.sent', { email: form.email })}
               </div>
             ) : (
               <div role="status" style={infoBox}>
-                Your account is ready, but the confirmation email could not be sent. Use “Send it again” in a moment.
+                {t('auth.done.failed')}
               </div>
             )}
             {confirmation?.devPreview?.links?.length ? (
               <div style={{ fontSize: 12, color: T.sub, overflowWrap: 'anywhere' }}>Development only, the link is also in the server console: <a href={confirmation.devPreview.links[0]} style={{ color: T.accent }}>confirm email</a></div>
             ) : null}
-            {notice?.classJoin?.ok ? <div role="status" style={{ fontSize: 12.5, color: T.ink }}>You joined the class {notice.classJoin.className}.</div> : null}
+            {notice?.classJoin?.ok ? <div role="status" style={{ fontSize: 12.5, color: T.ink }}>{t('auth.done.joined', { name: notice.classJoin.className })}</div> : null}
             {notice?.classJoin && !notice.classJoin.ok ? <div role="alert" style={{ fontSize: 12.5, color: T.red }}>{notice.classJoin.error}</div> : null}
-            {notice?.queued ? <div style={{ fontSize: 12.5, color: T.sub }}>The {notice.queued} connection request{notice.queued === 1 ? '' : 's'} you added will be sent once your email is confirmed.</div> : null}
-            {notice?.resent ? <div role="status" style={{ fontSize: 12.5, color: T.sub }}>Sent again.</div> : null}
+            {notice?.queued ? <div style={{ fontSize: 12.5, color: T.sub }}>{t.plural('auth.done.queued', notice.queued)}</div> : null}
+            {notice?.resent ? <div role="status" style={{ fontSize: 12.5, color: T.sub }}>{t("auth.sentAgain")}</div> : null}
             {notice?.resendError ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{notice.resendError}</div> : null}
-            <button type="button" onClick={() => window.location.assign(next)} style={primaryButton(false)}>Go to Luna</button>
-            <button type="button" onClick={resendConfirmation} disabled={busy} style={{ ...linkButton, cursor: busy ? 'default' : 'pointer' }}>Send it again</button>
+            <button type="button" onClick={() => window.location.assign(next)} style={primaryButton(false)}>{t("auth.goToLuna")}</button>
+            <button type="button" onClick={resendConfirmation} disabled={busy} style={{ ...linkButton, cursor: busy ? 'default' : 'pointer' }}>{t("auth.sendAgain")}</button>
           </div>
         )}
 
         {view === 'guardian' && (
           <form onSubmit={sendGuardianRequest} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
-            <p style={{ fontSize: 13.5, color: T.sub, margin: 0, lineHeight: 1.5 }}>Under 14, a parent or guardian has to agree before you can use LUNA. We will email them. Until they say yes we only keep your first name, birth date and their email, and we delete them after 48 hours.</p>
+            <p style={{ fontSize: 13.5, color: T.sub, margin: 0, lineHeight: 1.5 }}>{t("auth.guardianIntro")}</p>
             <div>
-              <label htmlFor="luna-g-name" style={labelStyle}>Your first name</label>
+              <label htmlFor="luna-g-name" style={labelStyle}>{t("auth.label.guardianName")}</label>
               <input id="luna-g-name" value={guardian.name} onChange={(event) => setGuardian((current) => ({ ...current, name: event.target.value }))} style={inputStyle} />
             </div>
             <div>
-              <label htmlFor="luna-g-email" style={labelStyle}>Parent or guardian’s email</label>
+              <label htmlFor="luna-g-email" style={labelStyle}>{t("auth.label.guardianEmail")}</label>
               <input id="luna-g-email" type="email" value={guardian.email} onChange={(event) => setGuardian((current) => ({ ...current, email: event.target.value }))} placeholder="parent@example.com" style={inputStyle} />
             </div>
             {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-            <button type="submit" disabled={busy} style={primaryButton(busy)}>{busy ? 'One moment…' : 'Email my parent or guardian'}</button>
-            <button type="button" onClick={() => { setError(''); setView('form'); setStep(1); }} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>← Back</button>
+            <button type="submit" disabled={busy} style={primaryButton(busy)}>{busy ? t("auth.busy") : t("auth.btn.emailGuardian")}</button>
+            <button type="button" onClick={() => { setError(''); setView('form'); setStep(1); }} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>{t("auth.backArrow")}</button>
           </form>
         )}
 
@@ -292,11 +296,11 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <div role="status" style={infoBox}>
               {notice?.guardian?.mailSetupNeeded
-                ? <>Email is not set up yet on this LUNA, so we could not email your parent or guardian.</>
-                : <>We emailed <strong style={{ overflowWrap: 'anywhere' }}>{guardian.email}</strong>. When they open the link and agree, your account is created and they can log in to see how you are doing. The link works for 48 hours.</>}
+                ? <>{t("auth.okEmailSetNot")}</>
+                : <>{t('auth.guardianSent.body', { email: guardian.email })}</>}
             </div>
             {notice?.guardian?.devPreview?.links?.length ? <div style={{ fontSize: 12, color: T.sub, overflowWrap: 'anywhere' }}>Development only: <a href={notice.guardian.devPreview.links[0]} style={{ color: T.accent }}>consent link</a></div> : null}
-            <button type="button" onClick={onClose || (() => window.location.assign('/'))} style={primaryButton(false)}>Done</button>
+            <button type="button" onClick={onClose || (() => window.location.assign('/'))} style={primaryButton(false)}>{t("auth.done")}</button>
           </div>
         )}
 
@@ -304,21 +308,21 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
           <form onSubmit={sendReset} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
             {notice?.sent ? (
               <>
-                <div role="status" style={infoBox}>{notice.message || 'If that email has an account, we sent a link to reset the password.'}</div>
+                <div role="status" style={infoBox}>{notice.message || t("auth.resetSent")}</div>
                 {notice.devPreview?.links?.length ? <div style={{ fontSize: 12, color: T.sub, overflowWrap: 'anywhere' }}>Development only, the link is also in the server console: <a href={notice.devPreview.links[0]} style={{ color: T.accent }}>reset password</a></div> : null}
               </>
             ) : (
               <>
-                <p style={{ fontSize: 13.5, color: T.sub, margin: 0, lineHeight: 1.5 }}>Enter your email and we will send you a link to choose a new password.</p>
+                <p style={{ fontSize: 13.5, color: T.sub, margin: 0, lineHeight: 1.5 }}>{t("auth.resetIntro")}</p>
                 <div>
-                  <label htmlFor="luna-reset-email" style={labelStyle}>Email</label>
+                  <label htmlFor="luna-reset-email" style={labelStyle}>{t("auth.label.email")}</label>
                   <input id="luna-reset-email" type="email" autoComplete="email" value={form.email} onChange={setField('email')} placeholder="you@example.com" style={inputStyle} />
                 </div>
                 {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-                <button type="submit" disabled={busy} style={primaryButton(busy)}>{busy ? 'One moment…' : 'Send reset link'}</button>
+                <button type="submit" disabled={busy} style={primaryButton(busy)}>{busy ? t("auth.busy") : t("auth.sendReset")}</button>
               </>
             )}
-            <button type="button" onClick={() => goTo('form')} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>← Back to log in</button>
+            <button type="button" onClick={() => goTo('form')} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>{t("auth.backLogin")}</button>
           </form>
         )}
 
@@ -332,81 +336,81 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
               }}>
                 <span style={{ fontSize: 24 }}>{profile.emoji}</span>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{profile.title}</div>
-                  <div style={{ fontSize: 12, color: T.sub }}>{profile.desc}</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: T.ink }}>{t(`auth.profile.${profile.id}.title`)}</div>
+                  <div style={{ fontSize: 12, color: T.sub }}>{t(`auth.profile.${profile.id}.desc`)}</div>
                 </div>
               </button>
             ))}
             <div style={{ padding: 14, background: T.bg, borderRadius: 12, marginTop: 4 }}>
-              <label htmlFor="luna-birth" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>Your date of birth</label>
+              <label htmlFor="luna-birth" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>{t("auth.label.birth")}</label>
               <input id="luna-birth" type="date" autoComplete="bday" value={birthDate} max={new Date().toISOString().slice(0, 10)} onChange={(event) => { setBirthDate(event.target.value); setError(''); }} style={{ ...inputStyle, marginTop: 6 }} />
-              <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>We use it only to check your age. Under 14, a parent or guardian has to agree first.</div>
+              <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>{t("auth.birthHelp")}</div>
               {needsGuardian && (
-                <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>{role === 'student' && classCode.trim() ? 'Under 14: your class code must come from a school that holds parental consent.' : 'Under 14: we will ask your parent or guardian to agree. Nothing else about you is saved until they do.'}</div>
+                <div style={{ fontSize: 12, color: T.amber, marginTop: 6 }}>{role === 'student' && classCode.trim() ? t("auth.under14School") : t("auth.under14Ask")}</div>
               )}
             </div>
             {role === 'student' && (
               <div style={{ padding: 14, background: T.bg, borderRadius: 12 }}>
-                <label htmlFor="luna-class-code" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>Class code <span style={{ color: T.sub, fontWeight: 400 }}>(optional)</span></label>
+                <label htmlFor="luna-class-code" style={{ fontSize: 13, color: T.ink, fontWeight: 500 }}>{t("auth.classCode")} <span style={{ color: T.sub, fontWeight: 400 }}>{t("auth.optional")}</span></label>
                 <input id="luna-class-code" value={classCode} maxLength={9} autoCapitalize="characters" autoComplete="off" spellCheck={false} onChange={(event) => { setClassCode(event.target.value.toUpperCase()); setError(''); }} placeholder="ABC DEF" style={{ ...inputStyle, marginTop: 6, letterSpacing: 3, textTransform: 'uppercase' }} />
-                <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>If your teacher gave you a code, enter it to join their class straight away. You can also do it later in People.</div>
+                <div style={{ fontSize: 11.5, color: T.sub, marginTop: 6, lineHeight: 1.45 }}>{t("auth.classCodeHelp")}</div>
               </div>
             )}
             {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-            <button type="button" onClick={continueFromProfile} disabled={busy} style={{ ...primaryButton(busy), marginTop: 6 }}>{busy ? 'One moment…' : 'Continue →'}</button>
+            <button type="button" onClick={continueFromProfile} disabled={busy} style={{ ...primaryButton(busy), marginTop: 6 }}>{busy ? t("auth.busy") : t("auth.btn.continue")}</button>
           </div>
         )}
 
         {view === 'form' && (!isSignUp || step === 2) && (
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
-            {isSignUp && schoolOk ? <div role="status" style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.5, background: T.bg, borderRadius: 10, padding: '10px 12px' }}>Your school confirmed it holds parental consent for this class, so you do not need to wait for a parent or guardian email.</div> : null}
+            {isSignUp && schoolOk ? <div role="status" style={{ fontSize: 12.5, color: T.ink, lineHeight: 1.5, background: T.bg, borderRadius: 10, padding: '10px 12px' }}>{t("auth.schoolOk")}</div> : null}
             {isSignUp && (
               <div>
-                <label htmlFor="luna-name" style={labelStyle}>Full name</label>
-                <input id="luna-name" autoComplete="name" value={form.name} onChange={setField('name')} placeholder="Your name" style={inputStyle} />
+                <label htmlFor="luna-name" style={labelStyle}>{t("auth.label.name")}</label>
+                <input id="luna-name" autoComplete="name" value={form.name} onChange={setField('name')} placeholder={t("auth.ph.name")} style={inputStyle} />
               </div>
             )}
             <div>
-              <label htmlFor="luna-email" style={labelStyle}>Email</label>
+              <label htmlFor="luna-email" style={labelStyle}>{t("auth.label.email")}</label>
               <input id="luna-email" type="email" autoComplete="email" value={form.email} onChange={setField('email')} placeholder="you@example.com" style={inputStyle} />
             </div>
             {isSignUp && (
               <div>
-                <label htmlFor="luna-phone" style={labelStyle}>Phone number{age !== null && age < 18 ? <span style={{ color: T.sub, fontWeight: 400 }}> (optional under 18)</span> : null}</label>
+                <label htmlFor="luna-phone" style={labelStyle}>{t("auth.phoneLabel")}{age !== null && age < 18 ? <span style={{ color: T.sub, fontWeight: 400 }}>{t("auth.optionalUnder18")}</span> : null}</label>
                 <input id="luna-phone" type="tel" inputMode="tel" autoComplete="tel" value={form.phone} onChange={setField('phone')} placeholder="+1 415 555 2671" style={{ ...inputStyle, borderColor: fieldErrors.phone ? T.red : T.line }} {...errorProps('luna-phone-msg', fieldErrors.phone)} />
                 <div id="luna-phone-msg" role={fieldErrors.phone ? 'alert' : undefined} style={{ fontSize: 11.5, marginTop: 4, color: fieldErrors.phone ? T.red : T.sub, lineHeight: 1.45 }}>
-                  {fieldErrors.phone || `${PHONE_HELP} One phone per account. We do not verify it by SMS yet (not verified yet).`}
+                  {fieldErrors.phone || `${PHONE_HELP} ${t('auth.phoneExtra')}`}
                 </div>
               </div>
             )}
             <div>
-              <label htmlFor="luna-password" style={labelStyle}>Password</label>
-              <input id="luna-password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} value={form.password} onChange={setField('password')} placeholder={isSignUp ? 'At least 8 characters' : '••••••••'} style={inputStyle} {...errorProps('luna-password-msg', fieldErrors.password)} />
+              <label htmlFor="luna-password" style={labelStyle}>{t("auth.label.password")}</label>
+              <input id="luna-password" type="password" autoComplete={isSignUp ? 'new-password' : 'current-password'} value={form.password} onChange={setField('password')} placeholder={isSignUp ? t("auth.ph.atLeast") : '••••••••'} style={inputStyle} {...errorProps('luna-password-msg', fieldErrors.password)} />
               {fieldErrors.password ? <div id="luna-password-msg" role="alert" style={{ fontSize: 12, color: T.red, marginTop: 4 }}>{fieldErrors.password}</div> : null}
             </div>
             {isSignUp && (
               <div>
-                <label htmlFor="luna-password-confirm" style={labelStyle}>Repeat password</label>
-                <input id="luna-password-confirm" type="password" autoComplete="new-password" value={form.passwordConfirm} onChange={setField('passwordConfirm')} placeholder="Type it again" style={{ ...inputStyle, borderColor: passwordConfirmError ? T.red : T.line }} {...errorProps('luna-password-confirm-msg', passwordConfirmError)} />
+                <label htmlFor="luna-password-confirm" style={labelStyle}>{t("auth.label.repeat")}</label>
+                <input id="luna-password-confirm" type="password" autoComplete="new-password" value={form.passwordConfirm} onChange={setField('passwordConfirm')} placeholder={t("auth.ph.again")} style={{ ...inputStyle, borderColor: passwordConfirmError ? T.red : T.line }} {...errorProps('luna-password-confirm-msg', passwordConfirmError)} />
                 {passwordConfirmError ? <div id="luna-password-confirm-msg" role="alert" style={{ fontSize: 12, color: T.red, marginTop: 4 }}>{passwordConfirmError}</div> : null}
               </div>
             )}
             {!isSignUp && (
               <div style={{ textAlign: 'right', marginTop: -6 }}>
-                <button type="button" onClick={() => goTo('forgot')} style={linkButton}>Forgot password?</button>
+                <button type="button" onClick={() => goTo('forgot')} style={linkButton}>{t("auth.forgot")}</button>
               </div>
             )}
 
             {isSignUp && (INVITE_FIELDS[role] || []).map((field) => (
               <div key={field.key}>
-                <label htmlFor={`luna-invite-${field.key}`} style={labelStyle}>{field.label} <span style={{ color: T.sub, fontWeight: 400 }}>(optional)</span></label>
+                <label htmlFor={`luna-invite-${field.key}`} style={labelStyle}>{t(field.labelKey)} <span style={{ color: T.sub, fontWeight: 400 }}>{t("auth.optional")}</span></label>
                 <textarea id={`luna-invite-${field.key}`} rows={2} value={invites[field.key] || ''} onChange={(event) => setInvites((current) => ({ ...current, [field.key]: event.target.value }))} placeholder="name@example.com, another@example.com" style={{ ...inputStyle, resize: 'vertical' }} />
-                <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>{field.hint}</div>
+                <div style={{ fontSize: 11, color: T.sub, marginTop: 4 }}>{t(field.hintKey)}</div>
               </div>
             ))}
             {isSignUp && (INVITE_FIELDS[role] || []).length > 0 && (
               <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, background: T.bg, borderRadius: 10, padding: '10px 12px' }}>
-                We send each of them a connection request once you have confirmed your email. A connection only becomes active when <strong>both</strong> accounts agree. If someone has no LUNA account yet, the request waits and appears for them as soon as they sign up with that email.
+                {t('auth.invite.note.a')}<strong>{t('auth.invite.note.b')}</strong>{t('auth.invite.note.c')}
               </div>
             )}
 
@@ -416,22 +420,22 @@ export function AuthModal({ mode, onClose, onToggle, next = '/platform' }) {
               <div>
                 <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5, color: T.ink, lineHeight: 1.5, cursor: 'pointer' }}>
                   <input type="checkbox" checked={acceptTerms} onChange={(event) => { setAcceptTerms(event.target.checked); setFieldErrors((current) => ({ ...current, acceptTerms: '' })); }} style={{ marginTop: 3 }} />
-                  <span>I accept the <a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>Terms of Service</a> and have read the <a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>Privacy Policy</a> and the <a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>AI notice</a>.</span>
+                  <span>{t('auth.terms.a')}<a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('auth.terms.b')}</a>{t('auth.terms.c')}<a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('auth.terms.d')}</a>{t('auth.terms.e')}<a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('auth.terms.f')}</a>{t('auth.terms.g')}</span>
                 </label>
                 {fieldErrors.acceptTerms ? <div role="alert" style={{ fontSize: 12.5, color: T.red, marginTop: 4 }}>{fieldErrors.acceptTerms}</div> : null}
-                <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 6 }}>We will email you a link to confirm your address.</div>
+                <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5, marginTop: 6 }}>{t("auth.confirmLink")}</div>
               </div>
             )}
             <button type="submit" disabled={busy || mismatch} style={primaryButton(busy || mismatch)}>
-              {busy ? 'One moment…' : isSignUp ? 'Create account' : 'Log in'}
+              {busy ? t("auth.busy") : isSignUp ? t("auth.btn.create") : t("auth.btn.login")}
             </button>
             {isSignUp && (
-              <button type="button" onClick={() => setStep(1)} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>← Change profile</button>
+              <button type="button" onClick={() => setStep(1)} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>{t("auth.changeProfile")}</button>
             )}
             <div style={{ textAlign: 'center', fontSize: 13, color: T.sub }}>
-              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+              {isSignUp ? t("auth.haveAccount") : t("auth.noAccount")}
               <button type="button" onClick={() => { setError(''); setFieldErrors({}); setStep(1); onToggle?.(); }} style={{ ...linkButton, fontSize: 13 }}>
-                {isSignUp ? 'Log in' : 'Sign up'}
+                {isSignUp ? t("auth.btn.login") : t("auth.signup")}
               </button>
             </div>
           </form>

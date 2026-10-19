@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useLocale } from "../../lib/i18n/LocaleProvider.js";
 import { LunaLogo } from "../brand/LunaLogo.js";
 
 /**
@@ -117,9 +117,9 @@ const COPY = {
 };
 
 export function TrustTab() {
-  const [lang, setLang] = useState("en");
+  const { locale: lang } = useLocale();
   const c = COPY[lang];
-  const q = lang === "es" ? "?lang=es" : "";
+  const q = `?lang=${lang}`;
   return (
     <section className="lp-trust">
       <div className="lp-wrap lp-trust-wrap">
@@ -129,7 +129,6 @@ export function TrustTab() {
           <h1 className="lp-h2">{c.title}</h1>
           <p className="lp-sub">{c.lead}</p>
           <p className="lp-trust-status">{c.status}</p>
-          <button type="button" className="lp-link" onClick={() => setLang(lang === "en" ? "es" : "en")} lang={lang === "en" ? "es" : "en"}>{c.langSwitch}</button>
         </div>
         <div className="lp-trust-cards">
           {c.cards.map(([title, text]) => (

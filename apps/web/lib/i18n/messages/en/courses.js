@@ -298,6 +298,7 @@ export default {
   "courses.sr.summary": "It goes to your resources, where you can do it on Luna, export it in any format, or regenerate it later.",
   "courses.sr.name": "Name",
   "courses.sr.namePh": "Biology quiz · chapter 3",
+  "courses.sr.nameNeeded": "Give it a name.",
   "courses.sr.where": "Where to file it",
   "courses.sr.pickSubject": "pick a subject or a folder inside it",
   "courses.sr.filedHere": "where it is filed in this space",

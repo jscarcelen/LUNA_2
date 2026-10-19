@@ -298,6 +298,7 @@ export default {
   "courses.sr.summary": "Va a tus recursos, donde puedes hacerlo en Luna, exportarlo en cualquier formato o volver a crearlo más tarde.",
   "courses.sr.name": "Nombre",
   "courses.sr.namePh": "Cuestionario de Biología · tema 3",
+  "courses.sr.nameNeeded": "Ponle un nombre.",
   "courses.sr.where": "Dónde guardarlo",
   "courses.sr.pickSubject": "elige una materia o una carpeta dentro de ella",
   "courses.sr.filedHere": "dónde se guarda en este espacio",

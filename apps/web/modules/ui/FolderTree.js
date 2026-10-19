@@ -90,6 +90,8 @@ export function FolderTree({
               autoFocus
               className="flex-1 rounded-md border border-ink/15 px-2 py-0.5 text-sm"
               value={draftName}
+              placeholder={t("courses.sr.nameNeeded")}
+              aria-invalid={!draftName.trim() || undefined}
               onChange={(event) => setDraftName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && draftName.trim()) { onRenameFolder?.(node.id, draftName.trim()); setRenaming(""); }

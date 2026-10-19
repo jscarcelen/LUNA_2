@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-ignore - plain JS module
-import { displayName, keepStorageSuffix } from "../modules/ui/displayName.js";
+import { displayName, keepStorageSuffix, nameToSave } from "../modules/ui/displayName.js";
 
 describe("displayName", () => {
   it("hides the .resource.json suffix", () => {
@@ -16,5 +16,18 @@ describe("displayName", () => {
     expect(displayName("notes.pdf")).toBe("notes.pdf");
     expect(displayName("data.json")).toBe("data.json");
     expect(displayName(undefined)).toBe("");
+  });
+});
+
+describe("nameToSave: the name box may be empty while typing, it is checked on Save", () => {
+  it("refuses an empty or blank name with a reason instead of putting a default back", () => {
+    expect(nameToSave("")).toEqual({ ok: false, reason: "empty" });
+    expect(nameToSave("   ")).toEqual({ ok: false, reason: "empty" });
+    expect(nameToSave(undefined)).toEqual({ ok: false, reason: "empty" });
+  });
+  it("trims and collapses spaces, and keeps the storage suffix on a rename", () => {
+    expect(nameToSave("  Balance   sheet quiz ")).toEqual({ ok: true, name: "Balance sheet quiz" });
+    expect(nameToSave("New name", "Old.resource.json")).toEqual({ ok: true, name: "New name.resource.json" });
+    expect(nameToSave("notes.pdf", "a.pdf")).toEqual({ ok: true, name: "notes.pdf" });
   });
 });

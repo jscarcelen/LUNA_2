@@ -99,7 +99,7 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
             {flipped ? (
               <>
                 {/* Where the card comes from, and whether Luna could confirm it in the material (pipeline/grounding.js). */}
-                {current.source?.extract || current.source?.grounding ? <div className="mb-3"><SourceNote source={current.source} /></div> : null}
+                {current.source ? <div className="mb-3"><SourceNote source={current.source} question={current} /></div> : null}
                 <p className="m-0 text-sm font-semibold text-ink">{t("practice.deck.howWell")}</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {LEVELS.map((level, position) => (

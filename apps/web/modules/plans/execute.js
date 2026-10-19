@@ -21,7 +21,7 @@ import { FORMULA_SHEET_AGENT } from "../ai-tools/tools/formula-sheet/formulaAgen
 import { READING_SPLITTER_AGENT } from "../ai-tools/tools/reading-splitter/readingAgent";
 import { runAgentStreaming } from "../ai-tools/tools/agent-builder/readAgentStream";
 import { MASTER_TAG } from "../ai-tools/pipeline/masterDocument";
-import { findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, stepSourceIds, uploadedMaterialIds } from "./master";
+import { CONSOLIDATED_KEY, findMasterDocument, masterIsCurrent, masterTitle, needsMasterDocument, stepSourceIds, uploadedMaterialIds } from "./master";
 
 const FLASHCARDS_AGENT = runConfigFromSpec(createVocabularyFlashcardsSpec());
 
@@ -194,8 +194,10 @@ export async function generateStepResource({ step, sourceDocumentIds, workspaceI
       name: agent.name,
       instructions: `${agent.instructions}${extraInstructions ? `\n\nThe user also asks: ${extraInstructions}` : ""}${focus.length && step.generate !== "level-test" ? (isSummaryKey(step.generate) ? summaryScopeInstruction(focus, step.generate) : coverageInstruction(focus, perConcept)) : ""}`,
       knowledgeText: recipe.custom ? agent.knowledgeText || "" : "",
-      // The consolidator is recognised by its spec (`pipeline: "consolidate"`).
-      ...(recipe.streams ? { spec: agent.spec } : {}),
+      // The consolidator (`pipeline: "consolidate"`) and the Reading Splitter (`pipeline: "split"`) are recognised by their spec.
+      ...(recipe.streams || agent.spec?.pipeline ? { spec: agent.spec } : {}),
+      // A reading step is the part of its document about the step's topics, cut from the whole document by code.
+      ...(step.generate === "reading" && focus.length ? { readingFocus: focus } : {}),
       questionAnswers: answers,
       outputExample: agent.outputExample || "",
       model: agent.model,
@@ -321,8 +323,10 @@ export async function buildMasterDocument({ plan, documents = [], existing = nul
  * onProgress receives { phase: "master" | "steps", index, total, title, detail? }.
  */
 export async function executePlan({ plan, documents = [], agentDocuments = [], subjectName = "", workspaceId, subjectId, folderIds = [], onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onProgress }) {
-  const pending = (plan.items || []).filter((item) => item.generate && !item.resourceId);
-  if (!pending.length) return { plan, created: 0, failures: [] };
+  // The "Consolidated view of the resources" step (generate = master) IS the master document: built once, first, below.
+  const consolidatedSteps = (plan.items || []).filter((item) => item.generate === CONSOLIDATED_KEY && !item.resourceId);
+  const pending = (plan.items || []).filter((item) => item.generate && !item.resourceId && item.generate !== CONSOLIDATED_KEY);
+  if (!pending.length && !consolidatedSteps.length) return { plan, created: 0, failures: [] };
   const failures = [];
   let created = 0;
   const items = [...plan.items];
@@ -354,6 +358,14 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
     }
   }
   const master = masterId ? { id: masterId } : null;
+  // The plan's first step points at it, so the learner reads it as step 1.
+  if (masterId) {
+    for (const step of consolidatedSteps) {
+      const position = items.findIndex((item) => item.id === step.id);
+      if (position >= 0) items[position] = { ...items[position], resourceId: masterId, madeAs: CONSOLIDATED_KEY, generate: "", kind: "read", note: "One document that brings all your materials together by topic; every later step builds on it." };
+    }
+    if (masterBuilt && consolidatedSteps.length) created += 1;
+  }
 
   for (const [index, step] of pending.entries()) {
     onProgress?.({ phase: "steps", index, total: pending.length, title: step.title });
@@ -396,7 +408,7 @@ export async function executePlan({ plan, documents = [], agentDocuments = [], s
   const summariesAllowed = Array.isArray(plan.agentScope) && plan.agentScope.some((agent) => (agent.makes || []).includes("summary"));
   // A plan that schedules its own summary steps (the planner puts "Summary: …" before the reading) needs no extra ones.
   const schedulesSummaries = (plan.items || []).some((item) => item.generate === "summary" || item.madeAs === "summary");
-  const readingPending = summariesAllowed && !schedulesSummaries ? (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId && item.madeAs !== "summary") : [];
+  const readingPending = summariesAllowed && !schedulesSummaries ? (plan.items || []).filter((item) => item.kind === "read" && item.resourceId && !item.summaryDocumentId && item.madeAs !== "summary" && item.madeAs !== CONSOLIDATED_KEY) : [];
   for (const step of readingPending) {
     onProgress?.({ index: created, total: pending.length + readingPending.length, title: `Summarising: ${step.title}` });
     try {

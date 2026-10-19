@@ -57,8 +57,8 @@ describe("navigation model", () => {
     expect(landingOf("progress", "parent", true)).toBe("students");
     expect(landingOf("progress", "student", true)).toBe("performance");
     expect(landingOf("progress", "teacher", false)).toBe("performance");
-    expect(navFor("teacher", true).find((item: any) => item.section === "progress").key).toBe("students");
-    expect(navFor("student", true).find((item: any) => item.section === "progress").key).toBe("performance");
+    expect(navFor("teacher", true).find((item: any) => item.section === "progress")?.key).toBe("students");
+    expect(navFor("student", true).find((item: any) => item.section === "progress")?.key).toBe("performance");
     expect(navFor("teacher")[0].key).toBe("dashboard");
   });
 });

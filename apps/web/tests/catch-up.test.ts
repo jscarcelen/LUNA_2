@@ -16,7 +16,7 @@ describe("catch-up summary", () => {
   });
   it("replaces many late badges by one calm message", () => {
     const rows = [{ done: false, due: "2026-10-01" }, { done: false, due: "2026-10-10" }, { done: false, due: "2026-10-12" }, { done: true, due: "2026-10-02" }, { done: false, due: "" }];
-    const s = summariseCatchUp(rows, { attempts: [{ at: "2026-10-19T08:00:00Z" }], now });
+    const s = summariseCatchUp(rows, { attempts: [{ at: "2026-10-19T08:00:00Z" }] as any, now });
     expect(s).toMatchObject({ waiting: 4, late: 3, doneThisWeek: 1, headline: "1 quiz done this week", catchUp: "3 things are waiting. Start with this one." });
   });
   it("has no catch-up message when nothing is late", () => {

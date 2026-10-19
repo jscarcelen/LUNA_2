@@ -3,6 +3,9 @@
 Lets testers send written feedback from inside the app, and gives the owner one board to read it all and hand it to Claude.
 Built to be deleted when the beta ends.
 
+## One button
+Inside the app the Feedback button is part of the single "Ask Luna" menu (`modules/chat/AskLunaMenu.js`): `FeedbackWidget` is mounted with `launcher={false}` and opens on the `luna:feedback` event (`feedbackEvents.js`). Outside the app (`SiteFeedback.js`, landing) it keeps its own small button.
+
 ## Tester side (`FeedbackWidget.js`, mounted in `components/AppShell.js` for the app and, via `SiteFeedback.js` in `app/layout.js`, on every other page such as the landing page)
 A "Feedback" button on every screen of `/app` and `/platform`. Pick a kind (Idea / Something is wrong / How it looks / AI result),
 write, and optionally:

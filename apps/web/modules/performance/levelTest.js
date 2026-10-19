@@ -1,4 +1,5 @@
 import { normaliseSkillIds, skillLabel } from "../skills/taxonomy.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * Where you start.
@@ -13,18 +14,19 @@ export const LEVEL_TEST_NAME = "Level Test";
 export const STRONG = 0.8;
 export const REVIEW = 0.5;
 
-export const isLevelTest = (attempt) => String(attempt?.agentName || "").trim() === LEVEL_TEST_NAME || /\blevel test\b/i.test(String(attempt?.activityTitle || attempt?.resourceName || ""));
+export const isLevelTest = (attempt) => String(attempt?.agentName || "").trim() === LEVEL_TEST_NAME || /\b(?:level test|prueba de nivel)\b/i.test(String(attempt?.activityTitle || attempt?.resourceName || ""));
 
 /** Solid, to review, or a place to start. */
 export const statusOfComponent = (accuracy) => (accuracy >= STRONG ? "strong" : accuracy >= REVIEW ? "review" : "start");
 
 /** One level-test attempt as a report: components in the order they were asked, each with its result. */
-export function levelReport(attempt) {
+export function levelReport(attempt, t = tEn) {
   const order = [];
   const byName = new Map();
   for (const result of attempt.results || []) {
     if (result.correct !== true && result.correct !== false) continue;
-    const name = String(result.topic || result.group || "General").trim() || "General";
+    const fallback = t("progress.level.general");
+    const name = String(result.topic || result.group || fallback).trim() || fallback;
     if (!byName.has(name)) { byName.set(name, { name, asked: 0, right: 0, skills: new Map() }); order.push(name); }
     const entry = byName.get(name);
     entry.asked += 1;
@@ -43,30 +45,29 @@ export function levelReport(attempt) {
   const startAt = components.find((component) => component.status !== "strong") || null;
   return {
     id: attempt.resourceId || attempt.activityId || "",
-    title: attempt.resourceName || attempt.activityTitle || "Level test",
+    title: attempt.resourceName || attempt.activityTitle || t("progress.level.title"),
     at: attempt.at || "",
     asked, accuracy: asked ? right / asked : 0,
     components, startAt,
     ready: components.length > 0 && !startAt,
-    summary: summaryOf(components, startAt)
+    summary: summaryOf(components, startAt, t)
   };
 }
 
-function summaryOf(components, startAt) {
-  if (!components.length) return "No answers to read yet.";
-  if (!startAt) return "Every foundation is solid: you can start the material.";
+function summaryOf(components, startAt, t = tEn) {
+  if (!components.length) return t("progress.level.noAnswers");
+  if (!startAt) return t("progress.level.allSolid");
   const solid = components.filter((component) => component.status === "strong").length;
-  const label = startAt.status === "start" ? "Start with" : "Review";
-  return `${solid} of ${components.length} foundations are solid. ${label} ${startAt.name.toLowerCase()} before moving on.`;
+  return t(startAt.status === "start" ? "progress.level.summary.start" : "progress.level.summary.review", { solid, total: components.length, name: startAt.name.toLowerCase() });
 }
 
 /** The latest level-test report of each document, newest first. */
-export function latestLevelReports(attempts = []) {
+export function latestLevelReports(attempts = [], t = tEn) {
   const latest = new Map();
   for (const attempt of attempts.filter(isLevelTest)) {
     const key = attempt.resourceId || attempt.activityTitle || attempt.activityId;
     const kept = latest.get(key);
     if (!kept || String(attempt.at) > String(kept.at)) latest.set(key, attempt);
   }
-  return [...latest.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).map(levelReport).filter((report) => report.components.length);
+  return [...latest.values()].sort((a, b) => String(b.at).localeCompare(String(a.at))).map((attempt) => levelReport(attempt, t)).filter((report) => report.components.length);
 }

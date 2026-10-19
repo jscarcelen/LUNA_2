@@ -5,36 +5,18 @@ import { BrowserFrame, PhoneFrame, Shot } from "./shots.js";
 import { ScreenSlider } from "./Slider.js";
 import { Reveal, useParallax } from "./motion.js";
 import { PromoVideo } from "./PromoVideo.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
-const SLIDES = [
-  { shot: "home", title: "Your week at a glance", text: "Plans, what is due next and Luna's read of what to work on." },
-  { shot: "workspaces", title: "All your material, organised", text: "A structured repository of uploaded and generated materials, all in one place, and shareable across accounts." },
-  { shot: "reader", title: "Notes you can read and mark up", text: "Headings, formulas and figures kept intact, with highlights and notes alongside." },
-  { shot: "reader-notes", title: "Select, colour, note", text: "Select a sentence, paint it a colour and add a note that stays with the text." },
-  { shot: "plans", title: "A study plan with deadlines", text: "What has to be achieved, by when, and the activities that get you there." },
-  { shot: "calendar", title: "Work spread over the calendar", text: "Every step lands on a day before the exam, colour-coded by plan." },
-  { shot: "quiz", title: "Practise inside Luna", text: "Answer quizzes and flashcards on the platform so every attempt is tracked." },
-  { shot: "quiz-answered", title: "Every answer, traced to your documents", text: "After you check, Luna shows where each answer sits in your own material." },
-  { shot: "performance", title: "See why answers go wrong", text: "Mastery by topic, and whether mistakes come from knowledge, reasoning or attention." },
-  { shot: "coach-read", title: "Luna's read of your results", text: "A plain diagnosis of what is really going wrong and the five things to do next, each one a click away." },
-  { shot: "agents", title: "Agents for every kind of material", text: "Quiz, flashcards and summaries built in, plus agents you made or installed." },
-  { shot: "builder-prompt", title: "Build your own agent", text: "Say what it does, choose what it reads, set the questions the runner answers and pick the output blocks it may use." },
-  { shot: "template-preview", title: "Choose how it looks", text: "The same content as an A4 exam, a worksheet or a deck: you pick the design." },
-  { shot: "marketplace", title: "Browse agents, templates and plans", text: "The marketplace shelves (sample listings shown)." }
-];
+const SLIDE_SHOTS = ["home", "workspaces", "reader", "reader-notes", "plans", "calendar", "quiz", "quiz-answered", "performance", "coach-read", "agents", "builder-prompt", "template-preview", "marketplace"];
 
 const FLOW = [
-  { n: 1, title: "Upload", text: "Drop in your PDFs, Word files and notes. Luna reads the text, headings, formulas and figures.", shot: "workspaces", pos: "left top" },
-  { n: 2, title: "Get a plan", text: "Luna consolidates the material into master notes and builds a study plan with deadlines.", shot: "calendar", pos: "left 30%" },
-  { n: 3, title: "Practise and track", text: "Do quizzes and flashcards on Luna. Every answer feeds your performance view.", shot: "results", pos: "right top" },
-  { n: 4, title: "Expand with your own agents", text: "Build an agent in Agent Studio or buy one in the Marketplace, and plug in the templates you like.", shot: "builder-prompt", pos: "left top" }
+  { n: 1, shot: "workspaces", pos: "left top" },
+  { n: 2, shot: "calendar", pos: "left 30%" },
+  { n: 3, shot: "results", pos: "right top" },
+  { n: 4, shot: "builder-prompt", pos: "left top" }
 ];
 
-const PROFILES = [
-  { key: "student", title: "Students", text: "Upload your material, follow a plan, practise on Luna and see exactly what to reinforce. Receive work and exam dates from teachers and parents, and share resources with classmates.", points: ["Master notes you can mark up", "A plan that fits your exam date", "Mistakes explained, not just counted"] },
-  { key: "parent", title: "Parents", text: "Follow how your child is doing, how efficiently they study and where you can help, with full transparency on performance. Send them work and resources.", points: ["Progress in plain language", "Topics you can support at home", "Linking and sending work are in beta"] },
-  { key: "teacher", title: "Teachers", text: "Create material from your documents, assign it with deadlines, send exam dates and organise students in groups. Read performance per student, topic and class.", points: ["Generate from your own resources", "Assign work and exam dates to students or whole groups", "Spot who needs which resource"] }
-];
+const PROFILES = ["student", "parent", "teacher"];
 
 function Icon({ name }) {
   const p = { fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" };
@@ -47,6 +29,8 @@ function Icon({ name }) {
 }
 
 export function HomeTab({ onSignUp }) {
+  const t = useT();
+  const slides = SLIDE_SHOTS.map((shot) => ({ shot, title: t(`landing.slide.${shot}.title`), text: t(`landing.slide.${shot}.text`) }));
   const hero = useRef(null);
   useParallax(hero);
   return (
@@ -55,12 +39,12 @@ export function HomeTab({ onSignUp }) {
       <section className="lp-hero" ref={hero}>
         <div className="lp-mesh" aria-hidden><i /><i /><i /></div>
         <div className="lp-wrap lp-hero-copy">
-          <span className="lp-badge"><LunaLogo mark size={14} /> Now in beta · free to try</span>
-          <h1 className="lp-h1">Upload everything.<br />Luna turns it into <span className="lp-grad">a plan that works.</span></h1>
-          <p className="lp-lead">A study helper for students, parents and teachers. Luna reads your documents, consolidates them into master notes, builds your study plan, tracks how you are really doing, and generates the practice material you need.</p>
+          <span className="lp-badge"><LunaLogo mark size={14} /> {t("landing.home.badge")}</span>
+          <h1 className="lp-h1">{t("landing.home.h1a")}<br />{t("landing.home.h1b")}<span className="lp-grad">{t("landing.home.h1c")}</span></h1>
+          <p className="lp-lead">{t("landing.home.lead")}</p>
           <div className="lp-cta">
-            <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={onSignUp}>Get started free</button>
-            <a className="lp-btn lp-btn-glass lp-btn-lg" href="/app">Try the live demo <span aria-hidden>↗</span></a>
+            <button type="button" className="lp-btn lp-btn-primary lp-btn-lg" onClick={onSignUp}>{t("landing.home.cta")}</button>
+            <a className="lp-btn lp-btn-glass lp-btn-lg" href="/app">{t("landing.home.demo")} <span aria-hidden>↗</span></a>
           </div>
         </div>
         <div className="lp-hero-stage">
@@ -79,32 +63,32 @@ export function HomeTab({ onSignUp }) {
       <section className="lp-section lp-tint">
         <div className="lp-wrap">
           <Reveal className="lp-head">
-            <span className="lp-eyebrow">Inside Luna</span>
-            <h2 className="lp-h2">The AI educational ecosystem. Everyone in one place.</h2>
-            <p className="lp-sub">Swipe through the product: from the first upload to the performance view.</p>
+            <span className="lp-eyebrow">{t("landing.home.inside")}</span>
+            <h2 className="lp-h2">{t("landing.home.insideTitle")}</h2>
+            <p className="lp-sub">{t("landing.home.insideSub")}</p>
           </Reveal>
         </div>
-        <Reveal><ScreenSlider slides={SLIDES} /></Reveal>
+        <Reveal><ScreenSlider slides={slides} /></Reveal>
       </section>
 
       {/* ------------------------------------------------------------------ pillars */}
       <section className="lp-section">
         <div className="lp-wrap">
           <Reveal className="lp-head">
-            <span className="lp-eyebrow">Three parts, one environment</span>
-            <h2 className="lp-h2">Study. Create. Expand.</h2>
-            <p className="lp-sub">Luna Study is where you learn. Luna Create is where you build your own resource-generating agents. The Marketplace is where you buy and sell more.</p>
+            <span className="lp-eyebrow">{t("landing.home.partsEyebrow")}</span>
+            <h2 className="lp-h2">{t("landing.home.partsTitle")}</h2>
+            <p className="lp-sub">{t("landing.home.partsSub")}</p>
           </Reveal>
 
           <Reveal className="lp-pillar lp-pillar-blue">
             <div className="lp-pillar-text">
-              <span className="lp-tag">Luna Study</span>
-              <h3 className="lp-h3">Upload once. Study with a plan.</h3>
+              <span className="lp-tag">{t("landing.pillar.study.tag")}</span>
+              <h3 className="lp-h3">{t("landing.pillar.study.title")}</h3>
               <ul className="lp-list">
-                <li>Upload documents and organise them in folders your way. Text, headings, formulas and figures are kept.</li>
-                <li>Read the consolidated master notes, highlight and add your own notes.</li>
-                <li>Follow a study plan tied to your goals and exam dates; doing an activity ticks it off.</li>
-                <li>See what to reinforce, and why mistakes happen: topic knowledge, reasoning or attention.</li>
+                <li>{t("landing.pillar.study.l1")}</li>
+                <li>{t("landing.pillar.study.l2")}</li>
+                <li>{t("landing.pillar.study.l3")}</li>
+                <li>{t("landing.pillar.study.l4")}</li>
               </ul>
             </div>
             <div className="lp-pillar-art">
@@ -115,13 +99,13 @@ export function HomeTab({ onSignUp }) {
 
           <Reveal className="lp-pillar lp-pillar-teal lp-flip">
             <div className="lp-pillar-text">
-              <span className="lp-tag">Luna Create</span>
-              <h3 className="lp-h3">Build the agents you need.</h3>
+              <span className="lp-tag">{t("landing.pillar.create.tag")}</span>
+              <h3 className="lp-h3">{t("landing.pillar.create.title")}</h3>
               <ul className="lp-list">
-                <li>Agent Studio: say what the agent does, what it reads, what the person running it chooses.</li>
-                <li>Pick which output blocks it may use; the agent decides the order.</li>
-                <li>Template Studio: the same content as an exam, a worksheet or flashcards, in the style you choose.</li>
-                <li>Answer inside Luna, or export to PDF, Word or HTML.</li>
+                <li>{t("landing.pillar.create.l1")}</li>
+                <li>{t("landing.pillar.create.l2")}</li>
+                <li>{t("landing.pillar.create.l3")}</li>
+                <li>{t("landing.pillar.create.l4")}</li>
               </ul>
             </div>
             <div className="lp-pillar-art">
@@ -132,12 +116,12 @@ export function HomeTab({ onSignUp }) {
 
           <Reveal className="lp-pillar lp-pillar-green">
             <div className="lp-pillar-text">
-              <span className="lp-tag">Luna Marketplace</span>
-              <h3 className="lp-h3">Buy to skip the setup. Sell what you build.</h3>
+              <span className="lp-tag">{t("landing.pillar.market.tag")}</span>
+              <h3 className="lp-h3">{t("landing.pillar.market.title")}</h3>
               <ul className="lp-list">
-                <li>Browse agents, templates, components, study resources and whole study plans.</li>
-                <li>Everything is bought and sold in Lunas, the same credit that pays for AI usage.</li>
-                <li>Package your own agents and templates for others. Browsing and installing work today; plans, payments and top-ups are coming soon.</li>
+                <li>{t("landing.pillar.market.l1")}</li>
+                <li>{t("landing.pillar.market.l2")}</li>
+                <li>{t("landing.pillar.market.l3")}</li>
               </ul>
             </div>
             <div className="lp-pillar-art">
@@ -152,16 +136,16 @@ export function HomeTab({ onSignUp }) {
       <section className="lp-section lp-tint">
         <div className="lp-wrap">
           <Reveal className="lp-head">
-            <span className="lp-eyebrow">How it works</span>
-            <h2 className="lp-h2">From a pile of documents to a system that adapts.</h2>
+            <span className="lp-eyebrow">{t("landing.home.howEyebrow")}</span>
+            <h2 className="lp-h2">{t("landing.home.howTitle")}</h2>
           </Reveal>
           <ol className="lp-flow">
             {FLOW.map((step, i) => (
               <Reveal as="li" className="lp-step" key={step.n} delay={i * 90}>
                 <div className="lp-step-img"><Shot name={step.shot} fit={step.pos} sizes="(max-width: 900px) 90vw, 300px" /></div>
                 <span className="lp-step-n">{step.n}</span>
-                <h3 className="lp-h4">{step.title}</h3>
-                <p>{step.text}</p>
+                <h3 className="lp-h4">{t(`landing.flow.${step.n}.title`)}</h3>
+                <p>{t(`landing.flow.${step.n}.text`)}</p>
               </Reveal>
             ))}
           </ol>
@@ -172,9 +156,9 @@ export function HomeTab({ onSignUp }) {
       <section className="lp-section">
         <div className="lp-wrap lp-phones">
           <Reveal className="lp-phones-copy">
-            <span className="lp-eyebrow">On your phone · app coming soon</span>
-            <h2 className="lp-h2">Luna on your phone.</h2>
-            <p className="lp-sub">A native app is coming soon. Until then, open Luna in your phone's browser and add it to your home screen: it opens full screen, with a tab bar under your thumb for plans, practice and performance.</p>
+            <span className="lp-eyebrow">{t("landing.home.phoneEyebrow")}</span>
+            <h2 className="lp-h2">{t("landing.home.phoneTitle")}</h2>
+            <p className="lp-sub">{t("landing.home.phoneSub")}</p>
           </Reveal>
           <Reveal className="lp-phones-row" delay={120}>
             {["m-home", "m-workspaces", "m-agents"].map((name) => (
@@ -188,17 +172,17 @@ export function HomeTab({ onSignUp }) {
       <section className="lp-section lp-tint">
         <div className="lp-wrap">
           <Reveal className="lp-head">
-            <span className="lp-eyebrow">One environment, three roles</span>
-            <h2 className="lp-h2">Everyone has a purpose. Everyone is connected.</h2>
-            <p className="lp-sub">Teachers send exam dates and assignments, parents follow performance, students share resources — and every role sees what matters to it.</p>
+            <span className="lp-eyebrow">{t("landing.home.rolesEyebrow")}</span>
+            <h2 className="lp-h2">{t("landing.home.rolesTitle")}</h2>
+            <p className="lp-sub">{t("landing.home.rolesSub")}</p>
           </Reveal>
           <div className="lp-profiles">
-            {PROFILES.map((profile, i) => (
-              <Reveal className="lp-profile" key={profile.key} delay={i * 90}>
-                <span className="lp-profile-icon"><Icon name={profile.key} /></span>
-                <h3 className="lp-h4">{profile.title}</h3>
-                <p>{profile.text}</p>
-                <ul>{profile.points.map((point) => <li key={point}>{point}</li>)}</ul>
+            {PROFILES.map((key, i) => (
+              <Reveal className="lp-profile" key={key} delay={i * 90}>
+                <span className="lp-profile-icon"><Icon name={key} /></span>
+                <h3 className="lp-h4">{t(`landing.profile.${key}.title`)}</h3>
+                <p>{t(`landing.profile.${key}.text`)}</p>
+                <ul>{[1, 2, 3].map((n) => <li key={n}>{t(`landing.profile.${key}.p${n}`)}</li>)}</ul>
               </Reveal>
             ))}
           </div>
@@ -211,11 +195,11 @@ export function HomeTab({ onSignUp }) {
           <Reveal className="lp-final">
             <div className="lp-mesh lp-mesh-dark" aria-hidden><i /><i /><i /></div>
             <LunaLogo variant="white" size={40} />
-            <h2>Start with your own material.</h2>
-            <p>Create a free account, upload a document and see the plan Luna builds. Luna is in beta: it is improving every week.</p>
+            <h2>{t("landing.home.finalTitle")}</h2>
+            <p>{t("landing.home.finalText")}</p>
             <div className="lp-cta">
-              <button type="button" className="lp-btn lp-btn-white lp-btn-lg" onClick={onSignUp}>Create your free account</button>
-              <a className="lp-btn lp-btn-outline-white lp-btn-lg" href="/app">Try the live demo <span aria-hidden>↗</span></a>
+              <button type="button" className="lp-btn lp-btn-white lp-btn-lg" onClick={onSignUp}>{t("landing.home.finalCta")}</button>
+              <a className="lp-btn lp-btn-outline-white lp-btn-lg" href="/app">{t("landing.home.demo")} <span aria-hidden>↗</span></a>
             </div>
           </Reveal>
         </div>

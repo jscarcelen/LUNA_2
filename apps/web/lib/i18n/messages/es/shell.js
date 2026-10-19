@@ -1,0 +1,25 @@
+// App shell: top bar, side rail, bottom tabs.
+export default {
+  "shell.openMenu": "Abrir menú",
+  "shell.account": "Cuenta",
+  "shell.roleSelector": "Selector de rol",
+  "shell.role.student": "Estudiante",
+  "shell.role.teacher": "Docente",
+  "shell.role.parent": "Familia",
+  "shell.storage": "{used} GB de {total} GB usados",
+  "shell.people": "Personas y conexiones",
+  "shell.settings": "Ajustes de la cuenta",
+  "shell.confirmEmail": " · confirma tu correo",
+  "shell.logout": "Cerrar sesión",
+  "shell.expandMenu": "Expandir menú",
+  "shell.collapseMenu": "Contraer menú",
+  "shell.closeMenu": "Cerrar menú",
+  "shell.sections": "Secciones",
+  "shell.mainSections": "Secciones principales",
+  "shell.views": "Vistas",
+  "shell.leaveConfirm": "¿Dejar este recurso compartido? Desaparecerá de tu espacio de trabajo. Tus propias notas y respuestas siguen siendo tuyas. Quien lo compartió puede volver a compartirlo contigo.",
+  "shell.leftShare": "Has dejado el recurso compartido.",
+  "shell.componentsAdded.one": "{count} componente compartido por {names} se ha añadido a tus bloques (Mis bloques en Template Studio). Es tu propia copia.",
+  "shell.componentsAdded.other": "{count} componentes compartidos por {names} se han añadido a tus bloques (Mis bloques en Template Studio). Son tus propias copias.",
+  "shell.yourNetwork": "tu red"
+};

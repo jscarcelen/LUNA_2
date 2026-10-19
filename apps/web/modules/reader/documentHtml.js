@@ -1,5 +1,6 @@
 import { renderInline } from "./markdown.js";
 import { linkSourceBlocks } from "../ai-tools/pipeline/sourceLinks.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * A generated document as reading HTML: the typed blocks of a block agent (or the items of a quiz
@@ -9,17 +10,17 @@ import { linkSourceBlocks } from "../ai-tools/pipeline/sourceLinks.js";
 const escape = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const text = (value) => (value === undefined || value === null ? "" : Array.isArray(value) ? value.map(text).join(", ") : String(value));
 
-const CALLOUT_LABEL = { info: "Info", tip: "Tip", warning: "Careful", note: "Note", important: "Important" };
+const CALLOUT_LABEL = { info: "info", tip: "tip", warning: "warning", note: "note", important: "important" };
 
 /** A paragraph the grounding checks could not match to the material gets a visible mark (pipeline/grounding.js groundBlocks). */
-const flagOf = (block) => (block?._grounding?.level === "unverified"
-  ? ` <span class="md-flag" title="${escape((block._grounding.reasons || []).join(" ") || "Luna could not confirm this in your material.")}">⚠ not confirmed in your material</span>`
+const flagOf = (block, t = tEn) => (block?._grounding?.level === "unverified"
+  ? ` <span class="md-flag" title="${escape((block._grounding.reasons || []).join(" ") || t("courses.dh.couldNotConfirm"))}">⚠ ${t("courses.dh.notConfirmed")}</span>`
   : "");
 
 /** The supporting words of a verified paragraph, shown on hover. */
-const quoteTitle = (block) => (block?._grounding?.level === "verified" && block._grounding.quote ? ` title="${escape(`Supported by your material: “${block._grounding.quote}”`)}"` : "");
+const quoteTitle = (block, t = tEn) => (block?._grounding?.level === "verified" && block._grounding.quote ? ` title="${escape(t("courses.dh.supported", { quote: block._grounding.quote }))}"` : "");
 
-export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", grounding = null } = {}) {
+export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", grounding = null, t = tEn } = {}) {
   // Source tags ("[D1 p.3]") become links to the original document (the app opens its reader at that page).
   const blocks = linkSourceBlocks(rawBlocks, linkBase);
   const out = [];
@@ -27,7 +28,7 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", 
   let table = [];
   const flushTable = () => {
     if (!table.length) return;
-    out.push(`<div class="md-table"><table><thead><tr><th>Term</th><th>Meaning</th>${table.some((row) => row.example) ? "<th>Example</th>" : ""}</tr></thead><tbody>${table.map((row) => `<tr><td><strong>${renderInline(row.word)}</strong></td><td>${renderInline(row.translation)}</td>${table.some((entry) => entry.example) ? `<td>${renderInline(row.example)}</td>` : ""}</tr>`).join("")}</tbody></table></div>`);
+    out.push(`<div class="md-table"><table><thead><tr><th>${t("courses.dh.term")}</th><th>${t("courses.dh.meaning")}</th>${table.some((row) => row.example) ? `<th>${t("courses.dh.example")}</th>` : ""}</tr></thead><tbody>${table.map((row) => `<tr><td><strong>${renderInline(row.word)}</strong></td><td>${renderInline(row.translation)}</td>${table.some((entry) => entry.example) ? `<td>${renderInline(row.example)}</td>` : ""}</tr>`).join("")}</tbody></table></div>`);
     table = [];
   };
   for (const block of blocks) {
@@ -49,16 +50,16 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", 
         break;
       }
       case "paragraph":
-        out.push(`<p${quoteTitle(block)}>${renderInline(text(block.text))}${flagOf(block)}</p>`);
+        out.push(`<p${quoteTitle(block, t)}>${renderInline(text(block.text))}${flagOf(block, t)}</p>`);
         break;
       case "bullet_list": {
-        const items = (Array.isArray(block.items) ? block.items : []).map((item) => `<li>${renderInline(text(item))}</li>`).join("") + (flagOf(block) ? `<li class="md-flag-item">${flagOf(block)}</li>` : "");
+        const items = (Array.isArray(block.items) ? block.items : []).map((item) => `<li>${renderInline(text(item))}</li>`).join("") + (flagOf(block, t) ? `<li class="md-flag-item">${flagOf(block, t)}</li>` : "");
         out.push(`${text(block.title) ? `<p class="md-list-title">${renderInline(text(block.title))}</p>` : ""}<ul>${items}</ul>`);
         break;
       }
       case "callout": {
         const kind = String(block.callout_type || block.type_ || "note").toLowerCase();
-        out.push(`<aside class="md-callout md-callout-${escape(kind)}"><strong>${CALLOUT_LABEL[kind] || "Note"}</strong><div>${renderInline(text(block.text))}${flagOf(block)}</div></aside>`);
+        out.push(`<aside class="md-callout md-callout-${escape(kind)}"><strong>${t(`courses.dh.callout.${CALLOUT_LABEL[kind] || "note"}`)}</strong><div>${renderInline(text(block.text))}${flagOf(block, t)}</div></aside>`);
         break;
       }
       case "vocabulary":
@@ -86,7 +87,7 @@ export function blocksToReaderHtml(rawBlocks = [], { title = "", linkBase = "", 
   flushTable();
   // A short notice when some statements could not be matched to the material: which ones are marked in the text.
   const unconfirmed = Number(grounding?.unverified) || 0;
-  if (unconfirmed > 0) out.unshift(`<aside class="md-callout md-callout-warning"><strong>Check against your material</strong><div>${unconfirmed} statement${unconfirmed === 1 ? "" : "s"} below could not be confirmed in your documents and ${unconfirmed === 1 ? "is" : "are"} marked ⚠. Treat ${unconfirmed === 1 ? "it" : "them"} with care.</div></aside>`);
+  if (unconfirmed > 0) out.unshift(`<aside class="md-callout md-callout-warning"><strong>${t("courses.dh.checkTitle")}</strong><div>${t.plural("courses.dh.checkText", unconfirmed)}</div></aside>`);
   const body = out.join("\n");
   return !hasTitle && title ? `<h1>${renderInline(title)}</h1>\n${body}` : body;
 }

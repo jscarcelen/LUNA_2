@@ -1,13 +1,17 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlanCard } from "../../plans/PlanCard";
 import { PLAN_TAG, dueLabel } from "../../plans/plan";
 import { ExamDatesCard } from "../../plans/ExamDates";
 import { OriginBadge } from "../../plans/DeadlineBadge";
 import { joinAttempts } from "../../performance/metrics";
+import { summariseCatchUp } from "../../activities/catchUp";
 import { CoachPanel } from "../../performance/dashboard/CoachPanel";
+import { TeacherHome } from "./TeacherHome";
+import { ParentHome } from "./ParentHome";
 import { HOME_PLAN_LIMIT, coachInputFor, documentsOf, firstRunChecklist, greeting, homeShortcuts, nextBestAction, nextSteps, planRowsOf, rankPlans } from "../home";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -22,7 +26,8 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * `onOpenPlan({ documentId, subjectId })` opens one plan in Study plans; `onOpenPage(target)` goes
  * to any other page.
  */
-export function DashboardPage({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate, account = false }) {
+function StudentHome({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate, account = false }) {
+  const t = useT();
   const workspace = workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null;
   const documents = useMemo(() => documentsOf(workspace), [workspace]);
   const rows = useMemo(() => planRowsOf(workspace), [workspace]);
@@ -30,8 +35,18 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
   const entries = useMemo(() => rankPlans(rows, attempts, { limit: HOME_PLAN_LIMIT }), [rows, attempts]);
   const coach = useMemo(() => coachInputFor(entries, documents, rows), [entries, documents, rows]);
   const steps = useMemo(() => nextSteps(entries, 5), [entries]);
+  // Students see what they finished before anything that is late; many late steps become one calm message.
+  const catchUp = useMemo(() => summariseCatchUp(steps.map((step) => ({ done: false, due: step.dueDate })), { attempts }, t), [steps, attempts, t]);
   const hasMaterial = documents.some((document) => document.sourceType !== "generated" && !(document.tags || []).includes(PLAN_TAG));
   const hasEvidence = coach.topics.length > 0 || coach.errorTypes.length > 0;
+  // "What Luna suggests" calls the model (4-5 s): it never blocks the first paint. The panel is mounted (and so reads) only
+  // after Home has been on screen for a moment, or as soon as the person opens it; until then a skeleton holds the place.
+  const [coachReady, setCoachReady] = useState(false);
+  useEffect(() => {
+    if (coachReady) return undefined;
+    const timer = setTimeout(() => setCoachReady(true), 1500);
+    return () => clearTimeout(timer);
+  }, [coachReady]);
   // Exam dates teachers or parents sent (students only; the card is absent when there are none), right under the plan gallery.
   const examCard = examDates.some((entry) => !entry.dismissedAt) ? (
     <ExamDatesCard
@@ -42,9 +57,9 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
     />
   ) : null;
 
-  const action = nextBestAction({ hasMaterial, hasPlans: entries.length > 0, steps, hasEvidence, role });
-  const checklist = firstRunChecklist({ hasMaterial, hasPlans: entries.length > 0, hasEvidence });
-  const shortcuts = homeShortcuts(role, Boolean(account));
+  const action = nextBestAction({ hasMaterial, hasPlans: entries.length > 0, steps, hasEvidence, role }, t);
+  const checklist = firstRunChecklist({ hasMaterial, hasPlans: entries.length > 0, hasEvidence }, t);
+  const shortcuts = homeShortcuts(role, Boolean(account), t);
   const go = () => {
     if (action.kind === "step") return onOpenPlan?.({ documentId: action.step.planId, subjectId: action.step.subjectId });
     return onOpenPage?.({ upload: "workspaces", plan: "plans?generate=1", practise: "create", review: "performance" }[action.kind] || "workspaces");
@@ -52,7 +67,8 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
 
   return (
     <section className="tw-scope grid gap-5">
-      <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{greeting(profileName)}</h2>
+      <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{greeting(profileName, t)}</h2>
+      {role === "student" && catchUp.headline ? <p className="m-0 -mt-3 text-sm font-semibold text-[#1f7a3a]">✓ {catchUp.headline}</p> : null}
 
       {!workspace && loading ? (
         <div className="grid gap-3" aria-busy="true">
@@ -60,14 +76,15 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
         </div>
       ) : (
         <>
-          <div className={`${card} grid justify-items-start gap-2 border-[var(--accent)]/30`} aria-label="Next step">
-            <p className={kicker}>Your next step</p>
+          <div className={`${card} grid justify-items-start gap-2 border-[var(--accent)]/30`} aria-label={t("home.aria.next")}>
+            <p className={kicker}>{t("home.yourNext")}</p>
             <p className="m-0 text-2xl font-bold tracking-tight text-ink">{action.title}</p>
             {action.detail ? <p className="m-0 text-sm text-soft-ink">{action.detail}</p> : null}
+            {role === "student" && catchUp.catchUp ? <p className="m-0 text-sm text-ink">{catchUp.catchUp}</p> : null}
             <button type="button" className={`${primaryBtn} mt-1 px-6 py-2.5`} onClick={go}>{action.cta}</button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3" aria-label="Shortcuts">
+          <div className="grid gap-3 sm:grid-cols-3" aria-label={t("home.aria.shortcuts")}>
             {shortcuts.map((shortcut) => (
               <button key={shortcut.id} type="button" className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]" onClick={() => onOpenPage?.(shortcut.target)}>
                 <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-base text-[var(--accent)]">{shortcut.icon}</span>
@@ -78,7 +95,7 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
 
           {checklist && role !== "parent" ? (
             <div className={card}>
-              <p className={kicker}>Getting started</p>
+              <p className={kicker}>{t("home.gettingStarted")}</p>
               <ol className="m-0 mt-3 grid list-none gap-2 p-0">
                 {checklist.map((item, index) => (
                   <li key={item.id}>
@@ -96,8 +113,8 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
 
           {entries.length ? (
             <details className="group">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>Your study plans ({entries.length})</summary>
-              <div className="mt-3 grid grid-flow-col auto-cols-[82%] gap-3 overflow-x-auto pb-1 sm:auto-cols-[calc((100%-0.75rem)/2)] lg:auto-cols-[calc((100%-2.25rem)/4)]" aria-label="Study plans, closest deadline first">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("home.plansSummary", { count: entries.length })}</summary>
+              <div className="mt-3 grid grid-flow-col auto-cols-[82%] gap-3 overflow-x-auto pb-1 sm:auto-cols-[calc((100%-0.75rem)/2)] lg:auto-cols-[calc((100%-2.25rem)/4)]" aria-label={t("home.aria.plans")}>
                 {entries.map((entry) => (
                   <PlanCard
                     key={entry.document.id}
@@ -114,10 +131,16 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
           ) : null}
 
           {entries.length ? (
-            <details className="group">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>What Luna suggests</summary>
+            <details className="group" onToggle={(event) => { if (event.currentTarget.open) setCoachReady(true); }}>
+              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("home.suggests")}</summary>
               <div className={`${card} mt-3`}>
-                {hasEvidence ? (
+                {hasEvidence && !coachReady ? (
+                  <div className="grid gap-2" aria-busy="true" aria-label={t("home.aria.getting")}>
+                    <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--surface-soft)]" />
+                    <div className="h-4 w-full animate-pulse rounded bg-[var(--surface-soft)]" />
+                    <div className="h-4 w-1/2 animate-pulse rounded bg-[var(--surface-soft)]" />
+                  </div>
+                ) : hasEvidence ? (
                   <CoachPanel
                     role={role}
                     learner={profileName}
@@ -125,13 +148,13 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
                     errorTypes={coach.errorTypes}
                     stuck={coach.stuck}
                     plan={coach.plan}
-                    practiseLabel="See in Progress"
+                    practiseLabel={t("home.seeProgress")}
                     onPractise={() => onOpenPage?.("performance")}
                     autoRead
                   />
                 ) : (
                   <div className="grid gap-3">
-                    <p className="m-0 text-sm text-soft-ink">Do a first activity and Luna will read your results and propose what to work on. Until then, this is what is due soonest.</p>
+                    <p className="m-0 text-sm text-soft-ink">{t("home.firstActivity")}</p>
                     {steps.length ? (
                       <ul className="m-0 grid list-none gap-1.5 p-0">
                         {steps.map((step) => (
@@ -140,12 +163,12 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
                               <span className="size-2.5 shrink-0 rounded-full" style={{ background: step.colour }} />
                               <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{step.title}</span><span className="block truncate text-[11px] text-soft-ink">{step.planName}</span></span>
                               {step.imposed ? <OriginBadge imposed by={step.setByName} /> : null}
-                              <span className={`shrink-0 text-xs font-semibold ${step.days !== null && step.days < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(step.dueDate)}</span>
+                              <span className={`shrink-0 text-xs font-semibold ${step.days !== null && step.days < 0 ? "text-[#8a4a00]" : "text-soft-ink"}`}>{dueLabel(step.dueDate)}</span>
                             </button>
                           </li>
                         ))}
                       </ul>
-                    ) : <p className="m-0 text-sm text-soft-ink">Everything in these plans is done.</p>}
+                    ) : <p className="m-0 text-sm text-soft-ink">{t("home.allDone")}</p>}
                   </div>
                 )}
               </div>
@@ -155,4 +178,15 @@ export function DashboardPage({ profileName = "", role = "student", workspaces =
       )}
     </section>
   );
+}
+
+/**
+ * Home is different for each role: a student gets their next step, a teacher "Your classes" (who is behind, what is due,
+ * send practice) and a parent "Your child this week" (read-only). `onSendPractice({ name, groupIds, recipientIds })` opens the
+ * Send practice flow.
+ */
+export function DashboardPage({ role = "student", account = false, onSendPractice, onOpenPage, ...rest }) {
+  if (role === "teacher") return <TeacherHome account={account} onSendPractice={onSendPractice} onOpenPage={onOpenPage} />;
+  if (role === "parent") return <ParentHome account={account} onOpenPage={onOpenPage} />;
+  return <StudentHome role={role} account={account} onOpenPage={onOpenPage} {...rest} />;
 }

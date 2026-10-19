@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { buildConceptForest } from "./conceptTree.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const TOPIC_COLORS = [
   "#0071e3", "#2f9e5b", "#b25e00", "#8e44ad",
@@ -38,6 +39,7 @@ export function KnowledgeGraph({
   height = 520,
   onConceptClick,
 }) {
+  const t = useT();
   const svgRef  = useRef(null);
   const [d3Ready, setD3Ready] = useState(typeof window !== "undefined" && !!window.d3);
   const [selected, setSelected] = useState(null);
@@ -83,7 +85,7 @@ export function KnowledgeGraph({
       ? makeNode(roots[0])
       : {
           id: "__subject__",
-          concept: { id: "__subject__", name: "Subject", topic: "", importance: 0.6, difficulty: 0.5 },
+          concept: { id: "__subject__", name: t("plans.kg.subject"), topic: "", importance: 0.6, difficulty: 0.5 },
           children: roots.map(makeNode),
         };
 
@@ -244,7 +246,7 @@ export function KnowledgeGraph({
   if (!concepts.length) {
     return (
       <div className="tw-scope flex items-center justify-center rounded-2xl bg-[var(--surface-soft)] py-12">
-        <p className="m-0 text-sm text-soft-ink">No concepts extracted yet. Upload reference material to build the concept map.</p>
+        <p className="m-0 text-sm text-soft-ink">{t("plans.kg.empty")}</p>
       </div>
     );
   }
@@ -253,14 +255,14 @@ export function KnowledgeGraph({
     <div className="tw-scope relative select-none">
       {/* Legend */}
       <div className="mb-3 flex flex-wrap items-center gap-4 text-xs text-soft-ink">
-        <span className="font-semibold text-ink">Mastery:</span>
-        {[["Not practiced", "#e5e7eb"], ["< 40%", "#ff3b30"], ["40–70%", "#ff9500"], ["> 70%", "#34c759"]].map(([label, color]) => (
+        <span className="font-semibold text-ink">{t("plans.kg.legend")}</span>
+        {[["notPracticed", "#e5e7eb"], ["< 40%", "#ff3b30"], ["40–70%", "#ff9500"], ["> 70%", "#34c759"]].map(([label, color]) => (
           <span key={label} className="flex items-center gap-1.5">
             <span className="inline-block h-3 w-3 rounded-full" style={{ background: color }} />
-            {label}
+            {label === "notPracticed" ? t("plans.kg.notPracticed") : label}
           </span>
         ))}
-        <span className="ml-auto text-soft-ink">Node size = importance · Click to highlight chain</span>
+        <span className="ml-auto text-soft-ink">{t("plans.kg.hint")}</span>
       </div>
 
       <svg
@@ -280,12 +282,12 @@ export function KnowledgeGraph({
           <p className="m-0 text-xs text-soft-ink">{tooltip.concept.topic}</p>
           {tooltip.mastery !== undefined && (
             <p className="m-0 mt-1 text-xs font-semibold" style={{ color: masteryColor(tooltip.mastery) }}>
-              Mastery: {Math.round(tooltip.mastery * 100)}%
+              {t("plans.kg.know", { pct: Math.round(tooltip.mastery * 100) })}
             </p>
           )}
           <p className="m-0 mt-1 text-xs text-soft-ink">
-            Importance: {Math.round((tooltip.concept.importance ?? 0.5) * 100)}% ·{" "}
-            Difficulty: {Math.round((tooltip.concept.difficulty ?? 0.5) * 100)}%
+            {t("plans.kg.importance", { pct: Math.round((tooltip.concept.importance ?? 0.5) * 100) })} ·{" "}
+            {t("plans.kg.difficulty", { pct: Math.round((tooltip.concept.difficulty ?? 0.5) * 100) })}
           </p>
           {tooltip.concept.description && (
             <p className="m-0 mt-1 text-xs text-soft-ink line-clamp-2">{tooltip.concept.description}</p>
@@ -295,7 +297,7 @@ export function KnowledgeGraph({
 
       {!d3Ready && (
         <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-[var(--surface-soft)]">
-          <p className="m-0 text-sm text-soft-ink">Loading graph…</p>
+          <p className="m-0 text-sm text-soft-ink">{t("plans.kg.loading")}</p>
         </div>
       )}
     </div>

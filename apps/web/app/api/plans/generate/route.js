@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { conceptNames, coverageOf, ensureCoverage } from "../../../../modules/plans/coverage.js";
 import { capDailyMinutes, normaliseMaxPerDay } from "../../../../modules/plans/dailyCap.js";
 import { ensureAgentUse } from "../../../../modules/plans/agentUse.js";
+import { CONSOLIDATED_KEY, ensureConsolidatedStep, needsConsolidatedView } from "../../../../modules/plans/master.js";
+import { localPlan } from "../../../../modules/plans/localPlan.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -92,8 +94,12 @@ export async function POST(request) {
     const performance = body?.performance || null;
     if (!deadline) return NextResponse.json({ error: "A deadline is needed." }, { status: 400 });
     if (!materials.length) return NextResponse.json({ error: "Choose at least one document." }, { status: 400 });
+    // Many documents, or a lot of material: the first step is one consolidated view of all of it (master.js).
+    const uploaded = materials.filter((item) => (item.kind || "material") === "material");
+    const consolidated = needsConsolidatedView({ uploadedCount: uploaded.length, totalChars: uploaded.reduce((sum, item) => sum + Math.max(0, Number(item.chars) || 0), 0) });
+    const consolidatedTitle = String(body?.consolidatedTitle || "").trim().slice(0, 120) || "Consolidated view of the resources";
+    const allowedKinds = consolidated ? [...new Set([...kinds, CONSOLIDATED_KEY])] : kinds;
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: "No model configured." }, { status: 500 });
 
     const weak = (performance?.weakConcepts || []).slice(0, 12);
     const strong = (performance?.strongConcepts || []).slice(0, 8);
@@ -120,6 +126,11 @@ Exhaustive coverage is the most important rule of this plan, because the learner
 </coverage_rules>`
       : "";
 
+    // No model: a plain schedule built by code (localPlan.js), checked below exactly like a model's plan.
+    let parsed;
+    if (!apiKey) {
+      parsed = localPlan({ today, deadline, materials, kinds, conceptMap, maxPerDay });
+    } else {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -127,7 +138,7 @@ Exhaustive coverage is the most important rule of this plan, because the learner
         store: false, // never keep user content at the provider (docs/LEGAL_COMPLIANCE_PLAN.md L4)
         model: process.env.LUNA_PLAN_MODEL || "gpt-4o",
         temperature: 0.3,
-        response_format: { type: "json_schema", json_schema: { name: "study_plan", strict: true, schema: schemaFor(kinds) } },
+        response_format: { type: "json_schema", json_schema: { name: "study_plan", strict: true, schema: schemaFor(allowedKinds) } },
         messages: [
           {
             role: "system",
@@ -147,24 +158,26 @@ Exhaustive coverage is the most important rule of this plan, because the learner
 11. Summaries first: when "summary" is an allowed generate kind, open each group of related topics with a step "Summary: <topics>" (generate = summary, kind read, 20-30 minutes, naming those topics in concepts) and put the "Read: <topics>" step of the original notes right after it, on the same or the next day, because a 1-2 page summary of the key ideas, messages and formulas sets the scene before the learner reads the real notes. Every summary is read before its notes.
 12. Every agent in <agent_scope> is used at least once, because the learner chose each of them deliberately: a level test at the start, summaries, formula sheets and reading parts before the notes, flashcards and problem sets spread through the middle, quizzes and the practice exam after the topics they test.
 13. Reading parts: when "reading" is an allowed generate kind, never schedule "read the whole document". Every step that reads an uploaded document is its own part: generate = reading, sourceId = that document, a title "Read: <what this part covers>" and the 1-8 concepts of that part in concepts, with different parts on different days, because the learner works through the material piece by piece.
+14. Consolidated view first: when <consolidated_view> is in the user message, the FIRST step of the plan is reading the consolidated view: the title given there, kind read, generate = master, sourceId empty, 30-45 minutes, dueDate ${today}, concepts = the main topics. Luna writes it before anything else as one document that brings all the material together by topic, so every later step builds on it: summaries, reading parts and activities come after it. Use generate = master for this step only.
 </rules>
 
 <step_format>
 A well-formed step has a title that says what to do and on what, starting with a verb or its type ("Read: osmosis and diffusion", "Quiz: the cell membrane"); one kind (read, activity, review or exam) that matches the title; a realistic number of minutes; a sourceId taken from the material list (empty only when no single document applies); the exact title of the goal it serves; and its concepts. The plan has 2-6 goals, each naming the concepts it covers and a targetScore between 0 and 1 (the share of questions the learner should get right). The note is two sentences to the learner: what the plan does and why it is spread this way.
 </step_format>${coverageRules}
 
-Before you answer, check the schedule against the rules: every dueDate lies between ${today} and ${deadline}; no day adds up to more than ${maxPerDay} minutes; the last fifth holds no new content; every generate value is allowed; every step's concepts come from the material and its goal is one of your goals${conceptMap.length ? "; the coverage ledger has one entry per concept and each tested concept has a real activity step" : ""}. Fix what fails, then answer.`
+Before you answer, check the schedule against the rules:${consolidated ? " the first step is the consolidated view (generate = master) and no other step uses master;" : ""} every dueDate lies between ${today} and ${deadline}; no day adds up to more than ${maxPerDay} minutes; the last fifth holds no new content; every generate value is allowed; every step's concepts come from the material and its goal is one of your goals${conceptMap.length ? "; the coverage ledger has one entry per concept and each tested concept has a real activity step" : ""}. Fix what fails, then answer.`
           },
           {
             role: "user",
-            content: `<today>${today}</today>\n<deadline>${deadline}</deadline>\n\n<learner_history>\n${history}\n</learner_history>\n\n<material>\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}\n</material>${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${instructions ? `\n\n<learner_instructions>\n${instructions}\n</learner_instructions>` : ""}${formatNotes ? `\n\n<resource_formats>\nThe learner's wishes for the shape of the exams, worksheets and flashcards that will be built (they are applied when the material is generated; use them to choose kinds and sizes):\n${formatNotes}\n</resource_formats>` : ""}${conceptMapList ? `\n\n<concept_map>\n${conceptMapList}\n</concept_map>` : ""}\n\nBuild the study plan from ${today} to ${deadline} now.`
+            content: `<today>${today}</today>\n<deadline>${deadline}</deadline>\n\n<learner_history>\n${history}\n</learner_history>\n\n<material>\n${materials.map((item) => `- [${item.id}] ${item.name}${item.kind ? ` (${item.kind})` : ""}${item.concepts?.length ? ` — teaches: ${item.concepts.join(", ")}` : ""}`).join("\n")}\n</material>${agentSection ? `\n\n<agent_scope>\n${agentSection}\n</agent_scope>` : ""}${instructions ? `\n\n<learner_instructions>\n${instructions}\n</learner_instructions>` : ""}${formatNotes ? `\n\n<resource_formats>\nThe learner's wishes for the shape of the exams, worksheets and flashcards that will be built (they are applied when the material is generated; use them to choose kinds and sizes):\n${formatNotes}\n</resource_formats>` : ""}${conceptMapList ? `\n\n<concept_map>\n${conceptMapList}\n</concept_map>` : ""}${consolidated ? `\n\n<consolidated_view>\nTitle of the first step: ${consolidatedTitle}\nThe plan has ${uploaded.length} uploaded document${uploaded.length === 1 ? "" : "s"}${uploaded.length >= 3 ? "" : " with a lot of material"}; Luna merges them into one document organised by topic, with overlaps written once and the sources of every section.\n</consolidated_view>` : ""}\n\nBuild the study plan from ${today} to ${deadline} now.`
           }
         ]
       })
     });
     const payload = await response.json();
     if (!response.ok) throw new Error(payload.error?.message || "Model request failed");
-    const parsed = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
+    parsed = JSON.parse(payload.choices?.[0]?.message?.content || "{}");
+    }
 
     // Trust but verify: whatever the model's ledger says, check the schedule itself and fill any gap.
     const names = conceptNames(conceptMap);
@@ -191,7 +204,19 @@ Before you answer, check the schedule against the rules: every dueDate lies betw
       parsed.items = capped.items;
       dailyCap = { maxPerDay, moved: capped.moved, clamped: capped.clamped, overloadedDays: capped.overloadedDays };
     }
-    return NextResponse.json({ plan: parsed, coverage, dailyCap, agentUse });
+    // The consolidated view is the first step, exactly once, on the plan's first day (checked after the daily cap moved steps).
+    let consolidatedView = null;
+    if (Array.isArray(parsed.items)) {
+      if (consolidated) {
+        const first = ensureConsolidatedStep(parsed.items, { today, title: consolidatedTitle, concepts: names });
+        parsed.items = first.items;
+        consolidatedView = { added: first.added, title: parsed.items[0]?.title || consolidatedTitle };
+      } else {
+        // Not needed: a step the model asked for anyway reads the material instead.
+        parsed.items = parsed.items.map((item) => (item.generate === CONSOLIDATED_KEY ? { ...item, generate: "" } : item));
+      }
+    }
+    return NextResponse.json({ plan: parsed, coverage, dailyCap, agentUse, consolidatedView, local: !apiKey });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }

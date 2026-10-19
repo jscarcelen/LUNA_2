@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { FolderPicker } from "../../ui/FolderTree";
 import { pathOf } from "./folderModel";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -15,7 +16,8 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * @param {{ id: string, name: string, parentFolderId: string, isSubject?: boolean }[]} folders  nodes from foldersOf()
  * @param {string[]} disabledIds nodes that cannot be chosen (a folder being moved and what is inside it)
  */
-export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [], initialId = "", confirmLabel = "Move here", pathLabel = "Move to", onPick, onCancel }) {
+export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [], initialId = "", confirmLabel, pathLabel, onPick, onCancel }) {
+  const t = useT();
   const [picked, setPicked] = useState(initialId);
   const chosen = folders.find((folder) => folder.id === picked);
   return (
@@ -26,10 +28,10 @@ export function MoveDialog({ title, subtitle = "", folders = [], disabledIds = [
           {subtitle ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{subtitle}</p> : null}
         </div>
         <FolderPicker folders={folders} selectedId={picked} onSelect={setPicked} hideUnfiled disabledIds={disabledIds} maxHeight={320} />
-        <p className="m-0 min-h-4 text-xs text-soft-ink">{chosen ? `${pathLabel}: ${pathOf(folders, chosen.id)}` : "Choose a topic or a folder."}</p>
+        <p className="m-0 min-h-4 text-xs text-soft-ink">{chosen ? `${pathLabel ?? t("courses.move.pathLabel")}: ${pathOf(folders, chosen.id)}` : t("courses.move.choose")}</p>
         <div className="flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={!chosen} onClick={() => onPick?.(picked)}>{confirmLabel}</button>
+          <button type="button" className={ghostBtn} onClick={onCancel}>{t("common.cancel")}</button>
+          <button type="button" className={primaryBtn} disabled={!chosen} onClick={() => onPick?.(picked)}>{confirmLabel ?? t("courses.move.confirm")}</button>
         </div>
       </div>
     </div>

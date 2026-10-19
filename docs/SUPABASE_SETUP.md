@@ -136,3 +136,15 @@ Supported actions currently mirror the mock route:
 
 - `202610130003_inactive_accounts.sql` — `last_login_at`, `inactivity_warned_at` (inactive-account policy; feature-detected).
 - `202610130004_mark_reviews.sql` — `mark_reviews` table (teacher review of AI marks; routes answer 503 `setupNeeded` until applied).
+- `202610140001_class_codes.sql` — `class_codes` (6-letter join code per class = group, on/off switch, teacher's school-consent confirmation) and `class_joins` (audit). Needs the groups migration `202610070001` first. Routes `/api/accounts/classes*` answer 503 `setupNeeded` until applied. **Apply it before the rollout.**
+- `202610190001_account_tour_seen.sql` — `accounts.tour_seen_at` (first-run tour remembered per account; feature-detected, falls back to localStorage keyed by account id).
+- `202610190002_activity_drafts.sql` — `activity_drafts` (quiz "Save and finish later": one draft per account and activity, deleted on submit; never counted as an attempt). Feature-detected: `/api/activities/drafts` answers `setupNeeded` and the player keeps drafts in localStorage keyed by account + activity until it is applied.
+
+## Function region (owner TODO)
+
+Project ref `fekeupkjljbgimntxpnv`. The Supabase region is **not recorded in this repo** (see `docs/PROVIDER_DPA_STEPS.md`: "check which region it is today").
+Home/tab loads make several Supabase round trips per request, so a Vercel function in another continent adds a lot of latency.
+TODO (owner): read the region in Supabase -> Project Settings -> General, then in Vercel -> Project -> Settings -> Functions -> Function Region pick
+the matching one (e.g. Frankfurt `fra1` for `eu-central-1`, Paris `cdg1` for `eu-west-3`, London `lhr1` for `eu-west-2`, Ireland `dub1` for `eu-west-1`), or add
+`"regions": ["<id>"]` to the root `vercel.json`, and redeploy. Not set here on purpose: guessing a region could make it slower.
+

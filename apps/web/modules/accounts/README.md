@@ -14,6 +14,9 @@ flows and the setup step.
   (`requestShare`, `useSharingAvailable`, `requestLeaveShare`); AppShell owns the one dialog.
 - `shared.js` also holds `SHARED_WITH_ME_SUBJECT`, `isReservedSubjectName`, `sharedInfoOf` (the `shared` marker on tree nodes) and `relationLabel`.
 - `LinkedStudentsPage.js` — "My students" / "My children": Groups bar, student chips (with group dots), `PerformancePage` read-only, plans overview, Sent, Exam dates; a selected group shows `GroupView`.
+- `ClassCodeCard.js` — Connections card: teacher "Your class code" (create class, big code, copy, new code, joining on/off, joined students, school-consent tick) and student "Join a class with a code"; `classCodeText.js` re-exports the browser-safe pieces of `lib/classCodes.js`.
+- `SendPracticeDialog.js` / `SendQuestionsDialog.js` / `sendQuestions.js` (pure) — "Send practice to {class}…" from Home and "Send N questions to {name}" from a student's weak topic: both end in the Assign dialog (`ShareDialog`, which now accepts `item.initial = { mode, groupIds, recipientIds }`). Nothing is sent before that last step.
+- `LinkedStudentsPage.js` also: `initialGroupId` (`students?group=<id>`), parents only read (no Make a quiz / Plan it for me), "Delete {name}'s account" is a danger zone at the bottom behind a dialog that needs the child's name typed back (`nouns.js` `matchesChildName`) and the parent's password.
 - `groups.js` — **pure** group rules (palette, caps, `activeMembership`, `resolveRecipients` de-duplication, `selectionStats`, per-person `summarizeResults`, `runPool` with a time budget). `GroupsBar.js` — the Groups bar, member picker, per-student "Groups…". `GroupView.js` + `groupData.js` (pure: the members as one synthetic class workspace, comparison, plan table, `examPlanStatus`) — the group view.
 - `examDates.js` — **pure** exam date rules (validation, recipient shape, ordering). `ExamDatesTab.js` — the teacher's list / send / edit / cancel / who has planned.
 - `shared.js` also holds `dueInfoOf` (imposed vs own date of a copy: `due:` + protected `due-by:`, the student's `due-own:`).
@@ -28,3 +31,15 @@ Server side lives in `apps/web/lib/` (`accountsCore.js`, `accountsRepository.js`
 ("Shared with me" in the tree), `copyShareRepository.js` (agents/templates/components), `workspaceGuard.js`, `session.js`, `sessionRevocation.js`, `resourceAccess.js`, plus `accountTokens.js` (one-time hashed tokens),
 `accountFlows.js` (confirm email / reset password / request emails), `accountLimits.js` (rate limiters), `mailer.js` +
 `mailTemplates.js` (SMTP / Resend / none), `phone.js` (E.164)) and `apps/web/app/api/accounts/`.
+
+## Linked student read-only view: concepts and mastery
+
+`PlanTopics` in a teacher/parent's read-only student view calls `/api/concepts` and `/api/student/mastery` with `studentId`. The routes decide
+with `lib/linkedStudentRead.js` (`decideLinkedStudentRead`: accepted teacher_student/parent_student link, workspace owned by that student; a peer
+link, a pending link or someone else's workspace is the same 404). Without `studentId` the signed-in account reads its own data; a client
+`learnerId` is never used.
+
+## First-run tour
+
+Remembered per account: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected) set by `POST /api/accounts/tour`
+and read by `app/platform/page.js`; without the migration the browser keeps it under `luna.tour.v1.<accountId>` (`lib/tourSeen.js`).

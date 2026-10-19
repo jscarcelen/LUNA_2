@@ -2,6 +2,8 @@
 import { useState } from 'react';
 import { LunaLogo } from '../brand/LunaLogo';
 import { accountsApi } from '../../modules/accounts/api';
+import { LanguageSwitch } from '../../lib/i18n/LanguageSwitch.js';
+import { useT } from '../../lib/i18n/LocaleProvider.js';
 
 // The same crisp, light look as the log in modal.
 const T = { accent: '#0071e3', ink: '#1d1d1f', sub: '#6e6e73', line: '#e5e5ea', bg: '#f5f5f7', paper: '#ffffff', red: '#d70015', green: '#1a7f37' };
@@ -15,6 +17,7 @@ function Frame({ title, children }) {
   return (
     <main style={{ minHeight: '100vh', background: T.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 12, boxSizing: 'border-box' }}>
       <a href="/" style={{ position: 'fixed', top: 18, left: 22, fontSize: 14, fontWeight: 600, color: T.accent, textDecoration: 'none' }}>← LUNA</a>
+      <div style={{ position: 'fixed', top: 14, right: 16 }}><LanguageSwitch /></div>
       <div style={{ background: T.paper, borderRadius: 22, padding: 'clamp(22px, 6vw, 40px)', width: '100%', maxWidth: 440, boxShadow: '0 24px 72px rgba(0,0,0,0.12)', boxSizing: 'border-box' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <div style={{ margin: '0 auto 12px', display: 'flex', justifyContent: 'center' }}><LunaLogo size={44} mark tile /></div>
@@ -26,11 +29,20 @@ function Frame({ title, children }) {
   );
 }
 
-const SetupBox = ({ migration }) => (
-  <div role="alert" style={{ ...infoBox, background: 'rgba(255,149,0,0.1)', border: '1px solid rgba(255,149,0,0.35)', overflowWrap: 'anywhere' }}>
-    <strong>Accounts need one database step.</strong> Apply <code>{migration}</code> in Supabase, then reload this page.
-  </div>
-);
+/** Splits a message at its `{x}` placeholder so a styled node can sit inside translated text. */
+const around = (template, node) => {
+  const [before, after = ''] = String(template).split('{x}');
+  return <>{before}{node}{after}</>;
+};
+
+function SetupBox({ migration }) {
+  const t = useT();
+  return (
+    <div role="alert" style={{ ...infoBox, background: 'rgba(255,149,0,0.1)', border: '1px solid rgba(255,149,0,0.35)', overflowWrap: 'anywhere' }}>
+      <strong>{t('misc.tok.setupTitle')}</strong> {around(t('misc.tok.setupBody'), <code>{migration}</code>)}
+    </div>
+  );
+}
 
 /**
  * /verify-email?token=… — the link in the confirmation email. The token is only used up when the person
@@ -38,6 +50,7 @@ const SetupBox = ({ migration }) => (
  * `state`: "ready" (token looks valid) | "invalid" | "setup".
  */
 export function VerifyEmailScreen({ token, state, migration }) {
+  const t = useT();
   const [phase, setPhase] = useState('idle'); // idle | busy | done | failed
   const [error, setError] = useState('');
 
@@ -52,33 +65,34 @@ export function VerifyEmailScreen({ token, state, migration }) {
     setPhase('failed');
   }
 
-  if (state === 'setup') return <Frame title="Confirm your email"><SetupBox migration={migration} /></Frame>;
+  if (state === 'setup') return <Frame title={t("misc.tok.confirmEmail")}><SetupBox migration={migration} /></Frame>;
   if (state === 'invalid' || phase === 'failed') {
     return (
-      <Frame title="This link does not work">
-        <div role="alert" style={infoBox}>{error || 'This link is invalid, has expired, or was already used.'} Log in and use “Resend email” in the banner at the top to get a new one.</div>
-        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>Log in</a>
+      <Frame title={t("misc.tok.badLink")}>
+        <div role="alert" style={infoBox}>{error || t('misc.tok.verifyInvalid')} {t('misc.tok.verifyHint')}</div>
+        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>{t('misc.tok.login')}</a>
       </Frame>
     );
   }
   if (phase === 'done') {
     return (
-      <Frame title="Email confirmed">
-        <div role="status" style={infoBox}>Thank you, your email is confirmed. You can now connect with teachers, parents and students, and share or assign work.</div>
-        <a href="/platform" style={{ ...buttonStyle(false), marginTop: 16 }}>Open Luna</a>
+      <Frame title={t("misc.tok.emailConfirmed")}>
+        <div role="status" style={infoBox}>{t('misc.tok.confirmedBody')}</div>
+        <a href="/platform" style={{ ...buttonStyle(false), marginTop: 16 }}>{t('misc.tok.openLuna')}</a>
       </Frame>
     );
   }
   return (
-    <Frame title="Confirm your email">
-      <p style={{ fontSize: 14, color: T.sub, lineHeight: 1.55, margin: '0 0 16px', textAlign: 'center' }}>Press the button to confirm that this email address is yours.</p>
-      <button type="button" onClick={confirm} disabled={phase === 'busy'} style={{ ...buttonStyle(phase === 'busy'), width: '100%' }}>{phase === 'busy' ? 'One moment…' : 'Confirm my email'}</button>
+    <Frame title={t("misc.tok.confirmEmail")}>
+      <p style={{ fontSize: 14, color: T.sub, lineHeight: 1.55, margin: '0 0 16px', textAlign: 'center' }}>{t('misc.tok.pressButton')}</p>
+      <button type="button" onClick={confirm} disabled={phase === 'busy'} style={{ ...buttonStyle(phase === 'busy'), width: '100%' }}>{phase === 'busy' ? t('misc.tok.busy') : t('misc.tok.confirmBtn')}</button>
     </Frame>
   );
 }
 
 /** /reset-password?token=… — choose a new password (typed twice). On success this browser is logged in. */
 export function ResetPasswordScreen({ token, state, migration }) {
+  const t = useT();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
@@ -91,7 +105,7 @@ export function ResetPasswordScreen({ token, state, migration }) {
     if (busy) return;
     setError('');
     if (password !== confirm) {
-      setError('The two passwords do not match.');
+      setError(t('misc.tok.mismatch'));
       return;
     }
     setBusy(true);
@@ -105,30 +119,30 @@ export function ResetPasswordScreen({ token, state, migration }) {
     setError(result.error);
   }
 
-  if (state === 'setup') return <Frame title="Choose a new password"><SetupBox migration={migration} /></Frame>;
+  if (state === 'setup') return <Frame title={t("misc.tok.chooseNew")}><SetupBox migration={migration} /></Frame>;
   if (invalid) {
     return (
-      <Frame title="This link does not work">
-        <div role="alert" style={infoBox}>{error || 'This link is invalid, has expired (they last one hour), or was already used.'} Ask for a new one with “Forgot password?” on the log in page.</div>
-        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>Go to log in</a>
+      <Frame title={t("misc.tok.badLink")}>
+        <div role="alert" style={infoBox}>{error || t('misc.tok.resetInvalid')} {t('misc.tok.resetHint')}</div>
+        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>{t('misc.tok.goLogin')}</a>
       </Frame>
     );
   }
   return (
-    <Frame title="Choose a new password">
+    <Frame title={t("misc.tok.chooseNew")}>
       <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div>
-          <label htmlFor="luna-new-password" style={labelStyle}>New password</label>
-          <input id="luna-new-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="At least 8 characters" style={inputStyle} />
+          <label htmlFor="luna-new-password" style={labelStyle}>{t('misc.tok.newPw')}</label>
+          <input id="luna-new-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('misc.tok.atLeast8')} style={inputStyle} />
         </div>
         <div>
-          <label htmlFor="luna-new-password-confirm" style={labelStyle}>Repeat new password</label>
-          <input id="luna-new-password-confirm" type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Type it again" aria-invalid={mismatch || undefined} aria-describedby={mismatch ? 'luna-reset-mismatch' : undefined} style={{ ...inputStyle, borderColor: mismatch ? T.red : T.line }} />
-          {mismatch ? <div id="luna-reset-mismatch" role="alert" style={{ fontSize: 12, color: T.red, marginTop: 4 }}>The two passwords do not match.</div> : null}
+          <label htmlFor="luna-new-password-confirm" style={labelStyle}>{t('misc.tok.repeatPw')}</label>
+          <input id="luna-new-password-confirm" type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder={t('misc.tok.typeAgain')} aria-invalid={mismatch || undefined} aria-describedby={mismatch ? 'luna-reset-mismatch' : undefined} style={{ ...inputStyle, borderColor: mismatch ? T.red : T.line }} />
+          {mismatch ? <div id="luna-reset-mismatch" role="alert" style={{ fontSize: 12, color: T.red, marginTop: 4 }}>{t('misc.tok.mismatch')}</div> : null}
         </div>
         {error && !mismatch ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5 }}>Changing the password signs you out everywhere else.</div>
-        <button type="submit" disabled={busy || mismatch} style={buttonStyle(busy || mismatch)}>{busy ? 'One moment…' : 'Save new password'}</button>
+        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5 }}>{t('misc.tok.signsOut')}</div>
+        <button type="submit" disabled={busy || mismatch} style={buttonStyle(busy || mismatch)}>{busy ? t('misc.tok.busy') : t('misc.tok.saveNew')}</button>
       </form>
     </Frame>
   );
@@ -140,6 +154,7 @@ export function ResetPasswordScreen({ token, state, migration }) {
  * not use the link up. `state`: "ready" | "invalid" | "setup".
  */
 export function GuardianConsentScreen({ token, studentName = '', state, migration }) {
+  const t = useT();
   const [form, setForm] = useState({ guardianName: '', guardianPassword: '', guardianPasswordConfirm: '', studentEmail: '', studentPassword: '', accept: false });
   const [phase, setPhase] = useState('idle'); // idle | busy | done | refused | failed
   const [error, setError] = useState('');
@@ -163,69 +178,70 @@ export function GuardianConsentScreen({ token, studentName = '', state, migratio
     setPhase('refused');
   }
 
-  if (state === 'setup') return <Frame title="Parent or guardian consent"><SetupBox migration={migration} /></Frame>;
+  if (state === 'setup') return <Frame title={t("misc.tok.consentTitle")}><SetupBox migration={migration} /></Frame>;
   if (state === 'invalid' || phase === 'failed') {
     return (
-      <Frame title="This link does not work">
-        <div role="alert" style={infoBox}>{error || 'This link has expired (they last 48 hours), was already used, or is not valid. Ask your child to start again from the sign-up page.'}</div>
+      <Frame title={t("misc.tok.badLink")}>
+        <div role="alert" style={infoBox}>{error || t('misc.tok.guardianInvalid')}</div>
       </Frame>
     );
   }
   if (phase === 'refused') {
     return (
-      <Frame title="Done: no account created">
-        <div role="status" style={infoBox}>Thank you. Nothing was created, and what we held about the request has been deleted.</div>
+      <Frame title={t("misc.tok.refusedTitle")}>
+        <div role="status" style={infoBox}>{t('misc.tok.refusedBody')}</div>
       </Frame>
     );
   }
   if (phase === 'done') {
     return (
-      <Frame title="Consent given">
+      <Frame title={t("misc.tok.consentGiven")}>
         <div role="status" style={infoBox}>
-          {studentName ? <><strong>{studentName}</strong>’s account is ready</> : 'The account is ready'}. They log in with <strong style={{ overflowWrap: 'anywhere' }}>{result?.studentEmail}</strong> and the password you chose.
-          {result?.createdGuardian ? <> Your own parent account is <strong style={{ overflowWrap: 'anywhere' }}>{result?.guardianEmail}</strong>, with the password you just set.</> : <> Log in with your existing parent account to see their progress.</>}
-          {' '}From “My students” you can see, export or delete their data at any time.
+          {studentName ? around(t('misc.tok.readyNamed'), <strong>{studentName}</strong>) : t('misc.tok.readyPlain')}{' '}
+          {around(t('misc.tok.logInWith'), <strong style={{ overflowWrap: 'anywhere' }}>{result?.studentEmail}</strong>)}
+          {result?.createdGuardian ? <> {around(t('misc.tok.parentAccount'), <strong style={{ overflowWrap: 'anywhere' }}>{result?.guardianEmail}</strong>)}</> : <> {t('misc.tok.existingParent')}</>}
+          {' '}{t('misc.tok.myStudents')}
         </div>
-        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>Log in</a>
+        <a href="/login" style={{ ...buttonStyle(false), marginTop: 16 }}>{t('misc.tok.login')}</a>
       </Frame>
     );
   }
   return (
-    <Frame title="Parent or guardian consent">
+    <Frame title={t("misc.tok.consentTitle")}>
       <form onSubmit={consent} style={{ display: 'flex', flexDirection: 'column', gap: 14 }} noValidate>
         <div style={infoBox}>
-          <strong>{studentName || 'Your child'}</strong> asked to use LUNA, a study platform that uses AI to make quizzes and study plans from school material. Under 14, we need your consent.
+          <strong>{studentName || t('misc.tok.yourChild')}</strong> {t('misc.tok.asked')}
           <ul style={{ margin: '8px 0 0', paddingLeft: 18 }}>
-            <li>We keep their name, the material they upload, their answers and results, to run the platform.</li>
-            <li>The text they write and the material they upload is processed by AI providers to generate content. It is not used for advertising, and we ask providers not to train on it.</li>
-            <li>AI scores and “diagnoses” are guidance for study, never a final grade or decision.</li>
-            <li>You get a parent account to see their progress, and you can export or delete all their data whenever you want.</li>
+            <li>{t('misc.tok.li1')}</li>
+            <li>{t('misc.tok.li2')}</li>
+            <li>{t('misc.tok.li3')}</li>
+            <li>{t('misc.tok.li4')}</li>
           </ul>
-          <div style={{ marginTop: 8 }}>Read the <a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>Privacy Policy</a>, the <a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>Terms</a> and the <a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>AI notice</a>.</div>
+          <div style={{ marginTop: 8 }}>{t('misc.tok.readThe')} <a href="/privacy" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('misc.tok.privacy')}</a>{t('misc.tok.sepThe')} <a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('misc.tok.terms')}</a> {t('misc.tok.andThe')} <a href="/ai" target="_blank" rel="noopener" style={{ color: T.accent }}>{t('misc.tok.aiNotice')}</a>.</div>
         </div>
         <div>
-          <label htmlFor="g-sname" style={labelStyle}>Email your child will log in with</label>
+          <label htmlFor="g-sname" style={labelStyle}>{t('misc.tok.childEmail')}</label>
           <input id="g-sname" type="email" value={form.studentEmail} onChange={set('studentEmail')} placeholder="child@example.com" style={inputStyle} autoComplete="off" />
         </div>
         <div>
-          <label htmlFor="g-spass" style={labelStyle}>Password for your child’s account</label>
+          <label htmlFor="g-spass" style={labelStyle}>{t('misc.tok.childPw')}</label>
           <input id="g-spass" type="password" value={form.studentPassword} onChange={set('studentPassword')} style={inputStyle} autoComplete="new-password" />
         </div>
         <div>
-          <label htmlFor="g-name" style={labelStyle}>Your name</label>
+          <label htmlFor="g-name" style={labelStyle}>{t('misc.tok.yourName')}</label>
           <input id="g-name" value={form.guardianName} onChange={set('guardianName')} style={inputStyle} autoComplete="name" />
         </div>
         <div>
-          <label htmlFor="g-pass" style={labelStyle}>Password for your parent account <span style={{ color: T.sub, fontWeight: 400 }}>(not needed if you already have one)</span></label>
+          <label htmlFor="g-pass" style={labelStyle}>{t('misc.tok.parentPw')} <span style={{ color: T.sub, fontWeight: 400 }}>{t('misc.tok.parentPwNote')}</span></label>
           <input id="g-pass" type="password" value={form.guardianPassword} onChange={(event) => setForm((current) => ({ ...current, guardianPassword: event.target.value, guardianPasswordConfirm: event.target.value }))} style={inputStyle} autoComplete="new-password" />
         </div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 13, color: T.ink, lineHeight: 1.5, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.accept} onChange={set('accept')} style={{ marginTop: 3 }} />
-          <span>I am the parent or legal guardian of {studentName || 'this child'} and I consent to the processing described above.</span>
+          <span>{t('misc.tok.iConsentPre', { name: studentName || t('misc.tok.thisChild') })}</span>
         </label>
         {error ? <div role="alert" style={{ fontSize: 13, color: T.red }}>{error}</div> : null}
-        <button type="submit" disabled={phase === 'busy'} style={buttonStyle(phase === 'busy')}>{phase === 'busy' ? 'One moment…' : 'I consent: create the account'}</button>
-        <button type="button" onClick={refuse} disabled={phase === 'busy'} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>No, I do not consent</button>
+        <button type="submit" disabled={phase === 'busy'} style={buttonStyle(phase === 'busy')}>{phase === 'busy' ? t('misc.tok.busy') : t('misc.tok.consentBtn')}</button>
+        <button type="button" onClick={refuse} disabled={phase === 'busy'} style={{ background: 'none', border: 'none', color: T.sub, cursor: 'pointer', fontSize: 13 }}>{t('misc.tok.noConsent')}</button>
       </form>
     </Frame>
   );

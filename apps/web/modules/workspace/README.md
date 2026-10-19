@@ -35,3 +35,5 @@ Server rules live in `lib/workspaceMove.js` (API actions `moveDocument` and `mov
 
 Known limit: the plans page resolves documents inside one topic, so a plan that stays behind shows a
 document it used as missing once that document moved to another topic. The move tells you which plans.
+
+Courses rows show Open and a "⋯" menu only; folders get the same menu on every screen size.

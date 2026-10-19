@@ -6,6 +6,7 @@ import { focusSections, htmlOfDocument, markdownToBlocks, notesDocumentFor, save
 import { saveFile } from "./downloadOriginal";
 import { TopicMap } from "./TopicMap";
 import { collectCoverageRefs } from "./coverageMap.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * An uploaded document (or any document that is text) in the HTML reader: two views — the original,
@@ -13,6 +14,7 @@ import { collectCoverageRefs } from "./coverageMap.js";
  * button with the PDF page-size × view matrix, the HTML and the original file.
  */
 export function DocumentReader({ document: original, documents = [], focus = null, scrollTo = null, planId = "", workspaceId = "", onClose, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onDownloadDocument, onUpdateDocumentContent, onOpenActivity }) {
+  const t = useT();
   // After an edit is saved the reader shows it at once; the workspace catches up when it reloads.
   const [edited, setEdited] = useState(null);
   const [showAll, setShowAll] = useState(false);
@@ -42,7 +44,7 @@ export function DocumentReader({ document: original, documents = [], focus = nul
       const saved = await saveDocumentNotes({ document: doc, existing: notesFile.current, list, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument });
       if (saved?.id && !notesFile.current) notesFile.current = { document: { id: saved.id }, highlights: list };
     } catch (error) {
-      setMessage(`Could not save your notes: ${String(error?.message || error)}`);
+      setMessage(t("courses.dr.notesFailed", { error: String(error?.message || error) }));
     }
   }
 
@@ -69,7 +71,7 @@ export function DocumentReader({ document: original, documents = [], focus = nul
       notice={message}
       onDownloadOriginal={onDownloadDocument ? async () => {
         const file = await onDownloadDocument(doc);
-        if (!saveFile(file, doc.name)) setMessage("Nothing to download for this file.");
+        if (!saveFile(file, doc.name)) setMessage(t("courses.wb.nothingFile"));
       } : undefined}
     />
   );

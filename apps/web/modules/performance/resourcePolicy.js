@@ -4,6 +4,7 @@
  * Pure function — no DB access. The planner and the "Do it now" wiring call this.
  * Rules are evaluated in order; first match wins.
  */
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * @param {object} state - student_concept_state row (may be partial / {} for first exposure)
@@ -13,7 +14,7 @@
  *   @param {number}  [context.sessionNumber=1]      - how many sessions the student has done
  * @returns {{ kind: string, durationMinutes: number, reason: string }}
  */
-export function selectResource(state, context = {}) {
+export function selectResource(state, context = {}, t = tEn) {
   const {
     daysUntilExam    = 365,
     prereqsMastered  = true,
@@ -35,92 +36,92 @@ export function selectResource(state, context = {}) {
       cond: !prereqsMastered,
       kind: "prerequisite_first",
       duration: 15,
-      reason: "A prerequisite concept needs practice before tackling this one.",
+      reason: t("progress.policy.prereq"),
     },
     {
       cond: attemptsTotal === 0,
       kind: "explanation",
       duration: 10,
-      reason: "First exposure — start with a clear explanation and worked example.",
+      reason: t("progress.policy.first"),
     },
     {
       cond: examImminent,
       kind: "mixed_exam",
       duration: 30,
-      reason: "Exam in ≤ 3 days — exam-style mixed practice.",
+      reason: t("progress.policy.exam3"),
     },
     {
       cond: mastery < 0.2,
       kind: "explanation",
       duration: 12,
-      reason: "Very low mastery — explain the concept before quizzing.",
+      reason: t("progress.policy.veryLow"),
     },
     {
       cond: mastery < 0.4,
       kind: "flashcards",
       duration: 15,
-      reason: "Low mastery — build recall with flashcards before quizzing.",
+      reason: t("progress.policy.low"),
     },
     {
       cond: mastery < 0.6 && dominant === "calculation",
       kind: "worksheet",
       duration: 20,
-      reason: "Repeated calculation errors — targeted worked-problem practice.",
+      reason: t("progress.policy.calc"),
     },
     {
       cond: mastery < 0.6 && dominant === "interpretation",
       kind: "scenario_quiz",
       duration: 20,
-      reason: "Interpretation errors — scenario-based questions to build meaning.",
+      reason: t("progress.policy.interp"),
     },
     {
       cond: mastery < 0.6 && dominant === "conceptual",
       kind: "explanation_then_quiz",
       duration: 20,
-      reason: "Conceptual gap — re-explain then quiz.",
+      reason: t("progress.policy.concept"),
     },
     {
       cond: mastery < 0.6 && dominant === "gap",
       kind: "explanation",
       duration: 15,
-      reason: "Knowledge gap detected — explain the missing foundation.",
+      reason: t("progress.policy.gap"),
     },
     {
       cond: mastery < 0.7,
       kind: "targeted_quiz",
       duration: 15,
-      reason: "Building mastery — focused retrieval practice.",
+      reason: t("progress.policy.building"),
     },
     {
       cond: mastery >= 0.7 && daysSince > 14,
       kind: "spaced_retrieval",
       duration: 10,
-      reason: "Mastered but not recently reviewed — spaced retrieval to maintain.",
+      reason: t("progress.policy.spaced"),
     },
     {
       cond: mastery >= 0.7 && examSoon,
       kind: "mixed_exam",
       duration: 25,
-      reason: "Exam approaching — exam-style mixed practice.",
+      reason: t("progress.policy.examSoon"),
     },
     {
       cond: mastery >= 0.7 && dominant === "careless",
       kind: "targeted_practice",
       duration: 10,
-      reason: "Careless errors dominate — short focused drill.",
+      reason: t("progress.policy.careless"),
     },
     {
       cond: mastery >= 0.8,
       kind: "interleaved_challenge",
       duration: 20,
-      reason: "Strong mastery — interleaved challenge to transfer learning.",
+      reason: t("progress.policy.strong"),
     },
     // Default
     {
       cond: true,
       kind: "quiz",
       duration: 15,
-      reason: "General practice.",
+      reason: t("progress.policy.general"),
     },
   ];
 

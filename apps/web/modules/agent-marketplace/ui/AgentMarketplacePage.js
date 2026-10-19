@@ -264,15 +264,15 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
         <div className="grid gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:items-center">
           <div>
             <span className="rounded-full bg-teal/15 px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-[0.16em] text-accent ring-1 ring-accent/40">Agent marketplace</span>
-            <h3 className="m-0 mt-3 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Ready-made agents for your classroom</h3>
-            <p className="m-0 mt-2 max-w-xl text-sm text-soft-ink">Browse agents built by LUNA and the community, see exactly what they ask and produce, and add them to your AI Tools in one click. Agents run on your own documents.</p>
+            <h3 className="m-0 mt-3 text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Ready-made tools for your classroom</h3>
+            <p className="m-0 mt-2 max-w-xl text-sm text-soft-ink">Browse tools built by LUNA and the community, see exactly what they ask and produce, and add them to your AI Tools in one click. Agents run on your own documents.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="button" onClick={onGoBuilder} className="rounded-full bg-ink px-5 py-2 text-sm font-bold text-bg transition hover:bg-ink/85">Build &amp; sell your own</button>
-              <span className="self-center text-xs text-soft-ink">{allListings.length} agents · {communityListings.length} from the community</span>
+              <span className="self-center text-xs text-soft-ink">{allListings.length} tools · {communityListings.length} from the community</span>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-2">
-            {[["1", "Pick an agent"], ["2", "Add to AI Tools"], ["3", "Run on your docs"]].map(([step, label]) => (
+            {[["1", "Pick a tool"], ["2", "Add to AI Tools"], ["3", "Run on your docs"]].map(([step, label]) => (
               <div key={step} className="rounded-2xl border border-ink/10 bg-ink/[0.04] p-3">
                 <span className="grid size-7 place-items-center rounded-full bg-mustard/30 text-xs font-extrabold text-ink">{step}</span>
                 <p className="m-0 mt-2 text-xs font-semibold text-ink">{label}</p>
@@ -322,7 +322,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
       ) : null}
 
       <div className={`flex flex-wrap items-center gap-2 rounded-bento border border-ink/8 bg-paper p-3 shadow-glow ${area === "blocks" ? "hidden" : ""}`}>
-        <input className={`${fieldClass} sm:max-w-xs`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search agents, outputs, authors…" aria-label="Search agents" />
+        <input className={`${fieldClass} sm:max-w-xs`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search tools, outputs, authors…" aria-label="Search agents" />
         <div className="flex flex-wrap gap-1 rounded-full bg-ink/5 p-1 ring-1 ring-ink/10">
           {CATEGORIES.map((item) => (
             <button key={item} type="button" onClick={() => setCategory(item)} className={`rounded-full px-3 py-1 text-xs font-semibold transition ${category === item ? "bg-ink text-bg shadow" : "text-soft-ink hover:text-ink"}`}>{item}</button>
@@ -342,7 +342,7 @@ export function AgentMarketplacePage({ onGoBuilder, workspaces = [], selectedWor
         ))}
         {!visible.length ? (
           <div className="col-span-full rounded-bento border border-dashed border-ink/20 p-10 text-center">
-            <p className="m-0 text-base font-semibold text-ink">No agents match</p>
+            <p className="m-0 text-base font-semibold text-ink">No tools match</p>
             <p className="m-0 mt-1 text-sm text-soft-ink">Try another search, or build one yourself.</p>
             <button type="button" onClick={onGoBuilder} className="mt-4 rounded-full bg-ink px-5 py-2 text-sm font-bold text-bg transition hover:bg-ink/85">Open Agent Builder</button>
           </div>

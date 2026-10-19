@@ -1,3 +1,5 @@
+import { tEn } from "../../lib/i18n/index.js";
+
 /**
  * What "shared" means, in one place that both the browser and the server import (it is pure).
  *
@@ -93,12 +95,12 @@ const SIDECAR_TAGS = ["doc-notes", "activity-attempt", "ai-agent", "study-goal"]
  * Luna's own bookkeeping documents (notes, attempts, agents, goals) are never sent.
  * @returns {{ ok: true, itemType: "plan" | "activity" | "resource" | "document" } | { ok: false, error: string }}
  */
-export function classifyDeliverable(document, mode) {
+export function classifyDeliverable(document, mode, t = tEn) {
   const tags = (document?.tags || []).map((tag) => String(tag).trim().toLowerCase());
-  if (tags.some((tag) => tag.startsWith("shared-by:"))) return { ok: false, error: "This was shared with you, so only the original sender can send it on." };
-  if (tags.some((tag) => SIDECAR_TAGS.includes(tag))) return { ok: false, error: "That kind of item cannot be shared." };
+  if (tags.some((tag) => tag.startsWith("shared-by:"))) return { ok: false, error: t("people.deliver.received") };
+  if (tags.some((tag) => SIDECAR_TAGS.includes(tag))) return { ok: false, error: t("people.deliver.sidecar") };
   const itemType = tags.includes("study-plan") ? "plan" : tags.includes("resource") && tags.includes("activity") ? "activity" : tags.includes("resource") ? "resource" : "document";
-  if (mode === "assign" && itemType !== "plan" && itemType !== "activity") return { ok: false, error: "Only activities (quizzes, flashcards, worksheets…) and study plans can be assigned. Use Share for other documents." };
+  if (mode === "assign" && itemType !== "plan" && itemType !== "activity") return { ok: false, error: t("people.deliver.assignOnly") };
   return { ok: true, itemType };
 }
 
@@ -198,10 +200,10 @@ export const sharedInfoOf = (entry) => (entry?.shared && typeof entry.shared ===
 export const canEditShared = (entry) => sharedInfoOf(entry)?.permission === "edit";
 
 /** "Your student", "Your teacher", "Your child", "Your parent" - or a plain description for a peer connection. */
-export function relationLabel(kind, myRole, otherRole) {
-  if (kind === "teacher_student") return myRole === "teacher" ? "Your student" : "Your teacher";
-  if (kind === "parent_student") return myRole === "parent" ? "Your child" : "Your parent";
-  return otherRole === "teacher" ? "Teacher in your network" : otherRole === "parent" ? "Parent in your network" : otherRole === "student" ? "Student in your network" : "In your network";
+export function relationLabel(kind, myRole, otherRole, t = tEn) {
+  if (kind === "teacher_student") return myRole === "teacher" ? t("people.rel.yourStudent") : t("people.rel.yourTeacher");
+  if (kind === "parent_student") return myRole === "parent" ? t("people.rel.yourChild") : t("people.rel.yourParent");
+  return otherRole === "teacher" ? t("people.rel.teacherNet") : otherRole === "parent" ? t("people.rel.parentNet") : otherRole === "student" ? t("people.rel.studentNet") : t("people.rel.net");
 }
 
 /** Can this kind of connection see performance? Only teacher/parent <-> student; a peer never. */

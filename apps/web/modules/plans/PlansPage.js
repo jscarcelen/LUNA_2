@@ -3,7 +3,7 @@
 import { EmptyState } from "../../components/EmptyState";
 import { sourceHref } from "../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, plannedForOf, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
+import { DEADLINE_KINDS, ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, daysUntil, dueLabel, newDeadline, newItem, nextDeadline, parsePlan, plannedForOf, planProgress, planWeeks, upcoming, withSubPlans } from "./plan";
 import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
@@ -30,6 +30,9 @@ import { canUpdateResource } from "../resources/update";
 import { deadlineOrigin, effectiveDue, examDeadline } from "./deadlines.js";
 import { DeadlineOrigin, OriginBadge } from "./DeadlineBadge";
 import { ExamDatePicker, ExamDatesCard, PlanExamLink } from "./ExamDates";
+import { displayName } from "../ui/displayName";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -46,25 +49,25 @@ const MATH_KEYWORDS = ["equation","formula","calcul","algebra","geom","statistic
  * Infer human-readable skill-category tags from an item's kind + the resource's
  * concept levels and names. Returns [{label, cls}] where cls is a Tailwind string.
  */
-function inferSkillTags(item, resource) {
+function inferSkillTags(item, resource, t = tEn) {
   const tags = [];
   const concepts = resource?.concepts || [];
   const levels = new Set(concepts.map((c) => c.level).filter(Boolean));
   const names = concepts.map((c) => String(c.name || "").toLowerCase()).join(" ");
 
   if (item.kind === "read" || item.kind === "review") {
-    tags.push({ label: "Reading", cls: "border-[#5856d6]/30 bg-[#5856d6]/10 text-[#5856d6]" });
+    tags.push({ label: t("plans.skill.reading"), cls: "border-[#5856d6]/30 bg-[#5856d6]/10 text-[#5856d6]" });
   }
   if (item.kind === "exam") {
-    tags.push({ label: "Assessment", cls: "border-[#ff3b30]/30 bg-[#ff3b30]/10 text-[#ff3b30]" });
+    tags.push({ label: t("plans.skill.assessment"), cls: "border-[#ff3b30]/30 bg-[#ff3b30]/10 text-[#ff3b30]" });
   }
   if (levels.has("apply") || levels.has("analyse")) {
-    tags.push({ label: "Problem-solving", cls: "border-[#ff9500]/30 bg-[#ff9500]/10 text-[#b86000]" });
+    tags.push({ label: t("plans.skill.problem"), cls: "border-[#ff9500]/30 bg-[#ff9500]/10 text-[#b86000]" });
   } else if (levels.has("understand") || levels.has("remember")) {
-    tags.push({ label: "Conceptual", cls: "border-[#0071e3]/30 bg-[#0071e3]/10 text-[#0071e3]" });
+    tags.push({ label: t("plans.skill.conceptual"), cls: "border-[#0071e3]/30 bg-[#0071e3]/10 text-[#0071e3]" });
   }
   if (MATH_KEYWORDS.some((kw) => names.includes(kw))) {
-    tags.push({ label: "Maths", cls: "border-[#34c759]/30 bg-[#34c759]/10 text-[#1d7a44]" });
+    tags.push({ label: t("plans.skill.maths"), cls: "border-[#34c759]/30 bg-[#34c759]/10 text-[#1d7a44]" });
   }
   return tags;
 }
@@ -140,6 +143,7 @@ function FolderPickerNode({ node, depth = 0, docs, picked, onToggle, docLabel, b
  * onConfirm({ materialIds, resourceIds }) returns the final selection of each kind.
  */
 function MaterialPickerModal({ documents, folders, resources, plan, initialPicked, onClose, onConfirm }) {
+  const t = useT();
   const [tab, setTab] = useState("uploaded");
   const [picked, setPicked] = useState(() => [...new Set(initialPicked)]);
   const { uploaded, generated } = useMemo(() => splitDocuments(documents, resources), [documents, resources]);
@@ -155,14 +159,14 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
   }), [shown, allFolderIds]);
 
   const toggle = (id) => setPicked((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
-  const docLabel = (doc) => (doc && (resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
-  const badgeOf = (doc) => (builtByPlan.has(doc.id) ? "built by this plan" : "");
+  const docLabel = (doc) => (doc && displayName(resourceByDocumentId.get(doc.id)?.name || doc.name || doc.id)) || "";
+  const badgeOf = (doc) => (builtByPlan.has(doc.id) ? t("plans.picker.builtBy") : "");
   const label = (id) => docLabel(documents.find((d) => d.id === id) || { id, name: id });
   const pickedUploaded = picked.filter((id) => !generatedIds.has(id));
   const pickedGenerated = picked.filter((id) => generatedIds.has(id));
   const tabs = [
-    { id: "uploaded", title: "Uploaded material", count: uploaded.length, picked: pickedUploaded.length, hint: "Documents you uploaded. They feed the concept map and are what Luna generates practice from." },
-    { id: "generated", title: "Generated resources", count: generated.length, picked: pickedGenerated.length, hint: "Quizzes, summaries and flashcards made by agents. Each becomes a step of the plan." }
+    { id: "uploaded", title: t("plans.picker.uploaded"), count: uploaded.length, picked: pickedUploaded.length, hint: t("plans.picker.uploadedHint") },
+    { id: "generated", title: t("plans.picker.generated"), count: generated.length, picked: pickedGenerated.length, hint: t("plans.picker.generatedHint") }
   ];
   const active = tabs.find((entry) => entry.id === tab);
 
@@ -173,7 +177,7 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
         {ids.map((id) => (
           <span key={id} className="inline-flex items-center gap-1 rounded-full border border-[var(--accent)]/25 bg-[var(--accent)]/5 px-2 py-0.5 text-[11px] font-medium text-ink">
             <span className="max-w-[140px] truncate">{label(id)}</span>
-            <button type="button" onClick={() => toggle(id)} className="ml-0.5 shrink-0 text-soft-ink hover:text-[var(--color-danger)]" aria-label={`Remove ${label(id)}`}>×</button>
+            <button type="button" onClick={() => toggle(id)} className="ml-0.5 shrink-0 text-soft-ink hover:text-[var(--color-danger)]" aria-label={t("plans.gen.remove", { label: label(id) })}>×</button>
           </span>
         ))}
       </div>
@@ -186,8 +190,8 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-ink/8 px-5 py-4">
           <div>
-            <h4 className="m-0 text-base font-bold text-ink">Add to this plan</h4>
-            <p className="m-0 mt-0.5 text-xs text-soft-ink">Adding anything re-plans what is still to do. What you have already done stays as it is.</p>
+            <h4 className="m-0 text-base font-bold text-ink">{t("plans.picker.title")}</h4>
+            <p className="m-0 mt-0.5 text-xs text-soft-ink">{t("plans.picker.intro")}</p>
           </div>
           <button type="button" className="shrink-0 text-soft-ink hover:text-ink" onClick={onClose}>✕</button>
         </div>
@@ -207,7 +211,7 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
         {/* Folder tree */}
         <div className="flex-1 overflow-y-auto p-3 grid gap-0.5">
           {!shown.length
-            ? <p className="m-0 p-2 text-xs text-soft-ink">{tab === "uploaded" ? "No uploaded documents in this workspace yet." : "No generated resources yet. Make some in Create → Make."}</p>
+            ? <p className="m-0 p-2 text-xs text-soft-ink">{tab === "uploaded" ? t("plans.picker.noUploaded") : t("plans.picker.noGenerated")}</p>
             : (<>
                 {folderTree.map((node) => <FolderPickerNode key={node.id} node={node} docs={shown} picked={picked} onToggle={toggle} docLabel={docLabel} badgeOf={badgeOf} />)}
                 {unorganised.map((doc) => (
@@ -223,15 +227,15 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
         {/* Selected tray, by kind */}
         {picked.length > 0 && (
           <div className="grid gap-2 border-t border-ink/8 px-4 py-3">
-            {tray("Uploaded material", pickedUploaded)}
-            {tray("Generated resources", pickedGenerated)}
+            {tray(t("plans.picker.uploaded"), pickedUploaded)}
+            {tray(t("plans.picker.generated"), pickedGenerated)}
           </div>
         )}
 
         {/* Footer */}
         <div className="flex justify-end gap-2 border-t border-ink/8 px-5 py-4">
-          <button type="button" className={ghostBtn} onClick={onClose}>Cancel</button>
-          <button type="button" className={primaryBtn} onClick={() => onConfirm({ materialIds: pickedUploaded, resourceIds: pickedGenerated })}>Confirm selection</button>
+          <button type="button" className={ghostBtn} onClick={onClose}>{t("common.cancel")}</button>
+          <button type="button" className={primaryBtn} onClick={() => onConfirm({ materialIds: pickedUploaded, resourceIds: pickedGenerated })}>{t("plans.picker.confirm")}</button>
         </div>
       </div>
     </div>
@@ -240,7 +244,8 @@ function MaterialPickerModal({ documents, folders, resources, plan, initialPicke
 
 /** Concept mastery list — hierarchical (mirrors concept map), with mastery bar each. */
 function ConceptMasteryList({ concepts = [], prerequisites = [], masteryByConceptId = {} }) {
-  if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">No concept data yet. Upload reference material to populate.</p>;
+  const t = useT();
+  if (!concepts.length) return <p className="m-0 text-xs text-soft-ink">{t("plans.cml.empty")}</p>;
 
   const color = (m) => m === undefined ? "#9ca3af" : m < 0.4 ? "#ff3b30" : m < 0.7 ? "#ff9500" : "#34c759";
 
@@ -296,6 +301,7 @@ function normalizeConceptGraph(conceptData) {
 }
 
 export function PlansPage({ role = "student", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onCreateFolder, onRemoveFolder, onRemoveDocument, onOpenResource, onDownloadDocument, onUpdateDocumentContent, onSelectSubject, openPlanId = "", startGenerating = false, startDocumentIds = [], startExamDateId = "", onShareDocument, examDates = [], onDismissExamDate, onLinkPlanToExamDate }) {
+  const t = useT();
   const [building, setBuilding] = useState("");
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
@@ -334,6 +340,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   const [rebuildConfirmOpen, setRebuildConfirmOpen] = useState(false);
   const [revising, setRevising] = useState(null); // { plan, newUploadedIds } while the re-plan preview is open
   const [updatingPlan, setUpdatingPlan] = useState(null); // plan row whose "Update this plan…" dialog is open
+  // A parent only reads a plan (their child's): no date pickers, no Open / Update… / ✕ on a step, no editing or rebuilding of the plan.
+  const readOnly = role === "parent";
   const [updatingResource, setUpdatingResource] = useState(null); // { document, resource } whose "Update…" dialog is open
   const [rebuildPreview, setRebuildPreview] = useState(null); // { newConcepts, newPrereqs, prevConcepts, prevPrereqs }
 
@@ -375,7 +383,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     if (!base) return [];
     return (open.plan.deadlines || []).filter((deadline) => deadline.date && base[deadline.id] && base[deadline.id] !== deadline.date).map((deadline) => ({ id: deadline.id, title: deadline.title, from: base[deadline.id], to: deadline.date }));
   }, [open?.document?.id, open?.plan?.deadlines, open?.plan?.plannedFor]);
-  const dateLabel = (date) => new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const dateLabel = (date) => new Date(`${date}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined, { day: "numeric", month: "short", year: "numeric" });
   /** The plan stays as it is, and is now considered fitted to the new dates (the question is not asked again). */
   function keepPlanAsIs() {
     if (!open) return;
@@ -384,8 +392,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     save({ ...open.plan, plannedFor: fitted }, open.document.id);
   }
   function askToUpdateForDeadlines() {
-    const text = movedDeadlines.map((move) => `The deadline "${move.title}" moved from ${dateLabel(move.from)} to ${dateLabel(move.to)}.`).join(" ");
-    setUpdatePrefill(`${text} Re-spread the steps still to do over the new timeline: move steps, and add or remove activities where the new time asks for it.`);
+    const text = movedDeadlines.map((move) => t("plans.page.deadlineMoved", { title: move.title, from: dateLabel(move.from), to: dateLabel(move.to) })).join(" ");
+    setUpdatePrefill(`${text} ${t("plans.page.respread")}`);
     setUpdatingPlan(open);
   }
 
@@ -396,12 +404,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   // If no concepts exist yet but the plan has linked material, auto-trigger extraction.
   useEffect(() => {
     if (!open || !selectedWorkspaceId) return;
-    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
     const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
 
     Promise.all([
       fetch(conceptsUrl(selectedWorkspaceId, open.plan.materialIds)).then((r) => r.json()).catch(() => ({ concepts: [], prerequisites: [] })),
-      fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
+      fetch(`/api/student/mastery?workspaceId=${selectedWorkspaceId}`).then((r) => r.json()).catch(() => ({ states: [] })),
     ]).then(([conceptData, masteryData]) => {
       const graph = normalizeConceptGraph(conceptData);
       const fetchedConcepts = graph.concepts;
@@ -507,7 +514,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       updateOpen((current) => ({ ...current, items: updatedItems }));
     }
     setRebuildPreview(null);
-    setStatus("Concept map rebuilt — student model and activity tags updated.");
+    setStatus(t("plans.page.rebuilt"));
   }
 
   /** Discards the preview and restores the previous concept map in the UI. */
@@ -530,13 +537,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const { receivedFrom: _receivedFrom, documentId: _documentId, ...stored } = plan;
     const content = JSON.stringify({ ...stored, updatedAt: new Date().toISOString() }, null, 2);
     const deadline = nextDeadline(plan);
-    const file = { name: `${plan.name}.plan.json`, content, preview: `${(plan.items || []).length} steps${deadline ? ` · ${deadline.date}` : ""}`, sizeBytes: content.length };
+    const file = { name: `${plan.name}.plan.json`, content, preview: `${t("plans.card.steps.count", { count: (plan.items || []).length })}${deadline ? ` · ${deadline.date}` : ""}`, sizeBytes: content.length };
     setBusy(true);
     try {
       const saved = documentId
         ? await onUpdateGeneratedDocument?.(documentId, { file })
         : await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file });
-      setStatus(`Saved "${plan.name}".`);
+      setStatus(t("plans.page.saved", { name: plan.name }));
       return saved;
     } catch (error) {
       setStatus(String(error.message || error));
@@ -561,7 +568,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
   async function saveAttempt(attempt, documentId) {
     const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: documentId, activityId: attempt.activityId || "", learner: "", attempt }, null, 2);
     try {
-      await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Activity"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
+      await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || t("plans.page.activity")} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } });
     } catch { /* attempt still shows locally */ }
   }
 
@@ -572,11 +579,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
    */
   async function build(row, report) {
     const pending = (row.plan.items || []).filter((item) => item.generate && !item.resourceId);
-    if (!pending.length) { setStatus("Every step of this plan already has its material."); return; }
+    if (!pending.length) { setStatus(t("plans.page.allBuilt")); return; }
     setBuilding(row.document.id);
     try {
       // Study plans / <plan> / {Reference material, Generated resources}
-      setStatus("Setting up the plan's folders…");
+      setStatus(t("plans.page.folders"));
       const planFolders = await ensurePlanFolders(row.plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
       if (planFolders.planId) await onUpdateDocumentMeta?.(row.document.id, { folderIds: [planFolders.planId], tags: row.document.tags || [] });
       const result = await executePlan({
@@ -589,10 +596,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         folderIds: planFolders.generatedId ? [planFolders.generatedId] : (row.document.folderIds || []).filter(Boolean),
         onSaveGeneratedQuizDocument,
         onUpdateGeneratedDocument,
-        onProgress: (event) => { const { phase, index, total, title, detail } = event; setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`); report?.(event); }
+        onProgress: (event) => { const { phase, index, total, title, detail } = event; setStatus(phase === "master" ? `${t("plans.page.merging")}${detail ? ` — ${detail}` : ""}…` : t("plans.page.buildingOf", { index: index + 1, total, title })); report?.(event); }
       });
       await save(result.plan, row.document.id);
-      setStatus(`${result.masterBuilt ? "Master document built from your documents · " : ""}${result.created} resource${result.created === 1 ? "" : "s"} generated and filed in your workspace${result.failures.length ? ` · ${result.failures.length} could not be built (${result.failures[0].message})` : ""}.`);
+      setStatus(`${result.masterBuilt ? `${t("plans.page.masterBuilt")} · ` : ""}${t.plural("plans.page.generatedFiled", result.created)}${result.failures.length ? ` · ${t("plans.page.couldNotBuild", { count: result.failures.length, message: result.failures[0].message })}` : ""}.`);
       return result;
     } catch (error) {
       setStatus(String(error.message || error));
@@ -631,7 +638,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       await deletePlanEverything(scope, { planDocumentId: planRow.document.id, extraDocumentIds: [...new Set(extra)], documents, folders, onRemoveDocument, onUpdateDocumentMeta, onRemoveFolder });
       setOpenId("");
       setDeletingPlan(null);
-      setStatus(`Plan "${plan.name}" deleted${scope.folderId ? ", with its folder and generated material" : ""}.`);
+      setStatus(scope.folderId ? t("plans.page.deletedFolder", { name: plan.name }) : t("plans.page.deleted", { name: plan.name }));
     } catch (error) {
       setStatus(String(error.message || error));
     } finally {
@@ -652,7 +659,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         body: JSON.stringify({ planDocumentId: open.document.id, learnerId, ownerUserId, workspaceId: selectedWorkspaceId }),
       }).then((r) => r.json());
       setReplanResult(result);
-      if (!result.shouldReplan) setStatus("Plan looks good — no changes needed based on your current performance.");
+      if (!result.shouldReplan) setStatus(t("plans.page.looksGood"));
     } catch (err) {
       setStatus(String(err.message || err));
     } finally {
@@ -699,7 +706,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     </>
   );
 
-  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className="m-0 text-sm text-soft-ink">Choose a folder in your workspace first.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className="m-0 text-sm text-soft-ink">{t("plans.page.chooseFolder")}</p></section>;
 
   /* ---------------------------------------------------------------- one plan */
   if (open) {
@@ -725,48 +732,48 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <div className={`${card} p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setOpenId("")}>← All plans</button>
-              {parent ? <button type="button" className="ml-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpenId(parent.document.id)}>part of "{parent.plan.name}"</button> : null}
+              <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setOpenId("")}>{t("plans.page.allPlans")}</button>
+              {parent ? <button type="button" className="ml-2 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setOpenId(parent.document.id)}>{t("plans.page.partOf", { name: parent.plan.name })}</button> : null}
               <h3 className="m-0 mt-1 text-2xl font-bold tracking-tight text-ink">{plan.name}</h3>
               <p className="m-0 mt-1 text-sm text-soft-ink">
-                {progress.deadline ? <><DeadlineOrigin deadline={progress.deadline} plan={plan} className="mr-1.5 align-middle" />{`${progress.deadline.title}: ${dueLabel(progress.deadline.date)}`}</> : "No deadline set"}
+                {progress.deadline ? <><DeadlineOrigin deadline={progress.deadline} plan={plan} className="mr-1.5 align-middle" />{`${progress.deadline.title}: ${dueLabel(progress.deadline.date, t)}`}</> : t("plans.page.noDeadlineSet")}
                 {plan.learner ? ` · ${plan.learner}` : ""}
-                {progress.total ? ` · ${progress.done} of ${progress.total} steps done` : ""}
-                {children.length ? ` · ${children.length} sub-plan${children.length === 1 ? "" : "s"} (${wholeProgress.done}/${wholeProgress.total} in total)` : ""}
+                {progress.total ? ` · ${t("plans.page.stepsDone", { done: progress.done, total: progress.total })}` : ""}
+                {children.length ? ` · ${t.plural("plans.card.subPlans", children.length)} (${t("plans.page.inTotal", { done: wholeProgress.done, total: wholeProgress.total })})` : ""}
               </p>
               {plan.note ? <p className="m-0 mt-2 max-w-2xl text-sm text-ink">{plan.note}</p> : null}
               {(() => {
                 const names = conceptNames(graphConcepts);
                 if (!names.length) return null;
                 const cov = planCoverage(plan, names);
-                if (cov.complete) return <p className="m-0 mt-1.5 text-xs font-semibold text-[#1f7a3a]">✓ Exhaustive: all {cov.total} concepts of the material are studied and tested in this plan.</p>;
+                if (cov.complete) return <p className="m-0 mt-1.5 text-xs font-semibold text-[#1f7a3a]">{t("plans.page.coversAll", { total: cov.total })}</p>;
                 const missing = [...new Set([...cov.missingStudy, ...cov.missingTest])];
                 return (
                   <p className="m-0 mt-1.5 text-xs text-[var(--color-warn)]">
-                    Coverage: {cov.testedCount} of {cov.total} concepts are tested. Missing: {missing.slice(0, 6).join(", ")}{missing.length > 6 ? ` +${missing.length - 6} more` : ""}.{" "}
-                    <button type="button" className="font-semibold text-[var(--accent)] underline" onClick={() => { const fixed = ensureCoverage(plan.items, names); updateOpen((current) => ({ ...current, items: fixed.items })); setStatus(`Added ${fixed.repairs.filter((entry) => entry.as !== "exam").length} concept${fixed.repairs.length === 1 ? "" : "s"} to the plan's steps.`); }}>Add them to the plan</button>
+                    {t("plans.page.coversSome", { tested: cov.testedCount, total: cov.total })} {t("plans.page.missing", { list: missing.slice(0, 6).join(", ") })}{missing.length > 6 ? ` ${t("plans.cal.more", { count: missing.length - 6 })}` : ""}.{" "}
+                    <button type="button" className="font-semibold text-[var(--accent)] underline" onClick={() => { const fixed = ensureCoverage(plan.items, names); updateOpen((current) => ({ ...current, items: fixed.items })); setStatus(t.plural("plans.page.addedConcepts", fixed.repairs.filter((entry) => entry.as !== "exam").length)); }}>{t("plans.page.addThem")}</button>
                   </p>
                 );
               })()}
-              {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">Agents in scope: {plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : "none — studying the material only"}</p> : null}
+              {Array.isArray(plan.agentScope) ? <p className="m-0 mt-1.5 text-xs text-soft-ink">{t("plans.page.tools", { list: plan.agentScope.length ? plan.agentScope.map((agent) => agent.label).join(" · ") : t("plans.page.noTools") })}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-4">
-              {!isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>✎ Update this plan…</button> : null}
+              {!readOnly && !isSharedDocument(open.document) ? <button type="button" className={ghostBtn} onClick={() => setUpdatingPlan(open)}>{t("plans.page.updateThis")}</button> : null}
               {plan.items.some((item) => item.generate && !item.resourceId) ? (
                 <button type="button" className={primaryBtn} disabled={building === open.document.id} onClick={() => build(open)}>
-                  {building === open.document.id ? "Building…" : `✦ Build the ${plan.items.filter((item) => item.generate && !item.resourceId).length} missing resources`}
+                  {building === open.document.id ? t("plans.card.building") : t("plans.page.buildMissing", { count: plan.items.filter((item) => item.generate && !item.resourceId).length })}
                 </button>
               ) : null}
-              <span className="inline-flex items-center gap-1"><Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} /><InfoDot info={METRIC_INFO.planProgress} label="plan progress" /></span>
-              {progress.average ? <div><p className={kicker}>Average</p><p className="m-0 text-xl font-bold text-ink">{Math.round(progress.average * 100)}%</p></div> : null}
-              {progress.late.length ? <div><p className={kicker}>Late</p><p className="m-0 text-xl font-bold text-[var(--color-danger)]">{progress.late.length}</p></div> : null}
+              <span className="inline-flex items-center gap-1"><Ring ratio={children.length ? wholeProgress.ratio : progress.ratio} colour={plan.colour} size={64} /><InfoDot info={METRIC_INFO.planProgress} label={t("plans.page.planProgress")} /></span>
+              {progress.average ? <div><p className={kicker}>{t("plans.page.average")}</p><p className="m-0 text-xl font-bold text-ink">{Math.round(progress.average * 100)}%</p></div> : null}
+              {progress.late.length ? <div><p className={kicker}>{t("plans.page.late")}</p><p className="m-0 text-xl font-bold text-[var(--color-danger)]">{progress.late.length}</p></div> : null}
 
               {/* ── Gear icon → settings dropdown ── */}
               <div className="relative">
                 <button
                   type="button"
-                  title="Plan settings"
-                  aria-label="Plan settings"
+                  title={t("plans.page.settings")}
+                  aria-label={t("plans.page.settings")}
                   onClick={() => setSettingsOpen((v) => !v)}
                   className="grid size-9 place-items-center rounded-full border border-ink/15 bg-white text-base text-soft-ink transition hover:bg-[var(--surface-soft)]"
                 >
@@ -777,30 +784,30 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                     className="absolute right-0 top-11 z-20 w-72 rounded-2xl border border-ink/8 bg-white p-4 shadow-[0_8px_32px_rgba(0,0,0,0.16)]"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <p className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">Plan settings</p>
+                    <p className="m-0 mb-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">{t("plans.page.settings")}</p>
                     <div className="grid gap-2">
                       <label className="grid gap-1 text-xs font-semibold text-soft-ink">
-                        Name
+                        {t("plans.page.name")}
                         <input className={field} value={plan.name} onChange={(e) => updateOpen((c) => ({ ...c, name: e.target.value }))} />
                       </label>
                       <label className="grid gap-1 text-xs font-semibold text-soft-ink">
-                        Notes
+                        {t("plans.page.notes")}
                         <textarea className={field} rows={2} value={plan.note || ""} onChange={(e) => updateOpen((c) => ({ ...c, note: e.target.value }))} />
                       </label>
                       <div className="flex flex-wrap items-center gap-1.5">
                         {PLAN_COLOURS.map((colour) => (
-                          <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((c) => ({ ...c, colour }))} />
+                          <button key={colour} type="button" aria-label={t("plans.page.colour", { colour })} className={`size-6 rounded-full ${plan.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => updateOpen((c) => ({ ...c, colour }))} />
                         ))}
                       </div>
                       <div className="flex flex-wrap gap-2 border-t border-ink/8 pt-2">
                         {plan.parentPlanId ? (
                           <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { updateOpen((c) => ({ ...c, parentPlanId: "" })); setSettingsOpen(false); }}>
-                            Detach from parent plan
+                            {t("plans.page.detach")}
                           </button>
                         ) : null}
                         {onRemoveDocument ? (
                           <button type="button" className="text-xs font-semibold text-[var(--color-danger)] hover:underline" onClick={() => { setDeletingPlan(open); setSettingsOpen(false); }}>
-                            Delete this plan…
+                            {t("plans.page.deleteThis")}
                           </button>
                         ) : null}
                       </div>
@@ -814,49 +821,49 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {movedDeadlines.length ? (
           <section className={`${card} p-4`} style={{ borderLeft: "4px solid var(--accent)" }} role="status">
-            <p className="m-0 text-sm font-bold text-ink">{movedDeadlines.length === 1 ? "A deadline moved." : "Deadlines moved."} Update the study plan to fit the new timeline?</p>
-            <p className="m-0 mt-1 text-xs text-soft-ink">{movedDeadlines.map((move) => `“${move.title}”: ${dateLabel(move.from)} → ${dateLabel(move.to)}`).join(" · ")}. Luna re-spreads the steps still to do, and can remove or add activities; what you have done stays, and you see the changes before anything is saved.</p>
+            <p className="m-0 text-sm font-bold text-ink">{movedDeadlines.length === 1 ? t("plans.page.movedOne") : t("plans.page.movedMany")} {t("plans.page.movedAsk")}</p>
+            <p className="m-0 mt-1 text-xs text-soft-ink">{movedDeadlines.map((move) => `“${move.title}”: ${dateLabel(move.from)} → ${dateLabel(move.to)}`).join(" · ")}. {t("plans.page.movedExplain")}</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className={primaryBtn} disabled={busy} onClick={askToUpdateForDeadlines}>Update the plan</button>
-              <button type="button" className={ghostBtn} disabled={busy} onClick={keepPlanAsIs}>Keep the plan as it is</button>
+              <button type="button" className={primaryBtn} disabled={busy} onClick={askToUpdateForDeadlines}>{t("plans.upd.submit")}</button>
+              <button type="button" className={ghostBtn} disabled={busy} onClick={keepPlanAsIs}>{t("plans.page.keepAsIs")}</button>
             </div>
           </section>
         ) : null}
 
         {/* ── Deadlines — full width, first ── */}
         <section className={`${card} p-5`}>
-          <p className={kicker}>Deadlines</p>
+          <p className={kicker}>{t("plans.page.deadlines")}</p>
           <div className="mt-2 grid gap-2">
             {[...(plan.deadlines || [])].sort((a, b) => String(a.date || "9999").localeCompare(String(b.date || "9999")) || Number(deadlineOrigin(b, { receivedFrom: plan.receivedFrom }).imposed) - Number(deadlineOrigin(a, { receivedFrom: plan.receivedFrom }).imposed)).map((deadline) => {
               // A deadline a teacher or parent set is locked (the server refuses changes too): dark badge + 🔒. Your own are editable.
-              const origin = deadlineOrigin(deadline, { receivedFrom: plan.receivedFrom });
+              const origin = deadlineOrigin(deadline, { receivedFrom: plan.receivedFrom }, t);
               return (
                 <div key={deadline.id} className={`flex flex-wrap items-center gap-1.5 rounded-xl border p-2 ${origin.imposed ? "border-ink/25 bg-[var(--surface-soft)]" : "border-ink/10"}`}>
                   <DeadlineOrigin deadline={deadline} plan={plan} />
                   <input className="min-w-0 flex-1 rounded-lg border border-ink/12 px-2 py-1 text-sm disabled:bg-transparent disabled:text-ink" disabled={origin.locked} title={origin.locked ? origin.tooltip : undefined} value={deadline.title} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, title: event.target.value } : entry)) }))} />
                   <select className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent" disabled={origin.locked} value={deadline.kind} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, kind: event.target.value } : entry)) }))}>
-                    {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                    {DEADLINE_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{t(`plans.deadlineKind.${entry.id}`)}</option>)}
                   </select>
-                  <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent disabled:text-ink" disabled={origin.locked} title={origin.locked ? `🔒 Set by ${origin.by}` : undefined} aria-label={origin.locked ? `Date, locked, set by ${origin.by}` : "Date"} value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
-                  <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date)}</span>
-                  {origin.locked ? (
-                    <span className="text-xs text-soft-ink" title={origin.tooltip} aria-label={origin.tooltip}>🔒</span>
+                  <input type="date" className="rounded-lg border border-ink/12 px-2 py-1 text-xs disabled:bg-transparent disabled:text-ink" disabled={origin.locked || readOnly} title={origin.locked ? `🔒 ${t("plans.card.setBy", { by: origin.by })}` : undefined} aria-label={origin.locked ? t("plans.page.dateLocked", { by: origin.by }) : t("plans.page.date")} value={deadline.date || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, date: event.target.value } : entry)) }))} />
+                  <span className="text-[11px] font-semibold text-soft-ink">{dueLabel(deadline.date, t)}</span>
+                  {origin.locked || readOnly ? (
+                    <span className="text-xs text-soft-ink" title={origin.tooltip} aria-label={origin.tooltip}>{origin.locked ? "🔒" : null}</span>
                   ) : (
-                    <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" aria-label="Remove this deadline" onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
+                    <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" aria-label={t("plans.page.removeDeadline")} onClick={() => updateOpen((current) => ({ ...current, deadlines: current.deadlines.filter((entry) => entry.id !== deadline.id) }))}>✕</button>
                   )}
-                  <button type="button" className="text-[11px] font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={coversOpen.has(deadline.id)} onClick={() => setCoversOpen((current) => { const next = new Set(current); if (next.has(deadline.id)) next.delete(deadline.id); else next.add(deadline.id); return next; })}>{coversOpen.has(deadline.id) ? "Hide details" : deadline.covers ? "Details ·" : "Details"}</button>
+                  <button type="button" className="text-[11px] font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={coversOpen.has(deadline.id)} onClick={() => setCoversOpen((current) => { const next = new Set(current); if (next.has(deadline.id)) next.delete(deadline.id); else next.add(deadline.id); return next; })}>{coversOpen.has(deadline.id) ? t("plans.page.hideDetails") : deadline.covers ? `${t("plans.page.details")} ·` : t("plans.page.details")}</button>
                   {coversOpen.has(deadline.id) ? (
-                    <label className="grid basis-full gap-1 text-[11px] font-semibold text-soft-ink">What does this deadline cover?
-                      <textarea className="rounded-lg border border-ink/12 px-2 py-1 text-xs font-normal text-ink disabled:bg-transparent" rows={2} disabled={origin.locked} maxLength={600} placeholder="e.g. Chapters 1–4: balance sheet and double entry. Leave empty if it covers everything." value={deadline.covers || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, covers: event.target.value } : entry)) }))} />
-                      <span className="font-normal">Luna plans the study for this material before this date when it updates the plan.</span>
+                    <label className="grid basis-full gap-1 text-[11px] font-semibold text-soft-ink">{t("plans.page.covers")}
+                      <textarea className="rounded-lg border border-ink/12 px-2 py-1 text-xs font-normal text-ink disabled:bg-transparent" rows={2} disabled={origin.locked} maxLength={600} placeholder={t("plans.page.coversPh")} value={deadline.covers || ""} onChange={(event) => updateOpen((current) => ({ ...current, deadlines: current.deadlines.map((entry) => (entry.id === deadline.id ? { ...entry, covers: event.target.value } : entry)) }))} />
+                      <span className="font-normal">{t("plans.page.coversHelp")}</span>
                     </label>
-                  ) : deadline.covers ? <span className="basis-full truncate text-[11px] text-soft-ink">Covers: {deadline.covers}</span> : null}
-                  {deadline.cancelledFrom ? <span className="basis-full text-[11px] text-soft-ink">{deadline.cancelledFrom} cancelled this exam date. The date stays as your own deadline: change or remove it as you like.</span> : null}
+                  ) : deadline.covers ? <span className="basis-full truncate text-[11px] text-soft-ink">{t("plans.page.coversLabel", { text: deadline.covers })}</span> : null}
+                  {deadline.cancelledFrom ? <span className="basis-full text-[11px] text-soft-ink">{t("plans.page.cancelled", { name: deadline.cancelledFrom })}</span> : null}
                 </div>
               );
             })}
-            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt(plan.receivedFrom ? "Your own deadline, e.g. Finish before the weekend" : "What is the deadline? e.g. Mock exam"); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ {(plan.deadlines || []).some((entry) => deadlineOrigin(entry, { receivedFrom: plan.receivedFrom }).imposed) ? "Add your own deadline" : "Add a deadline"}</button>
-            <PlanExamLink plan={plan} examDates={examDates} busy={busy} onLink={async (examDateId) => { const result = await onLinkPlanToExamDate?.(examDateId, open.document.id); setStatus(result?.ok ? "Linked: the plan now follows your teacher's exam date." : (result?.error || "Could not link the exam date.")); }} />
+            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt(plan.receivedFrom ? t("plans.page.promptOwn") : t("plans.page.prompt")); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ {(plan.deadlines || []).some((entry) => deadlineOrigin(entry, { receivedFrom: plan.receivedFrom }).imposed) ? t("plans.page.addOwn") : t("plans.page.addDeadline")}</button>
+            <PlanExamLink plan={plan} examDates={examDates} busy={busy} onLink={async (examDateId) => { const result = await onLinkPlanToExamDate?.(examDateId, open.document.id); setStatus(result?.ok ? t("plans.page.linked") : (result?.error || t("plans.page.linkFailed"))); }} />
           </div>
         </section>
 
@@ -865,7 +872,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <section className={`${card} p-5`} style={{ borderLeft: `4px solid var(--accent)` }}>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <p className={kicker}>Performance update — plan adjustment suggested</p>
+                <p className={kicker}>{t("plans.page.perfUpdate")}</p>
                 <ul className="m-0 mt-2 grid list-none gap-1 p-0">
                   {(replanResult.reasons || []).map((r, i) => <li key={i} className="text-sm text-ink">{r.message}</li>)}
                 </ul>
@@ -875,7 +882,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             {replanResult.suggestedItems?.length ? (
               <div className="mt-3">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="m-0 text-xs font-semibold text-soft-ink">Suggested additions:</p>
+                  <p className="m-0 text-xs font-semibold text-soft-ink">{t("plans.page.suggested")}</p>
                   <button
                     type="button"
                     className={primaryBtn}
@@ -890,10 +897,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                       );
                       updateOpen((current) => ({ ...current, items: [...doneItems, ...newItems] }));
                       setReplanResult(null);
-                      setStatus("Plan updated — completed activities kept, new steps scheduled.");
+                      setStatus(t("plans.page.appliedSug"));
                     }}
                   >
-                    Apply all suggestions
+                    {t("plans.page.applyAll")}
                   </button>
                 </div>
                 <div className="mt-2 grid gap-2">
@@ -901,10 +908,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                     <div key={i} className="flex items-center gap-3 rounded-xl border border-ink/10 bg-white px-3 py-2">
                       <div className="min-w-0 flex-1">
                         <p className="m-0 text-sm font-semibold text-ink">{sugItem.title}</p>
-                        <p className="m-0 text-[11px] text-soft-ink">{sugItem.reason} · {sugItem.minutes} min · due {sugItem.dueDate}</p>
+                        <p className="m-0 text-[11px] text-soft-ink">{sugItem.reason} · {t("plans.page.minShort", { count: sugItem.minutes })} · {t("plans.page.dueDate", { date: sugItem.dueDate })}</p>
                         {sugItem.conceptName ? <span className={`${chip} mt-1 bg-[var(--surface-soft)] text-soft-ink`}>{sugItem.conceptName}</span> : null}
                       </div>
-                      <button type="button" className={ghostBtn} onClick={() => { updateOpen((current) => ({ ...current, items: [...current.items, newItem({ title: sugItem.title, kind: sugItem.kind || "activity", dueDate: sugItem.dueDate, minutes: sugItem.minutes || 30 })] })); }}>＋ Add</button>
+                      <button type="button" className={ghostBtn} onClick={() => { updateOpen((current) => ({ ...current, items: [...current.items, newItem({ title: sugItem.title, kind: sugItem.kind || "activity", dueDate: sugItem.dueDate, minutes: sugItem.minutes || 30 })] })); }}>{t("plans.page.addSug")}</button>
                     </div>
                   ))}
                 </div>
@@ -916,19 +923,19 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {/* ── The plan — full width with list / calendar toggle ── */}
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className={kicker}>The plan</p>
+            <p className={kicker}>{t("plans.page.thePlan")}</p>
             <div className="flex flex-wrap items-center gap-2">
               {/* Single button → opens MaterialPickerModal */}
-              <button type="button" className={ghostBtn} onClick={() => setMaterialPickerOpen(true)}>
-                ＋ Materials &amp; resources…
-              </button>
+              {readOnly ? null : <button type="button" className={ghostBtn} onClick={() => setMaterialPickerOpen(true)}>
+                {t("plans.page.materials")}
+              </button>}
               {/* Update from performance */}
-              <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
-                {replanning ? "Checking…" : "↺ Update from performance"}
-              </button>
+              {readOnly ? null : <button type="button" className={ghostBtn} disabled={replanning} onClick={triggerReplan}>
+                {replanning ? t("plans.page.checking") : t("plans.page.fromPerf")}
+              </button>}
               {/* List / Calendar view toggle */}
               <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-                {[["list", "List"], ["calendar", "Calendar"]].map(([value, label]) => (
+                {[["list", t("plans.page.list")], ["calendar", t("plans.page.calendar")]].map(([value, label]) => (
                   <button key={value} type="button" onClick={() => setPlanView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${planView === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>
                 ))}
               </div>
@@ -941,25 +948,25 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             </div>
           ) : (
             <>
-              {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing scheduled yet. Add a resource here, or use "＋ Plan" on any resource in your folders.</p> : null}
+              {!plan.items.length ? <p className="m-0 mt-3 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("plans.page.nothingYet")}</p> : null}
               <div className="mt-3 grid gap-4">
                 {weeks.map((week) => (
                   <div key={week.start || "undated"}>
                     <p className="m-0 text-xs font-bold uppercase tracking-[0.1em] text-soft-ink">
-                      {week.start ? `Week of ${new Date(`${week.start}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "long" })}` : "No date yet"}
+                      {week.start ? t("plans.page.weekOf", { date: new Date(`${week.start}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined, { day: "numeric", month: "long" }) }) : t("plans.page.noDateYet")}
                     </p>
                     <div className="mt-2 grid gap-2">
                       {week.items.map((item) => {
                         const score = progress.scoreByResource.get(item.resourceId);
                         const done = Boolean(item.doneAt) || score !== undefined;
-                        const late = !done && dueLabel(item.dueDate).includes("late");
+                        const late = !done && daysUntil(item.dueDate) !== null && daysUntil(item.dueDate) < 0;
                         const kind = ITEM_KINDS.find((entry) => entry.id === item.kind) || ITEM_KINDS[0];
                         const itemConcepts = item.resourceId ? (conceptsByResourceId.get(item.resourceId) || []) : [];
                         // Resolve resource for skill tags + activity detection
                         const itemResourceDoc = item.resourceId ? workspaceDocuments.find((d) => d.id === item.resourceId) : null;
                         const itemResource = itemResourceDoc ? parseResource(itemResourceDoc) : null;
                         const activity = itemResource?.activity?.questions?.length ? itemResource.activity : null;
-                        const skillTags = inferSkillTags(item, itemResource);
+                        const skillTags = inferSkillTags(item, itemResource, t);
                         // The agent that made (or will make) this step's material is named on the step.
                         const agentName = itemResource?.meta?.agentName
                           || (item.generate && !item.resourceId ? ((plan.agentScope || []).find((entry) => (entry.makes || []).includes(item.generate))?.label || BUILTIN_PLAN_AGENTS.find((entry) => entry.makes.includes(item.generate))?.label || "") : "");
@@ -970,7 +977,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                           <div key={item.id} className={`flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2 ${done ? "border-[#2f9e5b]/30 bg-[#2f9e5b]/5" : late ? "border-[var(--color-danger)]/30 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 bg-white"}`}>
                             <button
                               type="button"
-                              title={done ? "Mark as not done" : "Mark as done"}
+                              title={done ? t("plans.page.markNotDone") : t("plans.page.markDone")}
                               className={`grid size-6 shrink-0 place-items-center rounded-full border text-xs ${done ? "border-[#2f9e5b] bg-[#2f9e5b] text-white" : "border-ink/25 text-transparent"}`}
                               onClick={() => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, doneAt: entry.doneAt ? "" : new Date().toISOString() } : entry)) }))}
                             >
@@ -979,7 +986,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                             <span className="shrink-0 text-sm" aria-hidden>{kind.icon}</span>
                             <span className="min-w-0 flex-1">
                               <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                              <span className="block text-[11px] text-soft-ink">{kind.label}{item.minutes ? ` · ${item.minutes} min` : ""}{score !== undefined ? ` · scored ${Math.round(score * 100)}%` : ""}</span>
+                              <span className="block text-[11px] text-soft-ink">{t(`plans.itemKind.${kind.id}`)}{item.minutes ? ` · ${t("plans.page.minShort", { count: item.minutes })}` : ""}{score !== undefined ? ` · ${t("plans.page.scored", { pct: Math.round(score * 100) })}` : ""}</span>
                               {/* Concept tags — coloured by mastery */}
                               {itemConcepts.length > 0 && (
                                 <p className="m-0 mt-1 flex flex-wrap gap-1">
@@ -989,13 +996,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                     const color = mastery === undefined ? "#9ca3af" : mastery < 0.4 ? "#ff3b30" : mastery < 0.7 ? "#ff9500" : "#34c759";
                                     return <span key={name} className={`${chip} text-[9px]`} style={{ background: `${color}20`, color }}>{name}</span>;
                                   })}
-                                  {itemConcepts.length > 5 && <span className={`${chip} text-[9px] bg-[var(--surface-soft)] text-soft-ink`}>+{itemConcepts.length - 5} more</span>}
+                                  {itemConcepts.length > 5 && <span className={`${chip} text-[9px] bg-[var(--surface-soft)] text-soft-ink`}>{t("plans.cal.more", { count: itemConcepts.length - 5 })}</span>}
                                 </p>
                               )}
                               {/* Skill-category tags — fixed palette, square-ish */}
                               {agentName ? (
                                 <p className="m-0 mt-1 flex flex-wrap gap-1">
-                                  <span className="inline-flex items-center gap-1 rounded-md border border-[#8a4fd6]/30 bg-[#8a4fd6]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#6f3bb5]" title={itemResource ? "Made with this agent" : "Will be made with this agent"}>✦ {agentName}</span>
+                                  <span className="inline-flex items-center gap-1 rounded-md border border-[#8a4fd6]/30 bg-[#8a4fd6]/10 px-1.5 py-0.5 text-[9px] font-semibold text-[#6f3bb5]" title={itemResource ? t("plans.page.madeWith") : t("plans.page.willMake")}>✦ {agentName}</span>
                                 </p>
                               ) : null}
                               {skillTags.length > 0 && (
@@ -1006,17 +1013,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                                 </p>
                               )}
                             </span>
-                            {plan.receivedFrom && item.dueDate ? (
+                            {readOnly ? (item.dueDate ? <span className="text-xs text-soft-ink">{dueLabel(item.dueDate, t)}</span> : null) : plan.receivedFrom && item.dueDate ? (
                               <span className="flex flex-wrap items-center gap-1.5">
                                 {/* A step of a plan somebody sent you: their date is locked; your own (earlier) date goes next to it. */}
-                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#1d1d1f] px-2 py-1 text-xs font-semibold text-white" title={`🔒 Set by ${plan.receivedFrom.name || "your teacher"}. You cannot change it; add your own date next to it.`}>
-                                  <span aria-hidden="true">🔒</span>{dueLabel(item.dueDate)}<span className="max-w-[7rem] truncate font-normal opacity-80">· {plan.receivedFrom.name || "Your teacher"}</span>
+                                <span className="inline-flex items-center gap-1 rounded-lg bg-[#1d1d1f] px-2 py-1 text-xs font-semibold text-white" title={`🔒 ${t("plans.page.lockedStep", { by: plan.receivedFrom.name || t("plans.origin.yourTeacher") })}`}>
+                                  <span aria-hidden="true">🔒</span>{dueLabel(item.dueDate, t)}<span className="max-w-[7rem] truncate font-normal opacity-80">· {plan.receivedFrom.name || t("plans.badge.yourTeacher")}</span>
                                 </span>
                                 <input
                                   type="date"
                                   className="rounded-lg border border-ink/25 px-2 py-1 text-xs"
-                                  aria-label="Your own deadline for this step"
-                                  title="Your own deadline (optional)"
+                                  aria-label={t("plans.page.ownForStep")}
+                                  title={t("plans.page.ownOptional")}
                                   max={item.dueDate}
                                   value={item.ownDueDate || ""}
                                   onChange={(event) => updateOpen((current) => ({ ...current, items: current.items.map((entry) => (entry.id === item.id ? { ...entry, ownDueDate: event.target.value } : entry)) }))}
@@ -1031,17 +1038,17 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                               />
                             )}
                             {/* Every step can be opened: the quiz or flashcards to do, the summary to read, the document to study. */}
-                            {activity ? (
-                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>Do activity</button>
+                            {readOnly ? null : activity ? (
+                              <button type="button" className={primaryBtn} onClick={() => setPlaying({ activity, resource: itemResource, resourceDocument: itemResourceDoc, documentId: item.resourceId, itemId: item.id, planDocumentId: open.document.id })}>{t("plans.page.doActivity")}</button>
                             ) : itemResource ? (
-                              <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>Open</button>
+                              <button type="button" className={primaryBtn} onClick={() => setReading({ resource: itemResource, document: itemResourceDoc })}>{t("common.open")}</button>
                             ) : readable || linkedDocument ? (
-                              <button type="button" className={primaryBtn} onClick={() => setReadingDoc({ ...(readable || linkedDocument), focus: item.kind === "read" || item.kind === "review" ? { title: item.title, concepts: item.concepts || [] } : null })}>Open</button>
+                              <button type="button" className={primaryBtn} onClick={() => setReadingDoc({ ...(readable || linkedDocument), focus: item.kind === "read" || item.kind === "review" ? { title: item.title, concepts: item.concepts || [] } : null })}>{t("common.open")}</button>
                             ) : (
-                              <button type="button" className={primaryBtn} disabled title={item.generate ? "Not generated yet — build the plan's material first" : "Nothing is attached to this step yet"}>Open</button>
+                              <button type="button" className={primaryBtn} disabled title={item.generate ? t("plans.page.notGenerated") : t("plans.page.nothingAttached")}>{t("common.open")}</button>
                             )}
-                            {itemResource && canUpdateResource(itemResource) ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={() => setUpdatingResource({ document: itemResourceDoc, resource: itemResource })}>✦ Update…</button> : null}
-                            <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title="Remove from the plan" onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>
+                            {!readOnly && itemResource && canUpdateResource(itemResource) ? <button type="button" className={ghostBtn} title={t("plans.page.sayChange")} onClick={() => setUpdatingResource({ document: itemResourceDoc, resource: itemResource })}>{t("plans.page.updateStep")}</button> : null}
+                            {readOnly ? null : <button type="button" className="text-xs text-soft-ink hover:text-[var(--color-danger)]" title={t("plans.page.removeFromPlan")} onClick={() => updateOpen((current) => ({ ...current, items: current.items.filter((entry) => entry.id !== item.id) }))}>✕</button>}
                           </div>
                         );
                       })}
@@ -1055,8 +1062,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 
         {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
-          <p className={`${kicker} flex items-center gap-1.5`}>Student model<InfoDot info={METRIC_INFO.studentModel} label="the student model" /></p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Mastery per concept, ordered by concept map hierarchy. Updated live after each activity.</p>
+          <p className={`${kicker} flex items-center gap-1.5`}>{t("plans.page.whatYouKnow")}<InfoDot info={METRIC_INFO.studentModel} label={t("plans.page.whatYouKnowLabel")} /></p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("plans.page.knowHint")}</p>
           <ConceptMasteryList concepts={graphConcepts} prerequisites={graphPrereqs} masteryByConceptId={masteryByConceptId} />
         </section>
 
@@ -1064,10 +1071,9 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className={kicker}>Concept map</p>
+              <p className={kicker}>{t("plans.page.topicMap")}</p>
               <p className="m-0 mt-1 mb-4 text-sm text-soft-ink">
-                All concepts from your reference material — sized by importance, coloured by mastery.
-                Arrows show prerequisites. Drag to rearrange, scroll to zoom, click to highlight a concept{"'"}s chain.
+                {t("plans.page.mapHint")}
               </p>
             </div>
             {open?.plan?.materialIds?.length > 0 && (
@@ -1077,13 +1083,13 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 disabled={extracting}
                 onClick={() => setRebuildConfirmOpen(true)}
               >
-                {extracting ? "Extracting concepts…" : "↺ Rebuild concept map"}
+                {extracting ? t("plans.page.extracting") : t("plans.page.rebuild")}
               </button>
             )}
           </div>
           {extracting ? (
             <div className="flex items-center justify-center rounded-2xl bg-[var(--surface-soft)] py-16">
-              <p className="m-0 text-sm text-soft-ink">Extracting concepts from your reference material…</p>
+              <p className="m-0 text-sm text-soft-ink">{t("plans.page.extractingMsg")}</p>
             </div>
           ) : (
             <KnowledgeGraph
@@ -1103,15 +1109,15 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         {rebuildConfirmOpen && (
           <div className="tw-scope fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={() => setRebuildConfirmOpen(false)}>
             <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
-              <h4 className="m-0 text-lg font-bold text-ink">Rebuild concept map?</h4>
+              <h4 className="m-0 text-lg font-bold text-ink">{t("plans.page.rebuildQ")}</h4>
               <p className="m-0 mt-2 text-sm text-soft-ink">
-                Rebuilding the concept map may change your performance tracking data. Concepts that no longer exist will be removed from the student model and their mastery scores will be lost.
+                {t("plans.page.rebuildWarn")}
               </p>
               <p className="m-0 mt-2 text-sm text-soft-ink">
-                You will be shown a preview of the changes before they are applied.
+                {t("plans.page.rebuildPreview")}
               </p>
               <div className="mt-5 flex justify-end gap-2">
-                <button type="button" className={ghostBtn} onClick={() => setRebuildConfirmOpen(false)}>Cancel</button>
+                <button type="button" className={ghostBtn} onClick={() => setRebuildConfirmOpen(false)}>{t("common.cancel")}</button>
                 <button
                   type="button"
                   className={primaryBtn}
@@ -1121,7 +1127,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                     doRebuildConceptMap(open.plan.materialIds, selectedWorkspaceId, ownerUserId);
                   }}
                 >
-                  Continue
+                  {t("common.continue")}
                 </button>
               </div>
             </div>
@@ -1134,39 +1140,39 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             <div className="mx-auto flex h-full w-full max-w-4xl flex-col rounded-2xl bg-white shadow-[0_24px_64px_rgba(0,0,0,0.3)]">
               {/* Header */}
               <div className="border-b border-ink/8 px-6 py-4">
-                <h4 className="m-0 text-lg font-bold text-ink">New concept map preview</h4>
-                <p className="m-0 mt-0.5 text-xs text-soft-ink">Review the changes before applying. Click Accept to update the student model and activity tags, or Go back to keep the old map.</p>
+                <h4 className="m-0 text-lg font-bold text-ink">{t("plans.page.previewTitle")}</h4>
+                <p className="m-0 mt-0.5 text-xs text-soft-ink">{t("plans.page.previewIntro")}</p>
               </div>
               {/* Diff strip */}
               <div className="flex flex-wrap gap-6 border-b border-ink/8 px-6 py-3">
                 {addedConcepts.length > 0 && (
                   <div>
                     <p className="m-0 text-[11px] font-semibold uppercase tracking-wide" style={{ color: "#2f9e5b" }}>
-                      {`Added (${addedConcepts.length})`}
+                      {t("plans.page.added", { count: addedConcepts.length })}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {addedConcepts.slice(0, 10).map((c) => (
                         <span key={c.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(47,158,91,0.1)", color: "#1d7a44" }}>{c.name}</span>
                       ))}
-                      {addedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{`+${addedConcepts.length - 10} more`}</span>}
+                      {addedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{t("plans.cal.more", { count: addedConcepts.length - 10 })}</span>}
                     </div>
                   </div>
                 )}
                 {removedConcepts.length > 0 && (
                   <div>
                     <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-danger)]">
-                      {`Removed (${removedConcepts.length})`}
+                      {t("plans.page.removed", { count: removedConcepts.length })}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {removedConcepts.slice(0, 10).map((c) => (
                         <span key={c.id} className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium" style={{ background: "rgba(255,59,48,0.08)", color: "var(--color-danger)" }}>{c.name}</span>
                       ))}
-                      {removedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{`+${removedConcepts.length - 10} more`}</span>}
+                      {removedConcepts.length > 10 && <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-soft-ink" style={{ background: "rgba(0,0,0,0.04)" }}>{t("plans.cal.more", { count: removedConcepts.length - 10 })}</span>}
                     </div>
                   </div>
                 )}
                 {addedConcepts.length === 0 && removedConcepts.length === 0 && (
-                  <p className="m-0 text-xs text-soft-ink">No concept names changed — internal structure may have been reorganised.</p>
+                  <p className="m-0 text-xs text-soft-ink">{t("plans.page.noChanged")}</p>
                 )}
               </div>
               {/* New graph */}
@@ -1180,8 +1186,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               </div>
               {/* Footer */}
               <div className="flex justify-end gap-2 border-t border-ink/8 px-6 py-4">
-                <button type="button" className={ghostBtn} onClick={handleGoBackRebuild}>← Go back</button>
-                <button type="button" className={primaryBtn} onClick={handleAcceptRebuild}>Accept new map</button>
+                <button type="button" className={ghostBtn} onClick={handleGoBackRebuild}>{t("plans.page.goBack")}</button>
+                <button type="button" className={primaryBtn} onClick={handleAcceptRebuild}>{t("plans.page.accept")}</button>
               </div>
             </div>
           </div>
@@ -1227,7 +1233,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               if (addedUploaded.length) {
                 const ownerUserId = typeof window !== "undefined" ? (window.localStorage.getItem("luna.ownerUserId") || "") : "";
                 triggerExtraction(addedUploaded, selectedWorkspaceId, ownerUserId);
-                setStatus("Material added — reading its concepts…");
+                setStatus(t("plans.page.materialAdded"));
               }
               // Anything new means the rest of the plan has to be redone around it.
               if (addedUploaded.length || addedItems.length) setRevising({ plan: nextPlan, newUploadedIds: addedUploaded });
@@ -1243,12 +1249,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             conceptMap={graphConcepts}
             newUploadedIds={revising.newUploadedIds}
             ready={!extracting}
-            onCancel={() => { setRevising(null); setStatus("Plan left as it was — the new material is linked, but nothing was rescheduled."); }}
+            onCancel={() => { setRevising(null); setStatus(t("plans.page.leftAsWas")); }}
             onApply={async (nextPlan, { buildNow }) => {
               const target = { document: open.document, plan: nextPlan };
               setRevising(null);
               await save(nextPlan, open.document.id);
-              setStatus(`Plan re-planned: finished work kept, ${nextPlan.items.filter((item) => !item.doneAt).length} steps still to do.`);
+              setStatus(t("plans.page.replanned", { count: nextPlan.items.filter((item) => !item.doneAt).length }));
               if (buildNow) await build(target);
             }}
           />
@@ -1312,24 +1318,24 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
-          <p className={kicker}>Study plans · {subject.name}</p>
-          <h3 className="m-0 mt-1 text-xl font-bold text-ink">{plans.length} plan{plans.length === 1 ? "" : "s"}</h3>
-          <p className="m-0 mt-1 text-sm text-soft-ink">Deadlines, what has to be achieved, and the resources and activities that get {role === "student" ? "you" : "them"} there. Doing an activity on Luna ticks it off by itself.</p>
+          <p className={kicker}>{t("plans.page.kicker", { name: subject.name })}</p>
+          <h3 className="m-0 mt-1 text-xl font-bold text-ink">{t.plural("plans.page.count", plans.length)}</h3>
+          <p className="m-0 mt-1 text-sm text-soft-ink">{role === "student" ? t("plans.page.introYou") : t("plans.page.introThem")}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">
-            {[["plans", "Plans"], ["calendar", "Calendar"], ...(examDates.length ? [["exams", `Exam dates (${examDates.filter((entry) => !entry.dismissedAt).length})`]] : [])].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
+            {[["plans", t("plans.page.tabPlans")], ["calendar", t("plans.page.calendar")], ...(examDates.length ? [["exams", t("plans.page.tabExams", { count: examDates.filter((entry) => !entry.dismissedAt).length })]] : [])].map(([value, label]) => <button key={value} type="button" onClick={() => setTab(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${tab === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{label}</button>)}
           </div>
-          <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>✦ Plan it for me</button>
-          <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>＋ New plan (manual)</button>
+          {readOnly ? null : <button type="button" className={primaryBtn} onClick={() => { setPickedExam(null); setGenerating(true); }}>{t("plans.page.planIt")}</button>}
+          {readOnly ? null : <button type="button" className={ghostBtn} onClick={() => { setPickedExam(null); setDraft({ name: "", examDate: "", examDateId: "", colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], note: "", parentPlanId: "" }); setCreating(true); }}>{t("plans.page.newManual")}</button>}
         </div>
       </div>
 
       {alerts.length ? (
         <section className={`${card} p-5`}>
           <div className="flex items-center justify-between gap-2">
-            <p className={kicker}>Next up</p>
-            <span className="text-[11px] text-soft-ink">{alerts.filter((alert) => alert.days < 0).length} late · {alerts.filter((alert) => alert.days === 0).length} today</span>
+            <p className={kicker}>{t("plans.card.nextUp")}</p>
+            <span className="text-[11px] text-soft-ink">{t("plans.page.lateToday", { late: alerts.filter((alert) => alert.days < 0).length, today: alerts.filter((alert) => alert.days === 0).length })}</span>
           </div>
           <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
             {alerts.slice(0, 6).map((alert) => (
@@ -1338,7 +1344,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                   <span className="size-2.5 shrink-0 rounded-full" style={{ background: alert.colour }} />
                   <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold text-ink">{alert.kind === "deadline" ? "★ " : ""}{alert.title}</span><span className="block text-[11px] text-soft-ink">{alert.planName}</span></span>
                   {alert.imposed || alert.kind === "deadline" ? <OriginBadge imposed={Boolean(alert.imposed)} by={alert.setByName} /> : null}
-                  <span className={`shrink-0 text-xs font-semibold ${alert.days < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(alert.dueDate)}</span>
+                  <span className={`shrink-0 text-xs font-semibold ${alert.days < 0 ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(alert.dueDate, t)}</span>
                 </button>
               </li>
             ))}
@@ -1352,10 +1358,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
         <ExamDatesCard
           examDates={examDates}
           showHidden
-          title="Exam dates from my teachers"
-          emptyHint="Nothing yet. When a teacher or parent sends you an exam date it shows here and in the bell."
+          title={t("plans.page.examsTitle")}
+          emptyHint={t("plans.page.examsEmpty")}
           onPlan={(entry) => { setPickedExam(entry); setGenerating(true); }}
-          onOpenPlan={(documentId) => { const row = plans.find((entry) => entry.document.id === documentId); if (row) { setTab("plans"); setOpenId(documentId); } else setStatus("That plan is in another topic: open it from there."); }}
+          onOpenPlan={(documentId) => { const row = plans.find((entry) => entry.document.id === documentId); if (row) { setTab("plans"); setOpenId(documentId); } else setStatus(t("plans.page.otherTopic")); }}
           onDismiss={(entry, hide) => onDismissExamDate?.(entry, hide)}
         />
       ) : tab === "calendar" ? <PlanCalendar rows={plans} attempts={attempts} onOpenPlan={setOpenId} onMoveItem={moveItem} /> : (
@@ -1371,8 +1377,8 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 subPlans={children}
                 progress={progress}
                 building={building}
-                sharedLabel={isSharedDocument(document) ? `${isAssignedDocument(document) ? "Assigned" : "Shared"} by ${senderNameOf(document, folders) || "another account"} · read-only (you can tick steps off)` : ""}
-                shareLabel={role === "teacher" || role === "parent" ? "Assign…" : "Share…"}
+                sharedLabel={isSharedDocument(document) ? t(isAssignedDocument(document) ? "plans.page.assignedBy" : "plans.page.sharedBy", { name: senderNameOf(document, folders) || t("plans.page.anotherAccount") }) : ""}
+                shareLabel={role === "teacher" || role === "parent" ? t("plans.page.assign") : t("plans.card.share")}
                 onShare={onShareDocument && !isSharedDocument(document) ? () => onShareDocument(document) : undefined}
                 onBuild={build}
                 onUpdate={isSharedDocument(document) ? undefined : setUpdatingPlan}
@@ -1381,7 +1387,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               />
             );
           })}
-          {!plans.length ? <EmptyState title="No study plans yet" text="A plan says what to study and when, with activities and deadlines. Luna can build one from your material." action="Plan it for me" onAction={() => setGenerating(true)} /> : null}
+          {!plans.length ? <EmptyState title={t("plans.page.emptyTitle")} text={t("plans.page.emptyText")} action={t("plans.gen.title")} onAction={() => setGenerating(true)} /> : null}
         </div>
       )}
 
@@ -1414,7 +1420,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           onBuild={async (plan, savedDocumentId, report) => {
             // The plan is worth nothing until its material exists, so it is built immediately —
             // into its own folders, with the material it studies linked rather than copied.
-            setStatus("Setting up the plan's folders…");
+            setStatus(t("plans.page.folders"));
             const planFolders = await ensurePlanFolders(plan.name, { folders, subjectId: selectedSubjectId, onCreateFolder });
             if (savedDocumentId && planFolders.planId) await onUpdateDocumentMeta?.(savedDocumentId, { folderIds: [planFolders.planId], tags: [PLAN_TAG] });
             const result = await executePlan({
@@ -1429,7 +1435,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
               onUpdateGeneratedDocument,
               onProgress: (event) => {
                 const { phase, index, total, title, detail } = event;
-                setStatus(phase === "master" ? `Merging your documents into one master document${detail ? ` — ${detail}` : ""}…` : `Building ${index + 1} of ${total}: ${title}…`);
+                setStatus(phase === "master" ? `${t("plans.page.merging")}${detail ? ` — ${detail}` : ""}…` : t("plans.page.buildingOf", { index: index + 1, total, title }));
                 report?.(event);
               }
             });
@@ -1443,6 +1449,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
 }
 
 function DeletePlanDialog({ planRow, documents, folders, busy, onCancel, onConfirm }) {
+  const t = useT();
   const plan = planRow.plan;
   const scope = planDeletionScope(planRow.document, plan, { folders, documents });
   const built = new Set((plan.items || []).filter((item) => item.generate && item.resourceId).map((item) => item.resourceId));
@@ -1459,38 +1466,38 @@ function DeletePlanDialog({ planRow, documents, folders, busy, onCancel, onConfi
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(e) => e.stopPropagation()}>
-        <h4 className="m-0 text-lg font-bold text-ink">Delete &ldquo;{plan.name}&rdquo;?</h4>
-        <p className="m-0 mt-1 text-sm text-soft-ink">This permanently removes:</p>
+        <h4 className="m-0 text-lg font-bold text-ink">{t("plans.del.title", { name: plan.name })}</h4>
+        <p className="m-0 mt-1 text-sm text-soft-ink">{t("plans.del.removes")}</p>
         <ul className="m-0 mt-2 grid list-disc gap-1 pl-5 text-sm text-ink">
-          <li>the plan</li>
-          {scope.folderId ? <li>its folder &ldquo;{scope.folderName}&rdquo; in the workspace</li> : null}
-          <li>{generatedCount ? `${generatedCount} generated resource${generatedCount === 1 ? "" : "s"} (quizzes, summaries…) built for it` : "no generated resources (none were built)"}</li>
+          <li>{t("plans.del.plan")}</li>
+          {scope.folderId ? <li>{t("plans.del.folder", { name: scope.folderName })}</li> : null}
+          <li>{generatedCount ? t.plural("plans.del.generated", generatedCount) : t("plans.del.noGenerated")}</li>
         </ul>
-        <p className="m-0 mt-2 text-xs text-soft-ink">Your uploaded material is not deleted — it just leaves the plan&rsquo;s folder and stays wherever else it is filed.</p>
+        <p className="m-0 mt-2 text-xs text-soft-ink">{t("plans.del.uploadedKept")}</p>
 
         <div className="mt-4 grid gap-3">
           <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${delMetrics ? "border-[var(--color-danger)]/40 bg-[rgba(255,59,48,0.04)]" : "border-ink/10 hover:border-ink/20"}`}>
             <input type="checkbox" className="mt-0.5 accent-[var(--color-danger)]" checked={delMetrics} onChange={(e) => setDelMetrics(e.target.checked)} disabled={!metricsCount} />
             <div>
-              <p className="m-0 text-sm font-semibold text-ink">Also delete performance metrics</p>
+              <p className="m-0 text-sm font-semibold text-ink">{t("plans.del.metrics")}</p>
               <p className="m-0 mt-0.5 text-xs text-soft-ink">
                 {metricsCount
-                  ? `${metricsCount} activity attempt${metricsCount === 1 ? "" : "s"} recorded against this plan's resources will be erased.`
-                  : "No recorded attempts found for this plan's resources."}
+                  ? t.plural("plans.del.attempts", metricsCount)
+                  : t("plans.del.noAttempts")}
               </p>
             </div>
           </label>
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
+          <button type="button" className={ghostBtn} onClick={onCancel}>{t("common.cancel")}</button>
           <button
             type="button"
             disabled={busy}
             className="inline-flex items-center justify-center rounded-full bg-[var(--color-danger)] px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             onClick={() => onConfirm({ metrics: delMetrics })}
           >
-            {busy ? "Deleting…" : "Delete plan"}
+            {busy ? t("plans.del.deleting") : t("plans.del.submit")}
           </button>
         </div>
       </div>
@@ -1499,29 +1506,30 @@ function DeletePlanDialog({ planRow, documents, folders, busy, onCancel, onConfi
 }
 
 function CreateDialog({ draft, setDraft, busy, plans, examDates = [], onCancel, onCreate }) {
+  const t = useT();
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>
-        <h4 className="m-0 text-lg font-bold text-ink">{draft.parentPlanId ? "New sub-plan" : "New study plan"}</h4>
-        <p className="m-0 mt-1 text-xs text-soft-ink">A name and a first deadline. Goals, resources and further deadlines are added inside.</p>
+        <h4 className="m-0 text-lg font-bold text-ink">{draft.parentPlanId ? t("plans.create.sub") : t("plans.create.new")}</h4>
+        <p className="m-0 mt-1 text-xs text-soft-ink">{t("plans.create.intro")}</p>
         <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Name<input autoFocus className={field} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Maths final · June" /></label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.page.name")}<input autoFocus className={field} value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("plans.add.placeholder")} /></label>
           <ExamDatePicker examDates={examDates} value={draft.examDateId || ""} onChange={(exam) => setDraft({ ...draft, examDateId: exam?.id || "", examDate: exam?.date || draft.examDate, name: draft.name || exam?.title || "" })} />
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">First deadline<input type="date" className={field} disabled={Boolean(draft.examDateId)} value={draft.examDate} onChange={(event) => setDraft({ ...draft, examDate: event.target.value })} /></label>
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">What is it for?<textarea className={field} rows={2} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Cover units 4 to 6 and fix the mistakes from the mock." /></label>
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Part of
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.create.first")}<input type="date" className={field} disabled={Boolean(draft.examDateId)} value={draft.examDate} onChange={(event) => setDraft({ ...draft, examDate: event.target.value })} /></label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.create.for")}<textarea className={field} rows={2} value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder={t("plans.create.forPh")} /></label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.create.partOf")}
             <select className={field} value={draft.parentPlanId} onChange={(event) => setDraft({ ...draft, parentPlanId: event.target.value })}>
-              <option value="">A plan of its own</option>
+              <option value="">{t("plans.create.own")}</option>
               {plans.map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
             </select>
           </label>
           <div className="flex flex-wrap items-center gap-1.5">
-            {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={`Colour ${colour}`} className={`size-6 rounded-full ${draft.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => setDraft({ ...draft, colour })} />)}
+            {PLAN_COLOURS.map((colour) => <button key={colour} type="button" aria-label={t("plans.page.colour", { colour })} className={`size-6 rounded-full ${draft.colour === colour ? "ring-2 ring-offset-2 ring-ink/40" : ""}`} style={{ background: colour }} onClick={() => setDraft({ ...draft, colour })} />)}
           </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={busy || !draft.name.trim()} onClick={onCreate}>{busy ? "Creating…" : "Create plan"}</button>
+          <button type="button" className={ghostBtn} onClick={onCancel}>{t("common.cancel")}</button>
+          <button type="button" className={primaryBtn} disabled={busy || !draft.name.trim()} onClick={onCreate}>{busy ? t("plans.create.creating") : t("plans.create.submit")}</button>
         </div>
       </div>
     </div>

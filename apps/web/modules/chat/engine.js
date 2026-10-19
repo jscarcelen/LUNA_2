@@ -71,7 +71,7 @@ Before you reply, check that you have not revealed an unchecked answer and that 
 }
 
 /**
- * The prompt of the "Chat with Luna" button that floats on every page. Unlike Ask Luna next to a quiz, it is an
+ * The prompt of the "Ask Luna" button that floats on every page. Unlike Ask Luna next to a quiz, it is an
  * open conversation: it knows which page the user is on, answers about the user's material from passages with
  * citations, answers about Luna from the guide, and may help with any other topic the learner wants to understand.
  */

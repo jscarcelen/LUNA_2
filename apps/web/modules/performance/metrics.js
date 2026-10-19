@@ -1,4 +1,5 @@
 import { parseResource, resourceTags } from "../resources/resource";
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * Performance model: attempts (what was answered) joined with resources (what it was) so results
@@ -107,8 +108,8 @@ export function timeline(attempts = [], days = 30) {
   return out;
 }
 
-export function activityKindLabel(kind) {
-  return { choice: "Multiple choice", boolean: "True / false", text: "Written", number: "Numeric", match: "Matching", flashcard: "Flashcards", tiles: "Puzzle" }[kind] || kind;
+export function activityKindLabel(kind, t = tEn) {
+  return ["choice", "boolean", "text", "number", "match", "flashcard", "tiles"].includes(kind) ? t(`progress.kind.${kind}`) : kind;
 }
 
 /** What the questions test: mistakes and time by skill category (concept, calculation, vocabulary…). */

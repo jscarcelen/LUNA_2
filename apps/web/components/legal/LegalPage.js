@@ -3,7 +3,7 @@ const NAV = [["/terms", "Terms", "Condiciones"], ["/privacy", "Privacy", "Privac
 
 /** Shared layout of /terms, /privacy and /ai: plain, readable, no scripts. `doc` comes from lib/legalTexts.js. */
 export function LegalPage({ doc, lang = "en" }) {
-  const q = lang === "es" ? "?lang=es" : "";
+  const q = `?lang=${lang}`;
   return (
     <main style={{ minHeight: "100vh", background: T.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif', color: T.ink, padding: "32px 16px" }}>
       <article style={{ maxWidth: 760, margin: "0 auto", background: T.paper, borderRadius: 22, padding: "clamp(22px, 5vw, 44px)", boxShadow: "0 1px 2px rgba(0,0,0,.05)", lineHeight: 1.65, fontSize: 15 }}>

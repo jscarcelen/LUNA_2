@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 // Log in / Sign up: the real accounts dialog (see components/auth/AuthModal.js). This page only decides when to open it.
 import { AuthModal } from './auth/AuthModal';
 import { LunaLogo } from './brand/LunaLogo.js';
+import { useT } from '../lib/i18n/LocaleProvider.js';
 import { LandingNav, TABS } from './landing/LandingNav.js';
 import { HomeTab } from './landing/HomeTab.js';
 import { DemoTab } from './landing/DemoTab.js';
@@ -16,6 +17,7 @@ import './landing/landing.css';
  * (apps/web/public/landing, refreshed with scripts/landing-capture).
  */
 export function LandingPage() {
+  const t = useT();
   const [tab, setTabState] = useState('home');
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('signin');
@@ -54,13 +56,13 @@ export function LandingPage() {
       <footer className="lp-footer">
         <div className="lp-wrap lp-footer-row">
           <LunaLogo variant="mono" size={24} />
-          <p>Luna is in beta. Screens shown use demo data.</p>
-          <nav aria-label="Footer">
-            {TABS.map((t) => <button key={t.id} type="button" onClick={() => setTab(t.id)}>{t.label}</button>)}
-            <a href="/app">Live demo</a>
-            <a href="/terms">Terms</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/ai">AI notice</a>
+          <p>{t('landing.footer.beta')}</p>
+          <nav aria-label={t('landing.footer.aria')}>
+            {TABS.map((item) => <button key={item.id} type="button" onClick={() => setTab(item.id)}>{t(`landing.nav.${item.id}`)}</button>)}
+            <a href="/app">{t('landing.footer.liveDemo')}</a>
+            <a href="/terms">{t('landing.footer.terms')}</a>
+            <a href="/privacy">{t('landing.footer.privacy')}</a>
+            <a href="/ai">{t('landing.footer.ai')}</a>
           </nav>
         </div>
       </footer>

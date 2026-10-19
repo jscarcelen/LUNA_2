@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildEvidence, classTopicCoverage, learnerSubjectMatrix, masteryOf, nextActions, overallMastery, statusOf, topicMastery } from "../../modules/performance/mastery";
+import { buildEvidence, classTopicCoverage, learnerSubjectMatrix, masteryOf, nextActions, overallMastery, statusOf, topicMastery, whyThisTopic } from "../../modules/performance/mastery";
 import { ERROR_TYPES, analyseErrors, classifyError, groupOf } from "../../modules/performance/errors";
 
 const daysAgo = (days) => new Date(Date.now() - days * 86400000).toISOString();
@@ -127,5 +127,20 @@ describe("what certainty says about a mistake", () => {
 
   it("treats a guess on a weak topic as a gap", () => {
     expect(classifyError({ given: "b", expected: "c", confidence: "low" }, { topicAccuracy: 0.45 })).toBe("gap");
+  });
+});
+
+describe("why each next action is on the list", () => {
+  it("speaks to the learner and differs per topic even when the kind of mistake is the same", () => {
+    const a = whyThisTopic({ topic: "Ratios", questions: 10, accuracy: 0.4, coverage: 1, trend: 0, recentAccuracy: 0.4 }, [{ id: "knowledge", label: "Topic knowledge gap", count: 4 }]);
+    const b = whyThisTopic({ topic: "Fractions", questions: 6, accuracy: 0.5, coverage: 1, trend: -0.2, recentAccuracy: 0.3 }, [{ id: "knowledge", label: "Topic knowledge gap", count: 2 }, { id: "accuracy", label: "Accuracy", count: 1 }]);
+    expect(a).toContain("You got 40% of 10 questions right");
+    expect(b).toContain("latest answers are at 30%");
+    expect(b).toContain("2 of your 3 mistakes");
+    expect(a).not.toBe(b);
+    expect(`${a} ${b}`).not.toMatch(/the learner/i);
+  });
+  it("admits when there is too little evidence", () => {
+    expect(whyThisTopic({ topic: "X", questions: 2, accuracy: 0, coverage: 0.2 }, [])).toContain("only answered 2 questions");
   });
 });

@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ROLE_LABEL, accountsApi } from "./api";
+import { accountsApi } from "./api";
 import { describeEvent, timeAgo } from "./bellText.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const POLL_MS = 60000;
 
@@ -19,6 +20,7 @@ const BellIcon = () => (
  * derived on the server from your connections and what was shared with you.
  */
 export function NotificationsBell({ onOpenPage }) {
+  const t = useT();
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
   const [busyId, setBusyId] = useState("");
@@ -93,7 +95,7 @@ export function NotificationsBell({ onOpenPage }) {
       <button
         type="button"
         onClick={toggle}
-        aria-label={count ? `Notifications, ${count} new` : "Notifications"}
+        aria-label={count ? t("dialogs.bell.ariaNew", { count }) : t("dialogs.bell.title")}
         aria-haspopup="dialog"
         aria-expanded={open}
         className="relative inline-flex h-9 w-9 items-center justify-center rounded-full border border-ink/10 bg-white text-ink transition hover:bg-[var(--surface-soft)]"
@@ -104,29 +106,29 @@ export function NotificationsBell({ onOpenPage }) {
         ) : null}
       </button>
       {open ? (
-        <div role="dialog" aria-label="Notifications" className="fixed inset-x-3 top-16 z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-ink/10 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[360px]">
-          <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-soft-ink">Notifications</p>
+        <div role="dialog" aria-label={t("dialogs.bell.title")} className="fixed inset-x-3 top-16 z-50 max-h-[70vh] overflow-y-auto rounded-2xl border border-ink/10 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.16)] sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-[360px]">
+          <p className="m-0 mb-2 text-xs font-semibold uppercase tracking-[0.1em] text-soft-ink">{t("dialogs.bell.title")}</p>
           {error ? <p role="alert" className="m-0 mb-2 rounded-xl bg-[rgba(255,59,48,0.08)] px-3 py-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
-          {!requests.length && !events.length ? <p className="m-0 px-1 py-4 text-center text-sm text-soft-ink">Nothing new. Connection requests and shared work will show up here.</p> : null}
+          {!requests.length && !events.length ? <p className="m-0 px-1 py-4 text-center text-sm text-soft-ink">{t("dialogs.bell.empty")}</p> : null}
           <ul className="m-0 flex list-none flex-col gap-2 p-0">
             {requests.map((request) => (
               <li key={request.id} className="rounded-xl border border-ink/10 bg-[var(--surface-soft)] p-3">
-                <p className="m-0 text-sm font-semibold text-ink [overflow-wrap:anywhere]">{describeEvent(request)}</p>
-                <p className="m-0 mt-0.5 text-[11px] text-soft-ink [overflow-wrap:anywhere]">{ROLE_LABEL[request.person.role] || request.person.role} · {request.person.email} · {timeAgo(request.at)}</p>
+                <p className="m-0 text-sm font-semibold text-ink [overflow-wrap:anywhere]">{describeEvent(request, t)}</p>
+                <p className="m-0 mt-0.5 text-[11px] text-soft-ink [overflow-wrap:anywhere]">{["student", "teacher", "parent"].includes(request.person.role) ? t(`shell.role.${request.person.role}`) : request.person.role} · {request.person.email} · {timeAgo(request.at, Date.now(), t)}</p>
                 <div className="mt-2 flex gap-2">
-                  <button type="button" disabled={busyId === request.linkId} onClick={() => answer(request, "accept")} className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">Accept</button>
-                  <button type="button" disabled={busyId === request.linkId} onClick={() => answer(request, "decline")} className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-50">Decline</button>
+                  <button type="button" disabled={busyId === request.linkId} onClick={() => answer(request, "accept")} className="rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">{t("dialogs.bell.accept")}</button>
+                  <button type="button" disabled={busyId === request.linkId} onClick={() => answer(request, "decline")} className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink disabled:opacity-50">{t("dialogs.bell.decline")}</button>
                 </div>
               </li>
             ))}
             {events.map((event) => (
               <li key={event.id} className={`rounded-xl px-3 py-2 ${event.unread ? "bg-[rgba(0,113,227,0.07)]" : ""}`}>
-                <p className="m-0 text-sm text-ink [overflow-wrap:anywhere]">{describeEvent(event)}</p>
-                <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{timeAgo(event.at)}</p>
+                <p className="m-0 text-sm text-ink [overflow-wrap:anywhere]">{describeEvent(event, t)}</p>
+                <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{timeAgo(event.at, Date.now(), t)}</p>
               </li>
             ))}
           </ul>
-          <button type="button" onClick={() => { setOpen(false); onOpenPage?.("connections"); }} className="mt-3 w-full rounded-full border border-ink/15 bg-white px-3 py-2 text-xs font-semibold text-ink">See all in Connections</button>
+          <button type="button" onClick={() => { setOpen(false); onOpenPage?.("connections"); }} className="mt-3 w-full rounded-full border border-ink/15 bg-white px-3 py-2 text-xs font-semibold text-ink">{t("dialogs.bell.seeAll")}</button>
         </div>
       ) : null}
     </div>

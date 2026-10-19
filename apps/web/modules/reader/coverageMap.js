@@ -1,5 +1,6 @@
 import { parseResource } from "../resources/resource.js";
 import { parsePlan } from "../plans/plan.js";
+import { splitAfterSentenceEnd } from "../../lib/regexCompat.js";
 
 /**
  * Where a document is tested and covered.
@@ -17,7 +18,7 @@ const MIN_PIECE = 20;
 export const normaliseText = (value) => String(value ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 
 /** An extract is a few sentences: each one on its own is enough to find the paragraph it came from. */
-const piecesOf = (extract) => String(extract ?? "").split(/(?<=[.!?])\s+|\n+|…/u).map(normaliseText).filter((piece) => piece.length >= MIN_PIECE);
+const piecesOf = (extract) => splitAfterSentenceEnd(String(extract ?? ""), { always: /\n+|…/gu }).map(normaliseText).filter((piece) => piece.length >= MIN_PIECE);
 
 /**
  * The pointers into `documentId` found in the workspace's documents: one per question that cites it, one per

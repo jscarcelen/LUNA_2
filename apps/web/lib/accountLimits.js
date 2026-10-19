@@ -25,7 +25,12 @@ export const limits = {
   /** Emails about batch sends, per sender (one per person; the per-sender cap keeps a mistake from mailing thousands). */
   batchMailBySender: createRateLimiter({ limit: 400, windowMs: HOUR }),
   /** At most this many groups created per hour (a script cannot fill the table). */
-  groupWritesBySender: createRateLimiter({ limit: 120, windowMs: HOUR })
+  groupWritesBySender: createRateLimiter({ limit: 120, windowMs: HOUR }),
+  /** Wrong class codes, per address and per account: 10 per 15 minutes, so a 6-letter code cannot be brute-forced. Only wrong guesses count. */
+  classCodeGuessesByAddress: createRateLimiter({ limit: 10, windowMs: QUARTER }),
+  classCodeGuessesByAccount: createRateLimiter({ limit: 10, windowMs: QUARTER }),
+  /** Classes created or codes regenerated, per teacher. */
+  classWritesBySender: createRateLimiter({ limit: 60, windowMs: HOUR })
 };
 
 export function clearAccountLimits() {

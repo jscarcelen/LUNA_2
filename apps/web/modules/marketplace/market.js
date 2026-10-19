@@ -14,7 +14,7 @@ export const MARKET_KEY = "luna.marketplace.v2";
 export const STORE_KEY = "luna.marketplace.stores.v1";
 
 export const KINDS = [
-  { id: "agent", label: "AI agents", blurb: "Recipes that generate content from your material.", icon: "✦" },
+  { id: "agent", label: "Tools", blurb: "Recipes that generate content from your material.", icon: "✦" },
   { id: "template", label: "Templates", blurb: "Whole documents: exams, worksheets, flashcards, slides.", icon: "▦" },
   { id: "component", label: "Components", blurb: "Single blocks to drop into your own templates.", icon: "◫" },
   { id: "resource", label: "Study resources", blurb: "Ready-made quizzes, summaries and activities.", icon: "◉" },

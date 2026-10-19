@@ -6,6 +6,7 @@
  */
 
 import { getDominantError } from "./resourcePolicy.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 const MIN_ATTEMPTS = 3;   // minimum questions answered before a concept counts
 const MIN_TOPICS   = 3;   // minimum distinct topics before flagging a transversal pattern
@@ -17,7 +18,7 @@ const MIN_TOPICS   = 3;   // minimum distinct topics before flagging a transvers
  * @param {object} conceptById       - { [conceptId]: concepts row }
  * @returns {object[]} pattern objects with { kind, severity, description, conceptIds, topics, errorType? }
  */
-export function detectTransversalPatterns(stateByConceptId, conceptById) {
+export function detectTransversalPatterns(stateByConceptId, conceptById, t = tEn) {
   const patterns = [];
 
   // --- 1. Error type patterns spanning multiple topics ---
@@ -44,7 +45,7 @@ export function detectTransversalPatterns(stateByConceptId, conceptById) {
       topics,
       conceptIds: items.map((i) => i.conceptId),
       severity:   Math.min(1, totalErrors / (items.length * 5)), // normalised 0–1
-      description: `${errorType} errors detected across ${topics.length} topics (${topics.slice(0, 3).join(", ")}${topics.length > 3 ? " and more" : ""})`,
+      description: t("progress.pattern.error", { type: errorType, count: topics.length, topics: topics.slice(0, 3).join(", ") + (topics.length > 3 ? t("progress.pattern.andMore") : "") }),
     });
   }
 
@@ -69,7 +70,7 @@ export function detectTransversalPatterns(stateByConceptId, conceptById) {
       conceptId,
       weakPrereqs,
       severity:    1 - (state.mastery ?? 0),
-      description: `Weak mastery on "${concept.name}" may be caused by ${weakPrereqs.length} unmastered prerequisite(s). Study those first.`,
+      description: t("progress.pattern.prereq", { name: concept.name, count: weakPrereqs.length }),
     });
   }
 
@@ -82,7 +83,7 @@ export function detectTransversalPatterns(stateByConceptId, conceptById) {
       kind:       "careless_pattern",
       conceptIds: carelessConcepts.map(([id]) => id),
       severity:   Math.min(1, carelessConcepts.length / 10),
-      description: `Careless errors detected across ${carelessConcepts.length} concepts — focus on checking work before submitting.`,
+      description: t("progress.pattern.careless", { count: carelessConcepts.length }),
     });
   }
 

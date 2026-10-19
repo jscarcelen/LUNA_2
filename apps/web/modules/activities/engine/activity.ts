@@ -13,6 +13,8 @@ import { skillsForQuestion } from "../../skills/taxonomy.js";
 import { workSummary } from "../workImage.js";
 import { causeFor, gradeLocally, scoreOf } from "../grading.js";
 import { isQuantitative } from "../quantitative.js";
+// @ts-ignore - plain JS module
+import { splitSentencesAndLines } from "../../../lib/regexCompat.js";
 
 export type QuestionKind = "choice" | "boolean" | "text" | "number" | "match" | "flashcard" | "tiles";
 
@@ -328,8 +330,7 @@ export function headingFor(passage: SourcePassage, extract: string): string {
 export function bestSentences(content: string, keys: string[]): string {
   const clean = String(content).replace(/!\[[^\]]*\]\([^)]*\)/g, "").replace(/^#{1,6}\s+.*$/gm, "");
   // Sentences, but also list items and lines: slides and notes are mostly bullets without full stops.
-  const sentences = clean
-    .split(/(?<=[.!?])\s+|\n+/)
+  const sentences = splitSentencesAndLines(clean)
     .map((sentence) => sentence.replace(/^\s*(?:[-*+]|\d+[.)])\s+/, "").replace(/\*\*|__/g, "").replace(/\s+/g, " ").trim())
     .filter((sentence) => sentence.length > 20 && !/^\$\$?/.test(sentence));
   if (!sentences.length) return clean.replace(/\s+/g, " ").trim().slice(0, 280);
@@ -362,6 +363,21 @@ export function locateSource(prompt: string, answer: string, passages: SourcePas
   return { passage: best, extract: bestSentences(best.content, keys) };
 }
 
+/** The passage sharing the most terms with a question (any overlap at all), else the single passage of a one-document set; null otherwise. */
+export function nearestPassage(prompt: string, answer: string, passages: SourcePassage[]): SourcePassage | null {
+  const keys = terms(`${prompt} ${answer}`);
+  let best: SourcePassage | null = null;
+  let bestScore = 0;
+  for (const passage of passages) {
+    const lower = String(passage.content || "").toLowerCase();
+    const score = keys.filter((key) => lower.includes(key)).length;
+    if (score > bestScore) { bestScore = score; best = passage; }
+  }
+  if (best) return best;
+  const names = new Set(passages.map((passage) => passage.documentId || passage.documentName));
+  return names.size === 1 && passages.length ? passages[0] : null;
+}
+
 /** Where to open the exact passage: the source page finds the quote even if the document was re-chunked. */
 export function sourceUrl(source: Pick<ActivitySource, "documentId" | "chunkIndex" | "extract">, base = ""): string {
   if (!source.documentId) return "";
@@ -376,7 +392,13 @@ export function sourceUrl(source: Pick<ActivitySource, "documentId" | "chunkInde
 export function attachSources(activity: Activity, passages: SourcePassage[] = []): Activity {
   if (!passages.length) return activity;
   const questions = activity.questions.map((question) => {
-    if (question.source?.extract && question.source.documentName && question.source.documentId) return question;
+    if (question.source?.extract && question.source.documentName && question.source.documentId) {
+      if (question.source.heading) return question;
+      // Every question carries the section it came from (the answer feedback names it when there is no quote to show).
+      const same = passages.find((passage) => passage.documentId === question.source!.documentId && passage.chunkIndex === question.source!.chunkIndex);
+      const heading = same ? headingFor(same, question.source.extract) : "";
+      return heading ? { ...question, source: { ...question.source, heading, locator: question.source.locator || sourceLocator(heading, same?.page ?? question.source.page, same?.chunkIndex) } } : question;
+    }
     const answerText = `${typeof question.answer === "string" ? question.answer : ""} ${question.back || ""}`;
     const keys = terms(`${question.prompt} ${answerText}`);
     const cited = question.source?.documentId
@@ -388,7 +410,14 @@ export function attachSources(activity: Activity, passages: SourcePassage[] = []
       return { ...question, source: { ...question.source!, extract, heading, locator: sourceLocator(heading, cited.page ?? question.source!.page, cited.chunkIndex) } };
     }
     const found = locateSource(question.prompt, answerText, passages);
-    if (!found) return question;
+    if (!found) {
+      // No passage backs it well enough to quote (typically a maths problem built on the notes): still say which section it
+      // is based on — the passage sharing the most terms with it, else the only document there is. No quote is invented.
+      const nearest = nearestPassage(question.prompt, answerText, passages);
+      if (!nearest) return question;
+      const heading = question.source?.heading || nearest.heading || "";
+      return { ...question, source: { ...(question.source || {}), documentName: question.source?.documentName || nearest.documentName, documentId: question.source?.documentId || nearest.documentId || "", chunkIndex: question.source?.chunkIndex ?? nearest.chunkIndex, page: question.source?.page ?? nearest.page ?? null, heading, locator: question.source?.locator || sourceLocator(heading, nearest.page, nearest.chunkIndex), extract: question.source?.extract || "" } };
+    }
     const { passage } = found;
     const heading = headingFor(passage, found.extract);
     return { ...question, source: { documentName: passage.documentName, documentId: passage.documentId || "", chunkIndex: passage.chunkIndex, page: passage.page ?? null, heading, locator: sourceLocator(heading, passage.page, passage.chunkIndex), extract: question.source?.extract || found.extract } };

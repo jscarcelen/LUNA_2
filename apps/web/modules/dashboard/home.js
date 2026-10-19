@@ -5,6 +5,7 @@ import { buildEvidence, topicMastery } from "../performance/mastery";
 import { analyseErrors } from "../performance/errors";
 import { targetsFor } from "../performance/targets";
 import { parseResource } from "../resources/resource";
+import { tEn } from "../../lib/i18n/index.js";
 
 /** The Home gallery is one row of at most this many plan cards. */
 export const HOME_PLAN_LIMIT = 4;
@@ -19,9 +20,9 @@ export function firstName(name) {
 }
 
 /** "Hi Maria" — or just "Hi" when there is no name yet. */
-export function greeting(name) {
+export function greeting(name, t = tEn) {
   const first = firstName(name);
-  return first ? `Hi ${first}` : "Hi";
+  return first ? t("home.hiName", { name: first }) : t("home.hi");
 }
 
 /** Every study plan of a workspace, whatever subject it lives in, tagged with where it came from. */
@@ -171,43 +172,44 @@ export function nextSteps(entries = [], limit = 5) {
  *
  * @returns {{ kind: "step"|"upload"|"plan"|"practise"|"review", title: string, detail: string, cta: string, step?: object }}
  */
-export function nextBestAction({ hasMaterial = false, hasPlans = false, steps = [], hasEvidence = false, role = "student" } = {}) {
+export function nextBestAction({ hasMaterial = false, hasPlans = false, steps = [], hasEvidence = false, role = "student" } = {}, t = tEn) {
+  // A parent never gets the child's task as their own to-do: only a way to see how the child is doing.
+  if (role === "parent") return { kind: "review", title: t("home.review.title"), detail: t("home.review.detail"), cta: t("home.review.cta") };
   if (steps.length) {
     const step = steps[0];
-    const when = step.days === null || step.days === undefined ? "" : step.days < 0 ? "late" : step.days === 0 ? "due today" : step.days === 1 ? "due tomorrow" : `due in ${step.days} days`;
-    return { kind: "step", title: step.title, detail: [step.planName, when].filter(Boolean).join(" · "), cta: "Start", step };
+    const when = step.days === null || step.days === undefined ? "" : step.days < 0 ? t("home.when.late") : step.days === 0 ? t("home.when.today") : step.days === 1 ? t("home.when.tomorrow") : t("home.when.days", { days: step.days });
+    return { kind: "step", title: step.title, detail: [step.planName, when].filter(Boolean).join(" · "), cta: t("home.step.cta"), step };
   }
-  if (role === "parent") return { kind: "review", title: "See how your child is doing", detail: "Progress shows what is going well and where help is needed.", cta: "Open progress" };
-  if (!hasMaterial) return { kind: "upload", title: "Add your course material", detail: "Upload notes, slides or a textbook. Luna reads them and builds everything else from them.", cta: "Upload material" };
-  if (!hasPlans) return { kind: "plan", title: "Let Luna plan your studying", detail: "A plan with deadlines and activities, built from your material.", cta: "Plan it for me" };
-  return { kind: "practise", title: hasEvidence ? "Practise what needs work" : "Do a first quiz", detail: "A short quiz shows Luna what you know, so it can tell you what to study next.", cta: "Make a quiz" };
+  if (!hasMaterial) return { kind: "upload", title: t("home.upload.title"), detail: t("home.upload.detail"), cta: t("home.upload.cta") };
+  if (!hasPlans) return { kind: "plan", title: t("home.plan.title"), detail: t("home.plan.detail"), cta: t("home.plan.cta") };
+  return { kind: "practise", title: hasEvidence ? t("home.practise.titleWork") : t("home.practise.titleFirst"), detail: t("home.practise.detail"), cta: t("home.practise.cta") };
 }
 
 /** Three first steps for a new person, each done or not: upload, plan, practise. Null once all three are done. */
-export function firstRunChecklist({ hasMaterial = false, hasPlans = false, hasEvidence = false } = {}) {
+export function firstRunChecklist({ hasMaterial = false, hasPlans = false, hasEvidence = false } = {}, t = tEn) {
   const items = [
-    { id: "upload", label: "Upload your material", done: hasMaterial, target: "workspaces" },
-    { id: "plan", label: "Make a study plan", done: hasPlans, target: "plans?generate=1" },
-    { id: "practise", label: "Do a first quiz", done: hasEvidence, target: "create" }
+    { id: "upload", label: t("home.check.upload"), done: hasMaterial, target: "workspaces" },
+    { id: "plan", label: t("home.check.plan"), done: hasPlans, target: "plans?generate=1" },
+    { id: "practise", label: t("home.practise.titleFirst"), done: hasEvidence, target: "create" }
   ];
   return items.every((item) => item.done) ? null : items;
 }
 
 /** The three shortcuts on Home, by role. */
-export function homeShortcuts(role = "student", account = false) {
+export function homeShortcuts(role = "student", account = false, t = tEn) {
   if (role === "parent") return [
-    { id: "progress", label: "See progress", target: "performance", icon: "◴" },
-    ...(account ? [{ id: "children", label: "My children", target: "students", icon: "☺" }] : []),
-    { id: "plans", label: "Open study plans", target: "plans", icon: "◷" }
+    { id: "progress", label: t("home.sc.progress"), target: "performance", icon: "◴" },
+    ...(account ? [{ id: "children", label: t("home.sc.children"), target: "students", icon: "☺" }] : []),
+    { id: "plans", label: t("home.sc.plans"), target: "plans", icon: "◷" }
   ];
   if (role === "teacher") return [
-    { id: "upload", label: "Upload material", target: "workspaces", icon: "⤒" },
-    { id: "make", label: "Make a quiz", target: "create", icon: "✎" },
-    account ? { id: "students", label: "Assign or follow students", target: "students", icon: "☺" } : { id: "plans", label: "Open study plans", target: "plans", icon: "◷" }
+    { id: "upload", label: t("home.upload.cta"), target: "workspaces", icon: "⤒" },
+    { id: "make", label: t("home.practise.cta"), target: "create", icon: "✎" },
+    account ? { id: "students", label: t("home.sc.students"), target: "students", icon: "☺" } : { id: "plans", label: t("home.sc.plans"), target: "plans", icon: "◷" }
   ];
   return [
-    { id: "upload", label: "Upload material", target: "workspaces", icon: "⤒" },
-    { id: "make", label: "Make a quiz", target: "create", icon: "✎" },
-    { id: "plans", label: "Open my plan", target: "plans", icon: "◷" }
+    { id: "upload", label: t("home.upload.cta"), target: "workspaces", icon: "⤒" },
+    { id: "make", label: t("home.practise.cta"), target: "create", icon: "✎" },
+    { id: "plans", label: t("home.sc.myPlan"), target: "plans", icon: "◷" }
   ];
 }

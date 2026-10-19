@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatUsd } from "./credits";
+import { formatNumber } from "../../lib/i18n/index.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * "This run will use about N tokens" — fetched from /estimate whenever the config changes.
@@ -36,14 +38,16 @@ export function useRunEstimate(config, enabled = true) {
 }
 
 export function RunEstimateLine({ estimate, loading, balance }) {
-  if (loading && !estimate) return <p className="m-0 text-[11px] text-soft-ink">Estimating cost…</p>;
+  const t = useT();
+  const n = (value) => formatNumber(value, t.locale);
+  if (loading && !estimate) return <p className="m-0 text-[11px] text-soft-ink">{t("misc.est.estimating")}</p>;
   if (!estimate) return null;
   const tooExpensive = typeof balance === "number" && estimate.totalTokens > balance;
   return (
-    <p className={`m-0 text-[11px] ${tooExpensive ? "font-semibold text-[var(--color-danger)]" : "text-soft-ink"}`} title={`≈ ${estimate.inputTokens.toLocaleString("en-US")} in + ${estimate.outputTokens.toLocaleString("en-US")} out · ${estimate.model}`}>
-      Estimated cost: <strong className="text-ink">≈ {estimate.totalTokens.toLocaleString("en-US")} lunas</strong> ({formatUsd(estimate.costUsd)})
-      {estimate.documentCount ? ` · reads ${estimate.documentCount} document${estimate.documentCount === 1 ? "" : "s"}${estimate.truncated ? " (largest parts only)" : " in full"}` : ""}
-      {tooExpensive ? " — not enough lunas" : ""}
+    <p className={`m-0 text-[11px] ${tooExpensive ? "font-semibold text-[var(--color-danger)]" : "text-soft-ink"}`} title={t("misc.est.tip", { input: n(estimate.inputTokens), output: n(estimate.outputTokens), model: estimate.model })}>
+      {t("misc.est.cost")} <strong className="text-ink">{t("misc.est.approx", { n: n(estimate.totalTokens) })}</strong> ({formatUsd(estimate.costUsd)})
+      {estimate.documentCount ? ` · ${t.plural("misc.est.reads", estimate.documentCount)}${estimate.truncated ? ` ${t("misc.est.largest")}` : ` ${t("misc.est.full")}`}` : ""}
+      {tooExpensive ? ` ${t("misc.est.notEnough")}` : ""}
     </p>
   );
 }

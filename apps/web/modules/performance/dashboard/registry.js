@@ -2,13 +2,15 @@
 
 import { MASTERY_THRESHOLD, RECOVERY_GAP_DAYS, statusOf } from "../mastery";
 import { activityKindLabel } from "../metrics";
+import { errorText } from "../errors";
 import { dueLabel } from "../../plans/plan";
 import { DeadlineOrigin } from "../../plans/DeadlineBadge";
-import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, METRIC_INFO, MasteryTrend, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
+import { ClassTopicBars, ErrorBreakdown, Heatmap, Kpi, METRIC_INFO, MasteryTrend, metricInfo, NextActions, TypeChip, chip, ghostBtn, percent, trendArrow, trendTone } from "./parts";
 import { CoachPanel } from "./CoachPanel";
 import { PlanTopics } from "./PlanTopics";
 import { SkillMap } from "./SkillMap";
 import { LevelReport } from "./LevelReport";
+import { tEn, formatNumber } from "../../../lib/i18n/index.js";
 
 /**
  * Every panel the performance screen can show.
@@ -31,21 +33,21 @@ export const PANELS = [
     size: "full",
     modes: ["value", "history"],
     info: METRIC_INFO.accuracy,
-    render: ({ overall, retention, trendChange }, mode) => (mode === "history"
+    render: ({ overall, retention, trendChange, t = tEn }, mode) => (mode === "history"
       ? <MasteryTrend points={trendChange.points} />
       : (
         <div className="grid gap-3 sm:grid-cols-2">
           <Kpi
-            label="Overall accuracy"
+            label={t("progress.headline.accuracy")}
             value={percent(overall.accuracy)}
-            hint={`${overall.questions} questions answered`}
+            hint={t.plural("progress.questionsAnswered", overall.questions)}
             info={METRIC_INFO.accuracy}
             footer={<div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${Math.round(overall.accuracy * 100)}%`, background: statusOf(overall.accuracy * 100).colour }} /></div>}
           />
           <Kpi
-            label="Retention"
+            label={t("progress.headline.retention")}
             value={retention.value === null ? "—" : percent(retention.value)}
-            hint={retention.value === null ? `measured once a topic with mistakes is practised again ${RECOVERY_GAP_DAYS}+ days later` : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved in the following weeks`}
+            hint={retention.value === null ? t("progress.headline.retentionHint", { days: RECOVERY_GAP_DAYS }) : t.plural("progress.headline.improved", retention.topics, { improved: retention.improved })}
             info={METRIC_INFO.retention}
           />
         </div>
@@ -58,7 +60,7 @@ export const PANELS = [
     roles: ALL,
     size: "full",
     modes: ["value"],
-    render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} overview={ctx.overview} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: `Re-teach ${topic.topic}`, why: topic.reason, effort: "30 minutes" })} />
+    render: (ctx) => <SkillMap diagnosis={ctx.diagnosis} overview={ctx.overview} onPrimer={(skill) => ctx.onPrimer?.(skill)} onReteach={(topic) => ctx.onPractise?.({ kind: "reteach", topic: topic.topic, title: (ctx.t || tEn)("progress.reteach", { topic: topic.topic }), why: topic.reason, effort: "30 minutes" })} />
   },
   {
     id: "level-tests",
@@ -85,8 +87,8 @@ export const PANELS = [
         skillDiagnosis={ctx.diagnosis}
         stuck={ctx.stuck}
         plan={ctx.planSummary}
-        onPractise={(action) => ctx.onPractise?.(action)}
-        onSchedule={(action) => ctx.onSchedule?.(action)}
+        onPractise={ctx.onPractise ? (action) => ctx.onPractise(action) : undefined}
+        onSchedule={ctx.onSchedule ? (action) => ctx.onSchedule(action) : undefined}
       />
     )
   },
@@ -98,7 +100,7 @@ export const PANELS = [
     size: "full",
     modes: ["value"],
     info: METRIC_INFO.topicAccuracy,
-    render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} />
+    render: (ctx) => <PlanTopics plans={ctx.planChoices} planId={ctx.focusPlanId} onPlanChange={ctx.setFocusPlanId} workspaceId={ctx.workspaceId} studentId={ctx.viewingStudentId} />
   },
   {
     id: "next-actions",
@@ -108,10 +110,11 @@ export const PANELS = [
     size: "half",
     modes: ["value"],
     info: {
+      id: "nextActions",
       meaning: "The topics that most need practice, weakest first, with the main reason each one is lagging.",
       formula: `listed when a topic has 2+ answered questions and mastery below ${MASTERY_THRESHOLD + 10}%  ·  mastery is explained under "Overall accuracy" and "Mastery over time"`
     },
-    render: (ctx) => <NextActions actions={ctx.actions} onOpen={ctx.onPractise} />
+    render: (ctx) => <NextActions actions={ctx.actions} onOpen={ctx.onPractise} viewer={ctx.viewer} studentName={ctx.studentName} />
   },
   {
     id: "error-breakdown",
@@ -121,6 +124,7 @@ export const PANELS = [
     size: "half",
     modes: ["value", "detail"],
     info: {
+      id: "errorBreakdown",
       meaning: "Each wrong answer is given one most-likely cause, so you can see whether to revise content, slow down, or fix a missing basic skill.",
       formula: "share of mistakes = mistakes of this kind ÷ all mistakes  ·  the cause comes from the grader's note and the pattern of your answers"
     },
@@ -144,7 +148,8 @@ export const PANELS = [
     size: "full",
     modes: ["value", "detail"],
     render: (ctx, mode) => {
-      if (!ctx.activePlan || !ctx.planStats) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Pick a study plan in the filters and this reads the results through it: whether its goals are met and whether the work is on schedule.</p>;
+      const t = ctx.t || tEn;
+      if (!ctx.activePlan || !ctx.planStats) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.plan.pick")}</p>;
       const stats = ctx.planStats;
       return (
         <div className="grid gap-3">
@@ -152,38 +157,38 @@ export const PANELS = [
             <p className="m-0 flex flex-wrap items-center gap-1.5 text-sm text-soft-ink">
               {/* Who set the deadline: a solid dark badge for a teacher or parent, outlined for the learner's own. */}
               {stats.deadline ? <DeadlineOrigin deadline={stats.deadline} plan={ctx.activePlan.plan} /> : null}
-              {stats.deadline ? `${stats.deadline.title}: ${dueLabel(stats.deadline.date)}` : "No deadline"}
-              {` · ${stats.done} of ${stats.total} steps done`}
-              {stats.late.length ? ` · ${stats.late.length} late` : ""}
-              {stats.average ? ` · averaging ${percent(stats.average)}` : ""}
+              {stats.deadline ? `${stats.deadline.title}: ${dueLabel(stats.deadline.date, t)}` : t("progress.plan.noDeadline")}
+              {` · ${t("progress.plan.stepsDone", { done: stats.done, total: stats.total })}`}
+              {stats.late.length ? ` · ${t("progress.plan.lateCount", { count: stats.late.length })}` : ""}
+              {stats.average ? ` · ${t("progress.plan.averaging", { pct: percent(stats.average) })}` : ""}
             </p>
             <span className="flex items-center gap-3">
-              <span className={`text-sm font-bold ${stats.late.length ? "text-[var(--color-danger)]" : "text-[#2f9e5b]"}`}>{stats.late.length ? "behind" : "on track"}</span>
-              {stats.days !== null ? <span className="text-sm text-ink">{stats.days} days left</span> : null}
-              <button type="button" className={ghostBtn} onClick={() => ctx.onOpenPage?.("plans")}>Open the plan</button>
+              <span className={`text-sm font-bold ${stats.late.length ? "text-[var(--color-danger)]" : "text-[#2f9e5b]"}`}>{stats.late.length ? t("progress.plan.behind") : t("progress.plan.onTrack")}</span>
+              {stats.days !== null ? <span className="text-sm text-ink">{t("progress.plan.daysLeft", { days: stats.days })}</span> : null}
+              {ctx.onOpenPage ? <button type="button" className={ghostBtn} onClick={() => ctx.onOpenPage("plans")}>{t("progress.plan.open")}</button> : null}
             </span>
           </div>
           <div className="grid gap-1.5">
             {stats.goals.map((goal) => (
               <div key={goal.id} className="rounded-xl border border-ink/10 p-2.5">
-                <p className="m-0 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-ink"><span className="min-w-0 truncate">{goal.title}</span><span className={tone(goal.average || 0)}>{goal.done}/{goal.total} done{goal.average ? ` · ${percent(goal.average)}` : ""}</span></p>
+                <p className="m-0 flex flex-wrap items-center justify-between gap-2 text-sm font-semibold text-ink"><span className="min-w-0 truncate">{goal.title}</span><span className={tone(goal.average || 0)}>{t("progress.plan.goalDone", { done: goal.done, total: goal.total })}{goal.average ? ` · ${percent(goal.average)}` : ""}</span></p>
                 <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full" style={{ width: `${goal.total ? (goal.done / goal.total) * 100 : 0}%`, background: goal.met ? "#2f9e5b" : ctx.activePlan.plan.colour }} /></div>
                 {mode === "detail" && (goal.concepts || []).length ? <p className="m-0 mt-1 text-[11px] text-soft-ink">{goal.concepts.slice(0, 6).join(" · ")}</p> : null}
               </div>
             ))}
-            {!stats.goals.length ? <p className="m-0 text-sm text-soft-ink">This plan has no goals yet.</p> : null}
+            {!stats.goals.length ? <p className="m-0 text-sm text-soft-ink">{t("progress.plan.noGoals")}</p> : null}
           </div>
           {mode === "detail" ? (
             <div>
-              <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Still to do</p>
+              <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("progress.plan.todo")}</p>
               <div className="mt-1 grid gap-1">
                 {stats.next.slice(0, 8).map((item) => (
                   <div key={item.id} className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-sm">
                     <span className="min-w-0 flex-1 truncate text-ink">{item.title}</span>
-                    <span className={`shrink-0 text-[11px] ${dueLabel(item.dueDate).includes("late") ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(item.dueDate)}</span>
+                    <span className={`shrink-0 text-[11px] ${dueLabel(item.dueDate, tEn).includes("late") ? "text-[var(--color-danger)]" : "text-soft-ink"}`}>{dueLabel(item.dueDate, t)}</span>
                   </div>
                 ))}
-                {!stats.next.length ? <p className="m-0 text-sm text-[#2f9e5b]">Everything in this plan is done.</p> : null}
+                {!stats.next.length ? <p className="m-0 text-sm text-[#2f9e5b]">{t("progress.plan.allDone")}</p> : null}
               </div>
             </div>
           ) : null}
@@ -198,19 +203,19 @@ export const PANELS = [
     roles: ["parent", "teacher"],
     size: "full",
     modes: ["value"],
-    render: ({ overall, topics, errors, trendChange, learner, sessionsPerWeek }) => {
+    render: ({ overall, topics, errors, trendChange, learner, sessionsPerWeek, t = tEn }) => {
       const change = Math.round(trendChange.change * 100);
       const strong = topics.filter((topic) => topic.mastery >= MASTERY_THRESHOLD).slice(-3).reverse();
       const weak = topics.filter((topic) => topic.mastery < MASTERY_THRESHOLD).slice(0, 3);
       return (
         <div className="grid gap-3">
           <p className="m-0 max-w-3xl text-[15px] leading-relaxed text-ink">
-            {learner ? `${learner}'s` : "Overall"} mastery is <strong>{overall.mastery}%</strong> and {change === 0 ? "has held steady" : change > 0 ? `has risen ${change} points` : `has slipped ${Math.abs(change)} points`} over the last weeks.
-            {strong.length ? ` The strongest areas are ${strong.map((topic) => topic.topic).join(" and ")}.` : ""}
-            {weak.length ? ` ${weak.map((topic) => topic.topic).join(", ")} ${weak.length === 1 ? "remains the area" : "remain the areas"} to practise` : " Nothing is lagging"}
-            {errors.total ? `, and most of the mistakes there are ${errors.types[0].label.toLowerCase()} — ${errors.types[0].blurb.toLowerCase().replace(/\.$/, "")}` : ""}.
+            {learner ? t("progress.ps.masteryOf", { learner }) : t("progress.ps.masteryAll")} <strong>{overall.mastery}%</strong> {change === 0 ? t("progress.ps.steady") : change > 0 ? t("progress.ps.rose", { n: change }) : t("progress.ps.slipped", { n: Math.abs(change) })}
+            {strong.length ? ` ${t("progress.ps.strongest", { areas: strong.map((topic) => topic.topic).join(t("progress.ps.and")) })}` : ""}
+            {weak.length ? ` ${t.plural("progress.ps.weak", weak.length, { topics: weak.map((topic) => topic.topic).join(", ") })}` : ` ${t("progress.ps.none")}`}
+            {errors.total ? t("progress.ps.tail", { label: errorText(errors.types[0].id, "label", t).toLowerCase(), blurb: errorText(errors.types[0].id, "blurb", t).toLowerCase().replace(/\.$/, "") }) : ""}.
           </p>
-          <p className="m-0 text-[11px] text-soft-ink">{overall.questions} questions answered · {sessionsPerWeek.toFixed(1)} sessions a week in this period.</p>
+          <p className="m-0 text-[11px] text-soft-ink">{t("progress.ps.foot", { questions: overall.questions, perWeek: formatNumber(sessionsPerWeek, t.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }) })}</p>
         </div>
       );
     }
@@ -222,7 +227,7 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ subjects }) => (subjects.length ? (
+    render: ({ subjects, t = tEn }) => (subjects.length ? (
       <div className="grid gap-1.5">
         {subjects.map((subject) => (
           <div key={subject.subject} className="grid gap-1 rounded-xl px-1 py-1">
@@ -234,7 +239,7 @@ export const PANELS = [
           </div>
         ))}
       </div>
-    ) : <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing measured yet.</p>)
+    ) : <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.map.empty")}</p>)
   },
   {
     id: "habit",
@@ -243,13 +248,13 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ streak, sessionsPerWeek, overall, rhythm }) => (
+    render: ({ streak, sessionsPerWeek, overall, rhythm, t = tEn }) => (
       <div className="grid gap-2">
-        <p className="m-0 text-2xl font-bold text-ink">{streak ? `${streak}-day streak` : "No streak"}</p>
-        <p className="m-0 text-[11px] text-soft-ink">{sessionsPerWeek.toFixed(1)} sessions a week · {overall.questions} questions in this selection. Doing more is not the goal — getting the weak topics up is.</p>
+        <p className="m-0 text-2xl font-bold text-ink">{streak ? t("progress.habit.streak", { n: streak }) : t("progress.habit.none")}</p>
+        <p className="m-0 text-[11px] text-soft-ink">{t("progress.habit.line", { perWeek: formatNumber(sessionsPerWeek, t.locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), questions: overall.questions })}</p>
         <div className="flex h-12 items-end gap-[3px]">
           {rhythm.map((day) => (
-            <div key={day.date} className="flex-1" title={`${day.date}: ${day.attempts} activities · ${day.minutes} min`}>
+            <div key={day.date} className="flex-1" title={t("progress.habit.day", { date: day.date, count: day.attempts, minutes: day.minutes })}>
               <div className="w-full rounded-t-[2px]" style={{ height: `${Math.min(100, (day.minutes / 60) * 100)}%`, minHeight: day.attempts ? 3 : 0, background: day.average === null ? "#d2d2d7" : day.average >= 0.8 ? "#34c759" : day.average >= 0.5 ? "#ff9f0a" : "#ff3b30" }} />
             </div>
           ))}
@@ -264,7 +269,7 @@ export const PANELS = [
     roles: ["teacher"],
     size: "full",
     modes: ["value"],
-    render: (ctx) => <Heatmap columns={ctx.matrix.topics} rows={ctx.matrix.rows} onCell={(row) => ctx.onPickLearner?.(row.learner)} />
+    render: (ctx) => <Heatmap columns={ctx.matrix.topics} rows={ctx.matrix.rows} onCell={(row) => ctx.onPickLearner?.(row.learner)} firstColumnLabel={(ctx.t || tEn)("progress.student")} />
   },
   {
     id: "class-topics",
@@ -282,22 +287,22 @@ export const PANELS = [
     roles: ["teacher", "parent"],
     size: "half",
     modes: ["value"],
-    render: (ctx) => (
+    render: (ctx) => { const t = ctx.t || tEn; const who = (name) => (!name || name === "Unassigned" ? t("progress.unassigned") : name); return (
       <div className="grid gap-1.5">
         {ctx.flagged.map((entry) => (
           <button key={entry.learner} type="button" className="grid gap-1 rounded-xl border border-ink/10 px-3 py-2 text-left hover:bg-[var(--surface-soft)]" onClick={() => ctx.onPickLearner?.(entry.learner)}>
             <span className="flex flex-wrap items-baseline justify-between gap-2">
-              <span className="min-w-0 truncate text-sm font-semibold text-ink">{entry.learner || "Unassigned"}</span>
+              <span className="min-w-0 truncate text-sm font-semibold text-ink">{who(entry.learner)}</span>
               <span className="shrink-0 text-xs font-bold" style={{ color: statusOf(entry.mastery).ink }}>{entry.mastery}%</span>
             </span>
             <span className="flex flex-wrap gap-1">
-              {entry.flags.length ? entry.flags.map((flag) => <span key={flag.id} className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{flag.label}</span>) : <span className={`${chip} bg-[#eaf7ef] text-[#1d7a44]`}>On track</span>}
+              {entry.flags.length ? entry.flags.map((flag) => <span key={flag.id} className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{flag.label}</span>) : <span className={`${chip} bg-[#eaf7ef] text-[#1d7a44]`}>{t("progress.track.onTrack")}</span>}
             </span>
           </button>
         ))}
-        {!ctx.flagged.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nobody to show — add students, or nothing matches the filters.</p> : null}
+        {!ctx.flagged.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.attention.empty")}</p> : null}
       </div>
-    )
+    ); }
   },
   {
     id: "across-subjects",
@@ -306,7 +311,7 @@ export const PANELS = [
     roles: ["teacher", "parent"],
     size: "full",
     modes: ["value"],
-    render: (ctx) => <Heatmap columns={ctx.across.subjects} rows={ctx.across.rows} onCell={(row) => ctx.onPickLearner?.(row.learner)} firstColumnLabel="Student" />
+    render: (ctx) => <Heatmap columns={ctx.across.subjects} rows={ctx.across.rows} onCell={(row) => ctx.onPickLearner?.(row.learner)} firstColumnLabel={(ctx.t || tEn)("progress.student")} />
   },
   {
     id: "timeline",
@@ -315,16 +320,16 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ days }) => (
+    render: ({ days, t = tEn }) => (
       <>
         <div className="flex h-24 items-end gap-[3px]">
           {days.map((day) => (
-            <div key={day.date} className="flex-1" title={`${day.date}: ${day.count} activities${day.score === null ? "" : ` · ${percent(day.score)}`}`}>
+            <div key={day.date} className="flex-1" title={`${t("progress.timeline.day", { date: day.date, count: day.count })}${day.score === null ? "" : ` · ${percent(day.score)}`}`}>
               <div className="w-full rounded-t-[2px]" style={{ height: `${(day.count / Math.max(1, ...days.map((entry) => entry.count))) * 100}%`, minHeight: day.count ? 3 : 0, background: day.score === null ? "#d2d2d7" : day.score >= 0.8 ? "#34c759" : day.score >= 0.5 ? "#ff9f0a" : "#ff3b30" }} />
             </div>
           ))}
         </div>
-        <p className="m-0 mt-2 text-[11px] text-soft-ink">Bar height = activities that day · colour = average score.</p>
+        <p className="m-0 mt-2 text-[11px] text-soft-ink">{t("progress.timeline.legend")}</p>
       </>
     )
   },
@@ -335,16 +340,16 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ rows }) => (
+    render: ({ rows, t = tEn }) => (
       <div className="grid gap-1">
         {rows.slice(0, 12).map((row) => (
           <div key={row.key} className="flex items-center gap-2 rounded-xl px-2 py-1 text-sm">
             <span className="min-w-0 flex-1 truncate text-ink">{row.name}</span>
-            <span className="shrink-0 text-[11px] text-soft-ink">{row.times}× · {row.errors} wrong</span>
+            <span className="shrink-0 text-[11px] text-soft-ink">{t("progress.res.row", { times: row.times, errors: row.errors })}</span>
             <span className={`w-12 shrink-0 text-right font-semibold ${tone(row.best)}`}>{percent(row.best)}</span>
           </div>
         ))}
-        {!rows.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing done yet.</p> : null}
+        {!rows.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.res.empty")}</p> : null}
       </div>
     )
   },
@@ -355,15 +360,15 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ stuck }) => (
+    render: ({ stuck, t = tEn }) => (
       <div className="grid gap-1.5">
         {stuck.slice(0, 6).map((entry, index) => (
           <div key={index} className="rounded-xl border border-ink/10 p-2.5">
             <p className="m-0 text-sm text-ink">✗ {entry.prompt}</p>
-            <p className="m-0 mt-1 text-[11px] text-soft-ink">Wrong {entry.times}×{entry.topic ? ` · ${entry.topic}` : ""} · answer: <span className="text-ink">{entry.expected}</span></p>
+            <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("progress.stuck.wrong", { times: entry.times })}{entry.topic ? ` · ${entry.topic}` : ""} · {t("progress.stuck.answer")} <span className="text-ink">{entry.expected}</span></p>
           </div>
         ))}
-        {!stuck.length ? <p className="m-0 rounded-xl bg-[#eaf7ef] p-4 text-sm text-[#1d7a44]">Nothing is being missed repeatedly.</p> : null}
+        {!stuck.length ? <p className="m-0 rounded-xl bg-[#eaf7ef] p-4 text-sm text-[#1d7a44]">{t("progress.stuck.none")}</p> : null}
       </div>
     )
   },
@@ -374,16 +379,16 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ skills }) => (
+    render: ({ skills, t = tEn }) => (
       <div className="grid gap-1">
         {skills.map((entry) => (
           <div key={entry.skill} className="flex items-center gap-2 text-sm">
             <span className="min-w-0 flex-1 truncate text-ink">{entry.skill}</span>
-            <span className="shrink-0 text-[11px] text-soft-ink">{entry.asked} q</span>
-            <span className={`w-24 shrink-0 text-right text-[11px] font-semibold ${entry.rate > 0.4 ? "text-[var(--color-danger)]" : entry.rate > 0.15 ? "text-[#b25e00]" : "text-[#2f9e5b]"}`}>{entry.errors} wrong · {percent(entry.rate)}</span>
+            <span className="shrink-0 text-[11px] text-soft-ink">{t("progress.q", { count: entry.asked })}</span>
+            <span className={`w-24 shrink-0 text-right text-[11px] font-semibold ${entry.rate > 0.4 ? "text-[var(--color-danger)]" : entry.rate > 0.15 ? "text-[#b25e00]" : "text-[#2f9e5b]"}`}>{t("progress.skills.wrong", { errors: entry.errors, pct: percent(entry.rate) })}</span>
           </div>
         ))}
-        {!skills.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Classify a resource's questions to see this.</p> : null}
+        {!skills.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.skills.empty")}</p> : null}
       </div>
     )
   },
@@ -394,16 +399,16 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ difficulties }) => (
+    render: ({ difficulties, t = tEn }) => (
       <div className="grid gap-1">
         {difficulties.map((entry) => (
           <div key={entry.difficulty} className="flex items-center gap-2 text-sm">
-            <span className="min-w-0 flex-1 truncate capitalize text-ink">{entry.difficulty}</span>
-            <span className="shrink-0 text-[11px] text-soft-ink">{entry.asked} q</span>
+            <span className="min-w-0 flex-1 truncate capitalize text-ink">{["easy", "medium", "hard"].includes(entry.difficulty) ? t(`progress.difficulty.${entry.difficulty}`) : entry.difficulty}</span>
+            <span className="shrink-0 text-[11px] text-soft-ink">{t("progress.q", { count: entry.asked })}</span>
             <span className={`w-14 shrink-0 text-right text-[11px] font-semibold ${tone(1 - entry.rate)}`}>{percent(1 - entry.rate)}</span>
           </div>
         ))}
-        {!difficulties.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">No difficulty ratings yet.</p> : null}
+        {!difficulties.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.difficulty.empty")}</p> : null}
       </div>
     )
   },
@@ -414,17 +419,17 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ times, examMinutes }) => (
+    render: ({ times, examMinutes, t = tEn }) => (
       <div className="grid gap-1">
         {times.map((entry) => (
           <div key={entry.kind} className="flex items-center gap-2 text-sm">
-            <span className="min-w-0 flex-1 truncate text-ink">{activityKindLabel(entry.kind)}</span>
-            <span className="shrink-0 text-[11px] text-soft-ink">{entry.count} answered</span>
+            <span className="min-w-0 flex-1 truncate text-ink">{activityKindLabel(entry.kind, t)}</span>
+            <span className="shrink-0 text-[11px] text-soft-ink">{t("progress.pace.answered", { count: entry.count })}</span>
             <span className="w-14 shrink-0 text-right font-semibold text-ink">{entry.seconds}s</span>
           </div>
         ))}
-        {examMinutes ? <p className="m-0 mt-1 text-[11px] text-soft-ink">At this pace a 20-question exam takes about {examMinutes} minutes.</p> : null}
-        {!times.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Timing is recorded from now on.</p> : null}
+        {examMinutes ? <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("progress.pace.exam", { minutes: examMinutes })}</p> : null}
+        {!times.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.pace.empty")}</p> : null}
       </div>
     )
   },
@@ -435,16 +440,16 @@ export const PANELS = [
     roles: ALL,
     size: "half",
     modes: ["value"],
-    render: ({ concepts }) => (
+    render: ({ concepts, t = tEn }) => (
       <div className="grid gap-1">
         {concepts.slice(0, 10).map((concept) => (
           <div key={concept.concept} className="flex items-center gap-2 text-sm">
             <span className="min-w-0 flex-1 truncate text-ink">{concept.mastered ? "✓ " : ""}{concept.concept}</span>
-            <span className="shrink-0 text-[11px] text-soft-ink">{concept.attempts} attempt{concept.attempts === 1 ? "" : "s"}</span>
+            <span className="shrink-0 text-[11px] text-soft-ink">{t.plural("progress.concepts.attempts", concept.attempts)}</span>
             <span className={`w-12 shrink-0 text-right font-semibold ${tone(concept.average)}`}>{percent(concept.average)}</span>
           </div>
         ))}
-        {!concepts.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Let Luna list what a resource teaches to see this.</p> : null}
+        {!concepts.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.concepts.empty")}</p> : null}
       </div>
     )
   },
@@ -458,6 +463,12 @@ export const PANELS = [
     render: (ctx) => ctx.renderGoals()
   }
 ];
+
+/** Translated panel text (the table above keeps the English as the fallback). */
+export const panelTitle = (id, t = tEn) => t(`progress.panel.${id}.title`);
+export const panelBlurb = (id, t = tEn) => t(`progress.panel.${id}.blurb`);
+const INFO_OF = { headline: "accuracy", "mastery-map": "topicAccuracy", "mastery-trend": "mastery", "next-actions": "nextActions", "error-breakdown": "errorBreakdown" };
+export const panelInfo = (id, t = tEn) => (INFO_OF[id] ? metricInfo(t)[INFO_OF[id]] : null);
 
 export const panelById = (id) => PANELS.find((panel) => panel.id === id) || null;
 

@@ -1,11 +1,12 @@
 /**
- * GET /api/student/mastery?workspaceId=
+ * GET /api/student/mastery?workspaceId=[&studentId=]
  * Returns all student_concept_state rows for the signed-in owner (session account or demo owner; a learnerId param is ignored) in a workspace,
  * enriched with concept metadata.
  */
 import { NextResponse } from "next/server";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
 import { ownerUserIdForFresh } from "../../../../lib/session.js";
+import { resolveLinkedStudentRead } from "../../../../lib/linkedStudentRead.js";
 import { getSubjectStates } from "../../../../lib/studentStateRepository.js";
 
 export const runtime = "nodejs";
@@ -23,10 +24,15 @@ export async function GET(request) {
       );
     }
 
-    const denied = await denyUnlessOwner(request, { workspaceId });
-    if (denied) return denied;
+    // A teacher or parent in a linked student's read-only view sends `studentId`; access comes from the account link.
+    const linked = await resolveLinkedStudentRead(request, { studentId: searchParams.get("studentId"), workspaceId });
+    if (linked?.response) return linked.response;
+    if (!linked) {
+      const denied = await denyUnlessOwner(request, { workspaceId });
+      if (denied) return denied;
+    }
 
-    const { stateByConceptId, states } = await getSubjectStates(await ownerUserIdForFresh(request), workspaceId);
+    const { stateByConceptId, states } = await getSubjectStates(linked ? linked.ownerUserId : await ownerUserIdForFresh(request), workspaceId);
 
     // Summary statistics
     const masteries = states.map((s) => s.mastery ?? 0);

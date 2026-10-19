@@ -23,7 +23,25 @@ export function normaliseMath(value) {
   return String(value ?? "").replace(/\\\[([\s\S]+?)\\\]/g, (_, latex) => `\n$$${latex}$$\n`).replace(/\\\(([\s\S]+?)\\\)/g, (_, latex) => `$${latex.trim()}$`);
 }
 
+/**
+ * Repairs LaTeX that lost its backslash on the way here, so an accent is typeset instead of printed as letters
+ * ("barx"): a JSON string with a single backslash turns `\bar` into a backspace + "ar" (and `\frac` into form-feed
+ * + "rac", `\vec` into vertical-tab + "ec", `\tau` into a tab + "au"), and a model sometimes writes the command
+ * without its backslash (`bar{x}`). Only a command directly followed by `{` is repaired, so words like "bark" stay.
+ */
+// Built from char codes (not literals) so the source has no control characters.
+const BACKSPACE_LETTER = new RegExp(`${String.fromCharCode(8)}(?=[a-z])`, "g");
+const FORMFEED_LETTER = new RegExp(`${String.fromCharCode(12)}(?=[a-z])`, "g");
+const VTAB_LETTER = new RegExp(`${String.fromCharCode(11)}(?=[a-z])`, "g");
+const TAB_COMMAND = new RegExp(`${String.fromCharCode(9)}(?=(?:ext|heta|imes|au|ilde)\\b)`, "g");
+export function repairLatexEscapes(value) {
+  return String(value ?? "")
+    .replace(BACKSPACE_LETTER, "\\b").replace(FORMFEED_LETTER, "\\f").replace(VTAB_LETTER, "\\v").replace(TAB_COMMAND, "\\t")
+    .replace(/(^|[^\\A-Za-z])(bar|hat|vec|tilde|overline|underline)(?=\{)/g, "$1\\$2");
+}
+
 export function renderInline(text) {
+  text = repairLatexEscapes(text);
   const maths = [];
   // `\$` is a literal dollar sign (a price), not the start of a formula.
   let source = normaliseMath(String(text ?? "").replace(/\\\$/g, "")).replace(/\$\$([\s\S]+?)\$\$/g, (_, latex) => { maths.push(renderMath(latex, true)); return `\uE000${maths.length - 1}\uE001`; });
@@ -32,7 +50,7 @@ export function renderInline(text) {
   html = html
     // A picture embedded in the notes (a data: image) is shown; any other image reference stays a "Figure" mark.
     .replace(/!\[([^\]]*)\]\((data:image\/(?:png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+)\)/g, (_, alt, src) => `<img class="md-image" src="${src}" alt="${alt || "Figure"}">`)
-    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => `<span class="md-figure">Figure${alt ? `: ${alt}` : ""}</span>`)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_, alt) => (alt.trim() ? `<span class="md-figure">Figure: ${alt}</span>` : ""))
     // Links to the original documents (`/source?d=…&p=…`) carry a mark: inside the app they open the reader at that page.
     .replace(/\[([^[\]]+)\]\((https?:[^)\s]+|\/source\?[^)\s]+)\)/g, (_, label, href) => `<a href="${href}" target="_blank" rel="noreferrer"${/\/source\?/.test(href) ? " data-luna-source" : ""}>${label}</a>`)
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
@@ -50,7 +68,7 @@ export function renderInline(text) {
 const COMMAND = /\\[a-zA-Z]{2,}/;
 const SUBSUP = /[A-Za-z\u0370-\u03ff)\]}]\s?[_^]\s?(?:\{[^{}]+\}|[A-Za-z0-9]{1,2}(?![A-Za-z0-9]))/;
 export function autoMath(text) {
-  const value = String(text ?? "");
+  const value = repairLatexEscapes(text);
   if (!value || /\$|\\\(|\\\[/.test(value) || !(COMMAND.test(value) || SUBSUP.test(value))) return value;
   const proseWords = (value.replace(/\\[a-zA-Z]+/g, " ").match(/\b[A-Za-z]{4,}\b/g) || []).length;
   if (proseWords <= 1) return `$${value.trim()}$`;

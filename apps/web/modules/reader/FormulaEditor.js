@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const pill = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-1.5 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 
@@ -11,6 +12,7 @@ const pill = "inline-flex items-center justify-center rounded-full border border
  * `initial` is the formula's LaTeX; `onDone(latex)` / `onCancel()`.
  */
 export function FormulaEditor({ initial = "", onDone, onCancel }) {
+  const t = useT();
   const fieldRef = useRef(null);
   const [ready, setReady] = useState(false);
 
@@ -48,17 +50,17 @@ export function FormulaEditor({ initial = "", onDone, onCancel }) {
         else if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) done();
       }}
     >
-      <div role="dialog" aria-label="Formula editor" className="grid w-full max-w-xl gap-3 rounded-[18px] border border-ink/10 bg-white p-5 shadow-[0_24px_60px_rgba(0,0,0,0.25)]">
+      <div role="dialog" aria-label={t("courses.fe.aria")} className="grid w-full max-w-xl gap-3 rounded-[18px] border border-ink/10 bg-white p-5 shadow-[0_24px_60px_rgba(0,0,0,0.25)]">
         <div>
-          <p className="m-0 text-base font-bold text-ink">Formula</p>
-          <p className="m-0 mt-0.5 text-xs text-soft-ink">Type it like normal text. <b>/</b> makes a fraction, <b>^</b> a power, <b>_</b> a subscript. The keyboard button on the right opens symbols (Σ, √, ∫, Greek letters…).</p>
+          <p className="m-0 text-base font-bold text-ink">{t("courses.rv.formula")}</p>
+          <p className="m-0 mt-0.5 text-xs text-soft-ink">{t("courses.fe.help1")} <b>/</b> {t("courses.fe.help2")} <b>^</b> {t("courses.fe.help3")} <b>_</b> {t("courses.fe.help4")}</p>
         </div>
         {ready
           ? <math-field ref={fieldRef} style={{ fontSize: "1.6rem", padding: "10px 12px", borderRadius: 12, border: "1px solid var(--line, #d2d2d7)", background: "#fff", color: "#1d1d1f", width: "100%", minHeight: 64 }} />
-          : <p className="m-0 text-sm text-soft-ink">Loading the formula editor…</p>}
+          : <p className="m-0 text-sm text-soft-ink">{t("courses.fe.loading")}</p>}
         <div className="flex items-center justify-end gap-2">
-          <button type="button" className={pill} onClick={onCancel}>Cancel</button>
-          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-1.5 text-sm font-semibold text-white" onClick={done}>Done</button>
+          <button type="button" className={pill} onClick={onCancel}>{t("common.cancel")}</button>
+          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-1.5 text-sm font-semibold text-white" onClick={done}>{t("common.done")}</button>
         </div>
       </div>
     </div>,

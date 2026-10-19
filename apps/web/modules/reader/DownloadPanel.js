@@ -6,6 +6,7 @@ import { renderActivityHtml } from "../activities/engine/html";
 import { outputDocumentFor } from "../resources/outputDoc";
 import { MARKDOWN_CSS } from "./markdown";
 import { READER_CSS } from "./documentHtml";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
 
@@ -29,7 +30,8 @@ export function standalonePage(title, body, mathStyle = "") {
  * view, each its own file) and the HTML — the interactive file for a quiz or flashcards, the
  * reading page (optionally with my highlights and notes) for a document.
  */
-export function DownloadPanel({ resource, filename, activity = null, getHtml, highlightCount = 0, onOriginal, originalLabel = "Original file", originals = [], onOriginalById, onError }) {
+export function DownloadPanel({ resource, filename, activity = null, getHtml, highlightCount = 0, onOriginal, originalLabel, originals = [], onOriginalById, onError }) {
+  const t = useT();
   const doc = useMemo(() => outputDocumentFor(resource), [resource]);
   const name = filename || resource?.name || "document";
   const activityData = activity && activity.questions ? activity : resource?.activity?.questions?.length ? resource.activity : null;
@@ -38,11 +40,11 @@ export function DownloadPanel({ resource, filename, activity = null, getHtml, hi
   function interactiveHtml() {
     const html = activityData ? renderActivityHtml(activityData) : null;
     if (html) save(`${name}.interactive.html`, html, "text/html");
-    else onError?.("There is no interactive form of this.");
+    else onError?.(t("courses.dp.noInteractive"));
   }
   async function readingHtml(withNotes) {
     const body = getHtml?.({ notes: withNotes });
-    if (!body) { onError?.("Nothing to download yet."); return; }
+    if (!body) { onError?.(t("courses.dp.nothingYet")); return; }
     // The formulas' CSS and fonts travel inside the file: opening it never contacts a third-party CDN (and works offline).
     const { mathStyleTag } = await import("../ai-tools/render/mathHtml.js");
     save(`${name}${withNotes ? " · notes" : ""}.html`, standalonePage(name, body, mathStyleTag(body)), "text/html");
@@ -54,26 +56,26 @@ export function DownloadPanel({ resource, filename, activity = null, getHtml, hi
         <OutputDownloads doc={doc} filename={name} onError={onError} interactiveKind={hasActivity ? "activity" : "document"} onInteractiveHtml={hasActivity ? interactiveHtml : () => readingHtml(false)} />
       ) : (
         <div className="grid gap-2">
-          <p className="m-0 text-xs text-soft-ink">This has no page layout to print, but you can take it as HTML.</p>
-          <button type="button" className={ghostBtn} onClick={() => (hasActivity ? interactiveHtml() : readingHtml(false))}>Download the HTML</button>
+          <p className="m-0 text-xs text-soft-ink">{t("courses.dp.noLayout")}</p>
+          <button type="button" className={ghostBtn} onClick={() => (hasActivity ? interactiveHtml() : readingHtml(false))}>{t("courses.dp.html")}</button>
         </div>
       )}
       {!hasActivity && highlightCount > 0 ? (
         <div className="border-t border-ink/8 pt-3">
-          <button type="button" className={ghostBtn} onClick={() => readingHtml(true)}>Download the HTML with my highlights and notes ({highlightCount})</button>
+          <button type="button" className={ghostBtn} onClick={() => readingHtml(true)}>{t("courses.dp.htmlNotes", { count: highlightCount })}</button>
         </div>
       ) : null}
       {onOriginal ? (
         <div className="border-t border-ink/8 pt-3">
-          <button type="button" className={ghostBtn} onClick={onOriginal}>{originalLabel}</button>
+          <button type="button" className={ghostBtn} onClick={onOriginal}>{originalLabel ?? t("courses.wb.fmt.original")}</button>
         </div>
       ) : null}
       {/* A merged (master) document: the files it was made from, each in the format it was uploaded in. */}
       {onOriginalById && originals.length ? (
         <div className="grid gap-1.5 border-t border-ink/8 pt-3">
-          <p className="m-0 text-xs font-semibold text-soft-ink">Original files this was made from</p>
+          <p className="m-0 text-xs font-semibold text-soft-ink">{t("courses.dp.originals")}</p>
           {originals.map((entry) => (
-            <button key={entry.id} type="button" className={`${ghostBtn} justify-start`} title={`Download ${entry.name} as it was uploaded`} onClick={async () => { const problem = await onOriginalById(entry.id); if (problem) onError?.(problem); }}>
+            <button key={entry.id} type="button" className={`${ghostBtn} justify-start`} title={t("courses.dp.asUploaded", { name: entry.name })} onClick={async () => { const problem = await onOriginalById(entry.id); if (problem) onError?.(problem); }}>
               <span className="truncate">⤓ {entry.name}</span>
             </button>
           ))}

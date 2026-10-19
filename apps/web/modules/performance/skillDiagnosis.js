@@ -1,4 +1,5 @@
 import { normaliseSkillIds, skillById, skillLabel, toSkillId, skillsForQuestion } from "../skills/taxonomy.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * Topic or skill?
@@ -22,7 +23,7 @@ export const THRESHOLDS = { weak: 0.65, minSkill: 4, minTopic: 4, minClean: 3, g
 const ratio = (right, total) => (total ? right / total : null);
 
 /** The graded answers of a set of attempts as flat rows: { topic, skills[], correct, prompt, at }. */
-export function diagnosisRows(attempts = []) {
+export function diagnosisRows(attempts = [], t = tEn) {
   const rows = [];
   for (const attempt of attempts) {
     for (const result of attempt.results || []) {
@@ -35,7 +36,7 @@ export function diagnosisRows(attempts = []) {
       const failed = result.correct === false ? toSkillId(result.failedSkill) : null;
       const blame = failed ? [failed] : [];
       if (failed && !skills.includes(failed)) skills = [...skills, failed];
-      rows.push({ topic: String(result.topic || result.group || "Other"), skills, blame, correct: result.correct === true, prompt: String(result.prompt || ""), at: attempt.at || "" });
+      rows.push({ topic: String(result.topic || result.group || t("progress.diag.other")), skills, blame, correct: result.correct === true, prompt: String(result.prompt || ""), at: attempt.at || "" });
     }
   }
   return rows;
@@ -69,7 +70,7 @@ export function skillStats(rows, thresholds = THRESHOLDS) {
  * The verdict for every topic: "ok", "skill", "topic", "both" or "unclear", with the weak skills
  * involved and one plain sentence saying why.
  */
-export function diagnoseTopics(rows, skills = skillStats(rows), thresholds = THRESHOLDS) {
+export function diagnoseTopics(rows, skills = skillStats(rows), thresholds = THRESHOLDS, t = tEn) {
   const weakIds = new Set(skills.filter((skill) => skill.weak).map((skill) => skill.id));
   const topics = [...new Set(rows.map((row) => row.topic))];
   return topics.map((topic) => {
@@ -77,7 +78,7 @@ export function diagnoseTopics(rows, skills = skillStats(rows), thresholds = THR
     const acc = accuracyOf(own);
     const wrong = own.filter((row) => !row.correct);
     const base = { topic, asked: own.length, wrong: wrong.length, acc, verdict: "ok", skills: [], skillShare: 0, cleanAcc: null, reason: "" };
-    if (own.length < thresholds.minTopic) return { ...base, verdict: wrong.length ? "unclear" : "ok", reason: wrong.length ? `Only ${own.length} answer${own.length === 1 ? "" : "s"} so far, not enough to say whether it is the topic or a skill.` : "" };
+    if (own.length < thresholds.minTopic) return { ...base, verdict: wrong.length ? "unclear" : "ok", reason: wrong.length ? t.plural("progress.diag.few", own.length) : "" };
     if (acc >= thresholds.weak) return base;
     const onWeak = wrong.filter((row) => (row.blame?.length ? row.blame : row.skills).some((id) => weakIds.has(id)));
     const skillShare = wrong.length ? onWeak.length / wrong.length : 0;
@@ -87,15 +88,15 @@ export function diagnoseTopics(rows, skills = skillStats(rows), thresholds = THR
     const lead = skillLabel(involved[0] || "").toLowerCase();
     let verdict; let reason;
     if (!involved.length || skillShare < 0.4) {
-      verdict = "topic"; reason = "The mistakes are spread over the questions whatever skills they need, so the topic itself needs re-teaching.";
+      verdict = "topic"; reason = t("progress.diag.spread");
     } else if (skillShare >= 0.6 && (cleanAcc === null || cleanAcc >= 0.7)) {
-      verdict = "skill"; reason = `${onWeak.length} of ${wrong.length} mistakes involve ${lead}${cleanAcc !== null ? `, and the questions without it go fine (${Math.round(cleanAcc * 100)}%)` : ""}.`;
+      verdict = "skill"; reason = cleanAcc !== null ? t("progress.diag.skillClean", { onWeak: onWeak.length, wrong: wrong.length, lead, pct: Math.round(cleanAcc * 100) }) : t("progress.diag.skill", { onWeak: onWeak.length, wrong: wrong.length, lead });
     } else if (cleanAcc !== null && cleanAcc < thresholds.weak) {
-      verdict = "both"; reason = `${onWeak.length} of ${wrong.length} mistakes involve ${lead}, but the questions that avoid it also go wrong (${Math.round(cleanAcc * 100)}%).`;
+      verdict = "both"; reason = t("progress.diag.both", { onWeak: onWeak.length, wrong: wrong.length, lead, pct: Math.round(cleanAcc * 100) });
     } else if (skillShare >= 0.5) {
-      verdict = "skill"; reason = `${onWeak.length} of ${wrong.length} mistakes involve ${lead}.`;
+      verdict = "skill"; reason = t("progress.diag.skill", { onWeak: onWeak.length, wrong: wrong.length, lead });
     } else {
-      verdict = "unclear"; reason = "The mistakes point partly at a skill and partly at the topic, and there are too few other answers to separate them.";
+      verdict = "unclear"; reason = t("progress.diag.unclear");
     }
     return { ...base, verdict, skills: involved, skillShare, cleanAcc, reason };
   }).sort((a, b) => (a.acc ?? 1) - (b.acc ?? 1));
@@ -120,36 +121,36 @@ export function skillMatrix(rows, { maxTopics = 8, maxSkills = 8 } = {}) {
 }
 
 /** Everything the screen and the coach need, from the attempts. */
-export function diagnoseSkills(attempts = [], thresholds = THRESHOLDS) {
-  const rows = diagnosisRows(attempts);
+export function diagnoseSkills(attempts = [], thresholds = THRESHOLDS, t = tEn) {
+  const rows = diagnosisRows(attempts, t);
   const skills = skillStats(rows, thresholds);
-  const topics = diagnoseTopics(rows, skills, thresholds);
+  const topics = diagnoseTopics(rows, skills, thresholds, t);
   const weakSkills = skills.filter((skill) => skill.weak).map((skill) => ({
     ...skill,
     // The topics this skill is the main cause of: fixing it lifts all of them at once.
     lifts: topics.filter((topic) => (topic.verdict === "skill" || topic.verdict === "both") && topic.skills.includes(skill.id)).map((topic) => topic.topic)
   }));
-  return { rows: rows.length, skills, weakSkills, topics, matrix: skillMatrix(rows), headline: headlineOf(weakSkills, topics) };
+  return { rows: rows.length, skills, weakSkills, topics, matrix: skillMatrix(rows), headline: headlineOf(weakSkills, topics, t) };
 }
 
 /** One plain sentence: the single most useful thing the grid says. */
-export function headlineOf(weakSkills, topics) {
+export function headlineOf(weakSkills, topics, t = tEn) {
   const lead = weakSkills.find((skill) => skill.lifts.length) || weakSkills[0];
-  if (lead && lead.lifts.length) return `${lead.label} is holding back ${lead.lifts.length === 1 ? lead.lifts[0] : `${lead.lifts.length} topics`}: fix the skill and ${lead.lifts.length === 1 ? "that topic" : "they"} should follow.`;
-  if (lead) return `${lead.label} is your weakest skill (${Math.round(lead.acc * 100)}% right when a question needs it).`;
+  if (lead && lead.lifts.length) return lead.lifts.length === 1 ? t("progress.diag.h.holdOne", { label: lead.label, topic: lead.lifts[0] }) : t("progress.diag.h.holdMany", { label: lead.label, count: lead.lifts.length });
+  if (lead) return t("progress.diag.h.weakest", { label: lead.label, pct: Math.round(lead.acc * 100) });
   const weakTopic = topics.find((topic) => topic.verdict === "topic");
-  if (weakTopic) return `${weakTopic.topic} is a topic gap, not a skill gap: re-read the material before practising more.`;
-  return topics.some((topic) => topic.verdict === "unclear") ? "A few more answers and Luna can tell topic gaps from skill gaps." : "No weak skill or topic stands out.";
+  if (weakTopic) return t("progress.diag.h.topicGap", { topic: weakTopic.topic });
+  return topics.some((topic) => topic.verdict === "unclear") ? t("progress.diag.h.fewMore") : t("progress.diag.h.none");
 }
 
 /**
  * The next steps the diagnosis implies, most useful first. A skill gap gets a refresher on the skill
  * (then the topic), a topic gap gets re-teaching, "both" gets the skill first.
  */
-export function diagnosisActions(diagnosis, max = 4) {
+export function diagnosisActions(diagnosis, max = 4, t = tEn) {
   const actions = [];
   for (const skill of diagnosis.weakSkills || []) {
-    actions.push({ kind: "skill-primer", skill: skill.id, skillLabel: skill.label, topics: skill.lifts.length ? skill.lifts : skill.wrongTopics.slice(0, 3), weight: skill.wrong, why: `${Math.round(skill.acc * 100)}% right when a question needs ${skill.label.toLowerCase()}${skill.accWithout !== null ? ` vs ${Math.round(skill.accWithout * 100)}% when it does not` : ""}.` });
+    actions.push({ kind: "skill-primer", skill: skill.id, skillLabel: skill.label, topics: skill.lifts.length ? skill.lifts : skill.wrongTopics.slice(0, 3), weight: skill.wrong, why: skill.accWithout !== null ? t("progress.diag.why.vs", { pct: Math.round(skill.acc * 100), skill: skill.label.toLowerCase(), without: Math.round(skill.accWithout * 100) }) : t("progress.diag.why", { pct: Math.round(skill.acc * 100), skill: skill.label.toLowerCase() }) });
   }
   for (const topic of diagnosis.topics || []) {
     if (topic.verdict === "topic" || topic.verdict === "both") actions.push({ kind: "reteach", topic: topic.topic, topics: [topic.topic], weight: topic.wrong, why: topic.reason });

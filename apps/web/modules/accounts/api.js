@@ -62,6 +62,13 @@ export const accountsApi = {
   removeGroupMembers: (groupId, memberIds) => post("/api/accounts/groups", { action: "removeMembers", groupId, memberIds }),
   setMemberGroups: (memberId, groupIds) => post("/api/accounts/groups", { action: "setMemberGroups", memberId, groupIds }),
   groupMembers: ({ groupId, studentIds, offset = 0, limit = 10 }) => call(`/api/accounts/linked/members?${groupId ? `groupId=${encodeURIComponent(groupId)}` : `studentIds=${encodeURIComponent((studentIds || []).join(","))}`}&offset=${offset}&limit=${limit}`),
+  // class join codes (teacher creates a class and gets a code; a student enters it)
+  checkClassCode: (code) => post("/api/accounts/classes/check", { code }),
+  classes: () => call("/api/accounts/classes"),
+  createClass: ({ name, schoolConsent }) => post("/api/accounts/classes", { action: "create", name, schoolConsent }),
+  regenerateClassCode: (groupId) => post("/api/accounts/classes", { action: "regenerate", groupId }),
+  setClassEnabled: (groupId, enabled) => post("/api/accounts/classes", { action: enabled ? "enable" : "disable", groupId }),
+  joinClass: (code) => post("/api/accounts/classes", { action: "join", code }),
   // exam dates (teacher / parent send; students receive)
   examDates: () => call("/api/accounts/exam-dates"),
   sendExamDate: (payload) => post("/api/accounts/exam-dates", { action: "send", ...payload }),
@@ -73,3 +80,6 @@ export const accountsApi = {
 };
 
 export const ROLE_LABEL = { student: "Student", teacher: "Teacher", parent: "Parent" };
+
+/** The role in the UI language (uses shell.role.*); an unknown role is returned as it came. */
+export const roleLabel = (role, t) => (ROLE_LABEL[role] ? t(`shell.role.${role}`) : role);

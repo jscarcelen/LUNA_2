@@ -141,7 +141,7 @@ export function highlightAt(root, anchors, x, y) {
  * The reading page as standalone HTML with the highlights drawn in (and, optionally, the notes
  * listed under the text as numbered footnotes). Works on a copy: the page being read is not touched.
  */
-export function markedHtml(root, anchors = [], { notes = true } = {}) {
+export function markedHtml(root, anchors = [], { notes = true, heading = "My notes" } = {}) {
   const copy = root.cloneNode(true);
   const full = copy.textContent || "";
   const colour = (id) => HIGHLIGHT_COLORS.find((entry) => entry.id === id)?.css || "#fff176";
@@ -182,7 +182,7 @@ export function markedHtml(root, anchors = [], { notes = true } = {}) {
     }
   }
   const footnotes = noted.length
-    ? `<section class="luna-notes"><h2>My notes</h2><ol>${noted.map((anchor) => `<li><em>“${String(anchor.text).slice(0, 120).replace(/</g, "&lt;")}”</em><br>${String(anchor.note).replace(/</g, "&lt;").replace(/\n/g, "<br>")}</li>`).join("")}</ol></section>`
+    ? `<section class="luna-notes"><h2>${String(heading).replace(/</g, "&lt;")}</h2><ol>${noted.map((anchor) => `<li><em>“${String(anchor.text).slice(0, 120).replace(/</g, "&lt;")}”</em><br>${String(anchor.note).replace(/</g, "&lt;").replace(/\n/g, "<br>")}</li>`).join("")}</ol></section>`
     : "";
   return copy.innerHTML + footnotes;
 }

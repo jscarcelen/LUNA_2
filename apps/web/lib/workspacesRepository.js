@@ -923,19 +923,25 @@ async function supportsSubjectColor(client) {
   return subjectColorSupported;
 }
 
+// Each "does this column exist" probe runs once per process: the promise is memoised, so concurrent cold requests share
+// one query instead of each running all eleven, and the probes of one request run in parallel.
+const probeMemo = new Map();
+function probeOnce(probe, client) {
+  if (!probeMemo.has(probe)) {
+    probeMemo.set(probe, Promise.resolve(probe(client)).catch((error) => { probeMemo.delete(probe); throw error; }));
+  }
+  return probeMemo.get(probe);
+}
+
 export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const client = createSupabaseAdminClient();
-  const hasFolderHierarchy = await supportsFolderHierarchy(client);
-  const hasDocumentFolders = await supportsDocumentFolders(client);
-  const hasDocumentSourceType = await supportsDocumentSourceType(client);
-  const hasDocumentReviewFields = await supportsDocumentReviewFields(client);
-  const hasDocumentReviewEnhancementFields = await supportsDocumentReviewEnhancementFields(client);
-  const hasDocumentSourceVisualFields = await supportsDocumentSourceVisualFields(client);
-  const hasDocumentBlockFields = await supportsDocumentBlockFields(client);
-  const hasGeneratedDocumentExports = await supportsGeneratedDocumentExports(client);
-  const hasTopicTagColor = await supportsTopicTagColor(client);
-  const hasWorkspaceColor = await supportsWorkspaceColor(client);
-  const hasSubjectColor = await supportsSubjectColor(client);
+  const [
+    hasFolderHierarchy, hasDocumentFolders, hasDocumentSourceType, hasDocumentReviewFields, hasDocumentReviewEnhancementFields,
+    hasDocumentSourceVisualFields, hasDocumentBlockFields, hasGeneratedDocumentExports, hasTopicTagColor, hasWorkspaceColor, hasSubjectColor
+  ] = await Promise.all([
+    supportsFolderHierarchy, supportsDocumentFolders, supportsDocumentSourceType, supportsDocumentReviewFields, supportsDocumentReviewEnhancementFields,
+    supportsDocumentSourceVisualFields, supportsDocumentBlockFields, supportsGeneratedDocumentExports, supportsTopicTagColor, supportsWorkspaceColor, supportsSubjectColor
+  ].map((probe) => probeOnce(probe, client)));
 
   const { data: workspaces, error: wsError } = await client
     .from("workspaces")
@@ -1000,37 +1006,25 @@ export async function listWorkspaceTree(ownerUserId = getDemoOwnerUserId()) {
   const docs = docsRes.data || [];
   const docIds = docs.map((row) => row.id);
 
-  const blockMetaRes = docIds.length && hasDocumentBlockFields
-    ? await client
-      .from("documents")
-      .select("id, content_template_id, content_blocks_json, content_blocks_schema_version")
-      .in("id", docIds)
-    : { data: [], error: null };
-
-  const docTagsRes = docIds.length
-    ? await client
-      .from("document_tags")
-      .select("document_id, topic_tag_id, topic_tags(id, tag)")
-      .in("document_id", docIds)
-    : { data: [], error: null };
-
-  const docFoldersRes = docIds.length && hasDocumentFolders
-    ? await client
-      .from("document_folders")
-      .select("document_id, folder_id")
-      .in("document_id", docIds)
-    : { data: [], error: null };
+  const none = { data: [], error: null };
+  const [blockMetaRes, docTagsRes, docFoldersRes, generatedExportRes] = await Promise.all([
+    docIds.length && hasDocumentBlockFields
+      ? client.from("documents").select("id, content_template_id, content_blocks_json, content_blocks_schema_version").in("id", docIds)
+      : none,
+    docIds.length
+      ? client.from("document_tags").select("document_id, topic_tag_id, topic_tags(id, tag)").in("document_id", docIds)
+      : none,
+    docIds.length && hasDocumentFolders
+      ? client.from("document_folders").select("document_id, folder_id").in("document_id", docIds)
+      : none,
+    docIds.length && hasGeneratedDocumentExports
+      ? client.from("generated_document_exports").select("document_id, format").in("document_id", docIds)
+      : none
+  ]);
 
   if (docTagsRes.error) throw docTagsRes.error;
   if (docFoldersRes.error) throw docFoldersRes.error;
   if (blockMetaRes.error) throw blockMetaRes.error;
-
-  const generatedExportRes = docIds.length && hasGeneratedDocumentExports
-    ? await client
-      .from("generated_document_exports")
-      .select("document_id, format")
-      .in("document_id", docIds)
-    : { data: [], error: null };
 
   if (generatedExportRes.error) throw generatedExportRes.error;
 

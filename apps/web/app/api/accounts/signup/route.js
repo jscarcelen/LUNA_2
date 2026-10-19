@@ -8,6 +8,11 @@
  * assign, and requests other people made to this address are NOT attached; the link requests typed here are
  * kept and sent when the email is confirmed. On a database without the verification migration this
  * degrades to the previous behaviour (no phone stored, no email, requests handled immediately).
+ *
+ * Optional `classCode` (students only): a teacher's class code. It is checked BEFORE the account is created (a wrong code
+ * creates nothing); a valid one connects the new student to the teacher already accepted and adds them to the class.
+ * A student under 14 may sign up here only with a code whose class carries the school's parental-consent confirmation
+ * (lib/classCodes.js `decideClassJoin`); otherwise the guardian-email flow applies (`needsGuardian`).
  */
 import {
   LinkError,
@@ -32,6 +37,8 @@ import { MAX_QUEUED_INVITES, sendVerificationEmail } from "../../../../lib/accou
 import { clientIp, errorResponse, json, rejectCrossSite, rejectUnconfigured } from "../../../../lib/accountsApi.js";
 import { publicBaseUrl } from "../../../../lib/mailer.js";
 import { normalizePhone } from "../../../../lib/phone.js";
+import { assertCanJoinOnSignup, joinClassWithRow } from "../../../../lib/classesRepository.js";
+import { normalizeClassCode } from "../../../../lib/classCodes.js";
 import { sessionCookieFor } from "../../../../lib/session.js";
 
 export const runtime = "nodejs";
@@ -64,11 +71,12 @@ export async function POST(request) {
   // Age gate (GDPR/LOPDGDD art. 7, COPPA): everyone gives a birth date. Under 14 never gets an account here: a parent or
   // guardian consents first (/api/accounts/guardian/request). Until the legal migration is applied the old optional age is used.
   const legal = await supportsLegal();
+  const classCodeTyped = role === "student" && String(body?.classCode || "").trim() !== "";
   const birthDate = parseBirthDate(body?.birthDate);
   const ownAge = birthDate ? ageFromBirthDate(birthDate) : null;
   if (legal) {
     if (!birthDate) return json({ error: "Enter your birth date.", field: "birthDate" }, 400);
-    if (needsGuardianConsent(ownAge)) return json({ error: "Under 14, a parent or guardian has to agree first.", needsGuardian: true, field: "birthDate" }, 403);
+    if (needsGuardianConsent(ownAge) && !classCodeTyped) return json({ error: "Under 14, a parent or guardian has to agree first.", needsGuardian: true, field: "birthDate" }, 403);
     if (body?.acceptTerms !== true) return json({ error: "Accept the Terms of Service and the Privacy Policy to continue.", field: "acceptTerms" }, 400);
   }
   const age = ownAge ?? Number(body?.age);
@@ -79,6 +87,17 @@ export async function POST(request) {
   if (!phone.ok) return json({ error: phone.error, field: "phone" }, 400);
   try {
     resolveSessionSecret(); // fail before creating anything if production has no session secret
+    // A class code is validated first, so a wrong one (or an under-14 without school consent) creates no account.
+    let classJoin = null;
+    if (classCodeTyped) {
+      if (!normalizeClassCode(body.classCode)) return json({ error: "That class code did not work. Check it with your teacher.", field: "classCode" }, 400);
+      try {
+        classJoin = await assertCanJoinOnSignup(body.classCode, { age: ownAge, address: ip });
+      } catch (error) {
+        if (error instanceof LinkError && !error.setup) return json({ error: error.message, field: "classCode", needsGuardian: Boolean(error.needsGuardian) }, error.status);
+        throw error;
+      }
+    }
     const verification = await supportsVerification();
     if (verification && (await findAccountIdByPhone(phone.e164))) return json({ error: "That phone number is already linked to another account.", field: "phone" }, 409);
 
@@ -105,6 +124,17 @@ export async function POST(request) {
     await ensureFirstWorkspace(account.id);
     await attachPendingLinks(account); // does nothing until the email is confirmed (and keeps the old behaviour on a legacy database)
 
+    let classResult = null;
+    if (classJoin) {
+      try {
+        const joined = await joinClassWithRow(account, classJoin.row, classJoin.approval);
+        classResult = { ok: true, className: joined.className, approval: joined.approval };
+      } catch (error) {
+        console.warn("[api/accounts/signup] could not join the class:", error?.message || error);
+        classResult = { ok: false, error: error instanceof LinkError ? error.message : "Could not join the class. Enter the code again in People." };
+      }
+    }
+
     const baseUrl = publicBaseUrl(request);
     const invites = [];
     let confirmation = null;
@@ -127,7 +157,7 @@ export async function POST(request) {
       }
     }
 
-    const response = json({ account: ownAccount(account), invites, confirmation, invitesQueued: verification ? queueable.length : 0 });
+    const response = json({ account: ownAccount(account), invites, confirmation, invitesQueued: verification ? queueable.length : 0, classJoin: classResult });
     response.headers.append("Set-Cookie", sessionCookieFor(account.id, request));
     return response;
   } catch (error) {

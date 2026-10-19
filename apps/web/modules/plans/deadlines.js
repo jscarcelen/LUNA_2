@@ -12,6 +12,8 @@
  * exist both are shown, and an imposed deadline ranks above an equal own one (`compareDeadlines`).
  */
 
+import { tEn } from "../../lib/i18n/index.js";
+
 export const SETBY_SENDER = "sender";
 export const SETBY_SELF = "self";
 /** Deadlines that follow a teacher's exam date are of this kind. */
@@ -21,11 +23,12 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const text = (value) => String(value || "").trim();
 
 /** "2026-10-24" -> "24 Oct" (fixed words: the same on the server, in emails and in tests). */
-export function shortDate(date) {
+export function shortDate(date, t = null) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(date));
   if (!match) return "";
   const month = MONTHS[Number(match[2]) - 1];
-  return month ? `${Number(match[3])} ${month}` : "";
+  // `t` (from useT()) gives the month words in the UI language; without it the fixed English words are used.
+  return month ? `${Number(match[3])} ${t ? t(`common.month.${Number(match[2])}`) : month}` : "";
 }
 
 /** "due 24 Oct, set by Prof. Rivera" / "due 24 Oct (your deadline)": the words used in notifications and emails. */
@@ -48,14 +51,14 @@ export const selfSetBy = () => ({ kind: SETBY_SELF });
  *   (or live share) from another account: its deadlines that do not say otherwise were set by that person.
  * @returns {{ imposed: boolean, locked: boolean, by: string, byId: string, label: string, tooltip: string }}
  */
-export function deadlineOrigin(deadline, context = {}) {
+export function deadlineOrigin(deadline, context = {}, t = tEn) {
   const received = context?.receivedFrom || null;
   const explicit = deadline?.setBy?.kind;
   const imposed = explicit === SETBY_SENDER || (Boolean(received) && explicit !== SETBY_SELF);
-  if (!imposed) return { imposed: false, locked: false, by: "", byId: "", label: "Your deadline", tooltip: "You set this deadline: you can change or remove it." };
-  const by = text(deadline?.setBy?.name) || text(received?.name) || "your teacher";
+  if (!imposed) return { imposed: false, locked: false, by: "", byId: "", label: t("plans.origin.own"), tooltip: t("plans.origin.ownTip") };
+  const by = text(deadline?.setBy?.name) || text(received?.name) || t("plans.origin.yourTeacher");
   const byId = text(deadline?.setBy?.accountId) || text(received?.id);
-  return { imposed: true, locked: true, by, byId, label: by, tooltip: `Set by ${by}. You cannot change it, but you can add your own earlier deadline next to it.` };
+  return { imposed: true, locked: true, by, byId, label: by, tooltip: t("plans.origin.setBy", { by }) };
 }
 
 /** Earliest first; on the same date the imposed one first (so it is the one a card shows). */

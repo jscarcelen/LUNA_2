@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { displayName } from "./displayName";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * The documents of the selected folder, as a grid of cards or an indented list.
@@ -24,8 +26,9 @@ export function DocumentBrowser({
   renderMeta,
   renderActions,
   marquee = false,
-  emptyText = "Nothing here yet."
+  emptyText
 }) {
+  const t = useT();
   const [clipboard, setClipboard] = useState([]);
   const [band, setBand] = useState(null);
   const lastIndex = useRef(-1);
@@ -84,7 +87,7 @@ export function DocumentBrowser({
       if (meta && event.key === "v" && clipboard.length && onCopy) { onCopy(clipboard); event.preventDefault(); }
       if (meta && event.key === "a" && documents.length) { onSelectionChange?.(documents.map((item) => item.id)); event.preventDefault(); }
       if ((event.key === "Backspace" || event.key === "Delete") && selectedIds.length && onDelete) {
-        if (window.confirm(`Delete ${selectedIds.length} item${selectedIds.length === 1 ? "" : "s"}?`)) onDelete(selectedIds);
+        if (window.confirm(t.plural("courses.browser.confirmDelete", selectedIds.length))) onDelete(selectedIds);
         event.preventDefault();
       }
     }
@@ -99,29 +102,29 @@ export function DocumentBrowser({
     event.dataTransfer.effectAllowed = "move";
   }
 
-  if (!documents.length) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{emptyText}</p>;
+  if (!documents.length) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{emptyText ?? t("courses.browser.empty")}</p>;
 
   return (
     <div className="grid gap-2">
       {selectedIds.length ? (
         <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/50 px-3 py-2 text-xs">
-          <span className="font-semibold text-[var(--accent-ink)]">{selectedIds.length} selected</span>
+          <span className="font-semibold text-[var(--accent-ink)]">{t("courses.browser.selected", { count: selectedIds.length })}</span>
           {onMove ? (
             <select
               className="rounded-lg border border-ink/15 bg-white px-2 py-1 text-xs"
               value=""
               onChange={(event) => { onMove(selectedIds, event.target.value); }}
             >
-              <option value="">Move to…</option>
-              <option value="">Unfiled</option>
+              <option value="">{t("courses.browser.moveTo")}</option>
+              <option value="">{t("courses.unfiled")}</option>
               {folders.map((folder) => <option key={folder.id} value={folder.id}>📁 {folder.name}</option>)}
             </select>
           ) : null}
-          {onCopy ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => setClipboard(selectedIds)}>Copy</button> : null}
-          {onCopy && clipboard.length ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onCopy(clipboard)}>Paste {clipboard.length} here</button> : null}
-          {onDownload ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onDownload(selectedIds)}>⤓ Download</button> : null}
-          {onDelete ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete ${selectedIds.length} item${selectedIds.length === 1 ? "" : "s"}?`)) onDelete(selectedIds); }}>Delete</button> : null}
-          <button type="button" className="ml-auto text-soft-ink hover:underline" onClick={() => onSelectionChange?.([])}>Clear</button>
+          {onCopy ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => setClipboard(selectedIds)}>{t("common.copy")}</button> : null}
+          {onCopy && clipboard.length ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onCopy(clipboard)}>{t("courses.browser.paste", { count: clipboard.length })}</button> : null}
+          {onDownload ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onDownload(selectedIds)}>⤓ {t("common.download")}</button> : null}
+          {onDelete ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold text-[var(--color-danger)]" onClick={() => { if (window.confirm(t.plural("courses.browser.confirmDelete", selectedIds.length))) onDelete(selectedIds); }}>{t("common.delete")}</button> : null}
+          <button type="button" className="ml-auto text-soft-ink hover:underline" onClick={() => onSelectionChange?.([])}>{t("courses.browser.clear")}</button>
         </div>
       ) : null}
 
@@ -141,7 +144,7 @@ export function DocumentBrowser({
               <article key={document.id} {...common} className={`cursor-pointer rounded-2xl border p-3 transition ${isSelected ? "border-[var(--accent)] bg-[var(--accent-soft)]/40" : "border-ink/10 bg-white hover:border-ink/20"}`}>
                 {renderCard ? renderCard(document, isSelected) : (
                   <>
-                    <p className="m-0 truncate text-sm font-semibold text-ink">{document.name}</p>
+                    <p className="m-0 truncate text-sm font-semibold text-ink">{displayName(document.name)}</p>
                     {renderMeta ? <div className="mt-1">{renderMeta(document)}</div> : <p className="m-0 mt-1 line-clamp-2 text-xs text-soft-ink">{document.preview || ""}</p>}
                     {renderActions ? <div className="mt-2">{renderActions(document)}</div> : null}
                   </>
@@ -153,15 +156,15 @@ export function DocumentBrowser({
             <div key={document.id} {...common} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 transition ${isSelected ? "border-[var(--accent)] bg-[var(--accent-soft)]/40" : "border-transparent hover:bg-[var(--surface-soft)]"}`}>
               <span aria-hidden className="text-sm">{document.sourceType === "generated" ? "✨" : "📄"}</span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium text-ink">{document.name}</span>
+                <span className="block truncate text-sm font-medium text-ink">{displayName(document.name)}</span>
                 {renderMeta ? renderMeta(document) : <span className="block truncate text-[11px] text-soft-ink">{document.preview || ""}</span>}
               </span>
-              {renderActions ? renderActions(document) : (onOpen ? <button type="button" className="shrink-0 rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink" onClick={(event) => { event.stopPropagation(); onOpen(document); }}>Open</button> : null)}
+              {renderActions ? renderActions(document) : (onOpen ? <button type="button" className="shrink-0 rounded-full border border-ink/15 px-2.5 py-1 text-[11px] font-semibold text-ink" onClick={(event) => { event.stopPropagation(); onOpen(document); }}>{t("common.open")}</button> : null)}
             </div>
           );
         })}
       </div>
-      <p className="m-0 text-[11px] text-soft-ink">Click to select · ⇧ click for a range · ⌘ click to add{marquee ? " · drag across empty space to select many" : ""} · drag onto a folder to move · ⌘C / ⌘V to copy into another folder</p>
+      <p className="m-0 text-[11px] text-soft-ink">{t("courses.browser.hint")}{marquee ? ` · ${t("courses.browser.hintMarquee")}` : ""} · {t("courses.browser.hintEnd")}</p>
     </div>
   );
 }

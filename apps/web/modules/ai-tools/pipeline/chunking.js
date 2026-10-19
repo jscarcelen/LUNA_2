@@ -1,3 +1,4 @@
+import { splitAfterSentenceEnd } from "../../../lib/regexCompat.js";
 const STOPWORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "in", "is", "it", "of", "on", "or", "that", "the", "this", "to", "was", "with", "which", "what", "when", "where", "who", "why", "how", "your", "their", "then", "than", "into", "about", "over", "under", "after", "before"
 ]);
@@ -255,8 +256,7 @@ function splitUnitBySentences(text, maxTokens) {
   const normalized = String(text || "").trim();
   if (!normalized) return [];
 
-  const sentences = normalized
-    .split(/(?<=[.!?])\s+(?=[A-Z0-9(["'])/)
+  const sentences = splitAfterSentenceEnd(normalized, { after: /\s+(?=[A-Z0-9(["'])/g })
     .map((sentence) => sentence.trim())
     .filter(Boolean);
 

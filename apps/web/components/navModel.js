@@ -10,6 +10,12 @@
  * file only says which section a page belongs to, so links, history and old bookmarks do not break. Pure, tested.
  */
 
+import { tEn } from "../lib/i18n/index.js";
+
+/**
+ * Labels are translated with an optional `t` (from useT()); without it they are English, exactly as before.
+ * The English objects below stay as the fallback and the source of the `nav.*` messages.
+ */
 export const SECTION_INFO = {
   dashboard: { label: "Home", icon: "⌂", landing: "dashboard" },
   study: { label: "Study", icon: "📚", landing: "workspaces" },
@@ -40,12 +46,21 @@ export function sectionsFor(role = "student") {
 
 const HOME_LABEL = { student: "Home", teacher: "Classes", parent: "Children" };
 
+/**
+ * The page a section opens. Progress opens on "My students" / "My children" for a teacher or parent with an account:
+ * their own stats are empty, the people they follow are the point.
+ */
+export function landingOf(section, role = "student", account = false) {
+  if (section === "progress" && account && role !== "student") return "students";
+  return SECTION_INFO[section].landing;
+}
+
 /** The rail / bottom bar items: `{ key (the page it opens), section, label, icon }`. */
-export function navFor(role = "student") {
+export function navFor(role = "student", account = false, t = tEn) {
   return sectionsFor(role).map((section) => ({
-    key: SECTION_INFO[section].landing,
+    key: landingOf(section, role, account),
     section,
-    label: section === "dashboard" ? HOME_LABEL[role] || "Home" : SECTION_INFO[section].label,
+    label: section === "dashboard" ? t(`nav.home.${HOME_LABEL[role] ? role : "student"}`) : t(`nav.section.${section}`),
     icon: SECTION_INFO[section].icon
   }));
 }
@@ -54,24 +69,26 @@ export function navFor(role = "student") {
  * The tabs inside a section: `{ key (page), label, matches }`. Fewer than two means no tab bar.
  * `account` is true on the real platform, where teachers and parents can open their students.
  */
-export function tabsFor(section, role = "student", account = false) {
+export function tabsFor(section, role = "student", account = false, t = tEn) {
+  const tab = (key, id, label, hint) => ({ key, label: t(`nav.tab.${id}`), hint: t(`nav.tabHint.${id}`) });
   if (section === "study") return [
-    { key: "workspaces", label: "Courses", hint: "Your material, organised in folders" },
-    { key: "plans", label: "Study plans", hint: "What to study, and when" },
-    { key: "activities", label: "Practice", hint: "Quizzes, flashcards and worksheets" }
+    tab("workspaces", "courses"),
+    tab("plans", "plans"),
+    tab("activities", "practice")
   ];
   if (section === "progress") {
-    const tabs = [{ key: "performance", label: role === "student" ? "My progress" : "Overview", hint: "Accuracy, retention and what to work on" }];
-    if (account && role !== "student") tabs.push({ key: "students", label: role === "parent" ? "My children" : "My students", hint: "See how each person is doing" });
+    const tabs = [tab("performance", role === "student" ? "progressStudent" : "progressOverview")];
+    // Teachers and parents see the people they follow first: that is what Progress is for them.
+    if (account && role !== "student") tabs.unshift(tab("students", role === "parent" ? "myChildren" : "myStudents"));
     return tabs;
   }
   if (section === "create") {
     const tabs = [
-      { key: "create", label: "Make", hint: "Make a quiz, flashcards or a summary from your material" },
-      { key: "marketplace", label: "Browse tools", hint: "Tools other people made" }
+      tab("create", "make"),
+      tab("marketplace", "browse")
     ];
     // Output styles are for people who design their own look: teachers and creators.
-    if (role !== "student") tabs.splice(1, 0, { key: "templates", label: "Output styles", hint: "How generated documents look (advanced)" });
+    if (role !== "student") tabs.splice(1, 0, tab("templates", "styles"));
     return tabs;
   }
   return [];
@@ -114,3 +131,43 @@ export const PAGE_TITLES = {
   connections: "People",
   students: "My students"
 };
+
+/** Phone-sized names: the top bar has little room, so a long title would be cut ("Make study…"). */
+export const SHORT_TITLES = {
+  dashboard: "Home",
+  workspaces: "Courses",
+  plans: "Study",
+  activities: "Practice",
+  performance: "Progress",
+  create: "Make",
+  "ai-tools": "Make",
+  templates: "Styles",
+  marketplace: "Browse",
+  builder: "Build",
+  revenue: "Earnings",
+  connections: "People",
+  students: "Students"
+};
+
+const HOME_TITLE = { student: "Home", teacher: "Classes", parent: "Children" };
+const HOME_SHORT = { student: "Home", teacher: "Classes", parent: "Children" };
+
+/** The page name shown in the top bar. Tools and agents (`ai-tool:…`) pass their own name as `toolName`. */
+export function titleOf(page = "", role = "student", toolName = "", t = tEn) {
+  const value = String(page || "");
+  if (toolName) return toolName;
+  if (!value || value === "dashboard") return t(`nav.title.home.${HOME_TITLE[role] ? role : "student"}`);
+  const base = value.split("?")[0];
+  if (base === "students" && role === "parent") return t("nav.title.myChildren");
+  return PAGE_TITLES[base] ? t(`nav.title.${base}`) : sectionOf(value) === "create" ? t("nav.title.make") : t("nav.title.fallback");
+}
+
+/** The short top-bar name for a phone ("My students" → "Students", "Make something" → "Make", "Study plans" → "Study"). */
+export function shortTitleOf(page = "", role = "student", t = tEn) {
+  const value = String(page || "");
+  if (!value || value === "dashboard") return t(`nav.title.home.${HOME_SHORT[role] ? role : "student"}`);
+  const base = value.split("?")[0];
+  if (SHORT_TITLES[base]) return t(`nav.short.${base}`);
+  if (sectionOf(value) === "create") return t("nav.short.make");
+  return titleOf(value, role, "", t);
+}

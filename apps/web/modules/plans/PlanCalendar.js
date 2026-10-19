@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { addDays, calendarDays, weekStart } from "./plan";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
 
-const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 const HEAVY = 120; // minutes in a day beyond which the day is called heavy
 
 /**
@@ -18,6 +19,7 @@ const HEAVY = 120; // minutes in a day beyond which the day is called heavy
  * the days where the plans pile up so a deadline can be moved before the week arrives.
  */
 export function PlanCalendar({ rows = [], attempts = [], onOpenPlan, onMoveItem }) {
+  const t = useT();
   const [offset, setOffset] = useState(0);
   const [weeks, setWeeks] = useState(6);
   const from = useMemo(() => addDays(weekStart(new Date().toISOString().slice(0, 10)), offset * 7), [offset]);
@@ -29,21 +31,21 @@ export function PlanCalendar({ rows = [], attempts = [], onOpenPlan, onMoveItem 
     <section className={`${card} p-5`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className={kicker}>Calendar · every plan</p>
-          <p className="m-0 mt-1 text-xs text-soft-ink">Colour by plan. A day in amber is carrying more than {HEAVY} minutes — drag an item to another day to spread the load.</p>
+          <p className={kicker}>{t("plans.cal.kicker")}</p>
+          <p className="m-0 mt-1 text-xs text-soft-ink">{t("plans.cal.hint", { minutes: HEAVY })}</p>
         </div>
         <div className="flex items-center gap-1.5">
-          <button type="button" className={ghostBtn} onClick={() => setOffset((value) => value - 1)}>← Earlier</button>
-          <button type="button" className={ghostBtn} onClick={() => setOffset(0)}>Today</button>
-          <button type="button" className={ghostBtn} onClick={() => setOffset((value) => value + 1)}>Later →</button>
+          <button type="button" className={ghostBtn} onClick={() => setOffset((value) => value - 1)}>{t("plans.cal.earlier")}</button>
+          <button type="button" className={ghostBtn} onClick={() => setOffset(0)}>{t("plans.cal.today")}</button>
+          <button type="button" className={ghostBtn} onClick={() => setOffset((value) => value + 1)}>{t("plans.cal.later")}</button>
           <select className="rounded-xl border border-ink/12 bg-white px-2 py-1.5 text-xs" value={weeks} onChange={(event) => setWeeks(Number(event.target.value))}>
-            {[4, 6, 8, 12].map((value) => <option key={value} value={value}>{value} weeks</option>)}
+            {[4, 6, 8, 12].map((value) => <option key={value} value={value}>{t("plans.cal.weeks", { count: value })}</option>)}
           </select>
         </div>
       </div>
 
       <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-[0.1em] text-soft-ink">
-        {DAY_NAMES.map((name) => <span key={name}>{name}</span>)}
+        {DAY_KEYS.map((name) => <span key={name}>{t(`plans.cal.day.${name}`)}</span>)}
       </div>
       <div className="mt-1 grid grid-cols-7 gap-1">
         {days.map((day) => {
@@ -81,9 +83,9 @@ export function PlanCalendar({ rows = [], attempts = [], onOpenPlan, onMoveItem 
                     {entry.kind === "deadline" ? "★ " : ""}{entry.title}
                   </button>
                 ))}
-                {day.entries.length > 3 ? <span className="px-1 text-[9px] text-soft-ink">+{day.entries.length - 3} more</span> : null}
+                {day.entries.length > 3 ? <span className="px-1 text-[9px] text-soft-ink">{t("plans.cal.more", { count: day.entries.length - 3 })}</span> : null}
               </div>
-              {plans.length > 1 ? <p className="m-0 mt-1 px-1 text-[9px] font-semibold text-[var(--color-warn)]">{plans.length} plans</p> : null}
+              {plans.length > 1 ? <p className="m-0 mt-1 px-1 text-[9px] font-semibold text-[var(--color-warn)]">{t("plans.cal.plans", { count: plans.length })}</p> : null}
             </div>
           );
         })}

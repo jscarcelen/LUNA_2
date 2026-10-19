@@ -24,7 +24,7 @@ const WEAK_SKILL = /(analysis|analytic|an[aá]lisis|problem[ -]?solving|resoluci
 const FACT_SKILL = /(concept|definition|vocab|recall|comprehension|knowledge|fact|terminolog|memor|reading|theory|history|literature|language|concepto|definici[oó]n|vocabulario|comprensi[oó]n|recuerdo|conocimiento|teor[ií]a|historia)/i;
 
 const CALC_VERBS = /\b(calculate|calculat\w*|compute|solve|evaluate|simplify|work out|find the (?:value|area|perimeter|volume|derivative|integral|sum|product|mean|average|median|probability|percentage|length|angle|roots?|solution|gradient|slope|total|difference)|how much is|what is \d|differentiate|integrate|factori[sz]e|expand the|percentage of|probability of|standard deviation|derivative|integral of|polynomial|quadratic|logarithm|calcula|calcule|resuelve|resolver|halla|simplifica|deriva la|integra|factoriza|cu[aá]nto es|cu[aá]nto vale|cu[aá]nto suman)\b/i;
-const EXPRESSION = /\d\s*(?:[+*×÷^=/]|x(?=\s*\d)|[-−–](?=\s)|(?<=\s)[-−–])\s*\d/i;
+const EXPRESSION = /\d(?:\s*(?:[+*×÷^=/]|x(?=\s*\d)|[-−–](?=\s))|\s+[-−–])\s*\d/i;
 const DATE_RANGE = /\b(?:1\d|20)\d\d\s*[-–]\s*(?:1\d|20)\d\d\b/;
 const LATEX_OR_SYMBOL = /\\(?:frac|sqrt|sum|int|cdot|times|pi|log|sin|cos|tan)\b|√|∑|∫|\b[a-z]\s*\^\s*[\d{]/i;
 
@@ -36,10 +36,10 @@ const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 export function numbersIn(value) {
   const text = clean(value).replace(/[−–]/g, "-");
   const out = [];
-  const fraction = /(?<![\w.,/])(-?\d+)\s*\/\s*(\d+)(?![\w.,/])/g;
-  const rest = text.replace(fraction, (_, a, b) => { if (Number(b) !== 0) out.push(Number(a) / Number(b)); return " "; });
-  for (const match of rest.matchAll(/(?<![\w.,])-?\d+(?:[.,]\d+)*/g)) {
-    let raw = match[0];
+  const fraction = /(^|[^\w.,/])(-?\d+)\s*\/\s*(\d+)(?![\w.,/])/g;
+  const rest = text.replace(fraction, (_, before, a, b) => { if (Number(b) !== 0) out.push(Number(a) / Number(b)); return `${before} `; });
+  for (const match of rest.matchAll(/(^|[^\w.,])(-?\d+(?:[.,]\d+)*)/g)) {
+    let raw = match[2];
     const dots = (raw.match(/\./g) || []).length;
     const commas = (raw.match(/,/g) || []).length;
     if (dots && commas) {

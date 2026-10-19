@@ -19,14 +19,16 @@ import { SkillMap } from "./dashboard/SkillMap";
 import { LevelReport } from "./dashboard/LevelReport";
 import { latestLevelReports } from "./levelTest";
 import { coverageOf, targetsFor } from "./targets";
-import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, visiblePanels } from "./views";
-import { panelById } from "./dashboard/registry";
+import { blankView, duplicateView, exportView, importView, readViews, removeView, upsertView, viewName, visiblePanels } from "./views";
+import { panelById, panelInfo, panelTitle } from "./dashboard/registry";
 import { Customise } from "./dashboard/Customise";
 import { InfoDot, Kpi, METRIC_INFO, NextActions, card, ghostBtn, kicker, percent } from "./dashboard/parts";
 import { onTrackStatus } from "./headline";
 import { EmptyState } from "../../components/EmptyState";
 import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
+import { displayName } from "../ui/displayName";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /** A filter control never grows past this, whatever the longest option is called. */
 const field = "min-w-[9rem] max-w-[15rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
@@ -43,11 +45,14 @@ const EMPTY_FILTERS = { folder: "", agent: "", template: "", source: "", kind: "
  * "broken down", with several saved views reachable as tabs. What counts as a subject and a topic is
  * the user's own study plans — the targets they set — rather than a taxonomy Luna invents.
  */
-export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner }) {
+export function PerformancePage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onRemoveDocument, onOpenPage, onSelectSubject, onOpenLearner, viewer = "", viewingStudentId = "", studentName = "", onSendQuestions }) {
+  const t = useT();
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const documents = subject?.documents || [];
   const folders = subject?.folders || [];
   const isOwn = role === "student";
+  // A teacher or parent reading a student's page (LinkedStudentsPage): read-only; the weak-topic button sends questions (teacher) or explains how to help (parent).
+  const looking = viewer === "teacher" || viewer === "parent";
 
   const [learners, setLearners] = useState([]);
   const [learner, setLearner] = useState("");
@@ -152,28 +157,28 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     return (attempt) => map.get(attempt.resourceId) || [];
   }, [resourceByDocumentId]);
 
-  const targets = useMemo(() => targetsFor(trackBy, { plans, folderSubjectOf, conceptsOfResource, fallbackSubject: subject?.name || "" }), [trackBy, plans, folderSubjectOf, conceptsOfResource, subject]);
+  const targets = useMemo(() => targetsFor(trackBy, { plans, folderSubjectOf, conceptsOfResource, fallbackSubject: subject?.name || "", t }), [trackBy, plans, folderSubjectOf, conceptsOfResource, subject, t]);
   const evidence = useMemo(() => buildEvidence(attempts, { subjectOf: targets.subjectOf, conceptsOf: targets.conceptsOf }), [attempts, targets]);
-  const coverage = useMemo(() => coverageOf(attempts, targets.subjectOf), [attempts, targets]);
+  const coverage = useMemo(() => coverageOf(attempts, targets.subjectOf, t), [attempts, targets, t]);
 
   const topics = useMemo(() => topicMastery(evidence), [evidence]);
   const overall = useMemo(() => overallMastery(topics), [topics]);
-  const errors = useMemo(() => analyseErrors(evidence), [evidence]);
+  const errors = useMemo(() => analyseErrors(evidence, t), [evidence, t]);
   const trendPoints = useMemo(() => masteryOverTime(evidence), [evidence]);
   const measured = trendPoints.filter((point) => point.mastery !== null);
   const trendChange = { points: trendPoints, change: measured.length > 1 ? (measured[measured.length - 1].mastery - measured[0].mastery) / 100 : 0 };
-  const actions = useMemo(() => nextActions(topics, errors.byTopic), [topics, errors]);
+  const actions = useMemo(() => nextActions(topics, errors.byTopic, 3, t), [topics, errors, t]);
   // Retention = how many topics with mistakes improved in the following weeks (see errorRecovery in mastery.js).
   const retention = useMemo(() => errorRecovery(evidence), [evidence]);
   const learnerRows = useMemo(() => byLearner(evidence), [evidence]);
-  const flagged = useMemo(() => learnerRows.map((entry) => ({ ...entry, flags: attentionFlags(entry, (row) => analyseErrors(row.rows).types) })), [learnerRows]);
+  const flagged = useMemo(() => learnerRows.map((entry) => ({ ...entry, flags: attentionFlags(entry, (row) => analyseErrors(row.rows, t).types, t) })), [learnerRows, t]);
   const matrix = useMemo(() => classTopicMatrix(evidence), [evidence]);
   const classCoverage = useMemo(() => classTopicCoverage(evidence), [evidence]);
   const across = useMemo(() => learnerSubjectMatrix(evidence), [evidence]);
   const subjects = useMemo(() => {
     const map = new Map();
     for (const row of evidence) {
-      const key = row.subject || subject?.name || "This space";
+      const key = row.subject || subject?.name || t("progress.pg.thisSpace");
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(row);
     }
@@ -182,7 +187,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       const series = masteryOverTime(rows, 8).filter((point) => point.mastery !== null);
       return { subject: name, mastery: summary.mastery, trend: series.length > 1 ? (series[series.length - 1].mastery - series[0].mastery) / 100 : 0 };
     }).sort((a, b) => b.mastery - a.mastery);
-  }, [evidence, subject]);
+  }, [evidence, subject, t]);
 
   /* The study plans, most recently active first: "Topic by topic" and Luna's read follow one of them. */
   const [topicPlanId, setTopicPlanId] = useState("");
@@ -216,24 +221,24 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     const mine = goals.filter((goal) => isOwn || !learner || goal.learner === learner || !goal.learner).sort((a, b) => String(a.date).localeCompare(String(b.date)));
     return (
       <div className="grid gap-2">
-        <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => setGoalOpen((value) => !value)}>{goalOpen ? "Cancel" : "＋ Exam date or goal"}</button>
+        <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => setGoalOpen((value) => !value)}>{goalOpen ? t("common.cancel") : t("progress.pg.addGoal")}</button>
         {goalOpen ? (
           <div className="grid gap-2 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/40 p-3">
-            <input className="w-full rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-sm" value={goalDraft.title} onChange={(event) => setGoalDraft({ ...goalDraft, title: event.target.value })} placeholder="Biology midterm" />
+            <input className="w-full rounded-xl border border-ink/12 bg-white px-3 py-1.5 text-sm" value={goalDraft.title} onChange={(event) => setGoalDraft({ ...goalDraft, title: event.target.value })} placeholder={t("progress.pg.goalPlaceholder")} />
             <div className="grid grid-cols-2 gap-2">
-              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Date<input type="date" className="rounded-xl border border-ink/12 bg-white px-2 py-1.5 text-xs" value={goalDraft.date} onChange={(event) => setGoalDraft({ ...goalDraft, date: event.target.value })} /></label>
-              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Target %<input type="number" min="10" max="100" className="rounded-xl border border-ink/12 bg-white px-2 py-1.5 text-xs" value={goalDraft.targetScore} onChange={(event) => setGoalDraft({ ...goalDraft, targetScore: event.target.value })} /></label>
+              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">{t("progress.pg.date")}<input type="date" className="rounded-xl border border-ink/12 bg-white px-2 py-1.5 text-xs" value={goalDraft.date} onChange={(event) => setGoalDraft({ ...goalDraft, date: event.target.value })} /></label>
+              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">{t("progress.pg.target")}<input type="number" min="10" max="100" className="rounded-xl border border-ink/12 bg-white px-2 py-1.5 text-xs" value={goalDraft.targetScore} onChange={(event) => setGoalDraft({ ...goalDraft, targetScore: event.target.value })} /></label>
             </div>
             <div className="grid max-h-36 gap-0.5 overflow-y-auto">
               {resources.map((row) => (
                 <label key={row.document.id} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs text-ink hover:bg-white">
                   <input type="checkbox" checked={goalDraft.resourceIds.includes(row.document.id)} onChange={(event) => setGoalDraft({ ...goalDraft, resourceIds: event.target.checked ? [...goalDraft.resourceIds, row.document.id] : goalDraft.resourceIds.filter((id) => id !== row.document.id) })} />
-                  <span className="min-w-0 truncate">{row.resource.name}</span>
+                  <span className="min-w-0 truncate">{displayName(row.resource.name)}</span>
                 </label>
               ))}
-              {!resources.length ? <p className="m-0 text-xs text-soft-ink">No resources yet.</p> : null}
+              {!resources.length ? <p className="m-0 text-xs text-soft-ink">{t("progress.pg.noResources")}</p> : null}
             </div>
-            <button type="button" className={primaryBtn} disabled={busy || !goalDraft.title.trim() || !goalDraft.date} onClick={saveGoal}>{busy ? "Saving…" : "Save goal"}</button>
+            <button type="button" className={primaryBtn} disabled={busy || !goalDraft.title.trim() || !goalDraft.date} onClick={saveGoal}>{busy ? t("progress.pg.saving") : t("progress.pg.saveGoal")}</button>
           </div>
         ) : null}
         {mine.map((goal) => {
@@ -243,31 +248,31 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
             <div key={goal.documentId} className={`rounded-2xl border p-3 ${late ? "border-[rgba(255,59,48,0.35)]" : "border-ink/10"}`}>
               <p className="m-0 flex flex-wrap items-center justify-between gap-2 text-sm font-bold text-ink">
                 <span className="min-w-0 truncate">{goal.title}</span>
-                <span className={`shrink-0 text-[11px] font-semibold ${late ? "text-[var(--color-danger)]" : progress.days <= 7 ? "text-[#b25e00]" : "text-soft-ink"}`}>{late ? `${Math.abs(progress.days)} days ago` : `in ${progress.days} days`}</span>
+                <span className={`shrink-0 text-[11px] font-semibold ${late ? "text-[var(--color-danger)]" : progress.days <= 7 ? "text-[#b25e00]" : "text-soft-ink"}`}>{late ? t("progress.pg.daysAgo", { days: Math.abs(progress.days) }) : t("progress.pg.inDays", { days: progress.days })}</span>
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(progress.onTrack * 100)}%` }} /></div>
-              <p className="m-0 mt-1 text-[11px] text-soft-ink">{progress.mastered} of {progress.total} resources at target{progress.done ? ` · average ${percent(progress.average)}` : ""}</p>
-              {onRemoveDocument ? <button type="button" className={`${ghostBtn} mt-2 text-[var(--color-danger)]`} onClick={() => { if (window.confirm(`Delete the goal "${goal.title}"?`)) onRemoveDocument(goal.documentId); }}>Delete</button> : null}
+              <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("progress.pg.atTarget", { mastered: progress.mastered, total: progress.total })}{progress.done ? ` · ${t("progress.pg.average", { pct: percent(progress.average) })}` : ""}</p>
+              {onRemoveDocument ? <button type="button" className={`${ghostBtn} mt-2 text-[var(--color-danger)]`} onClick={() => { if (window.confirm(t("progress.pg.deleteGoal", { title: goal.title }))) onRemoveDocument(goal.documentId); }}>{t("common.delete")}</button> : null}
             </div>
           );
         })}
-        {!mine.length ? <p className="m-0 text-sm text-soft-ink">No dates yet. Add an exam and tick the resources that prepare for it.</p> : null}
+        {!mine.length ? <p className="m-0 text-sm text-soft-ink">{t("progress.pg.noDates")}</p> : null}
       </div>
     );
   }
 
-  const diagnosis = useMemo(() => diagnoseSkills(attempts), [attempts]);
+  const diagnosis = useMemo(() => diagnoseSkills(attempts, undefined, t), [attempts, t]);
   // The skills grid reads the whole workspace (every subject and study plan), under the same learner and date filters.
-  const overview = useMemo(() => skillOverview(workspaces.find((w) => w.id === selectedWorkspaceId), keepAttempt), [workspaces, selectedWorkspaceId, range, filters, learner, isOwn, profileName]);
+  const overview = useMemo(() => skillOverview(workspaces.find((w) => w.id === selectedWorkspaceId), keepAttempt, t), [workspaces, selectedWorkspaceId, range, filters, learner, isOwn, profileName, t]);
   // Level tests are taken before a plan exists and whatever the date range: only the learner narrows them down.
   const levelReports = useMemo(() => latestLevelReports(all.filter((attempt) => {
     if (isOwn ? false : learner && attempt.learner !== learner) return false;
     if (isOwn && attempt.learner && profileName && attempt.learner !== profileName) return false;
     return true;
-  })), [all, isOwn, learner, profileName]);
+  }), t), [all, isOwn, learner, profileName, t]);
 
   const context = {
-    role, learner, profileName, subject, evidence, topics, overall, errors, actions, retention, trendChange,
+    t, role, learner, profileName, subject, evidence, topics, overall, errors, actions, retention, trendChange,
     weeks: measured.length, subjects, flagged, matrix, coverage: classCoverage, across, stats,
     days: useMemo(() => timeline(attempts, Math.min(range || 30, 60)), [attempts, range]),
     rhythm: useMemo(() => dailyActivity(attempts, Math.min(range || 30, 45)), [attempts, range]),
@@ -278,8 +283,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     diagnosis,
     overview,
     levelReports,
-    onBuildFoundation: (report, component) => practise({ kind: "reteach", topic: component.name, title: `Build the foundation: ${component.name}`, why: `${component.right} of ${component.asked} right in the level test of ${report.title}.`, effort: "30 minutes", skill: component.skill && component.status === "start" ? component.skill : "" }),
-    onPrimer: (skill) => practise({ kind: "skill-primer", skill: skill.id, topic: (skill.lifts && skill.lifts[0]) || "", title: `Refresh: ${skill.label}`, why: skill.lifts?.length ? `${skill.label} is holding back ${skill.lifts.join(", ")}.` : `${skill.label} is your weakest skill.`, effort: "30 minutes" }),
+    onBuildFoundation: (report, component) => practise({ kind: "reteach", topic: component.name, title: t("progress.pg.buildFoundation", { name: component.name }), why: t("progress.pg.levelWhy", { right: component.right, asked: component.asked, title: report.title }), effort: "30 minutes", skill: component.skill && component.status === "start" ? component.skill : "" }),
+    onPrimer: (skill) => practise({ kind: "skill-primer", skill: skill.id, topic: (skill.lifts && skill.lifts[0]) || "", title: t("progress.pg.refresh", { label: skill.label }), why: skill.lifts?.length ? t("progress.pg.holding", { label: skill.label, topics: skill.lifts.join(", ") }) : t("progress.pg.weakest", { label: skill.label }), effort: "30 minutes" }),
     difficulties: useMemo(() => byDifficulty(attempts), [attempts]),
     times: useMemo(() => timeByKind(attempts), [attempts]),
     examMinutes: estimateExamMinutes(attempts, 20),
@@ -295,14 +300,18 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     focusPlanId: focusPlan?.id || "",
     setFocusPlanId: setTopicPlanId,
     workspaceId: selectedWorkspaceId,
+    // Set only in a teacher/parent read-only view: the linked student whose concepts and mastery are read.
+    viewingStudentId,
     selectedTopic,
     selected: topics.find((entry) => entry.topic === selectedTopic) || null,
     onSelectTopic: (topic) => setSelectedTopic(topic === selectedTopic ? "" : topic),
     // Clicking a student in a class panel filters to them; a group view (My students) also opens their individual view.
     onPickLearner: (name) => { setLearner(name); onOpenLearner?.(name); },
-    onOpenPage,
-    onPractise: (action) => practise(action),
-    onSchedule: () => onOpenPage?.("plans"),
+    onOpenPage: looking ? undefined : onOpenPage,
+    viewer,
+    studentName,
+    onPractise: viewer === "parent" ? undefined : viewer === "teacher" ? (action) => onSendQuestions?.(action) : (action) => practise(action),
+    onSchedule: looking ? undefined : () => onOpenPage?.("plans"),
     renderGoals
   };
 
@@ -352,11 +361,11 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       };
       const response = await fetch("/api/ai-tools/agent-builder", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ config }) });
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Could not generate practice.");
+      if (!response.ok) throw new Error(data.error || t("progress.pg.couldNotGenerate"));
       const items = Array.isArray(data.items) ? data.items : [];
-      if (!items.length) throw new Error("No questions were generated — try adding material to this subject first.");
+      if (!items.length) throw new Error(t("progress.pg.noQuestions"));
       // The same engine as every other activity: written, numeric and choice answers are graded, and each answer carries its skills.
-      const built = buildActivity([{ id: "items", name: "items", type: "array", children: [] }], { items }, { title: action.title || (refresher ? `Refresh: ${refresher.label}` : topic ? `Practice: ${topic}` : "Targeted practice") });
+      const built = buildActivity([{ id: "items", name: "items", type: "array", children: [] }], { items }, { title: action.title || (refresher ? t("progress.pg.refresh", { label: refresher.label }) : topic ? t("progress.pg.practiceTopic", { topic }) : t("progress.pg.targeted")) });
       const primer = String(data?.data?.primer || "").trim();
       const activity = {
         ...built,
@@ -392,7 +401,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
     setPracticeSaved((current) => ({ ...current, busy: true, status: "" }));
     try {
       const documentId = await savePractice();
-      setPracticeSaved((current) => ({ ...current, busy: false, documentId: documentId || current.documentId, status: "Saved to your workspace." }));
+      setPracticeSaved((current) => ({ ...current, busy: false, documentId: documentId || current.documentId, status: t("progress.pg.savedWs") }));
     } catch (error) {
       setPracticeSaved((current) => ({ ...current, busy: false, status: String(error.message || error) }));
     }
@@ -408,7 +417,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       const { plan: next, before } = insertPrerequisite(choice.plan, { resourceId: documentId, title: activity.title, topic, skillLabel: refresher?.label || "", minutes: 20 });
       const planContent = JSON.stringify(next, null, 2);
       await onUpdateGeneratedDocument(choice.document.id, { file: { name: choice.document.name, content: planContent, preview: choice.document.preview, sizeBytes: planContent.length } }, selectedSubjectId);
-      setPracticeSaved((current) => ({ ...current, busy: false, documentId, planName: choice.plan.name, status: before ? `Added to “${choice.plan.name}”, before “${before}”.` : `Added to “${choice.plan.name}”.` }));
+      setPracticeSaved((current) => ({ ...current, busy: false, documentId, planName: choice.plan.name, status: before ? t("progress.pg.addedBefore", { plan: choice.plan.name, before }) : t("progress.pg.added", { plan: choice.plan.name }) }));
     } catch (error) {
       setPracticeSaved((current) => ({ ...current, busy: false, status: String(error.message || error) }));
     }
@@ -416,7 +425,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
 
   function publishView() {
     const stores = readStores();
-    if (!stores.length) { setNotice("Create a store in the marketplace first — a dashboard is sold by a store, like everything else."); return; }
+    if (!stores.length) { setNotice(t("progress.pg.needStore")); return; }
     publish({
       kind: "view",
       name: view.name,
@@ -427,28 +436,28 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       payload: exportView(view),
       preview: visiblePanels(view).map((panel) => panelById(panel.id)?.title).filter(Boolean).slice(0, 4).join(" · ")
     });
-    setNotice(`“${view.name}” is on the marketplace under ${stores[0].name}.`);
+    setNotice(t("progress.pg.published", { name: viewName(view, role, t), store: stores[0].name }));
   }
 
   function importFromFile(file) {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const next = importView(reader.result, role);
+        const next = importView(reader.result, role, t);
         setViews(upsertView(role, next));
         setViewId(next.id);
-        setNotice(`Loaded “${next.name}”.`);
+        setNotice(t("progress.pg.loaded", { name: next.name }));
       } catch (error) { setNotice(error.message); }
     };
     reader.readAsText(file);
   }
 
-  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see performance.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>{t("progress.pg.select")}</p></section>;
   if (!view) return null;
 
   const panels = visiblePanels(view).map((panel) => ({ panel, definition: panelById(panel.id) })).filter((entry) => entry.definition && entry.definition.roles.includes(role));
 
-  const track = onTrackStatus(context.planSummary);
+  const track = onTrackStatus(context.planSummary, new Date(), t);
   const trackTone = { good: "text-[#2f9e5b]", warn: "text-[#b25e00]", bad: "text-[var(--color-danger)]", none: "text-soft-ink" }[track.tone];
 
   return (
@@ -456,34 +465,34 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
 
       {/* The short version: three numbers and what to work on. Everything else is under "See details". */}
-      <div className="grid gap-3 sm:grid-cols-3" aria-label="Summary">
-        <Kpi label="Accuracy" value={evidence.length ? percent(overall.accuracy) : "—"} hint={evidence.length ? `${overall.questions} questions answered` : "Answer a quiz to see this"} info={METRIC_INFO.accuracy} />
-        <Kpi label="Retention" value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? "Shows once you re-practise a topic you got wrong" : `${retention.improved} of ${retention.topics} topic${retention.topics === 1 ? "" : "s"} with mistakes improved`} info={METRIC_INFO.retention} />
-        <Kpi label="On track for the exam?" value={track.label} tone={trackTone} hint={track.detail} info={{ meaning: "Whether the steps of your most active study plan are being done on time.", formula: "On track = no late steps and the plan's date has not passed  ·  Behind = at least one late step, or the date passed with steps left" }} />
+      <div className="grid gap-3 sm:grid-cols-3" aria-label={t("progress.pg.summary")}>
+        <Kpi label={t("progress.pg.accuracy")} value={evidence.length ? percent(overall.accuracy) : "—"} hint={evidence.length ? t.plural("progress.questionsAnswered", overall.questions) : t("progress.pg.answerQuiz")} info={METRIC_INFO.accuracy} />
+        <Kpi label={t("progress.headline.retention")} value={retention.value === null ? "—" : percent(retention.value)} hint={retention.value === null ? t("progress.pg.retentionHint") : t.plural("progress.pg.improved", retention.topics, { improved: retention.improved })} info={METRIC_INFO.retention} />
+        <Kpi label={t("progress.pg.onTrackQ")} value={track.label} tone={trackTone} hint={track.detail} info={{ id: "onTrack", meaning: "Whether the steps of your most active study plan are being done on time.", formula: "On track = no late steps and the plan's date has not passed  ·  Behind = at least one late step, or the date passed with steps left" }} />
       </div>
       {levelReports.length ? (
         <div className={`${card} grid gap-3 p-5`}>
-          <p className={kicker}>Where you start</p>
+          <p className={kicker}>{panelTitle("level-tests", t)}</p>
           <LevelReport reports={levelReports} compact onBuild={context.onBuildFoundation} />
         </div>
       ) : null}
       {evidence.length && diagnosis.rows && (diagnosis.weakSkills.length || diagnosis.topics.some((topic) => topic.verdict !== "ok")) ? (
         <div className={`${card} grid gap-3 p-5`}>
-          <p className={kicker}>Topic or skill?</p>
+          <p className={kicker}>{panelTitle("skill-map", t)}</p>
           <SkillMap diagnosis={diagnosis} compact onPrimer={context.onPrimer} />
         </div>
       ) : null}
       {evidence.length ? (
         <div className={`${card} grid gap-3 p-5`}>
-          <p className={`${kicker} flex items-center gap-1.5`}>Work on these next</p>
-          {actions.length ? <NextActions actions={actions} onOpen={(action) => practise(action)} /> : <p className="m-0 text-sm text-soft-ink">Nothing is lagging right now. Keep going with your plan.</p>}
+          <p className={`${kicker} flex items-center gap-1.5`}>{t("progress.pg.workNext")}</p>
+          {actions.length ? <NextActions actions={actions} viewer={viewer} studentName={studentName} onOpen={viewer === "teacher" ? (action) => onSendQuestions?.(action) : (action) => practise(action)} /> : <p className="m-0 text-sm text-soft-ink">{t("progress.pg.nothingLagging")}</p>}
         </div>
       ) : (
-        <EmptyState title="No results yet" text={trackBy === "plan" && plans.length === 0 ? "Progress fills in as you answer quizzes. Make a study plan, then do a first quiz." : "Progress fills in as you answer quizzes and flashcards."} action="Make a quiz" onAction={() => onOpenPage?.("create")} secondary={plans.length ? undefined : "Plan it for me"} onSecondary={() => onOpenPage?.("plans?generate=1")} />
+        <EmptyState title={t("progress.pg.noResults")} text={trackBy === "plan" && plans.length === 0 ? t("progress.pg.fillsPlan") : t("progress.pg.fills")} action={looking ? undefined : t("progress.pg.makeQuiz")} onAction={() => onOpenPage?.("create")} secondary={looking || plans.length ? undefined : t("progress.pg.planIt")} onSecondary={() => onOpenPage?.("plans?generate=1")} />
       )}
 
       <details className="group" open={customising || undefined}>
-        <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>See details</summary>
+        <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("progress.pg.seeDetails")}</summary>
       <div className="mt-3 grid gap-4">
       {/* The views, as tabs: one dashboard per question you keep asking. */}
       <div className={`${card} grid gap-3 p-3`}>
@@ -496,28 +505,28 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                 onClick={() => { setViewId(entry.id); setCustomising(false); }}
                 className={`max-w-[14rem] truncate rounded-lg px-3 py-1.5 text-xs font-semibold transition ${entry.id === view.id ? "bg-ink text-white" : "text-soft-ink hover:bg-[var(--surface-soft)]"}`}
               >
-                {entry.name}
+                {viewName(entry, role, t)}
               </button>
             ))}
-            <button type="button" className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" title="A new, empty view" onClick={() => { const next = blankView(role, window.prompt("Name this view", "Before the exam") || "New view"); setViews(upsertView(role, next)); setViewId(next.id); setCustomising(true); }}>＋ View</button>
+            <button type="button" className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" title={t("progress.pg.newView")} onClick={() => { const next = blankView(role, window.prompt(t("progress.pg.nameView"), t("progress.pg.beforeExam")) || t("progress.pg.newViewName")); setViews(upsertView(role, next)); setViewId(next.id); setCustomising(true); }}>{t("progress.pg.addView")}</button>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
-            <button type="button" className={ghostBtn} onClick={() => setCustomising((value) => !value)}>{customising ? "Done" : "⚙ Arrange"}</button>
+            <button type="button" className={ghostBtn} onClick={() => setCustomising((value) => !value)}>{customising ? t("common.done") : t("progress.pg.arrange")}</button>
           </div>
         </div>
         {/* Two filters only: which study plan, and which period. */}
         <div className="flex flex-wrap items-center gap-2">
           {plans.length ? (
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
-              Study plan
+              {t("progress.pg.studyPlan")}
               <select className={field} value={planId} onChange={(event) => setPlanId(event.target.value)}>
-                <option value="">Every plan</option>
+                <option value="">{t("progress.pg.everyPlan")}</option>
                 {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
               </select>
             </label>
           ) : null}
           <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
-            Period
+            {t("progress.pg.period")}
             <select className={field} value={custom ? "custom" : String(range)} onChange={(event) => {
               const value = event.target.value;
               if (value === "custom") { setCustom(true); setRange(0); return; }
@@ -525,29 +534,29 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
               setFilters({ ...filters, from: "", to: "" });
               setRange(Number(value));
             }}>
-              {[["0", "All time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 3 months"], ["custom", "Choose dates…"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {[["0", t("progress.pg.allTime")], ["7", t("progress.pg.last7")], ["30", t("progress.pg.last30")], ["90", t("progress.pg.last90")], ["custom", t("progress.pg.chooseDates")]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           {custom ? (
             <>
-              <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} aria-label="From" title="From this date" />
-              <span className="text-xs text-soft-ink">to</span>
-              <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} aria-label="Up to" title="Up to this date" />
+              <input type="date" className={field} value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} aria-label={t("progress.pg.from")} title={t("progress.pg.fromTitle")} />
+              <span className="text-xs text-soft-ink">{t("progress.pg.to")}</span>
+              <input type="date" className={field} value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} aria-label={t("progress.pg.upTo")} title={t("progress.pg.upToTitle")} />
             </>
           ) : null}
           {!isOwn ? (
             <label className="flex items-center gap-1.5 text-[11px] font-semibold text-soft-ink">
-              {role === "teacher" ? "Student" : "Child"}
+              {role === "teacher" ? t("progress.student") : t("progress.pg.child")}
               <select className={field} value={learner} onChange={(event) => setLearner(event.target.value)}>
-                <option value="">{role === "teacher" ? "Whole class" : "All children"}</option>
+                <option value="">{role === "teacher" ? t("progress.pg.wholeClass") : t("progress.pg.allChildren")}</option>
                 {learners.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
-              <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? "Student name" : "Child's name"); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
+              <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? t("progress.pg.studentName") : t("progress.pg.childName")); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
             </label>
           ) : null}
-          {planId || learner || custom || range ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { setPlanId(""); setLearner(""); setCustom(false); setRange(0); setFilters(EMPTY_FILTERS); }}>Reset</button> : null}
+          {planId || learner || custom || range ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { setPlanId(""); setLearner(""); setCustom(false); setRange(0); setFilters(EMPTY_FILTERS); }}>{t("progress.pg.reset")}</button> : null}
         </div>
-        <p className="m-0 text-[11px] text-soft-ink">{attempts.length} result{attempts.length === 1 ? "" : "s"} · {stats.questions} questions · average {percent(stats.score)} <span className={tone(stats.score)}>●</span></p>
+        <p className="m-0 text-[11px] text-soft-ink">{t.plural("progress.pg.results", attempts.length)} · {t("progress.pg.questionsN", { count: stats.questions })} · {t("progress.pg.average", { pct: percent(stats.score) })} <span className={tone(stats.score)}>●</span></p>
         {notice ? <p className="m-0 text-xs text-[var(--accent-ink)]">{notice}</p> : null}
       </div>
 
@@ -557,8 +566,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           role={role}
           canDelete={view.id !== `default_${role}`}
           onChange={changeView}
-          onSaveAs={() => { const name = window.prompt("Name this view", `${view.name} copy`); if (!name) return; const next = duplicateView(view, name); setViews(upsertView(role, next)); setViewId(next.id); }}
-          onDelete={() => { if (!window.confirm(`Delete the view “${view.name}”?`)) return; const remaining = removeView(role, view.id); setViews(remaining); setViewId(remaining[0].id); setCustomising(false); }}
+          onSaveAs={() => { const name = window.prompt(t("progress.pg.nameView"), t("progress.pg.copyOf", { name: viewName(view, role, t) })); if (!name) return; const next = duplicateView(view, name); setViews(upsertView(role, next)); setViewId(next.id); }}
+          onDelete={() => { if (!window.confirm(t("progress.pg.deleteView", { name: viewName(view, role, t) }))) return; const remaining = removeView(role, view.id); setViews(remaining); setViewId(remaining[0].id); setCustomising(false); }}
           onPublish={publishView}
           onReset={() => { const remaining = removeView(role, view.id); const restored = readViews(role); setViews(restored); setViewId(restored[0].id); void remaining; }}
         />
@@ -568,12 +577,12 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <>
           <section className={`${card} p-6`}>
             <p className="m-0 text-sm text-soft-ink">
-              Nothing measured in this selection yet. {trackBy === "plan" && plans.length === 0 ? "Make a study plan — its goals become the topics this screen tracks — then do an activity on Luna." : "Do an activity on Luna, or widen the filters, and this screen fills itself in."}
+              {t("progress.pg.nothingMeasured")} {trackBy === "plan" && plans.length === 0 ? t("progress.pg.makePlanHint") : t("progress.pg.doActivity")}
             </p>
           </section>
           {panels.filter(({ panel }) => panel.id === "mastery-map").map(({ panel, definition }) => (
             <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
-              <p className={`${kicker} flex items-center gap-1.5`}>{definition.title}<InfoDot info={definition.info} label={definition.title} /></p>
+              <p className={`${kicker} flex items-center gap-1.5`}>{panelTitle(definition.id, t)}<InfoDot info={panelInfo(definition.id, t) || definition.info} label={panelTitle(definition.id, t)} /></p>
               <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>
           ))}
@@ -583,7 +592,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           {panels.map(({ panel, definition }) => (
             <section key={panel.id} className={`${card} flex min-w-0 flex-col p-5`}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className={`${kicker} flex items-center gap-1.5`}>{definition.title}<InfoDot info={definition.info} label={definition.title} /></p>
+                <p className={`${kicker} flex items-center gap-1.5`}>{panelTitle(definition.id, t)}<InfoDot info={panelInfo(definition.id, t) || definition.info} label={panelTitle(definition.id, t)} /></p>
               </div>
               <div className="mt-3 min-w-0 flex-1">{definition.render(context, panel.mode)}</div>
             </section>
@@ -594,8 +603,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
       {/* ── Topics index ───────────────────────────────────────────────── */}
       {tagTopics.length ? (
         <section className={`${card} p-5`}>
-          <p className={kicker}>Topics</p>
-          <p className="m-0 mt-1 text-[11px] text-soft-ink">Topics come from <code>topic:Name</code> tags on materials, activities and plans. Tag a document in Study → Courses to add it here.</p>
+          <p className={kicker}>{t("progress.pg.topics")}</p>
+          <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("progress.pg.topicsFrom")} <code>topic:Name</code> {t("progress.pg.topicsTags")}</p>
           <div className="mt-3 grid gap-3 lg:grid-cols-2">
             {tagTopics.map((topic) => {
               const isSelected = selectedTagTopic === topic.name;
@@ -608,17 +617,17 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                     {topic.name}
                   </p>
                   <div className="mt-2 grid gap-0.5 text-[11px] text-soft-ink">
-                    {topic.materials.length ? <p className="m-0">📄 {topic.materials.length} material{topic.materials.length === 1 ? "" : "s"}: {topic.materials.slice(0, 3).map((m) => m.name).join(", ")}{topic.materials.length > 3 ? "…" : ""}</p> : null}
-                    {topic.activities.length ? <p className="m-0">✎ {topic.activities.length} activit{topic.activities.length === 1 ? "y" : "ies"}: {topic.activities.slice(0, 2).map((a) => a.name).join(", ")}{topic.activities.length > 2 ? "…" : ""}</p> : null}
-                    {topic.plans.length ? <p className="m-0">◷ In {topic.plans.length} plan{topic.plans.length === 1 ? "" : "s"}: {topic.plans.slice(0, 2).map((p) => p.name).join(", ")}</p> : null}
-                    {!topic.materials.length && !topic.activities.length ? <p className="m-0 italic">No tagged items yet</p> : null}
+                    {topic.materials.length ? <p className="m-0">📄 {t.plural("progress.pg.materials", topic.materials.length)}: {topic.materials.slice(0, 3).map((m) => m.name).join(", ")}{topic.materials.length > 3 ? "…" : ""}</p> : null}
+                    {topic.activities.length ? <p className="m-0">✎ {t.plural("progress.pg.activities", topic.activities.length)}: {topic.activities.slice(0, 2).map((a) => a.name).join(", ")}{topic.activities.length > 2 ? "…" : ""}</p> : null}
+                    {topic.plans.length ? <p className="m-0">◷ {t.plural("progress.pg.inPlans", topic.plans.length)}: {topic.plans.slice(0, 2).map((p) => p.name).join(", ")}</p> : null}
+                    {!topic.materials.length && !topic.activities.length ? <p className="m-0 italic">{t("progress.pg.noTagged")}</p> : null}
                   </div>
                   {isSelected ? (
                     <div className="mt-2 flex flex-wrap gap-1">
-                      {onOpenPage ? (
+                      {onOpenPage && !looking ? (
                         <>
-                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspaces", { topicFilter: topic.name }); }}>Open in Courses →</button>
-                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>Open in Practice →</button>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("workspaces", { topicFilter: topic.name }); }}>{t("progress.pg.openCourses")}</button>
+                          <button type="button" className={ghostBtn} onClick={(e) => { e.stopPropagation(); onOpenPage("activities", { topicFilter: topic.name }); }}>{t("progress.pg.openPractice")}</button>
                         </>
                       ) : null}
                     </div>
@@ -632,19 +641,19 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
 
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-[11px] text-soft-ink">
-          Load a dashboard someone shared
-          <input type="file" accept="application/json" aria-label="Load a performance dashboard someone shared" className="ml-2 text-[11px]" onChange={(event) => { const file = event.target.files?.[0]; if (file) importFromFile(file); event.target.value = ""; }} />
+          {t("progress.pg.load")}
+          <input type="file" accept="application/json" aria-label={t("progress.pg.loadAria")} className="ml-2 text-[11px]" onChange={(event) => { const file = event.target.files?.[0]; if (file) importFromFile(file); event.target.value = ""; }} />
         </label>
-        <button type="button" className={ghostBtn} onClick={() => { const blob = new Blob([JSON.stringify(exportView(view), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${view.name}.luna-view.json`; anchor.click(); URL.revokeObjectURL(url); }}>⤓ Save this view as a file</button>
-        <span className="text-[11px] text-soft-ink">Mastery counts as {statusOf(70).label} at 70%. A view holds the arrangement only — never anybody's results.</span>
+        <button type="button" className={ghostBtn} onClick={() => { const blob = new Blob([JSON.stringify(exportView(view), null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `${viewName(view, role, t)}.luna-view.json`; anchor.click(); URL.revokeObjectURL(url); }}>{t("progress.pg.saveFile")}</button>
+        <span className="text-[11px] text-soft-ink">{t("progress.pg.masteryNote", { label: t(`progress.status.${statusOf(70).id}`) })}</span>
       </div>
       </div>
       </details>
       {generatingPractice ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
           <div className={`${card} max-w-sm p-6 text-center`}>
-            <p className="m-0 text-base font-bold text-ink">Building your practice…</p>
-            <p className="m-0 mt-1 text-sm text-soft-ink">Generating questions focused on your weak areas.</p>
+            <p className="m-0 text-base font-bold text-ink">{t("progress.pg.building")}</p>
+            <p className="m-0 mt-1 text-sm text-soft-ink">{t("progress.pg.generating")}</p>
           </div>
         </div>
       ) : null}
@@ -657,16 +666,16 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
         <div className="fixed inset-0 z-50 overflow-y-auto bg-[var(--bg)]/95 p-4 sm:p-8">
           {onSaveGeneratedQuizDocument ? (
             <div className={`${card} mx-auto mb-3 flex max-w-3xl flex-wrap items-center gap-2 p-3`}>
-              <span className="min-w-0 flex-1 text-xs font-semibold text-soft-ink">{practising.refresher ? `Skill refresher · ${practising.refresher.label}` : "Practice"}</span>
-              <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.documentId)} onClick={keepPractice}>{practiceSaved.documentId ? "Saved" : "Save it"}</button>
+              <span className="min-w-0 flex-1 text-xs font-semibold text-soft-ink">{practising.refresher ? t("progress.pg.refresherLabel", { label: practising.refresher.label }) : t("progress.pg.practiceLabel")}</span>
+              <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.documentId)} onClick={keepPractice}>{practiceSaved.documentId ? t("progress.pg.saved") : t("progress.pg.saveIt")}</button>
               {plans.length && typeof onUpdateGeneratedDocument === "function" ? (
                 <>
                   {plans.length > 1 ? (
-                    <select aria-label="Study plan" className="rounded-full border border-ink/15 bg-white px-2 py-1 text-xs" value={practiceSaved.planId || activePlan?.document.id || plans[0].document.id} onChange={(event) => setPracticeSaved((current) => ({ ...current, planId: event.target.value }))}>
+                    <select aria-label={t("progress.pg.studyPlan")} className="rounded-full border border-ink/15 bg-white px-2 py-1 text-xs" value={practiceSaved.planId || activePlan?.document.id || plans[0].document.id} onChange={(event) => setPracticeSaved((current) => ({ ...current, planId: event.target.value }))}>
                       {plans.map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
                     </select>
                   ) : null}
-                  <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.planName)} onClick={planPractice}>{practising.refresher ? "Add to my plan, before the topic" : "Add to my plan"}</button>
+                  <button type="button" className={ghostBtn} disabled={practiceSaved.busy || Boolean(practiceSaved.planName)} onClick={planPractice}>{practising.refresher ? t("progress.pg.addBefore") : t("progress.pg.addPlan")}</button>
                 </>
               ) : null}
               {practiceSaved.status ? <span className="basis-full text-xs text-accent">{practiceSaved.status}</span> : null}
@@ -679,7 +688,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                 const content = JSON.stringify({ kind: "activity-attempt", activityDocumentId: practiceSaved.documentId || "", activityId: attempt.activityId || "", learner: profileName || "", attempt }, null, 2);
                 await onSaveGeneratedQuizDocument({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Practice"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }).catch(() => {});
               }
-              setPractising(null);
+              // The player stays open on the results (it used to close here, right after checking): the learner leaves with "Done".
             }}
             onClose={() => setPractising(null)}
           />

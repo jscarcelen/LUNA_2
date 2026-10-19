@@ -36,7 +36,7 @@ export function normaliseAnswer(value) {
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[−–]/g, "-")
     // "U.S.A." and "don't" lose their marks; everything else that punctuates becomes a space.
-    .replace(/(?<=[a-z])\.(?=[a-z]|\s|$)|['`´’‘]/g, "")
+    .replace(/([a-z])\.(?=[a-z]|\s|$)|['`´’‘]/g, (_mark, letter) => letter || "")
     .replace(/[.,;:!?"“”()[\]{}¿¡]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

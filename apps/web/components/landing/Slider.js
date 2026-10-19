@@ -1,12 +1,14 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrowserFrame, Shot } from "./shots.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * A horizontal slider of real product screens: CSS scroll-snap (touch and trackpad swipe work
  * natively), arrow buttons, dots, and the arrow keys when the track has focus.
  */
 export function ScreenSlider({ slides }) {
+  const t = useT();
   const track = useRef(null);
   const [active, setActive] = useState(0);
 
@@ -45,23 +47,23 @@ export function ScreenSlider({ slides }) {
   };
 
   return (
-    <div className="lp-slider" role="region" aria-roledescription="carousel" aria-label="Screens from the Luna app">
+    <div className="lp-slider" role="region" aria-roledescription="carousel" aria-label={t("landing.slider.aria")}>
       <div className="lp-slider-track" ref={track} tabIndex={0} onKeyDown={onKey} aria-live="polite">
         {slides.map((slide, i) => (
-          <figure className={`lp-slide${i === active ? " is-active" : ""}`} key={slide.shot} aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}: ${slide.title}`}>
+          <figure className={`lp-slide${i === active ? " is-active" : ""}`} key={slide.shot} aria-roledescription="slide" aria-label={t("landing.slider.slideOf", { n: i + 1, total: slides.length, title: slide.title })}>
             <BrowserFrame><Shot name={slide.shot} sizes="(max-width: 900px) 86vw, 760px" /></BrowserFrame>
             <figcaption><strong>{slide.title}</strong><span>{slide.text}</span></figcaption>
           </figure>
         ))}
       </div>
       <div className="lp-slider-controls">
-        <button type="button" className="lp-arrow" onClick={() => goTo(active - 1)} disabled={active === 0} aria-label="Previous screen">‹</button>
-        <div className="lp-dots" role="tablist" aria-label="Choose a screen">
+        <button type="button" className="lp-arrow" onClick={() => goTo(active - 1)} disabled={active === 0} aria-label={t("landing.slider.prev")}>‹</button>
+        <div className="lp-dots" role="tablist" aria-label={t("landing.slider.choose")}>
           {slides.map((slide, i) => (
             <button key={slide.shot} type="button" role="tab" aria-selected={i === active} aria-label={slide.title} className={i === active ? "on" : ""} onClick={() => goTo(i)} />
           ))}
         </div>
-        <button type="button" className="lp-arrow" onClick={() => goTo(active + 1)} disabled={active === slides.length - 1} aria-label="Next screen">›</button>
+        <button type="button" className="lp-arrow" onClick={() => goTo(active + 1)} disabled={active === slides.length - 1} aria-label={t("landing.slider.next")}>›</button>
       </div>
     </div>
   );

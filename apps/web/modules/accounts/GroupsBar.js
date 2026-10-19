@@ -5,7 +5,8 @@ import { accountsApi } from "./api";
 import { GROUP_COLOURS, MAX_GROUP_MEMBERS, MAX_GROUP_NAME } from "./groups";
 import { GROUPS_MIGRATION, SetupNotice } from "./SetupNotice";
 import { dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
-import { pluralNoun } from "./nouns.js";
+import { nounWord } from "./nouns.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const label = (person) => person.displayName || person.email;
 
@@ -21,10 +22,11 @@ export function GroupDots({ groups = [] }) {
 }
 
 export function ColourPicker({ value, onChange }) {
+  const t = useT();
   return (
-    <span className="inline-flex items-center gap-1" role="radiogroup" aria-label="Group colour">
+    <span className="inline-flex items-center gap-1" role="radiogroup" aria-label={t("people.gb.colourGroup")}>
       {GROUP_COLOURS.map((colour) => (
-        <button key={colour} type="button" role="radio" aria-checked={value === colour} aria-label={`Colour ${colour}`} onClick={() => onChange(colour)} className={`size-5 rounded-full ${value === colour ? "ring-2 ring-ink/50 ring-offset-1" : ""}`} style={{ background: colour }} />
+        <button key={colour} type="button" role="radio" aria-checked={value === colour} aria-label={t("people.gb.colour", { colour })} onClick={() => onChange(colour)} className={`size-5 rounded-full ${value === colour ? "ring-2 ring-ink/50 ring-offset-1" : ""}`} style={{ background: colour }} />
       ))}
     </span>
   );
@@ -32,6 +34,7 @@ export function ColourPicker({ value, onChange }) {
 
 /** A searchable checkbox list of students. */
 export function MemberPicker({ students, selectedIds, onChange, max = MAX_GROUP_MEMBERS }) {
+  const t = useT();
   const [query, setQuery] = useState("");
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -40,7 +43,7 @@ export function MemberPicker({ students, selectedIds, onChange, max = MAX_GROUP_
   const toggle = (id) => onChange(selectedIds.includes(id) ? selectedIds.filter((entry) => entry !== id) : selectedIds.length >= max ? selectedIds : [...selectedIds, id]);
   return (
     <div className="grid gap-1.5">
-      {students.length > 6 ? <input className={`${field} w-full`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search students" aria-label="Search students" /> : null}
+      {students.length > 6 ? <input className={`${field} w-full`} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("people.gb.searchStudents")} aria-label={t("people.gb.searchStudents")} /> : null}
       <ul className="m-0 grid max-h-48 list-none gap-0.5 overflow-y-auto p-0">
         {shown.map((student) => (
           <li key={student.id}>
@@ -50,9 +53,9 @@ export function MemberPicker({ students, selectedIds, onChange, max = MAX_GROUP_
             </label>
           </li>
         ))}
-        {!shown.length ? <li className="px-2 py-1 text-xs text-soft-ink">{students.length ? `Nobody matches “${query}”.` : "No connected students yet."}</li> : null}
+        {!shown.length ? <li className="px-2 py-1 text-xs text-soft-ink">{students.length ? t("people.gb.noMatch", { query }) : t("people.gb.noConnected")}</li> : null}
       </ul>
-      <p className="m-0 text-[11px] text-soft-ink">{selectedIds.length} selected · a group holds up to {max} students</p>
+      <p className="m-0 text-[11px] text-soft-ink">{t("people.gb.selected", { count: selectedIds.length, max })}</p>
     </div>
   );
 }
@@ -63,6 +66,8 @@ export function MemberPicker({ students, selectedIds, onChange, max = MAX_GROUP_
  * deletes a student.
  */
 export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged, setup, noun }) {
+  const t = useT();
+  const nouns = nounWord(noun, t, true);
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", colour: GROUP_COLOURS[0], memberIds: [] });
   const [editing, setEditing] = useState(null); // { name, colour, memberIds } for the selected group
@@ -85,18 +90,18 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
   if (setup) {
     return (
       <div className="grid gap-2">
-        <p className={kicker}>Groups</p>
-        <SetupNotice compact migration={setup.migration || GROUPS_MIGRATION} title="Groups need one database step" />
+        <p className={kicker}>{t("people.gb.groups")}</p>
+        <SetupNotice compact migration={setup.migration || GROUPS_MIGRATION} title={t("people.gb.dbStep")} />
       </div>
     );
   }
 
   return (
     <div className="grid gap-2">
-      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Groups">
-        <span className={`${kicker} mr-1`}>Groups</span>
+      <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t("people.gb.groups")}>
+        <span className={`${kicker} mr-1`}>{t("people.gb.groups")}</span>
         <button type="button" role="tab" aria-selected={!groupId} onClick={() => onSelectGroup("")} className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${!groupId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
-          All {pluralNoun(noun)} <span className="opacity-70">{students.length}</span>
+          {t("people.gb.all", { nouns })} <span className="opacity-70">{students.length}</span>
         </button>
         {groups.map((group) => (
           <button key={group.id} type="button" role="tab" aria-selected={group.id === groupId} onClick={() => onSelectGroup(group.id)} className={`inline-flex max-w-[14rem] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition ${group.id === groupId ? "border-transparent bg-ink text-white" : "border-ink/15 bg-white text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
@@ -105,41 +110,41 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
             <span className="opacity-70">{group.memberCount}</span>
           </button>
         ))}
-        <button type="button" className={ghostBtn} onClick={() => { setCreating((value) => !value); setError(""); }}>{creating ? "Cancel" : "＋ New group"}</button>
+        <button type="button" className={ghostBtn} onClick={() => { setCreating((value) => !value); setError(""); }}>{creating ? t("common.cancel") : t("people.gb.newGroup")}</button>
       </div>
 
       {creating ? (
         <div className="grid gap-2 rounded-2xl border border-[var(--accent)]/30 bg-[var(--accent-soft)]/30 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <input className={`${field} min-w-[12rem] flex-1`} value={draft.name} maxLength={MAX_GROUP_NAME} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Group name, e.g. Class 3B" aria-label="Group name" />
+            <input className={`${field} min-w-[12rem] flex-1`} value={draft.name} maxLength={MAX_GROUP_NAME} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("people.gb.namePh")} aria-label={t("people.gb.nameAria")} />
             <ColourPicker value={draft.colour} onChange={(colour) => setDraft({ ...draft, colour })} />
           </div>
-          <p className="m-0 text-[11px] font-semibold text-soft-ink">Who is in it (you can change this later; a student can be in several groups)</p>
+          <p className="m-0 text-[11px] font-semibold text-soft-ink">{t("people.gb.whoIn")}</p>
           <MemberPicker students={students} selectedIds={draft.memberIds} onChange={(memberIds) => setDraft({ ...draft, memberIds })} />
           <div className="flex justify-end">
-            <button type="button" className={primaryBtn} disabled={busy || !draft.name.trim()} onClick={() => run(() => accountsApi.createGroup(draft), (data) => { setCreating(false); setDraft({ name: "", colour: GROUP_COLOURS[0], memberIds: [] }); if (data.group?.id) onSelectGroup(data.group.id); })}>{busy ? "Creating…" : "Create group"}</button>
+            <button type="button" className={primaryBtn} disabled={busy || !draft.name.trim()} onClick={() => run(() => accountsApi.createGroup(draft), (data) => { setCreating(false); setDraft({ name: "", colour: GROUP_COLOURS[0], memberIds: [] }); if (data.group?.id) onSelectGroup(data.group.id); })}>{busy ? t("people.gb.creating") : t("people.gb.create")}</button>
           </div>
         </div>
       ) : null}
 
       {selected ? (
         <div className="flex flex-wrap items-center gap-2 text-xs text-soft-ink">
-          <span>{selected.memberCount} {selected.memberCount === 1 ? noun : `${pluralNoun(noun)}`} in this group</span>
-          <button type="button" className={ghostBtn} onClick={() => setEditing(editing ? null : { name: selected.name, colour: selected.colour, memberIds: selected.memberIds })}>{editing ? "Close" : "Edit group…"}</button>
+          <span>{t("people.gb.inGroup", { count: selected.memberCount, noun: nounWord(noun, t, selected.memberCount !== 1) })}</span>
+          <button type="button" className={ghostBtn} onClick={() => setEditing(editing ? null : { name: selected.name, colour: selected.colour, memberIds: selected.memberIds })}>{editing ? t("common.close") : t("people.gb.edit")}</button>
           {confirmDelete ? (
             <span className="inline-flex flex-wrap items-center gap-1.5">
-              Delete “{selected.name}”? The {pluralNoun(noun)} are not deleted or disconnected.
-              <button type="button" className={dangerBtn} disabled={busy} onClick={() => run(() => accountsApi.deleteGroup(selected.id), () => { setConfirmDelete(false); setEditing(null); onSelectGroup(""); })}>Delete group</button>
-              <button type="button" className={ghostBtn} onClick={() => setConfirmDelete(false)}>Keep</button>
+              {t("people.gb.confirmDelete", { name: selected.name, nouns })}
+              <button type="button" className={dangerBtn} disabled={busy} onClick={() => run(() => accountsApi.deleteGroup(selected.id), () => { setConfirmDelete(false); setEditing(null); onSelectGroup(""); })}>{t("people.gb.delete")}</button>
+              <button type="button" className={ghostBtn} onClick={() => setConfirmDelete(false)}>{t("people.gb.keep")}</button>
             </span>
-          ) : <button type="button" className={ghostBtn} onClick={() => setConfirmDelete(true)}>Delete group</button>}
+          ) : <button type="button" className={ghostBtn} onClick={() => setConfirmDelete(true)}>{t("people.gb.delete")}</button>}
         </div>
       ) : null}
 
       {selected && editing ? (
         <div className="grid gap-2 rounded-2xl border border-ink/10 p-3">
           <div className="flex flex-wrap items-center gap-2">
-            <input className={`${field} min-w-[12rem] flex-1`} value={editing.name} maxLength={MAX_GROUP_NAME} onChange={(event) => setEditing({ ...editing, name: event.target.value })} aria-label="Rename group" />
+            <input className={`${field} min-w-[12rem] flex-1`} value={editing.name} maxLength={MAX_GROUP_NAME} onChange={(event) => setEditing({ ...editing, name: event.target.value })} aria-label={t("people.gb.rename")} />
             <ColourPicker value={editing.colour} onChange={(colour) => setEditing({ ...editing, colour })} />
           </div>
           <MemberPicker students={students} selectedIds={editing.memberIds} onChange={(memberIds) => setEditing({ ...editing, memberIds })} />
@@ -158,7 +163,7 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
               if (!last.ok) { setError(last.error); return; }
               onChanged?.(last.data);
               setEditing(null);
-            }}>{busy ? "Saving…" : "Save"}</button>
+            }}>{busy ? t("people.gb.saving") : t("common.save")}</button>
           </div>
         </div>
       ) : null}
@@ -172,6 +177,7 @@ export function GroupsBar({ groups, students, groupId, onSelectGroup, onChanged,
  * The per-student "Groups…" multi-select: tick the groups this student belongs to. A student can be in several.
  */
 export function StudentGroupsMenu({ student, groups, memberOf, onChanged, noun }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState(memberOf);
   const [busy, setBusy] = useState(false);
@@ -179,10 +185,10 @@ export function StudentGroupsMenu({ student, groups, memberOf, onChanged, noun }
   if (!groups.length) return null;
   return (
     <span className="relative inline-block">
-      <button type="button" className={ghostBtn} aria-expanded={open} onClick={() => { setPicked(memberOf); setOpen((value) => !value); setError(""); }}>Groups…{memberOf.length ? ` (${memberOf.length})` : ""}</button>
+      <button type="button" className={ghostBtn} aria-expanded={open} onClick={() => { setPicked(memberOf); setOpen((value) => !value); setError(""); }}>{t("people.gb.groupsMenu")}{memberOf.length ? ` (${memberOf.length})` : ""}</button>
       {open ? (
-        <div role="dialog" aria-label={`Groups of ${label(student)}`} className="absolute left-0 top-full z-20 mt-1 grid w-64 gap-1.5 rounded-2xl border border-ink/10 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.16)]">
-          <p className="m-0 text-[11px] font-semibold text-soft-ink">Groups of {label(student)}</p>
+        <div role="dialog" aria-label={t("people.gb.groupsOf", { name: label(student) })} className="absolute left-0 top-full z-20 mt-1 grid w-64 gap-1.5 rounded-2xl border border-ink/10 bg-white p-3 shadow-[0_12px_40px_rgba(0,0,0,0.16)]">
+          <p className="m-0 text-[11px] font-semibold text-soft-ink">{t("people.gb.groupsOf", { name: label(student) })}</p>
           {groups.map((group) => (
             <label key={group.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-1 py-0.5 text-sm hover:bg-[var(--surface-soft)]">
               <input type="checkbox" checked={picked.includes(group.id)} onChange={() => setPicked((current) => (current.includes(group.id) ? current.filter((id) => id !== group.id) : [...current, group.id]))} />
@@ -192,7 +198,7 @@ export function StudentGroupsMenu({ student, groups, memberOf, onChanged, noun }
           ))}
           {error ? <p className="m-0 text-xs text-[var(--color-danger)]" role="alert">{error}</p> : null}
           <div className="flex justify-end gap-1.5">
-            <button type="button" className={ghostBtn} onClick={() => setOpen(false)}>Cancel</button>
+            <button type="button" className={ghostBtn} onClick={() => setOpen(false)}>{t("common.cancel")}</button>
             <button type="button" className={primaryBtn} disabled={busy} onClick={async () => {
               setBusy(true);
               const result = await accountsApi.setMemberGroups(student.id, picked);
@@ -200,9 +206,9 @@ export function StudentGroupsMenu({ student, groups, memberOf, onChanged, noun }
               if (!result.ok) { setError(result.error); return; }
               onChanged?.(result.data);
               setOpen(false);
-            }}>{busy ? "Saving…" : "Save"}</button>
+            }}>{busy ? t("people.gb.saving") : t("common.save")}</button>
           </div>
-          <p className="m-0 text-[10px] text-soft-ink">A {noun} can be in several groups.</p>
+          <p className="m-0 text-[10px] text-soft-ink">{t("people.gb.canBeSeveral", { noun: nounWord(noun, t) })}</p>
         </div>
       ) : null}
     </span>

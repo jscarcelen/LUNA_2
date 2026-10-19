@@ -1,4 +1,5 @@
 "use client";
+import { useT } from "../lib/i18n/LocaleProvider.js";
 
 /**
  * The tabs inside a section (Study: Courses · Study plans · Practice, …). A segmented row of pills, never more than
@@ -6,10 +7,11 @@
  * to screen readers.
  */
 export function SectionTabs({ tabs = [], active, onChange }) {
+  const t = useT();
   if (tabs.length < 2) return null;
   return (
     <div className="tw-scope mb-4 flex">
-      <div role="tablist" aria-label="Views" className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-ink/10 bg-white p-1">
+      <div role="tablist" aria-label={t("shell.views")} className="inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-ink/10 bg-white p-1">
         {tabs.map((tab) => {
           const on = tab.key === active;
           return (

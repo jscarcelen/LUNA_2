@@ -6,7 +6,7 @@ import { BottomTabs } from "./BottomTabs";
 import { ensureSubjectStructure } from "../modules/plans/folders";
 import { TopBar } from "./TopBar";
 import { roleProfiles } from "./data";
-import { PAGE_TITLES, isPageAllowed, navFor, sectionOf, tabKeyOf, tabsFor } from "./navModel";
+import { isPageAllowed, navFor, sectionOf, shortTitleOf, tabKeyOf, tabsFor, titleOf } from "./navModel";
 import { SectionTabs } from "./SectionTabs";
 import { friendlyMessage } from "./friendlyError";
 import { FirstRunTour } from "./FirstRunTour";
@@ -14,6 +14,8 @@ import { ConnectionsPage } from "../modules/accounts/ConnectionsPage";
 import { LinkedStudentsPage } from "../modules/accounts/LinkedStudentsPage";
 import { PlatformNotice } from "../modules/accounts/PlatformNotice";
 import { ShareDialog } from "../modules/accounts/ShareDialog";
+import { SendPracticeDialog } from "../modules/accounts/SendPracticeDialog";
+import { SendQuestionsDialog } from "../modules/accounts/SendQuestionsDialog";
 import { accountsApi } from "../modules/accounts/api";
 import { onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
 import { saveBlockToLibrary } from "../modules/template-studio/engine/blocks";
@@ -29,8 +31,12 @@ import { UiCritic } from "../modules/ui/UiCritic";
 import { FeedbackWidget } from "../modules/feedback/FeedbackWidget";
 import { AskLunaProvider } from "../modules/chat/AskLunaContext";
 import { GlobalAskLuna } from "../modules/chat/GlobalAskLuna";
+import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
 import { uploadFailureMessage } from "../modules/workspace/uploadPlan";
 import { renameInResource } from "../modules/workspace/renameCascade";
+
+import { cacheKeyFor, invalidateWorkspaces, loadWorkspaces as fetchWorkspaces, peekWorkspaces, storeWorkspaces } from "../lib/workspacesClientCache.js";
+import { useT } from "../lib/i18n/LocaleProvider.js";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -40,7 +46,8 @@ const WORKSPACES_API = "/api/workspaces-supabase";
  * connections) and the logged-in account for the real platform (/platform: the role and name come from
  * the account, there is no role switcher, and Connections / My students are in the menu).
  */
-export function AppShell({ account: accountProp = null, initialPage = "" }) {
+export function AppShell({ account: accountProp = null, initialPage = "", tourSeen = null }) {
+  const t = useT();
   // Saved profile changes (name, age…) replace the server-rendered account so every screen shows them at once.
   const [accountOverride, setAccountOverride] = useState(null);
   const account = accountOverride || accountProp;
@@ -54,6 +61,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     return known ? initialPage : start;
   });
   const [shareTarget, setShareTarget] = useState(null);
+  // Teacher: "Send practice to {class}…" (pick what to send) and "Send 10 questions to {student}" (make, then assign).
+  const [practiceTarget, setPracticeTarget] = useState(null);
+  const [questionsTarget, setQuestionsTarget] = useState(null);
   const [shareNotice, setShareNotice] = useState("");
   // "Share…" opens one dialog for everything: a file/folder/topic/plan (live share with a permission) or an
   // agent/template/component (a copy). Older callers pass a bare document, which still works.
@@ -63,9 +73,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     setSharingAvailable(true);
     const stop = onShareRequested(openShare);
     const stopLeave = onLeaveRequested(async (grantId) => {
-      if (!window.confirm("Leave this share? It disappears from your workspace. Your own notes and answers stay yours. The owner can share it with you again.")) return;
+      if (!window.confirm(t("shell.leaveConfirm"))) return;
       const result = await accountsApi.leaveGrant(grantId);
-      setShareNotice(result.ok ? "You left the share." : result.error);
+      setShareNotice(result.ok ? t("shell.leftShare") : result.error);
       if (result.ok) loadWorkspaces();
     });
     return () => { stop(); stopLeave(); setSharingAvailable(false); };
@@ -84,7 +94,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       }
       await accountsApi.markComponentsImported(list.map((entry) => entry.id));
       const names = [...new Set(list.map((entry) => entry.sender?.displayName).filter(Boolean))];
-      if (alive && imported) setShareNotice(`${imported} shared component${imported === 1 ? "" : "s"} from ${names.join(", ") || "your network"} ${imported === 1 ? "was" : "were"} added to your blocks (My blocks in Template Studio). They are your own copies.`);
+      if (alive && imported) setShareNotice(t.plural("shell.componentsAdded", imported, { names: names.join(", ") || t("shell.yourNetwork") }));
     })();
     return () => { alive = false; };
   }, [account?.id]);
@@ -122,7 +132,9 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  const [workspaces, setWorkspaces] = useState([]);
+  // The tree is cached in memory (stale-while-revalidate, one shared request): a remount or a second consumer paints at once.
+  const workspacesKey = cacheKeyFor(account);
+  const [workspaces, setWorkspaces] = useState(() => peekWorkspaces(cacheKeyFor(account)) || []);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
   const [selectedSubjectId, setSelectedSubjectId] = useState("");
   const [statusMessage, setStatusMessage] = useState("Loading workspaces...");
@@ -146,14 +158,15 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   const startGenerating = Boolean(planParams?.get("generate"));
   const startExamDateId = planParams?.get("exam") || "";
   const startDocumentIds = (planParams?.get("docs") || "").split(",").map((id) => id.trim()).filter(Boolean);
-  const roleHomeTitle = { student: "Home", teacher: "Classes", parent: "Children" }[role] || "Home";
-  const title = currentAiTool ? currentAiTool.name : (page === "dashboard" ? roleHomeTitle : (page === "students" && role === "parent" ? "My children" : (PAGE_TITLES[page.split("?")[0]] || "LUNA")));
-  const navItems = navFor(role);
+  const title = titleOf(page, role, currentAiTool ? currentAiTool.name : "", t);
+  const shortTitle = currentAiTool ? t("nav.short.make") : shortTitleOf(page, role, t);
+  const navItems = navFor(role, Boolean(account), t);
   const section = sectionOf(page);
-  const sectionTabs = tabsFor(section, role, Boolean(account));
+  const sectionTabs = tabsFor(section, role, Boolean(account), t);
 
   useEffect(() => {
-    loadWorkspaces();
+    // Fresh enough (loaded in the last seconds, e.g. a remount) is not asked again; otherwise stale-while-revalidate.
+    loadWorkspaces({ force: false });
   }, []);
 
   function selectFallback(workspaceList) {
@@ -162,17 +175,15 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
     setSelectedSubjectId(firstWorkspace?.subjects?.[0]?.id || "");
   }
 
-  async function loadWorkspaces() {
+  async function loadWorkspaces({ force = true } = {}) {
     try {
-      setIsWorking(true);
-      const response = await fetch(WORKSPACES_API, { cache: "no-store" });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load workspace data");
-      }
-      setWorkspaces(data.workspaces || []);
-      if (!selectedWorkspaceId && data.workspaces?.length) {
-        const firstWorkspace = data.workspaces[0];
+      // Show the cached tree straight away; the request refreshes it behind (and is shared with any other caller).
+      const cached = peekWorkspaces(workspacesKey);
+      if (cached) setWorkspaces(cached); else setIsWorking(true);
+      const list = await fetchWorkspaces(workspacesKey, { force });
+      setWorkspaces(list);
+      if (!selectedWorkspaceId && list.length) {
+        const firstWorkspace = list[0];
         setSelectedWorkspaceId(firstWorkspace.id);
         setSelectedSubjectId(firstWorkspace.subjects?.[0]?.id || "");
       }
@@ -199,7 +210,10 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       if (!response.ok && !data.error) data.error = uploadFailureMessage(response.status, raw);
       if (response.ok) {
         if (Array.isArray(data.workspaces)) {
+          storeWorkspaces(workspacesKey, data.workspaces);
           setWorkspaces(data.workspaces);
+        } else {
+          invalidateWorkspaces(workspacesKey);
         }
         setStatusMessage("");
         return { ok: true, status: response.status, data };
@@ -241,12 +255,13 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
         examDates={examDates}
         onDismissExamDate={dismissExamDate}
         account={Boolean(account)}
+        onSendPractice={(target) => setPracticeTarget(target)}
       />
     );
     if (page === "dashboard") return home;
     // The real platform only: connections to other accounts, and a connected student's performance.
     if (account && page === "connections") return <ConnectionsPage account={account} onOpenPage={setPage} />;
-    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} />;
+    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} initialGroupId={new URLSearchParams(page.split("?")[1] || "").get("group") || ""} onSendQuestions={(action, student) => setQuestionsTarget({ action, student })} />;
     if (page === "performance") {
       return (
         <PerformancePage
@@ -282,6 +297,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
           onRemoveDocument={handleRemoveDocument}
           onOpenTool={(target) => setPage(target)}
           onSelectSubject={handleSelectSubject}
+          onUploadTxt={handleUploadTxt}
         />
       );
     }
@@ -939,7 +955,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   }, []);
 
   // "Ask Luna" next to any reader finds the workspace tree here.
-  // A reader that shows its own Ask Luna button "claims" the corner, and the page-level "Chat with Luna" steps aside.
+  // A reader that shows its own Ask Luna button "claims" the corner, and the page-level "Ask Luna" menu then offers only feedback.
   const [readerClaims, setReaderClaims] = useState(0);
   const claimAskLuna = useCallback(() => { setReaderClaims((count) => count + 1); return () => setReaderClaims((count) => count - 1); }, []);
   const askLunaValue = useMemo(() => ({ workspaces, selectedWorkspaceId, selectedSubjectId, claim: claimAskLuna }), [workspaces, selectedWorkspaceId, selectedSubjectId, claimAskLuna]);
@@ -953,7 +969,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
   return (
     <div className={`app-shell${menuOpen ? " nav-open" : ""}`}>
       {/* Phone only: tapping the dimmed page closes the workspace sheet. */}
-      <button className="nav-scrim" type="button" aria-label="Close menu" onClick={() => setMenuOpen(false)} />
+      <button className="nav-scrim" type="button" aria-label={t("shell.closeMenu")} onClick={() => setMenuOpen(false)} />
       <SideNav
         navItems={navItems}
         page={page}
@@ -961,7 +977,7 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
         onClose={() => setMenuOpen(false)}
       />
       <main className="main-pane">
-        <TopBar title={title} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} />
+        <TopBar title={title} shortTitle={shortTitle} page={page} role={role} onRoleChange={handleRoleChange} onOpenMenu={() => setMenuOpen(true)} account={account} onAccountChange={setAccountOverride} onOpenPage={setPage} askLunaClaimed={readerClaims > 0} />
         <div className="page-content">
           {account ? <PlatformNotice account={account} onOpenPage={setPage} /> : null}
           {shareNotice ? (
@@ -981,10 +997,32 @@ export function AppShell({ account: accountProp = null, initialPage = "" }) {
       {account && shareTarget ? (
         <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
       ) : null}
-      <FirstRunTour />
+      {account && practiceTarget ? (
+        <SendPracticeDialog
+          target={practiceTarget}
+          workspaces={workspaces}
+          onClose={() => setPracticeTarget(null)}
+          onMake={() => { setPracticeTarget(null); setPage("create"); }}
+          onPick={(document) => { const target = practiceTarget; setPracticeTarget(null); setShareTarget({ kind: "document", id: document.id, name: document.name, document, initial: { mode: "assign", groupIds: target.groupIds || [], recipientIds: target.recipientIds || [] } }); }}
+        />
+      ) : null}
+      {account && questionsTarget ? (
+        <SendQuestionsDialog
+          action={questionsTarget.action}
+          student={questionsTarget.student}
+          workspaces={workspaces}
+          workspaceId={selectedWorkspaceId}
+          subjectId={selectedSubjectId}
+          onSave={(payload) => handleSaveGeneratedQuizDocument(payload)}
+          onClose={() => setQuestionsTarget(null)}
+          onAssign={(document) => { const target = questionsTarget; setQuestionsTarget(null); setShareTarget({ kind: "document", id: document.id, name: document.name, document, initial: { mode: "assign", groupIds: [], recipientIds: [target.student.id] } }); }}
+        />
+      ) : null}
+      <FirstRunTour role={role} accountId={account?.id || ""} serverSeen={tourSeen} />
       <UiCritic enabled={criticOn} />
       {/* Beta feedback tool — temporary, see modules/feedback/README.md. */}
-      <FeedbackWidget page={page} title={title} role={role} account={account} />
+      <FeedbackWidget page={page} title={title} role={role} account={account} launcher={false} />
+      <AskLunaMenu variant="floating" claimed={readerClaims > 0} />
     </div>
   );
 }

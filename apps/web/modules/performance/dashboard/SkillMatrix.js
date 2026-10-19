@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { ghostBtn } from "./parts";
 import { cellOf, overviewColumns, topicGroups, topicSplit } from "../skillOverview.js";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const tone = (acc) => (acc >= 0.8 ? "#34c759" : acc >= 0.6 ? "#ff9f0a" : "#ff3b30");
 
@@ -33,6 +34,7 @@ function Percent({ cell, title, onInfo, infoLabel }) {
  * table: workspace → study plan → topic, indented.
  */
 export function SkillMatrix({ overview }) {
+  const t = useT();
   const [view, setView] = useState("plans");
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -52,7 +54,7 @@ export function SkillMatrix({ overview }) {
     const cell = cellOf(rows, skill.id);
     return (
       <td key={skill.id} className="p-0.5">
-        <Percent cell={cell} title={cell ? `${label} · ${skill.label}: ${cell.asked - cell.wrong} of ${cell.asked} right` : "No question needed this skill here"} onInfo={info ? () => info(skill.id) : null} infoLabel={`Topics behind ${label}, ${skill.label}`} />
+        <Percent cell={cell} title={cell ? t("progress.mx.cell", { label, skill: skill.label, right: cell.asked - cell.wrong, asked: cell.asked }) : t("progress.mx.noneNeeded")} onInfo={info ? () => info(skill.id) : null} infoLabel={t("progress.mx.behind", { label, skill: skill.label })} />
       </td>
     );
   });
@@ -60,11 +62,11 @@ export function SkillMatrix({ overview }) {
   return (
     <div className="grid gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="inline-flex rounded-full border border-ink/12 bg-white p-0.5" role="tablist" aria-label="Skills grid view">
-          <button type="button" role="tab" aria-selected={view === "plans"} className={pill(view === "plans")} onClick={() => setView("plans")}>By study plan</button>
-          <button type="button" role="tab" aria-selected={view === "topics"} className={pill(view === "topics")} onClick={() => setView("topics")}>By topic · advanced</button>
+        <div className="inline-flex rounded-full border border-ink/12 bg-white p-0.5" role="tablist" aria-label={t("progress.mx.viewLabel")}>
+          <button type="button" role="tab" aria-selected={view === "plans"} className={pill(view === "plans")} onClick={() => setView("plans")}>{t("progress.mx.byPlan")}</button>
+          <button type="button" role="tab" aria-selected={view === "topics"} className={pill(view === "topics")} onClick={() => setView("topics")}>{t("progress.mx.byTopic")}</button>
         </div>
-        <button type="button" className={ghostBtn} aria-pressed={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? "− Fewer skills" : "+ All skills"}</button>
+        <button type="button" className={ghostBtn} aria-pressed={expanded} onClick={() => setExpanded((value) => !value)}>{expanded ? t("progress.mx.fewer") : t("progress.mx.all")}</button>
       </div>
 
       <div className="overflow-x-auto">
@@ -77,10 +79,10 @@ export function SkillMatrix({ overview }) {
             <tr className="text-left text-[10px] uppercase tracking-wider text-soft-ink">
               {view === "plans" ? (
                 <>
-                  <th className="sticky left-0 bg-white py-1.5 pr-3 font-semibold">Workspace</th>
-                  <th className="py-1.5 pr-3 font-semibold">Study plan</th>
+                  <th className="sticky left-0 bg-white py-1.5 pr-3 font-semibold">{t("progress.mx.workspace")}</th>
+                  <th className="py-1.5 pr-3 font-semibold">{t("progress.mx.plan")}</th>
                 </>
-              ) : <th className="sticky left-0 bg-white py-1.5 pr-3 font-semibold">Workspace · plan · topic</th>}
+              ) : <th className="sticky left-0 bg-white py-1.5 pr-3 font-semibold">{t("progress.mx.wpt")}</th>}
               {columns.map((group) => group.skills.map((skill, index) => <th key={skill.id} className={`px-1 py-1.5 text-center font-semibold ${index === 0 ? "border-l border-ink/10" : ""}`}>{skill.label}</th>))}
             </tr>
           </thead>
@@ -115,20 +117,20 @@ export function SkillMatrix({ overview }) {
             ))}
           </tbody>
         </table>
-        <p className="m-0 mt-1 text-[10px] text-soft-ink">Percent right. A weak column is a skill problem, a weak row a topic or plan problem. Paler cells have fewer answers.{view === "plans" ? " Tap the i in a cell to see which topics it comes from." : ""}</p>
+        <p className="m-0 mt-1 text-[10px] text-soft-ink">{t("progress.mx.legend")}{view === "plans" ? ` ${t("progress.mx.legendTap")}` : ""}</p>
       </div>
 
       {detail && detailSkill && detailPlan && view === "plans" ? (
         <div className="grid gap-2 rounded-xl border border-ink/10 bg-[var(--surface-soft)] p-3">
           <div className="flex items-start justify-between gap-2">
-            <p className="m-0 text-sm font-bold text-ink">{detailSubject.name} · {detailPlan.name} · {detailSkill.label}<span className="block text-xs font-normal text-soft-ink">The topics the questions that needed this skill came from.</span></p>
-            <button type="button" className={ghostBtn} onClick={() => setDetail(null)}>Close</button>
+            <p className="m-0 text-sm font-bold text-ink">{detailSubject.name} · {detailPlan.name} · {detailSkill.label}<span className="block text-xs font-normal text-soft-ink">{t("progress.mx.detail")}</span></p>
+            <button type="button" className={ghostBtn} onClick={() => setDetail(null)}>{t("common.close")}</button>
           </div>
           {split.map((entry) => (
             <div key={entry.topic} className="grid grid-cols-[minmax(0,10rem)_1fr_auto] items-center gap-2 text-xs">
               <span className="truncate font-semibold text-ink">{entry.topic}</span>
               <span className="h-2 overflow-hidden rounded-full bg-white"><span className="block h-full rounded-full" style={{ width: `${Math.max(4, Math.round(entry.share * 100))}%`, background: tone(entry.acc) }} /></span>
-              <span className="whitespace-nowrap text-soft-ink">{entry.asked - entry.wrong} of {entry.asked} right · {Math.round(entry.share * 100)}% of its questions</span>
+              <span className="whitespace-nowrap text-soft-ink">{t("progress.mx.split", { right: entry.asked - entry.wrong, asked: entry.asked, pct: Math.round(entry.share * 100) })}</span>
             </div>
           ))}
         </div>

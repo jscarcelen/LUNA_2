@@ -1,0 +1,25 @@
+// English UI text for "shell" (generated from the original source strings, then edited by hand).
+export default {
+  "shell.openMenu": "Open menu",
+  "shell.account": "Account",
+  "shell.roleSelector": "Role selector",
+  "shell.role.student": "Student",
+  "shell.role.teacher": "Teacher",
+  "shell.role.parent": "Parent",
+  "shell.storage": "{used} GB of {total} GB used",
+  "shell.people": "People & connections",
+  "shell.settings": "Account settings",
+  "shell.confirmEmail": " · confirm email",
+  "shell.logout": "Log out",
+  "shell.expandMenu": "Expand menu",
+  "shell.collapseMenu": "Collapse menu",
+  "shell.closeMenu": "Close menu",
+  "shell.sections": "Sections",
+  "shell.mainSections": "Main sections",
+  "shell.views": "Views",
+  "shell.leaveConfirm": "Leave this share? It disappears from your workspace. Your own notes and answers stay yours. The owner can share it with you again.",
+  "shell.leftShare": "You left the share.",
+  "shell.componentsAdded.one": "{count} shared component from {names} was added to your blocks (My blocks in Template Studio). They are your own copies.",
+  "shell.componentsAdded.other": "{count} shared components from {names} were added to your blocks (My blocks in Template Studio). They are your own copies.",
+  "shell.yourNetwork": "your network"
+};

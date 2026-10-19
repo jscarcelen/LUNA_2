@@ -2,6 +2,7 @@ import { forPlan, joinAttempts } from "./metrics.js";
 import { parsePlan } from "../plans/plan.js";
 import { diagnosisRows } from "./skillDiagnosis.js";
 import { SKILL_FAMILIES, skillById, skillLabel } from "../skills/taxonomy.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * The skills grid, one level above topic: workspace (a main folder) → study plan, against skills grouped
@@ -61,7 +62,7 @@ export function topicSplit(rows, id) {
  * plan sit under "Outside a study plan" so the numbers still add up; a resource in two plans counts in both.
  * `keep` is the screen's own filter (learner, dates).
  */
-export function skillOverview(workspace, keep = () => true) {
+export function skillOverview(workspace, keep = () => true, t = tEn) {
   const subjects = (workspace?.subjects || []).map((subject) => {
     const documents = subject.documents || [];
     const all = joinAttempts(documents).filter(keep);
@@ -69,11 +70,11 @@ export function skillOverview(workspace, keep = () => true) {
     const plans = documents.map((document) => ({ document, plan: parsePlan(document, { folders: subject.folders || [] }) })).filter((row) => row.plan).map(({ document, plan }) => {
       const attempts = forPlan(all, plan);
       attempts.forEach((attempt) => planned.add(attempt));
-      return { id: document.id, name: plan.name || "Study plan", rows: diagnosisRows(attempts) };
+      return { id: document.id, name: plan.name || t("progress.overview.plan"), rows: diagnosisRows(attempts) };
     });
     const loose = diagnosisRows(all.filter((attempt) => !planned.has(attempt)));
-    if (loose.length) plans.push({ id: "outside-plan", name: "Outside a study plan", rows: loose });
-    return { id: subject.id, name: subject.name || "Workspace", rows: diagnosisRows(all), plans: plans.filter((plan) => plan.rows.length) };
+    if (loose.length) plans.push({ id: "outside-plan", name: t("progress.overview.outside"), rows: loose });
+    return { id: subject.id, name: subject.name || t("progress.overview.workspace"), rows: diagnosisRows(all), plans: plans.filter((plan) => plan.rows.length) };
   }).filter((subject) => subject.plans.length);
   return { subjects, rows: subjects.flatMap((subject) => subject.rows) };
 }

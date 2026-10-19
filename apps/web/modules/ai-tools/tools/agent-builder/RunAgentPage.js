@@ -29,6 +29,10 @@ import { LOOSE_FOLDER } from "../../../plans/folders";
 import { WorkspaceDocumentPicker } from "./WorkspaceDocumentPicker";
 import { MASTER_TAG } from "../../pipeline/masterDocument";
 import { SaveAndExportDialog, SaveProgressView } from "./SaveExportViews";
+import { CountNotice } from "./CountNotice";
+import { shortfallOf } from "../../pipeline/itemCount";
+import { useLocale, useT } from "../../../../lib/i18n/LocaleProvider.js";
+import { LANGUAGE_NAME } from "../../../../lib/i18n/index.js";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -202,7 +206,7 @@ function SegmentedControl({ value, options, onChange }) {
 
 function HowItWorks({ agent, open, onToggle }) {
   const steps = Array.isArray(agent.howItWorks) && agent.howItWorks.length ? agent.howItWorks : [
-    { title: "Choose your material", text: "Pick the documents the agent should learn from." },
+    { title: "Choose your material", text: "Pick the documents this tool should learn from." },
     { title: "Answer a few questions", text: "The agent asks only what it needs to tailor the result." },
     { title: "Pick formats and colors", text: "Style each component with Template Studio's formats and colors, or apply a saved template." },
     { title: "Export or save", text: "PDF, Word, HTML — or straight into your workspace." }
@@ -270,6 +274,8 @@ function legacyToFieldDefs(fields = []) {
  * Generator). Every agent in LUNA goes through this component so the experience is identical.
  */
 export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent = null }) {
+  const { locale: uiLocale } = useLocale();
+  const t = useT();
   const workspaces = toolContext?.workspaces || [];
   const workspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
   const subjectId = toolContext?.selectedSubjectId || "";
@@ -321,6 +327,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
   const [statusMessage, setStatusMessage] = useState("");
   const [isSavingPreset, setIsSavingPreset] = useState(false);
   const [isSavingDocument, setIsSavingDocument] = useState(false);
+  /** "Make more" is asking for the items missing from a short set. */
+  const [toppingUp, setToppingUp] = useState(false);
   /** A node of the workspace tree ("s:<subject>" or "f:<subject>:<folder>"); empty means the open subject. */
   const [saveFolderId, setSaveFolderId] = useState("");
   const filingTarget = (node) => {
@@ -393,6 +401,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     const initialAnswers = {};
     for (const question of Array.isArray(parsed.questions) ? parsed.questions : []) {
       initialAnswers[question.id] = defaultAnswerForQuestion(question);
+      // A "Language" question starts on the UI language when the person uses the app in Spanish (English keeps "Same as material").
+      if (uiLocale !== "en" && /^language$/i.test(String(question.text || "").trim()) && Array.isArray(question.options) && question.options.includes(LANGUAGE_NAME[uiLocale])) initialAnswers[question.id] = LANGUAGE_NAME[uiLocale];
     }
     setAnswersByQuestionId(initialAnswers);
     if (Array.isArray(parsed.savedOutput?.items) && parsed.savedOutput.items.length) setOutput(parsed.savedOutput);
@@ -602,6 +612,26 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
       if (note && !(data?.items || []).length) setStatusMessage(note);
     } catch {
       // The hook exposes the error state to the preview pane.
+    }
+  }
+
+  /** "Make more": asks only for the items missing from a short set, listing the ones made so none is repeated. */
+  async function handleMakeMore() {
+    const short = shortfallOf(output, runConfig);
+    if (!runConfig || !output || !short || generation.isGenerating) return;
+    setStatusMessage("");
+    setToppingUp(true);
+    try {
+      const { items: _items, ...root } = output.data || {};
+      const before = Array.isArray(output.items) ? output.items.length : 0;
+      const data = await generation.generate({ ...runConfig, topUp: { items: output.items || [], root, want: short.requested } });
+      chargeRun({ agentName: agentConfig.name, usage: data.usage, fallbackTokens: runEstimate?.totalTokens || 0, model: data.model });
+      setOutput(data);
+      if ((data?.items || []).length <= before) setStatusMessage(t("misc.run.noMore"));
+    } catch {
+      // The hook exposes the error state to the preview pane; the current result stays.
+    } finally {
+      setToppingUp(false);
     }
   }
 
@@ -1032,7 +1062,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
           <div className="grid gap-3">
             <section className={cardClass}>
               <p className={kicker}>1 · Material</p>
-              <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the agent read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">{agentConfig.materialSlots?.[0]?.name || "What should the tool read?"}{agentConfig.materialSlots?.length && !agentConfig.materialSlots[0].required ? <span className={`${chipClass} ml-2`}>Optional</span> : null}</h4>
               {agentConfig.materialSlots?.[0]?.description ? <p className="m-0 mt-1 text-xs text-soft-ink">{agentConfig.materialSlots[0].description}</p> : null}
               <div className="mt-3 grid gap-3">
                 {!consolidating ? <SegmentedControl value={knowledgeMode} onChange={setKnowledgeMode} options={[{ value: "workspace", label: "Documents from my workspace" }, { value: "context", label: "Paste text" }]} /> : null}
@@ -1057,7 +1087,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
 
             <section className={cardClass}>
               <p className={kicker}>2 · A few choices</p>
-              <h4 className="m-0 mt-1 text-base font-bold text-ink">Tell the agent what you need</h4>
+              <h4 className="m-0 mt-1 text-base font-bold text-ink">Tell the tool what you need</h4>
               <div className="mt-3 grid gap-4">
                 {questions.map((question) => (
                   <div key={question.id}>
@@ -1200,14 +1230,7 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
         </div>
       ) : null}
       {output?.fallbackReason ? <p className="m-0 text-xs text-[var(--color-warn)]">Used the local fallback: {output.fallbackReason}</p> : null}
-      {Array.isArray(output?.checks) && output.checks.some((check) => !check.ok) ? (
-        <div className="rounded-xl border border-[rgba(215,0,21,0.25)] bg-[rgba(215,0,21,0.06)] px-3 py-2">
-          <p className="m-0 text-xs font-semibold text-[var(--color-danger)]">Some checks did not pass — generate again or adjust your choices.</p>
-          <ul className="m-0 mt-1 grid list-none gap-1 p-0 sm:grid-cols-2">
-            {output.checks.filter((check) => !check.ok).map((check) => <li key={check.rule} className="text-xs text-[var(--color-danger)]">✗ {check.message}</li>)}
-          </ul>
-        </div>
-      ) : null}
+      {output && !outputIsBlocks ? <CountNotice shortfall={shortfallOf(output, runConfig)} checks={output.checks} agentName={agentConfig?.name || ""} busy={toppingUp || generation.isGenerating} onMakeMore={handleMakeMore} /> : null}
     </section>
   );
 }

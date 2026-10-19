@@ -1,6 +1,7 @@
 "use client";
 
 import { sectionOf } from "./navModel";
+import { useT } from "../lib/i18n/LocaleProvider.js";
 
 /**
  * Phone only: the same four sections as the side rail (Home, Study, Progress, Create), in reach of a thumb, like the
@@ -37,10 +38,11 @@ const GLYPHS = {
 };
 
 export function BottomTabs({ navItems = [], page, onPageChange }) {
+  const t = useT();
   const items = navItems.slice(0, 4);
   const isCurrent = (item) => (item.section ? item.section === sectionOf(page) : page === item.key);
   return (
-    <nav className="bottom-tabs" aria-label="Main sections">
+    <nav className="bottom-tabs" aria-label={t("shell.mainSections")}>
       {items.map((item) => {
         const on = isCurrent(item);
         const glyph = GLYPHS[item.section || item.key];

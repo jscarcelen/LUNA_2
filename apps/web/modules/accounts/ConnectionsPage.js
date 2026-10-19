@@ -1,24 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ROLE_LABEL, accountsApi } from "./api";
+import { accountsApi, roleLabel } from "./api";
+import { ClassCodeCard } from "./ClassCodeCard";
 import { SHARING_MIGRATION, SetupNotice } from "./SetupNotice";
 import { kindExposesPerformance, relationLabel } from "./shared";
 import { card, chip, dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
-const dueText = (date) => (date ? new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "");
-const KIND_WORD = { document: "file", folder: "folder", subject: "topic" };
-const COPY_WORD = { agent: "agent", template: "template", component: "component" };
+const dueText = (date, t) => (date ? new Date(`${date}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined, { day: "numeric", month: "short" }) : "");
+const KIND_WORD = { document: true, folder: true, subject: true };
+const COPY_WORD = { agent: true, template: true, component: true };
+const kindWord = (kind, t) => t(`people.conn.kind.${KIND_WORD[kind] ? kind : "item"}`);
+const kindA = (kind, t) => t(`people.conn.kindA.${KIND_WORD[kind] ? kind : "item"}`);
 
 function Person({ other, label }) {
+  const t = useT();
   return (
     <div className="min-w-0">
       <p className="m-0 truncate text-sm font-semibold text-ink">{other.displayName || other.email}</p>
       <p className="m-0 truncate text-[11px] text-soft-ink">
-        <span className={`${chip} mr-1.5 bg-[var(--surface-soft)] text-soft-ink`}>{ROLE_LABEL[other.role] || other.role || "Unknown role"}</span>
+        <span className={`${chip} mr-1.5 bg-[var(--surface-soft)] text-soft-ink`}>{roleLabel(other.role, t) || t("people.conn.unknownRole")}</span>
         {label ? <span className={`${chip} mr-1.5 bg-[var(--accent-soft)] text-[var(--accent-ink)]`}>{label}</span> : null}
         {other.displayName ? other.email : null}
-        {other.awaitingSignup ? " · no LUNA account yet — the request waits for them" : ""}
+        {other.awaitingSignup ? ` · ${t("people.conn.awaiting")}` : ""}
       </p>
     </div>
   );
@@ -33,6 +38,7 @@ function Person({ other, label }) {
  * never exposes performance or anything private: only what is explicitly shared.
  */
 export function ConnectionsPage({ account, onOpenPage }) {
+  const t = useT();
   const [connections, setConnections] = useState(null);
   const [shared, setShared] = useState({ sent: [], received: [] });
   const [grants, setGrants] = useState({ given: [], received: [], supported: true });
@@ -89,37 +95,38 @@ export function ConnectionsPage({ account, onOpenPage }) {
 
   return (
     <section className="tw-scope grid gap-3">
+      <ClassCodeCard account={account} onChanged={load} />
       <div className={`${card} p-5`}>
-        <p className={kicker}>Build your network</p>
+        <p className={kicker}>{t("people.conn.build")}</p>
         <p className="m-0 mt-1 text-sm text-soft-ink">
-          Connect with anyone on Luna: students, parents, teachers… there is no limit. They have to accept before anything is shared, and you can end a connection at any time.
-          Connected people can share files, folders, study plans, agents, templates and components with each other, and decide whether the other person can only view or also edit.
-          {account.role === "teacher" ? " Connect with a student to also assign them activities and study plans and follow their performance." : account.role === "parent" ? " Connect with your child to also send them work and follow their performance." : " Teachers and parents you connect with can send you work; a peer connection never shows anyone your performance."}{" "}
-          If they do not have a LUNA account yet, the request waits and shows up when they sign up with that email.
+          {t("people.conn.intro1")}
+          {" "}{t("people.conn.intro2")}
+          {" "}{account.role === "teacher" ? t("people.conn.introTeacher") : account.role === "parent" ? t("people.conn.introParent") : t("people.conn.introStudent")}{" "}
+          {t("people.conn.intro3")}
         </p>
         <form className="mt-3 flex flex-wrap items-center gap-2" onSubmit={send}>
-          <input className={`${field} min-w-[14rem] flex-1`} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="their email" aria-label="Their email" />
-          <select className={field} value={relation} onChange={(event) => setRelation(event.target.value)} aria-label="They are a (only needed if they have no account yet)" title="Only needed if they have no account yet">
-            <option value="">Any role</option>
-            {["student", "teacher", "parent"].map((value) => <option key={value} value={value}>{ROLE_LABEL[value]}</option>)}
+          <input className={`${field} min-w-[14rem] flex-1`} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={t("people.conn.emailPh")} aria-label={t("people.conn.emailAria")} />
+          <select className={field} value={relation} onChange={(event) => setRelation(event.target.value)} aria-label={t("people.conn.roleAria")} title={t("people.conn.roleTitle")}>
+            <option value="">{t("people.conn.anyRole")}</option>
+            {["student", "teacher", "parent"].map((value) => <option key={value} value={value}>{roleLabel(value, t)}</option>)}
           </select>
-          <button type="submit" className={primaryBtn} disabled={busy || !email.trim()}>Send request</button>
+          <button type="submit" className={primaryBtn} disabled={busy || !email.trim()}>{t("people.conn.sendRequest")}</button>
         </form>
         {message ? <p className="m-0 mt-2 text-xs text-[var(--accent-ink)]" role="status">{message}</p> : null}
         {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]" role="alert">{error}</p> : null}
-        {sharingSetup ? <div className="mt-2"><SetupNotice compact migration={SHARING_MIGRATION} title="Connecting beyond teacher, parent and student pairs needs one database step" /></div> : null}
+        {sharingSetup ? <div className="mt-2"><SetupNotice compact migration={SHARING_MIGRATION} title={t("people.conn.sharingDb")} /></div> : null}
       </div>
 
       {connections?.incoming?.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Requests for you</p>
+          <p className={kicker}>{t("people.conn.requestsForYou")}</p>
           <ul className="m-0 mt-2 grid list-none gap-2 p-0">
             {connections.incoming.map((row) => (
               <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 p-3">
                 <Person other={row.other} />
                 <span className="flex gap-1.5">
-                  <button type="button" className={primaryBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("accept", row.id))}>Accept</button>
-                  <button type="button" className={ghostBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("decline", row.id))}>Decline</button>
+                  <button type="button" className={primaryBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("accept", row.id))}>{t("people.conn.accept")}</button>
+                  <button type="button" className={ghostBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("decline", row.id))}>{t("people.conn.decline")}</button>
                 </span>
               </li>
             ))}
@@ -128,30 +135,30 @@ export function ConnectionsPage({ account, onOpenPage }) {
       ) : null}
 
       <div className={`${card} p-5`}>
-        <p className={kicker}>Your network{accepted.length ? ` · ${accepted.length}` : ""}</p>
+        <p className={kicker}>{t("people.conn.yourNetwork")}{accepted.length ? ` · ${accepted.length}` : ""}</p>
         {accepted.length ? (
           <ul className="m-0 mt-2 grid list-none gap-2 p-0">
             {accepted.map((row) => (
               <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 p-3">
-                <Person other={row.other} label={relationLabel(row.kind, account.role, row.other.role)} />
+                <Person other={row.other} label={relationLabel(row.kind, account.role, row.other.role, t)} />
                 <span className="flex gap-1.5">
-                  {row.other.role === "student" && account.role !== "student" && kindExposesPerformance(row.kind) ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("students")}>{account.role === "parent" ? "See performance" : "Open student"}</button> : null}
-                  <button type="button" className={dangerBtn} disabled={busy} onClick={() => { if (window.confirm(`Remove your connection with ${row.other.displayName || row.other.email}? You will stop sharing with each other: what you shared live stops being visible to each other, and copies already sent stay where they are.`)) run(accountsApi.changeLink("remove", row.id)).then(() => load()); }}>Remove</button>
+                  {row.other.role === "student" && account.role !== "student" && kindExposesPerformance(row.kind) ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("students")}>{account.role === "parent" ? t("people.conn.seePerf") : t("people.conn.openStudent")}</button> : null}
+                  <button type="button" className={dangerBtn} disabled={busy} onClick={() => { if (window.confirm(t("people.conn.confirmRemove", { name: row.other.displayName || row.other.email }))) run(accountsApi.changeLink("remove", row.id)).then(() => load()); }}>{t("common.remove")}</button>
                 </span>
               </li>
             ))}
           </ul>
-        ) : <p className="m-0 mt-2 text-sm text-soft-ink">{connections ? "Nobody yet. Send a request above." : "Loading…"}</p>}
+        ) : <p className="m-0 mt-2 text-sm text-soft-ink">{connections ? t("people.conn.nobody") : t("common.loading")}</p>}
       </div>
 
       {connections?.outgoing?.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Waiting for an answer</p>
+          <p className={kicker}>{t("people.conn.waiting")}</p>
           <ul className="m-0 mt-2 grid list-none gap-2 p-0">
             {connections.outgoing.map((row) => (
               <li key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 p-3">
                 <Person other={row.other} />
-                <button type="button" className={ghostBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("cancel", row.id))}>Cancel</button>
+                <button type="button" className={ghostBtn} disabled={busy} onClick={() => run(accountsApi.changeLink("cancel", row.id))}>{t("common.cancel")}</button>
               </li>
             ))}
           </ul>
@@ -160,38 +167,38 @@ export function ConnectionsPage({ account, onOpenPage }) {
 
       {grants.received.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Shared with you</p>
+          <p className={kicker}>{t("people.conn.sharedWithYou")}</p>
           <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
             {grants.received.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 px-3 py-2">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-ink">{item.itemName || `A ${KIND_WORD[item.itemKind] || "item"}`}</span>
-                  <span className="block text-[11px] text-soft-ink">{KIND_WORD[item.itemKind] || "item"} from {item.owner.displayName || "someone"} · {item.permission === "edit" ? "you can edit (changes update the original)" : "view only"}</span>
+                  <span className="block truncate text-sm font-semibold text-ink">{item.itemName || kindA(item.itemKind, t)}</span>
+                  <span className="block text-[11px] text-soft-ink">{t("people.conn.kindFrom", { kind: kindWord(item.itemKind, t), name: item.owner.displayName || t("people.conn.someone") })} · {item.permission === "edit" ? t("people.conn.canEditYou") : t("people.conn.viewOnly")}</span>
                 </span>
-                <button type="button" className={ghostBtn} disabled={busy} onClick={() => { if (window.confirm("Leave this share? It disappears from your workspace. Your own notes and answers stay yours.")) changeGrant(accountsApi.leaveGrant(item.id)); }}>Leave</button>
+                <button type="button" className={ghostBtn} disabled={busy} onClick={() => { if (window.confirm(t("people.conn.confirmLeave"))) changeGrant(accountsApi.leaveGrant(item.id)); }}>{t("people.conn.leave")}</button>
               </li>
             ))}
           </ul>
-          <p className="m-0 mt-2 text-[11px] text-soft-ink">Find it in your workspace under <strong>Shared with me</strong>, in a folder named after the owner. It is the owner&apos;s original, not a copy.</p>
+          <p className="m-0 mt-2 text-[11px] text-soft-ink">{t("people.conn.findA")} <strong>{t("people.conn.sharedWithMe")}</strong>{t("people.conn.findB")}</p>
         </div>
       ) : null}
 
       {grants.given.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Shared by you</p>
+          <p className={kicker}>{t("people.conn.sharedByYou")}</p>
           <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
             {grants.given.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 px-3 py-2">
                 <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold text-ink">{item.itemName || `A ${KIND_WORD[item.itemKind] || "item"}`}</span>
-                  <span className="block text-[11px] text-soft-ink">{KIND_WORD[item.itemKind] || "item"} shared with {item.grantee.displayName || item.grantee.email}</span>
+                  <span className="block truncate text-sm font-semibold text-ink">{item.itemName || kindA(item.itemKind, t)}</span>
+                  <span className="block text-[11px] text-soft-ink">{t("people.conn.kindSharedWith", { kind: kindWord(item.itemKind, t), name: item.grantee.displayName || item.grantee.email })}</span>
                 </span>
                 <span className="flex items-center gap-1.5">
-                  <select className={`${field} py-1 text-xs`} value={item.permission} aria-label={`What ${item.grantee.displayName || "they"} can do`} onChange={(event) => changeGrant(accountsApi.changePermission(item.id, event.target.value))}>
-                    <option value="view">Can view</option>
-                    <option value="edit">Can edit</option>
+                  <select className={`${field} py-1 text-xs`} value={item.permission} aria-label={t("people.conn.whatCanDo", { name: item.grantee.displayName || t("people.conn.they") })} onChange={(event) => changeGrant(accountsApi.changePermission(item.id, event.target.value))}>
+                    <option value="view">{t("people.conn.canView")}</option>
+                    <option value="edit">{t("people.conn.canEdit")}</option>
                   </select>
-                  <button type="button" className={ghostBtn} disabled={busy} onClick={() => changeGrant(accountsApi.revokeGrant(item.id))}>Remove</button>
+                  <button type="button" className={ghostBtn} disabled={busy} onClick={() => changeGrant(accountsApi.revokeGrant(item.id))}>{t("common.remove")}</button>
                 </span>
               </li>
             ))}
@@ -201,34 +208,34 @@ export function ConnectionsPage({ account, onOpenPage }) {
 
       {received.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Sent to you</p>
+          <p className={kicker}>{t("people.conn.sentToYou")}</p>
           <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
             {received.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink/10 px-3 py-2">
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
                   <span className="block text-[11px] text-soft-ink">
-                    {COPY_WORD[item.itemType] ? `A ${COPY_WORD[item.itemType]} from` : item.mode === "assign" ? "Assigned by" : "Shared by"} {item.sender.displayName || "someone"}{item.dueDate ? ` · due ${dueText(item.dueDate)}` : ""}{item.note ? ` · “${item.note}”` : ""}
+                    {COPY_WORD[item.itemType] ? t(`people.conn.copyFrom.${item.itemType}`, { name: item.sender.displayName || t("people.conn.someone") }) : item.mode === "assign" ? t("people.conn.assignedBy", { name: item.sender.displayName || t("people.conn.someone") }) : t("people.conn.sharedBy", { name: item.sender.displayName || t("people.conn.someone") })}{item.dueDate ? ` · ${t("people.conn.dueDate", { date: dueText(item.dueDate, t) })}` : ""}{item.note ? ` · “${item.note}”` : ""}
                   </span>
                 </span>
-                {item.copyDocumentId && item.itemType !== "plan" && !COPY_WORD[item.itemType] ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.(`workspaces?doc=${item.copyDocumentId}`)}>Open</button> : null}
-                {item.itemType === "plan" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("plans")}>Study plans</button> : null}
-                {item.itemType === "agent" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("create")}>Open in Make</button> : null}
+                {item.copyDocumentId && item.itemType !== "plan" && !COPY_WORD[item.itemType] ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.(`workspaces?doc=${item.copyDocumentId}`)}>{t("common.open")}</button> : null}
+                {item.itemType === "plan" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("plans")}>{t("people.conn.studyPlans")}</button> : null}
+                {item.itemType === "agent" ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("create")}>{t("people.conn.openMake")}</button> : null}
               </li>
             ))}
           </ul>
-          <p className="m-0 mt-2 text-[11px] text-soft-ink">Assigned work and older shares are read-only copies in the “Shared documents” folder of your workspace, in a folder named after the sender. Agents, templates and components are your own copies: use and change them freely.</p>
+          <p className="m-0 mt-2 text-[11px] text-soft-ink">{t("people.conn.copiesNote")}</p>
         </div>
       ) : null}
 
       {account.role !== "student" && shared.sent.length ? (
         <div className={`${card} p-5`}>
-          <p className={kicker}>Sent by you</p>
+          <p className={kicker}>{t("people.conn.sentByYou")}</p>
           <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
             {shared.sent.slice(0, 30).map((item) => (
               <li key={item.id} className="rounded-xl border border-ink/10 px-3 py-2">
                 <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? "Assigned" : COPY_WORD[item.itemType] ? `Copy of a ${COPY_WORD[item.itemType]} sent` : "Shared"} with {item.recipient.displayName || "someone"}{item.dueDate ? ` · due ${dueText(item.dueDate)}` : ""}</span>
+                <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? t("people.conn.assignedWith", { name: item.recipient.displayName || t("people.conn.someone") }) : COPY_WORD[item.itemType] ? t(`people.conn.copySent.${item.itemType}`, { name: item.recipient.displayName || t("people.conn.someone") }) : t("people.conn.sharedWith", { name: item.recipient.displayName || t("people.conn.someone") })}{item.dueDate ? ` · ${t("people.conn.dueDate", { date: dueText(item.dueDate, t) })}` : ""}</span>
               </li>
             ))}
           </ul>

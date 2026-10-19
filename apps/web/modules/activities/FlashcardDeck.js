@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
 import { SourceNote } from "./SourceNote";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
@@ -10,9 +11,9 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
 
 /** How well the learner knew the card. Sure counts as known; the other two come back for review. */
 const LEVELS = [
-  { key: "high", label: "Knew it", hint: "Sure", answer: "known" },
-  { key: "medium", label: "Almost", hint: "Fairly sure", answer: "unknown" },
-  { key: "low", label: "Not yet", hint: "Guessing", answer: "unknown" }
+  { key: "high", label: "practice.deck.knew", hint: "practice.sure.high", answer: "known" },
+  { key: "medium", label: "practice.deck.almost", hint: "practice.sure.medium", answer: "unknown" },
+  { key: "low", label: "practice.deck.notYet", hint: "practice.sure.low", answer: "unknown" }
 ];
 
 const lookStyle = (look) => (look?.accent ? { "--accent": look.accent.main, "--accent-soft": look.accent.tint, "--accent-ink": `color-mix(in srgb, ${look.accent.main} 65%, #000)` } : undefined);
@@ -23,6 +24,7 @@ const lookStyle = (look) => (look?.accent ? { "--accent": look.accent.main, "--a
  * middle) and every rating is recorded as the confidence of that attempt.
  */
 export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
+  const t = useT();
   const cards = activity.questions;
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
@@ -70,22 +72,22 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h3 className="m-0 truncate text-xl font-bold tracking-tight text-ink">{activity.title}</h3>
-            <p className="m-0 text-xs text-soft-ink">{done ? "Deck finished" : `Card ${index + 1} of ${cards.length} · tap the card to flip it`}</p>
+            <p className="m-0 text-xs text-soft-ink">{done ? t("practice.deck.finished") : t("practice.deck.progress", { n: index + 1, total: cards.length })}</p>
           </div>
-          {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? "Done" : "Leave"}</button> : null}
+          {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? t("practice.done") : t("practice.leave")}</button> : null}
         </div>
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full bg-[var(--accent)] transition-all" style={{ width: `${cards.length ? (Math.min(index, cards.length) / cards.length) * 100 : 0}%` }} /></div>
       </header>
 
       {!done ? (
         <>
-          <button type="button" onClick={() => setFlipped((value) => !value)} aria-label={flipped ? "Show the front" : "Flip the card"} className="relative block w-full text-left" style={{ perspective: 1200 }}>
+          <button type="button" onClick={() => setFlipped((value) => !value)} aria-label={flipped ? t("practice.deck.showFront") : t("practice.deck.flipCard")} className="relative block w-full text-left" style={{ perspective: 1200 }}>
             <div className="relative w-full transition-transform duration-500" style={{ transformStyle: "preserve-3d", transform: flipped ? "rotateY(180deg)" : "none", aspectRatio: "3 / 2" }}>
-              {[{ side: "FRONT", text: current.prompt, back: false }, { side: "BACK", text: current.back || (typeof current.answer === "string" ? current.answer : ""), back: true }].map((face) => (
+              {[{ side: "FRONT", label: t("practice.deck.front"), text: current.prompt, back: false }, { side: "BACK", label: t("practice.deck.back"), text: current.back || (typeof current.answer === "string" ? current.answer : ""), back: true }].map((face) => (
                 <div key={face.side} className="absolute inset-0 grid grid-rows-[auto_1fr] overflow-hidden rounded-[22px] border border-[var(--accent-soft)] bg-white shadow-[0_12px_32px_rgba(0,0,0,0.10)]" style={{ backfaceVisibility: "hidden", transform: face.back ? "rotateY(180deg)" : "none" }}>
                   <div className="mx-10 h-1.5 rounded-b-full bg-[var(--accent)]" />
                   <div className="grid grid-rows-[auto_1fr] px-8 pb-8 pt-4">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: face.back ? "#8e8e93" : "var(--accent-ink)" }}>{face.side}</span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: face.back ? "#8e8e93" : "var(--accent-ink)" }}>{face.label}</span>
                     <p className={`m-0 grid place-items-center text-center font-bold text-ink ${String(face.text).length > 60 ? "text-xl" : "text-3xl sm:text-4xl"}`}>{face.text}</p>
                   </div>
                 </div>
@@ -97,23 +99,23 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
             {flipped ? (
               <>
                 {/* Where the card comes from, and whether Luna could confirm it in the material (pipeline/grounding.js). */}
-                {current.source?.extract || current.source?.grounding ? <div className="mb-3"><SourceNote source={current.source} /></div> : null}
-                <p className="m-0 text-sm font-semibold text-ink">How well did you know it?</p>
+                {current.source ? <div className="mb-3"><SourceNote source={current.source} question={current} /></div> : null}
+                <p className="m-0 text-sm font-semibold text-ink">{t("practice.deck.howWell")}</p>
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {LEVELS.map((level, position) => (
                     <button key={level.key} type="button" onClick={() => rate(level)} className="rounded-xl border border-ink/12 px-3 py-2.5 text-left transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">
-                      <span className="block text-sm font-bold text-ink">{level.label}</span>
-                      <span className="block text-[11px] text-soft-ink">{level.hint} · key {position + 1}</span>
+                      <span className="block text-sm font-bold text-ink">{t(level.label)}</span>
+                      <span className="block text-[11px] text-soft-ink">{t("practice.deck.hint", { hint: t(level.hint), n: position + 1 })}</span>
                     </button>
                   ))}
                 </div>
               </>
             ) : (
               <div className="flex items-center justify-between gap-3">
-                <p className="m-0 text-sm text-soft-ink">Think of the answer, then flip the card (Space).</p>
+                <p className="m-0 text-sm text-soft-ink">{t("practice.deck.think")}</p>
                 <div className="flex gap-2">
-                  {index > 0 ? <button type="button" className={ghostBtn} onClick={() => setIndex((value) => Math.max(0, value - 1))}>← Back</button> : null}
-                  <button type="button" className={primaryBtn} onClick={() => setFlipped(true)}>Flip</button>
+                  {index > 0 ? <button type="button" className={ghostBtn} onClick={() => setIndex((value) => Math.max(0, value - 1))}>{t("practice.deck.back2")}</button> : null}
+                  <button type="button" className={primaryBtn} onClick={() => setFlipped(true)}>{t("practice.deck.flip")}</button>
                 </div>
               </div>
             )}
@@ -124,18 +126,18 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
           {attempt ? (
             <>
               <p className="m-0 text-3xl font-bold text-ink">{attempt.score} / {attempt.total}</p>
-              <p className="m-0 text-sm text-soft-ink">you knew these cards{missed.length ? ` — ${missed.length} to see again` : " — perfect!"}</p>
+              <p className="m-0 text-sm text-soft-ink">{t("practice.deck.knewThese")}{missed.length ? t("practice.deck.toSeeAgain", { count: missed.length }) : t("practice.deck.perfect")}</p>
             </>
           ) : (
             <>
-              <p className="m-0 text-lg font-bold text-ink">That was the whole deck</p>
-              <p className="m-0 mt-1 text-sm text-soft-ink">{rated} card{rated === 1 ? "" : "s"} rated. Save the result so your progress is tracked.</p>
-              <button type="button" className={`${primaryBtn} mt-3`} onClick={finish}>Save my result</button>
+              <p className="m-0 text-lg font-bold text-ink">{t("practice.deck.whole")}</p>
+              <p className="m-0 mt-1 text-sm text-soft-ink">{t.plural("practice.deck.rated", rated)}</p>
+              <button type="button" className={`${primaryBtn} mt-3`} onClick={finish}>{t("practice.deck.save")}</button>
             </>
           )}
           {missed.length ? (
             <div className="mt-4 grid gap-1.5">
-              <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">To see again</p>
+              <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">{t("practice.deck.again")}</p>
               {missed.map((entry) => <p key={entry.id} className="m-0 rounded-lg bg-[var(--surface-soft)] px-3 py-1.5 text-sm text-ink"><strong>{entry.prompt}</strong> — {entry.back || entry.answer}</p>)}
             </div>
           ) : null}

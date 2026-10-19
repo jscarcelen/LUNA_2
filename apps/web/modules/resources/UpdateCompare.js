@@ -2,30 +2,36 @@
 
 import { useState } from "react";
 import { blockText } from "./update";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const TONE = {
-  added: { label: "New", chip: "bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]", box: "border-[rgba(52,199,89,0.35)] bg-[rgba(52,199,89,0.06)]" },
-  changed: { label: "Changed", chip: "bg-[rgba(255,149,0,0.15)] text-[#b25e00]", box: "border-[rgba(255,149,0,0.4)] bg-[rgba(255,149,0,0.06)]" },
-  removed: { label: "Removed", chip: "bg-[rgba(255,59,48,0.12)] text-[var(--color-danger)]", box: "border-[rgba(255,59,48,0.3)] bg-[rgba(255,59,48,0.05)]" },
-  same: { label: "Same", chip: "bg-[var(--surface-soft)] text-soft-ink", box: "border-ink/10 bg-white" }
+  added: { chip: "bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]", box: "border-[rgba(52,199,89,0.35)] bg-[rgba(52,199,89,0.06)]" },
+  changed: { chip: "bg-[rgba(255,149,0,0.15)] text-[#b25e00]", box: "border-[rgba(255,149,0,0.4)] bg-[rgba(255,149,0,0.06)]" },
+  removed: { chip: "bg-[rgba(255,59,48,0.12)] text-[var(--color-danger)]", box: "border-[rgba(255,59,48,0.3)] bg-[rgba(255,59,48,0.05)]" },
+  same: { chip: "bg-[var(--surface-soft)] text-soft-ink", box: "border-ink/10 bg-white" }
 };
 
-const Chip = ({ status }) => <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE[status].chip}`}>{TONE[status].label}</span>;
+function Chip({ status }) {
+  const t = useT();
+  return <span className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${TONE[status].chip}`}>{t(`courses.cmp.${status}`)}</span>;
+}
 
 const answerOf = (question) => (typeof question?.answer === "string" ? question.answer : question?.answer ? Object.entries(question.answer).map(([left, right]) => `${left} → ${right}`).join("; ") : "");
 
 function QuestionBody({ question, struck = false }) {
+  const t = useT();
   if (!question) return null;
   const text = question.kind === "flashcard" ? `${question.prompt}  →  ${answerOf(question)}` : question.prompt;
   return (
     <div className={struck ? "text-soft-ink line-through decoration-[var(--color-danger)]/50" : ""}>
       <p className="m-0 text-sm font-semibold text-ink">{text}</p>
-      {question.kind !== "flashcard" ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{question.options?.length ? `${question.options.length} options · ` : ""}Answer: {answerOf(question) || "—"}</p> : null}
+      {question.kind !== "flashcard" ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{question.options?.length ? `${t("courses.cmp.options", { count: question.options.length })} · ` : ""}{t("courses.cmp.answer", { answer: answerOf(question) || "—" })}</p> : null}
     </div>
   );
 }
 
 function BlockBody({ block, struck = false }) {
+  const t = useT();
   if (!block) return null;
   const heading = /^(heading|section_header|document_header)/.test(String(block.type || ""));
   return (
@@ -41,11 +47,12 @@ function BlockBody({ block, struck = false }) {
  * after side by side — and the removed ones where they were.
  */
 export function UpdateCompare({ diff }) {
+  const t = useT();
   const [showSame, setShowSame] = useState(false);
   const { counts, rows, kind } = diff;
   const same = rows.filter((row) => row.status === "same");
   const changedRows = rows.filter((row) => row.status !== "same");
-  const unit = kind === "questions" ? "question" : "block";
+  const unit = kind === "questions" ? "Question" : "Block";
 
   const summary = [["added", counts.added], ["changed", counts.changed], ["removed", counts.removed]].filter(([, n]) => n > 0);
 
@@ -56,7 +63,7 @@ export function UpdateCompare({ diff }) {
     const flush = (key) => {
       if (!run.length) return;
       if (showSame) run.forEach((row, index) => out.push(<div key={`${key}-${index}`} className={`rounded-xl border px-3 py-2 ${TONE.same.box}`}><BlockBody block={row.after} /></div>));
-      else out.push(<p key={`${key}-fold`} className="m-0 px-1 text-[11px] text-soft-ink">… {run.length} unchanged {unit}{run.length === 1 ? "" : "s"}</p>);
+      else out.push(<p key={`${key}-fold`} className="m-0 px-1 text-[11px] text-soft-ink">{t.plural(`courses.cmp.fold${unit}`, run.length)}</p>);
       run = [];
     };
     rows.forEach((row, index) => {
@@ -66,8 +73,8 @@ export function UpdateCompare({ diff }) {
         <div key={index} className={`grid gap-2 rounded-xl border px-3 py-2 ${TONE[row.status].box} ${row.status === "changed" ? "md:grid-cols-2" : ""}`}>
           {row.status === "changed" ? (
             <>
-              <div><p className="m-0 mb-1 text-[10px] font-semibold uppercase tracking-wide text-soft-ink">Before</p><BlockBody block={row.before} struck /></div>
-              <div><p className="m-0 mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-soft-ink">After <Chip status="changed" /></p><BlockBody block={row.after} /></div>
+              <div><p className="m-0 mb-1 text-[10px] font-semibold uppercase tracking-wide text-soft-ink">{t("courses.cmp.before")}</p><BlockBody block={row.before} struck /></div>
+              <div><p className="m-0 mb-1 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-soft-ink">{t("courses.cmp.after")} <Chip status="changed" /></p><BlockBody block={row.after} /></div>
             </>
           ) : (
             <div className="flex items-start gap-2"><Chip status={row.status} /><div className="min-w-0 flex-1"><BlockBody block={row.after || row.before} struck={row.status === "removed"} /></div></div>
@@ -82,9 +89,9 @@ export function UpdateCompare({ diff }) {
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center gap-1.5">
-        {summary.length ? summary.map(([status, n]) => <span key={status} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${TONE[status].chip}`}>{n} {TONE[status].label.toLowerCase()}</span>) : <span className="text-xs text-soft-ink">Nothing was changed.</span>}
-        {counts.same ? <span className="text-xs text-soft-ink">· {counts.same} unchanged</span> : null}
-        {kind === "blocks" && counts.same ? <button type="button" className="ml-auto text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setShowSame((value) => !value)}>{showSame ? "Hide unchanged" : "Show unchanged"}</button> : null}
+        {summary.length ? summary.map(([status, n]) => <span key={status} className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${TONE[status].chip}`}>{n} {t(`courses.cmp.${status}`).toLowerCase()}</span>) : <span className="text-xs text-soft-ink">{t("courses.cmp.nothing")}</span>}
+        {counts.same ? <span className="text-xs text-soft-ink">· {t("courses.cmp.unchanged", { count: counts.same })}</span> : null}
+        {kind === "blocks" && counts.same ? <button type="button" className="ml-auto text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setShowSame((value) => !value)}>{showSame ? t("courses.cmp.hide") : t("courses.cmp.show")}</button> : null}
       </div>
       <div className="grid max-h-[46vh] gap-1.5 overflow-y-auto pr-1">
         {kind === "blocks" ? renderBlocks() : (
@@ -102,7 +109,7 @@ export function UpdateCompare({ diff }) {
             ))}
             {same.length ? (
               <button type="button" className="rounded-xl border border-ink/10 bg-white px-3 py-2 text-left text-xs text-soft-ink hover:bg-[var(--surface-soft)]" onClick={() => setShowSame((value) => !value)}>
-                {showSame ? "▾" : "▸"} {same.length} {unit}{same.length === 1 ? "" : "s"} kept as they were
+                {showSame ? "▾" : "▸"} {t.plural(`courses.cmp.kept${unit}`, same.length)}
               </button>
             ) : null}
             {showSame ? same.map((row, index) => <div key={`s${index}`} className={`rounded-xl border px-3 py-2 ${TONE.same.box}`}><QuestionBody question={row.after} /></div>) : null}

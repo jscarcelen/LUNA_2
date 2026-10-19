@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildConceptForest, capConceptTree } from "../../plans/conceptTree";
 import { InfoDot, METRIC_INFO } from "./parts";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const TOP = 5;
 const colour = (mastery) => (mastery === undefined ? "#9ca3af" : mastery < 0.4 ? "#ff3b30" : mastery < 0.7 ? "#ff9500" : "#34c759");
@@ -13,7 +14,8 @@ const colour = (mastery) => (mastery === undefined ? "#9ca3af" : mastery < 0.4 ?
  * behind, the five that are strongest, and how many have not been assessed at all. One plan at a
  * time — the most recently active one to begin with, others one tap away.
  */
-export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId = "" }) {
+export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId = "", studentId = "" }) {
+  const t = useT();
   const plan = plans.find((entry) => entry.id === planId) || plans[0] || null;
   const [data, setData] = useState({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} });
   const [showUnassessed, setShowUnassessed] = useState(false);
@@ -23,10 +25,11 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
     if (!plan || !workspaceId) { setData({ status: "idle", concepts: [], prerequisites: [], mastery: {}, accuracy: {} }); return undefined; }
     let cancelled = false;
     setData((current) => ({ ...current, status: "loading" }));
-    const learnerId = (typeof window !== "undefined" && window.localStorage.getItem("luna.learnerId")) || "anonymous";
+    // Whose data is read is decided on the server: the session, or (teacher/parent view) the linked student named by `studentId`.
+    const asStudent = studentId ? `&studentId=${encodeURIComponent(studentId)}` : "";
     Promise.all([
-      fetch(`/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent(materialKey)}`).then((response) => response.json()).catch(() => ({})),
-      fetch(`/api/student/mastery?learnerId=${encodeURIComponent(learnerId)}&workspaceId=${workspaceId}`).then((response) => response.json()).catch(() => ({}))
+      fetch(`/api/concepts?workspaceId=${workspaceId}&documentIds=${encodeURIComponent(materialKey)}${asStudent}`).then((response) => response.json()).catch(() => ({})),
+      fetch(`/api/student/mastery?workspaceId=${workspaceId}${asStudent}`).then((response) => response.json()).catch(() => ({}))
     ]).then(([conceptData, masteryData]) => {
       if (cancelled) return;
       const graph = capConceptTree(Array.isArray(conceptData?.concepts) ? conceptData.concepts : [], Array.isArray(conceptData?.prerequisites) ? conceptData.prerequisites : []);
@@ -43,7 +46,7 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
       setData({ status: "done", concepts: graph.concepts, prerequisites: graph.prerequisites, mastery, accuracy });
     });
     return () => { cancelled = true; };
-  }, [plan?.id, workspaceId, materialKey]);
+  }, [plan?.id, workspaceId, materialKey, studentId]);
 
   const view = useMemo(() => {
     const { roots, childrenById } = buildConceptForest(data.concepts, data.prerequisites);
@@ -65,7 +68,7 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
     return { depth, byId, assessed, notAssessed, withAccuracy, lowest: inTreeOrder(lowest), highest: inTreeOrder(highest), total: data.concepts.length };
   }, [data]);
 
-  if (!plans.length) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Make a study plan — its topics are what this tracks.</p>;
+  if (!plans.length) return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.pt.make")}</p>;
 
   const row = (concept) => {
     const value = data.mastery[concept.id];
@@ -92,7 +95,7 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
   return (
     <div className="grid gap-4">
       {plans.length > 1 ? (
-        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Study plan">
+        <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label={t("progress.pt.plan")}>
           {plans.map((entry) => (
             <button key={entry.id} type="button" onClick={() => onPlanChange?.(entry.id)} className={`inline-flex max-w-[16rem] items-center gap-1.5 truncate rounded-full border px-3 py-1 text-xs font-semibold transition ${entry.id === plan.id ? "border-transparent bg-ink text-white" : "border-ink/15 text-soft-ink hover:bg-[var(--surface-soft)]"}`}>
               <span className="size-2 shrink-0 rounded-full" style={{ background: entry.colour }} />
@@ -102,22 +105,22 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
         </div>
       ) : plan ? <p className="m-0 text-xs font-semibold text-soft-ink">◷ {plan.name}</p> : null}
 
-      {data.status === "loading" ? <p className="m-0 text-sm text-soft-ink">Reading the plan's topics…</p> : null}
-      {data.status === "done" && !view.total ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">This plan has no topics yet. Open it in Study plans so Luna can map its material.</p> : null}
+      {data.status === "loading" ? <p className="m-0 text-sm text-soft-ink">{t("progress.pt.reading")}</p> : null}
+      {data.status === "done" && !view.total ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.pt.noTopics")}</p> : null}
       {view.total ? (
         <>
           <p className="m-0 text-sm text-ink">
-            <strong>{view.total}</strong> topic{view.total === 1 ? "" : "s"} in this plan · <strong>{view.assessed.length}</strong> assessed · <strong className={view.notAssessed.length ? "text-[var(--color-warn)]" : ""}>{view.notAssessed.length}</strong> not assessed yet
+            <strong>{view.total}</strong> {t.plural("progress.pt.topicsInPlan", view.total)} · <strong>{view.assessed.length}</strong> {t("progress.pt.assessed")} · <strong className={view.notAssessed.length ? "text-[var(--color-warn)]" : ""}>{view.notAssessed.length}</strong> {t("progress.pt.notAssessed")}
           </p>
-          {few ? group("Assessed topics", [...view.lowest], "#6e6e73") : (
+          {few ? group(t("progress.pt.assessedTopics"), [...view.lowest], "#6e6e73") : (
             <div className="grid gap-4 lg:grid-cols-2">
-              {group(`${TOP} furthest behind`, view.lowest, "#d7003a")}
-              {group(`${TOP} strongest`, view.highest, "#1f7a3a")}
+              {group(t("progress.pt.behind", { count: TOP }), view.lowest, "#d7003a")}
+              {group(t("progress.pt.strongest", { count: TOP }), view.highest, "#1f7a3a")}
             </div>
           )}
           {view.withAccuracy.length ? (
             <div className="grid gap-2 rounded-2xl border border-ink/10 p-3">
-              <p className="m-0 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Accuracy by topic<InfoDot info={METRIC_INFO.topicAccuracy} label="accuracy by topic" /></p>
+              <p className="m-0 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{t("progress.pt.accByTopic")}<InfoDot info={METRIC_INFO.topicAccuracy} label={t("progress.pt.accByTopicLower")} /></p>
               {view.withAccuracy.map((concept) => {
                 const { value, answers } = data.accuracy[concept.id];
                 const percent = Math.round(value * 100);
@@ -125,7 +128,7 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
                   <div key={concept.id} className="grid gap-0.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate text-xs font-medium text-ink" title={concept.name}>{concept.name}</span>
-                      <span className="shrink-0 text-[11px] text-soft-ink"><strong className="text-ink">{percent}%</strong> · {answers} answer{answers === 1 ? "" : "s"}</span>
+                      <span className="shrink-0 text-[11px] text-soft-ink"><strong className="text-ink">{percent}%</strong> · {t.plural("progress.pt.answers", answers)}</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-ink/8"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div>
                   </div>
@@ -133,11 +136,11 @@ export function PlanTopics({ plans = [], planId = "", onPlanChange, workspaceId 
               })}
             </div>
           ) : null}
-          {!view.assessed.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Nothing assessed yet — do an activity from this plan and its topics start to fill in.</p> : null}
+          {!view.assessed.length ? <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.pt.nothing")}</p> : null}
           {view.notAssessed.length ? (
             <div className="grid gap-2">
               <button type="button" className="justify-self-start text-xs font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={showUnassessed} onClick={() => setShowUnassessed((value) => !value)}>
-                {showUnassessed ? "Hide" : "Show"} the {view.notAssessed.length} topic{view.notAssessed.length === 1 ? "" : "s"} not assessed yet
+                {t.plural(showUnassessed ? "progress.pt.hideN" : "progress.pt.showN", view.notAssessed.length)}
               </button>
               {showUnassessed ? <div className="grid gap-2 rounded-xl bg-[var(--surface-soft)] p-3">{view.notAssessed.map(row)}</div> : null}
             </div>

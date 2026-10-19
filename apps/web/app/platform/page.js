@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "../../components/AppShell";
 import { SetupNotice } from "../../modules/accounts/SetupNotice";
 import { isSetupNeededError, ownAccount } from "../../lib/accountsCore.js";
-import { findAccountById } from "../../lib/accountsRepository.js";
+import { findAccountById, readTourSeen } from "../../lib/accountsRepository.js";
 import { freshSessionFromRequest } from "../../lib/session.js";
 import { isSupabaseConfigured } from "../../lib/supabaseClient.js";
 
@@ -35,5 +35,8 @@ export default async function PlatformPage({ searchParams }) {
     throw error;
   }
   if (!account) redirect("/login");
-  return <AppShell account={ownAccount(account)} initialPage={initialPage} />;
+  // Whether this account already closed the first-run tour (null: the migration is not applied, the browser remembers it per account).
+  let tourSeen = null;
+  try { const tour = await readTourSeen(account.id); tourSeen = tour.ready ? tour.seen : null; } catch { tourSeen = null; }
+  return <AppShell account={ownAccount(account)} initialPage={initialPage} tourSeen={tourSeen} />;
 }

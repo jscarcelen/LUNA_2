@@ -3,6 +3,9 @@
 A **resource** is one generated document: the agent output plus everything needed to open it as an activity, export it in any view of its template, and run its agent again. It is stored as a workspace document tagged `resource` (`resource.js`: `buildResource`, `parseResource`, attempts and stats).
 
 - `ResourceDetail.js` / `ResourceExports.js` / `ResourceStyle.js` / `SaveResourceDialog.js` — the overlay a resource opens in, its downloads, its "Format & colour", and the save dialog.
+  The save dialog's Name may be empty while it is typed (clear it and retype); it is checked only on Save (`nameToSave` in
+  `ui/displayName.js`): a blank name keeps the dialog open with "Give it a name." The same rule applies to renaming in the Courses
+  browser (empty → asked again, Cancel keeps the old name; the `.resource.json` suffix is kept) and to the folder tree's inline rename.
 - `concepts.js`, `look.js`, `outputDoc.js`, `saveFlow.js` — what it teaches, how it looks, the laid-out document, the save flow.
 
 ## Update… (run the same agent again with what the user wants changed)
@@ -11,3 +14,5 @@ A **resource** is one generated document: the agent output plus everything neede
 - `UpdateDialog.js` — the dialog every "Update…" button opens (form → progress with `PlanProgress` → result with `UpdateCompare` → Replace / Save as new version / Discard). Props: `document` (null for a result that is not saved yet), `resource`, `workspace`, `fallbackSubjectId`, `onSaveGeneratedQuizDocument`, `onUpdateGeneratedDocument`, `onReplaceUnsaved`, `onDone`, `onClose`.
 - `UpdateCompare.js`, `VersionsPanel.js` — the before/after view and the "Versions" tab.
 - The same idea for study plans lives in `modules/plans/updatePlan.js` + `UpdatePlanDialog.js` (+ `app/api/plans/update/route.js`): the model proposes, `applyPlanUpdate` enforces what may change (finished steps, built resources, deadlines with `setBy`, the plan's agent scope).
+
+A generated document (summary, notes) opens straight in the reader; "What it teaches", Regenerate and Delete are in the reader's "⋯" menu. Names are shown through `ui/displayName.js` (no `.resource.json`).

@@ -52,10 +52,13 @@ function cfgError() {
   }, { status: 500 });
 }
 
-async function ok(ownerUserId, extra = {}) {
+async function loadTree(ownerUserId) {
   // A real account also sees what was shared with it ("Shared with me / <owner>"); the demo owner never does.
-  const workspaces = ownerUserId !== getDemoOwnerUserId() ? await listTreeWithShared(ownerUserId) : await listWorkspaceTree(ownerUserId);
-  return NextResponse.json({ workspaces, ...extra });
+  return ownerUserId !== getDemoOwnerUserId() ? listTreeWithShared(ownerUserId) : listWorkspaceTree(ownerUserId);
+}
+
+async function ok(ownerUserId, extra = {}) {
+  return NextResponse.json({ workspaces: await loadTree(ownerUserId), ...extra });
 }
 
 export async function GET(request) {
@@ -65,11 +68,13 @@ export async function GET(request) {
     if (await hasRevokedSession(request)) return NextResponse.json({ error: "Your session ended (the password was changed). Please log in again." }, { status: 401 });
     // A logged-in account sees its own workspaces (and always has at least one); anyone else gets the demo owner.
     const ownerUserId = await ownerUserIdForFresh(request);
-    if (await accountIdForFresh(request)) {
-      const existing = await listWorkspaceTree(ownerUserId);
-      if (!existing.length) await createWorkspace("My workspace", ownerUserId);
+    // One load (the tree used to be read twice: once to see whether it is empty, once to answer).
+    let workspaces = await loadTree(ownerUserId);
+    if (!workspaces.length && await accountIdForFresh(request)) {
+      await createWorkspace("My workspace", ownerUserId);
+      workspaces = await loadTree(ownerUserId);
     }
-    return await ok(ownerUserId);
+    return NextResponse.json({ workspaces });
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }

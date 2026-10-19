@@ -238,6 +238,28 @@ export async function updateAccountProfile(accountId, { displayName, age, plan }
   }
 }
 
+/**
+ * Has this account closed the first-run tour? `{ seen, ready }`: `ready` is false until
+ * supabase/migrations/202610190001_account_tour_seen.sql is applied (the browser then remembers it per account id).
+ */
+export async function readTourSeen(accountId) {
+  const { data, error } = await createSupabaseAdminClient().from("accounts").select("tour_seen_at").eq("id", accountId).maybeSingle();
+  if (error) {
+    if (isMissingColumnError(error)) return { seen: false, ready: false };
+    throw error;
+  }
+  return { seen: Boolean(data?.tour_seen_at), ready: true };
+}
+
+export async function markTourSeen(accountId) {
+  const { error } = await createSupabaseAdminClient().from("accounts").update({ tour_seen_at: new Date().toISOString() }).eq("id", accountId).is("tour_seen_at", null);
+  if (error) {
+    if (isMissingColumnError(error)) return { ready: false };
+    throw error;
+  }
+  return { ready: true };
+}
+
 /** New email: it has to be confirmed again, so the confirmation mark is cleared (when verification exists). */
 export async function updateAccountEmail(accountId, email) {
   const row = { email: normalizeEmail(email) };

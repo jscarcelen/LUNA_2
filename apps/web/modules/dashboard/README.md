@@ -1,6 +1,17 @@
 # dashboard (Home)
 
-The Home page, the same for a student, a teacher and a parent (only the name differs):
+Home is different for each role (`ui/DashboardPage.js` dispatches):
+
+- **Teacher: "Your classes"** (`ui/TeacherHome.js`): one card per group (plus "Not in a class yet" / "All my students") with who is
+  behind, what is due this week and a big "Send practice to {class}…" button. It opens `accounts/SendPracticeDialog.js` (pick an
+  activity or plan) and then the normal Assign dialog (`ShareDialog` with `item.initial`), so the due date and delivery are the existing flow.
+  Data: `ui/useLinkedMembers.js` (connections, groups, members a page at a time, 30 max per card). "Open class" goes to `students?group=<id>`.
+- **Parent: "Your child this week"** (`ui/ParentHome.js`): per child on track or not, where they struggle, ONE way to help, read-only.
+  No Start button and none of the child's tasks as the parent's own.
+- Both are built by the pure view-models in `roleHome.js` (`standingOf`, `classCardOf`, `weeklySummaryOf`, `howToHelp`), tested in `tests/dashboard/role-home.test.js`.
+  "Behind" = a late step, a passed plan date, no activity for 7 days while work is left, or mastery under 50%.
+
+The student Home (the rest of this file) is:
 
 1. **Greeting** — "Hi <first name>" (`home.js` `greeting`, from the role profile in `components/data.js`).
 2. **Plan gallery** — one row, at most four study-plan cards, the plans with the closest upcoming
@@ -20,3 +31,7 @@ No plans yet → one line and a "Plan it for me" (`plans?generate=1`) or "Upload
 
 `home.js` is pure (greeting, plan ranking, coach input) and tested in `tests/dashboard/home.test.js`.
 The old sample-data dashboards and `insights.js` were removed.
+
+**What Luna suggests** never blocks the first paint: the coach read (`CoachPanel`, a model call) is mounted about 1.5 s after Home is
+shown, or as soon as the person opens the fold, with a skeleton in the meantime.
+Student Home shows "N quizzes done this week" first and, when two or more steps are late, one catch-up message (`activities/catchUp.js`).

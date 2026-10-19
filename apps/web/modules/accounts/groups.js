@@ -1,3 +1,5 @@
+import { tEn } from "../../lib/i18n/index.js";
+
 /**
  * Groups of students (pure: imported by the browser and the server; tests in tests/accounts/groups.test.js).
  *
@@ -87,17 +89,17 @@ export function resolveRecipients({ groupIds = [], individualIds = [], groups, a
 }
 
 /** "Group A (12) + 2 individuals" — what the dialog says it is about to do. `individuals` counts people not already covered by a group. */
-export function describeSelection({ groupsUsed = [], individuals = 0 }) {
+export function describeSelection({ groupsUsed = [], individuals = 0 }, t = tEn) {
   const parts = groupsUsed.map((group) => `${group.name} (${group.count})`);
-  if (individuals > 0) parts.push(`${individuals} ${individuals === 1 ? "individual" : "individuals"}`);
+  if (individuals > 0) parts.push(t.plural("people.sum.individuals", individuals));
   return parts.join(" + ");
 }
 
 /** How many distinct people a selection reaches, and how many chosen individually are already in a chosen group. */
-export function selectionStats({ groupIds = [], individualIds = [], groups }) {
+export function selectionStats({ groupIds = [], individualIds = [], groups }, t = tEn) {
   const { recipients, groupsUsed } = resolveRecipients({ groupIds, individualIds, groups });
   const onlyIndividual = recipients.filter((entry) => entry.individual && !entry.via.length).length;
-  return { people: recipients.length, individuals: onlyIndividual, groupsUsed, line: describeSelection({ groupsUsed, individuals: onlyIndividual }) };
+  return { people: recipients.length, individuals: onlyIndividual, groupsUsed, line: describeSelection({ groupsUsed, individuals: onlyIndividual }, t) };
 }
 
 /* ------------------------------------------------------------------ results of a batch */
@@ -128,14 +130,14 @@ export function summarizeResults(results) {
 }
 
 /** One line for the dialog: "Delivered to 11 · skipped: 1 not connected any more, 1 already had it". */
-export function summaryLine(summary) {
+export function summaryLine(summary, t = tEn) {
   const skipped = [
-    summary.skipped.not_connected ? `${summary.skipped.not_connected} not connected` : "",
-    summary.skipped.already_has_it ? `${summary.skipped.already_has_it} already had it` : "",
-    summary.skipped.failed ? `${summary.skipped.failed} failed` : ""
+    summary.skipped.not_connected ? t("people.sum.notConnected", { count: summary.skipped.not_connected }) : "",
+    summary.skipped.already_has_it ? t("people.sum.alreadyHad", { count: summary.skipped.already_has_it }) : "",
+    summary.skipped.failed ? t("people.sum.failed", { count: summary.skipped.failed }) : ""
   ].filter(Boolean);
-  const head = `Delivered to ${summary.delivered} ${summary.delivered === 1 ? "person" : "people"}`;
-  return `${head}${skipped.length ? ` · skipped: ${skipped.join(", ")}` : ""}${summary.deferred ? ` · ${summary.deferred} not processed yet, send again to finish` : ""}`;
+  const head = t.plural("people.sum.delivered", summary.delivered);
+  return `${head}${skipped.length ? ` · ${t("people.sum.skipped", { list: skipped.join(", ") })}` : ""}${summary.deferred ? ` · ${t("people.sum.deferred", { count: summary.deferred })}` : ""}`;
 }
 
 /**

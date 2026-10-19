@@ -1,5 +1,20 @@
 # Implementation Log
 
+## 2026-10-19 (teacher and parent are no longer the student app with other labels)
+
+- **Home by role**: teacher "Your classes" (a card per group: who is behind, due this week, "Send practice to {class}…" which picks an
+  activity/plan and opens the existing Assign dialog preset; `modules/dashboard/ui/TeacherHome.js`), parent "Your child this week" (on
+  track or not, where they struggle, one way to help; no Start button, none of the child's tasks). Pure view-models in
+  `modules/dashboard/roleHome.js` with tests. Tour, page help and Home copy are role-specific (`components/helpContent.js`).
+- **Progress opens on My students / My children** for a teacher or parent with an account (`navModel.landingOf`; the tab comes first).
+- **A student's weak topic**: teacher "Send 10 questions to {name}" (makes the set, saves it in the teacher's workspace, opens Assign with the
+  student chosen), parent "How to help" (plain panel from the topic data, no AI call). `NextActions` takes `viewer`.
+- **Read-only parent**: the plan page hides date pickers, Open, Update…, ✕, Materials & resources… and Update from performance; the child's
+  Progress shows no Make a quiz / Plan it for me; "Delete their account" moved to a danger zone behind a dialog naming the child (type the name + password).
+- **Topic chips** no longer list "Shared documents" / "Shared with me" (Courses only). **Plan it for me** asks What, Exam date, Time per week; the rest is under "More options" (defaults unchanged).
+- **One "Ask Luna" button** replaces "Chat with Luna" + "Feedback" (menu: Ask Luna / Send feedback; small bottom-right on desktop with page bottom padding, an icon in the top bar on a phone).
+- **Top bar** shows the page name and a short phone title from `navModel.shortTitleOf` ("Students", "Make", "Study").
+
 ## 2026-10-06 (landing: promo video + 16 tester notes)
 
 - **Promo video** (`tools/promo-video`, README there): 58 s, 1920x1080, music only, nine scenes from the real screenshots,
@@ -1277,6 +1292,73 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Charts: new `chart` block (`renderers/chartSvg.js`) holding the plotted numbers, drawn as SVG in the reader/exports; click a chart to change its numbers (`reader/ChartEditor.js`); saved with "Edit content". Converter emits a fenced `chart` JSON block for plotted charts.
 - Dashboard U1 updated (batching, chart block); run `npm run dashboard:publish`.
 
+## 2026-10-19 — rollout onboarding: class codes, school consent, legal placeholders
+- Class join codes: migration `202610140001_class_codes.sql` (`class_codes`, `class_joins`), `lib/classCodes.js` (pure: generator, validation, under-14 decision), `lib/classesRepository.js`, routes `/api/accounts/classes` and `/classes/check`, sign-up `classCode`, teacher card "Your class code" and student "Join a class with a code" in Connections. Joining creates the teacher-student link already accepted; wrong codes are rate limited (10 per 15 minutes per address and account).
+- School sign-up under 14: a class created with the teacher's "school holds parental consent" confirmation (stored with teacher id and time) approves under-14s who join with its code; other classes keep the guardian email flow. One sentence added to the Children section of the Privacy Policy (EN/ES).
+- Legal pages never show a placeholder: `operatorDetails` treats empty or placeholder values (e.g. `privacy@yourdomain`) as unset and says to use the in-app Feedback button; site description is now a real one-liner.
+- Tests: `tests/class-codes.test.ts`. Owner must apply the migration in Supabase before the rollout and set `LUNA_PRIVACY_EMAIL`, `LUNA_LEGAL_NAME`, `LUNA_LEGAL_ADDRESS` in Vercel.
+## 2026-10-19 (older Safari, speed, linked-student reads, tour per account)
+
+- **Older Safari**: every regex lookbehind (`(?<=`, `(?<!`) removed from `apps/web` source (it is a parse-time SyntaxError before Safari 16.4);
+  `lib/regexCompat.js` holds the replacements and `tests/regex-compat.test.js` fuzzes them against the original patterns and fails if a
+  lookbehind literal is reintroduced. `browserslist` (safari/ios_saf >= 14, chrome/firefox/edge >= 90) added to `apps/web/package.json`
+  (Next reads it for SWC/CSS targets). `replaceAll` and `Array.prototype.at` calls in shared code replaced by `replace(/x/g)` / index.
+- **Speed**: the workspace tree is cached in the browser (`lib/workspacesClientCache.js`: one shared request, stale-while-revalidate, 20 s
+  freshness, kept in sync by mutation answers). `GET /api/workspaces-supabase` loads the tree once (was twice), the 11 column probes are
+  memoised per process and run in parallel, the independent document queries and the sharers' trees load with `Promise.all`.
+  "What Luna suggests" mounts after 1.5 s (or when opened) behind a skeleton. **Owner TODO**: Vercel function region, see `docs/SUPABASE_SETUP.md`.
+- **Linked student read-only view**: `/api/concepts` and `/api/student/mastery` accept `studentId` and authorise it with the accepted
+  teacher_student/parent_student link (`lib/linkedStudentRead.js`); the client no longer sends `learnerId=anonymous`.
+- **Tour per account**: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected), `POST /api/accounts/tour`;
+  without the migration the flag is kept in localStorage under the account id.
+
+## 2026-10-19 — student rollout fixes (branch feat/rollout-student)
+- Practice card (A6): full title (up to 3 lines), one big Start button, and the deadline / Update / Delete controls in a "⋯" menu (Delete confirms). Same on desktop and phone.
+- Names (C1): `modules/ui/displayName.js` hides `.resource.json` everywhere a name is shown (rename keeps the stored suffix). Courses rows are Open + "⋯" only (folder hover icons, star and download buttons moved into the menu).
+- Summaries (C2): a generated document opens in the reader; "What it teaches", Regenerate and Delete are in its "⋯" menu.
+- Coach (C3): the coach prompt writes to the reader ("you" for a student) and every action needs its own reason; the local "Work on these next" list builds a per-topic `why` from that topic's score, mistakes and trend (`whyThisTopic`). Coach cache key bumped to v5.
+- Plain words (C4): "Covers all N topics", "Tools used", "How well you know it"; one name "Tool" for tool / agent / Agent Studio; lunas balance hidden behind `SHOW_LUNAS` in `modules/credits/CreditsBadge.js`.
+- Quiz (C5): the quiz overlay is a full-screen dialog with a "← Leave" button.
+- Reader (C8): `repairLatexEscapes` typesets `\bar{x}` (also when the backslash was lost); an empty "Figure" label with no picture is no longer drawn.
+- Progress first (C9): `modules/activities/catchUp.js` — "N quizzes done this week" before late items, one catch-up message instead of a wall of late badges, first late chip red and the rest amber (Practice and student Home).
+
+## 2026-10-19 — A9: English / Spanish (branch feat/rollout-2026-10-19)
+- New dependency-free i18n layer in `apps/web/lib/i18n/` (see its README): `t(key, vars)`, `t.plural`, `LocaleProvider`/`useT`/`useLocale`, `LanguageSwitch`, server detection (cookie `luna_lang` then Accept-Language, default en), `<html lang>` from `app/layout.js` (the layout is now dynamic). Legal pages reuse the cookie when there is no `?lang=`.
+- Switch "EN | ES" in the top bar (desktop and phone), landing header, auth dialog, token screens and Account settings. Cookie only: no migration, so the choice is per browser.
+- Translated (es): landing, sign-up/login incl. class code, navigation and titles (long and phone-short), student Home, "?" help and first-run tour, Study plans, Practice and the quiz player, Progress incl. coach panel text, Courses tree/row menus/reader chrome, teacher and parent Home, People/Connections, share/send dialogs, notifications, Ask Luna menu, feedback widget, Account settings, error messages (`friendlyError.js`). Remaining English: see `lib/i18n/README.md`.
+- AI content: coach request sends `language`; `/api/performance/coach` adds a `<language>` block (`npm run dashboard:check` passes); agent runners' "Language" question defaults to the UI language when Spanish.
+- Tests: `tests/i18n/i18n.test.js` (same keys and `{placeholders}` in en and es, detection, plurals, fallback), `tests/i18n/keys-used.test.js` (literal keys used in code exist). Existing English tests unchanged: pure helpers keep English output without `t`.
+
+## 2026-10-19 — quiz player: drafts, results stay open, source labels, phone quizzes (branch feat/rollout-quiz)
+- **Save without submitting**: drafts autosave (debounced, on Leave, on page hide) to `activity_drafts` for a logged-in account (migration `202610190002_activity_drafts.sql`, feature-detected, route `app/api/activities/drafts`) and always to localStorage keyed by account + activity. "Save and finish later" button, "Saved" indicator, resume on the same question with the same answers, Submit only when chosen. Drafts are never attempts. Practice shows "In progress · 3/6 answered · Continue". Pure rules in `modules/activities/drafts.js`.
+- **Bug "checking the answers closes the quiz"**: root cause was Progress → practice (`modules/performance/PerformancePage.js`) calling `setPractising(null)` inside the player's `onSubmit`, so the results unmounted as soon as they were computed. The host no longer closes it; the player now awaits `onSubmit` safely, scrolls its own results into view inside whatever scrolls (the reader is a fixed z-[70] dialog, so `window.scrollTo` did nothing), and the grader has a 40 s per-call model timeout (`MODEL_TIMEOUT_MS` in `gradeBatch.js`, route `maxDuration` 60) so long written/maths grading always answers with local marking instead of being killed by Vercel; the client gives up only at 55 s; photos of working are capped at 6 per request (4.5 MB body limit). Regression guard: `tests/activities/player-stays-open.test.js`.
+- **Answer feedback source**: `modules/activities/sourceLabel.js` + `SourceNote.js`: a maths question says "Maths problem based on this section of the notes: {section}" with a link to the section; other questions without a quote name their section; the "No supporting quote was given" reason is never shown. `attachSources` now gives every question a section heading (the cited passage's heading, else the nearest passage, else the single document).
+- **Phone**: one question per screen (progress bar, Back/Next fixed at the bottom with `env(safe-area-inset-bottom)`, Review answers → Submit, 180 ms step animation `animate-step`), big tap targets, 16 px inputs (no iOS zoom); optional "One question at a time" on a computer. `PhotoQuizMaker.js`: camera / library photos, client-side JPEG ≤ 2000 px (`photoUpload.js`), upload through the existing pipeline one photo per request, 5/10/15 questions + difficulty, generated with the built-in Quiz Generator, opened straight away.
+- Tests: `tests/activities/drafts.test.js`, `photo-upload.test.js`, `source-label.test.js`, `player-stays-open.test.js`. i18n keys `practice.draft.*`, `practice.step.*`, `practice.src.*`, `practice.photo.*` in en and es.
+## 2026-10-19 — agents rollout: Reading Splitter, consolidated view, flashcard counts, save names (branch feat/rollout-agents)
+- **Reading Splitter covers the whole document.** Root cause: it ran as one block-agent call over the best-ranked chunks that fit the
+  48k-character retrieval budget (`selectChunksWithinBudget`, max 40 chunks) with a 6k-token output cap (3k on retry), and the model
+  had to copy the text itself, so long documents came back as 2–3 parts, some with only a heading. Now the spec is `pipeline: "split"`
+  and `pipeline/readingParts.js` cuts every document in code from its headings/blocks (merge/split to the minutes per part, never
+  inside a table, list, formula or code block), copies every passage exactly, and asks the model only for titles, "Why read this",
+  difficulty and "Check yourself" questions in batches of 6 (streamed progress `phase: "split"`). Pasted text works too. Tests:
+  `tests/ai-tools/reading-parts.test.ts` (long Accounting fixture: 100 % of headings, every word in order, no empty part).
+- **Plans and the splitter:** plan generation does NOT use the splitter to make topic chunks (the planner sees names + the concept
+  map); plan *building* used it for reading steps (`STEP_RECIPES.reading`) through the same truncated path. Reading steps now run the
+  whole-document pipeline on their own upload with `readingFocus` = the step's concepts.
+- **Consolidated view of the resources** (plans): 3+ uploaded documents or > 150,000 characters → step 1 is the consolidated view
+  (`generate: "master"`), enforced by `master.js ensureConsolidatedStep` after the other checks and asked for in the planner prompt
+  (rule 14, `<consolidated_view>`); `executePlan` builds it once as the master document (Summary Notes Consolidator) and points step 1
+  at it. New `localPlan.js`: plan generation without an OpenAI key. Tests: `tests/plans/consolidated-view.test.ts`.
+- **Flashcards "8 items, 20 requested":** the count check failed because one call (6k tokens, 3k on retry) had to write every card with
+  its source, quote and support, models stop early on long lists, and grounding drops unverified cards. `pipeline/itemCount.js`: output
+  budget sized to the count (6k–16k), up to 3 automatic top-up calls listing the items made (no repeats), stop when the material runs
+  out; never more than asked. Runner: `CountNotice.js` shows "Made 8 cards: the material had 8 key ideas. Make more?" with "Make N
+  more" (`config.topUp`); red only for real problems. Applies to every count-based agent and to plan steps. Tests:
+  `tests/ai-tools/item-count.test.ts` (incl. `runAgentGeneration` with a fake model).
+- **Save / rename names:** the Save dialog's Name can be empty while typing and is checked on Save ("Give it a name."); Courses
+  rename re-asks on an empty name (Cancel keeps it; `.resource.json` kept), folder-tree rename shows the hint. `ui/displayName.js nameToSave`.
+- Dashboard: P1 and A1 updated, new A15 (splitter light pass); `npm run dashboard:check` clean.
 ## 2026-10-19 — PDF figures shown as real pictures
 - Cause: in production no PDF figure ever got a picture (0 of 38 in the reported deck). The picture and page-render workers run as child processes that load pdfjs, sharp and `@napi-rs/canvas` by path, so the Vercel file trace left them out; drawn charts (vector) also need the canvas. Only the converter's re-drawn `chart` blocks showed, with estimated numbers.
 - `next.config.js` `outputFileTracingIncludes` ships them for `/api/**`; `@napi-rs/canvas` is now a direct dependency.

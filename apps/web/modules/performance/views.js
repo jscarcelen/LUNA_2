@@ -8,9 +8,13 @@
  * "Parent evening". A view is a small JSON document, so it can also be sold in the marketplace and
  * loaded by someone else.
  */
+import { tEn } from "../../lib/i18n/index.js";
 
 const KEY = "luna.performance.views";
 export const VIEW_VERSION = 3;
+
+/** The name to show for a view: the built-in view is named in the UI language, the user's own views keep their name. */
+export const viewName = (view, role, t = tEn) => (view && view.id === `default_${role}` ? t(`progress.view.default.${role}`) : view?.name || "");
 
 /** How a panel can read. Not every panel offers every mode; the registry says which. */
 export const MODES = [
@@ -160,13 +164,13 @@ export function exportView(view) {
   };
 }
 
-export function importView(payload, role) {
+export function importView(payload, role, t = tEn) {
   const spec = typeof payload === "string" ? JSON.parse(payload) : payload;
-  if (!spec || spec.kind !== "performance-view" || !Array.isArray(spec.panels)) throw new Error("That file is not a performance view.");
+  if (!spec || spec.kind !== "performance-view" || !Array.isArray(spec.panels)) throw new Error(t("progress.view.notView"));
   return {
     id: uid(),
     version: VIEW_VERSION,
-    name: spec.name || "Imported view",
+    name: spec.name || t("progress.view.imported"),
     role: role || spec.role || "student",
     trackBy: spec.trackBy || "plan",
     filters: {},

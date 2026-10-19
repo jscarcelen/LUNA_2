@@ -13,6 +13,7 @@ import { joinAttempts } from "../performance/metrics.js";
 import { buildEvidence, overallMastery, topicMastery } from "../performance/mastery.js";
 import { daysUntil, nextDeadline, parsePlan, planProgress } from "../plans/plan.js";
 import { isImposed } from "../plans/deadlines.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 const text = (value) => String(value || "").trim();
 
@@ -20,14 +21,14 @@ export const GROUP_WORKSPACE_ID = "group-view";
 export const GROUP_SUBJECT_ID = "group-subject";
 
 /** Two students with the same name stay two rows: the second gets its email in brackets. */
-export function memberLabels(members) {
+export function memberLabels(members, t = tEn) {
   const counts = new Map();
   for (const member of members) {
-    const name = text(member.student?.displayName) || text(member.student?.email) || "Student";
+    const name = text(member.student?.displayName) || text(member.student?.email) || t("people.studentFallback");
     counts.set(name, (counts.get(name) || 0) + 1);
   }
   return new Map(members.map((member) => {
-    const name = text(member.student?.displayName) || text(member.student?.email) || "Student";
+    const name = text(member.student?.displayName) || text(member.student?.email) || t("people.studentFallback");
     return [member.student.id, counts.get(name) > 1 ? `${name} (${text(member.student?.email)})` : name];
   }));
 }
@@ -54,8 +55,8 @@ function labelled(document, label) {
  * One synthetic workspace for the group, holding the members' documents of the topic called `subjectName` (every
  * topic when it is empty). Shape: what PerformancePage / SubjectTabs take as `workspaces`.
  */
-export function buildGroupWorkspaces(members, { groupName = "Group", subjectName = "" } = {}) {
-  const labels = memberLabels(members);
+export function buildGroupWorkspaces(members, { groupName = "Group", subjectName = "" } = {}, t = tEn) {
+  const labels = memberLabels(members, t);
   const documents = [];
   const folders = [];
   for (const member of members) {
@@ -68,7 +69,7 @@ export function buildGroupWorkspaces(members, { groupName = "Group", subjectName
       }
     }
   }
-  return [{ id: GROUP_WORKSPACE_ID, name: groupName, subjects: [{ id: GROUP_SUBJECT_ID, name: subjectName || "All topics", documents, folders }] }];
+  return [{ id: GROUP_WORKSPACE_ID, name: groupName, subjects: [{ id: GROUP_SUBJECT_ID, name: subjectName || t("people.group.allTopics"), documents, folders }] }];
 }
 
 /** All of one member's documents across every topic (their plans can live anywhere). */
@@ -78,8 +79,8 @@ const documentsOf = (member) => (member.workspaces || []).flatMap((workspace) =>
  * One row per member, weakest first: how they are doing and what needs a look.
  * @returns {Array<{ id: string, name: string, attempts: number, mastery: number | null, lastAt: string, late: number, plans: number, idleDays: number | null }>}
  */
-export function compareMembers(members, { now = Date.now() } = {}) {
-  const labels = memberLabels(members);
+export function compareMembers(members, { now = Date.now() } = {}, t = tEn) {
+  const labels = memberLabels(members, t);
   return members.map((member) => {
     const documents = documentsOf(member);
     const attempts = joinAttempts(documents);
@@ -105,8 +106,8 @@ export function compareMembers(members, { now = Date.now() } = {}) {
  * The Study plans table: for every member, each of their plans with progress and the next deadline (and who set it).
  * @returns {Array<{ id: string, name: string, plans: Array<{ documentId: string, name: string, colour: string, done: number, total: number, ratio: number, late: number, deadline: object | null, imposed: boolean, setBy: string, days: number | null, examDateId: string }> }>}
  */
-export function memberPlanRows(members) {
-  const labels = memberLabels(members);
+export function memberPlanRows(members, t = tEn) {
+  const labels = memberLabels(members, t);
   return members.map((member) => {
     const documents = documentsOf(member);
     const attempts = joinAttempts(documents);

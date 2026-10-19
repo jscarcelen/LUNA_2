@@ -7,7 +7,7 @@ function normalizeLatex(latex = "") {
     .replace(/([A-Za-z0-9])_\(([^)]+)\)/g, "$1_$2")
     .replace(/([A-Za-z0-9])_\(([^)]+)\)\^\(([^)]+)\)/g, "$1_$2^$3")
     .replace(/([A-Za-z0-9])_\{([A-Za-z0-9]+)\}/g, "$1_$2")
-    .replace(/(?<=[A-Za-z0-9)])\^\{([A-Za-z0-9]+)\}/g, "^$1")
+    .replace(/([A-Za-z0-9)])\^\{([A-Za-z0-9]+)\}/g, "$1^$2")
     .replace(/\^\(([^)]+)\)/g, "^$1")
     .replace(/\bbar\s*\{([^}]+)\}/g, "\\bar{$1}")
     .trim();

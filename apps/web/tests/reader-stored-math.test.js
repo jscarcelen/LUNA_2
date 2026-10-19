@@ -17,6 +17,7 @@ describe("stored maths with a doubled backslash", () => {
   it("leaves a real line break alone", () => {
     expect(repairDoubledLatex("a \\\\ b")).toBe("a \\\\ b");
     expect(repairDoubledLatex("\\\\frac{1}{2}")).toBe("\\frac{1}{2}");
+    expect(repairDoubledLatex("(x_i - \\\\\\bar{x})^2")).toBe("(x_i - \\bar{x})^2");
   });
 
   it("does nothing to HTML without stored maths", () => {

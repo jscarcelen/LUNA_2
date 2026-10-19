@@ -5,13 +5,13 @@ import katex from "katex";
  * followed by the word "bar", so the reader showed "barx". Such a formula keeps its source in `data-latex`; here it
  * is typeset again from the corrected source. Formulas without a doubled backslash are left exactly as stored.
  */
-const DOUBLED = /\\\\(?=[a-zA-Z])/;
+const DOUBLED = /\\{2,}(?=[a-zA-Z])/;
 
-/** The formula with each doubled backslash before a command made single, when KaTeX accepts the result; else unchanged. */
+/** The formula with each run of backslashes before a command (`\\bar`, `\\\bar`) made single, when KaTeX accepts the result; else unchanged. */
 export function repairDoubledLatex(latex = "", display = false) {
   const text = String(latex || "");
   if (!DOUBLED.test(text)) return text;
-  const fixed = text.replace(/\\\\(?=[a-zA-Z])/g, "\\");
+  const fixed = text.replace(/\\{2,}(?=[a-zA-Z])/g, "\\");
   try {
     katex.renderToString(fixed, { displayMode: display, throwOnError: true, strict: "ignore", output: "html" });
     return fixed;

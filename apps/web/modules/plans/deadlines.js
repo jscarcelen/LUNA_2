@@ -21,11 +21,12 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 const text = (value) => String(value || "").trim();
 
 /** "2026-10-24" -> "24 Oct" (fixed words: the same on the server, in emails and in tests). */
-export function shortDate(date) {
+export function shortDate(date, t = null) {
   const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text(date));
   if (!match) return "";
   const month = MONTHS[Number(match[2]) - 1];
-  return month ? `${Number(match[3])} ${month}` : "";
+  // `t` (from useT()) gives the month words in the UI language; without it the fixed English words are used.
+  return month ? `${Number(match[3])} ${t ? t(`common.month.${Number(match[2])}`) : month}` : "";
 }
 
 /** "due 24 Oct, set by Prof. Rivera" / "due 24 Oct (your deadline)": the words used in notifications and emails. */

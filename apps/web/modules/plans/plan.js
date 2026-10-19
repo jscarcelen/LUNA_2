@@ -10,6 +10,7 @@
  * Plans are workspace documents tagged `study-plan`, filed in a folder like everything else.
  */
 
+import { tEn } from "../../lib/i18n/index.js";
 import { compareDeadlines, effectiveDue, isImposed, selfSetBy } from "./deadlines.js";
 import { senderNameOf } from "../accounts/shared.js";
 
@@ -119,14 +120,15 @@ export function daysUntil(date) {
   return Math.round((target - today) / 86400000);
 }
 
-export function dueLabel(date) {
+/** "Today", "In 3 days", "2 days late", "24 Oct". Pass `t` (useT()) for the UI language; without it, English. */
+export function dueLabel(date, t = tEn) {
   const days = daysUntil(date);
-  if (days === null) return "No date";
-  if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} late`;
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days <= 7) return `In ${days} days`;
-  return new Date(`${date}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  if (days === null) return t("common.due.noDate");
+  if (days < 0) return t.plural("common.due.late", Math.abs(days));
+  if (days === 0) return t("common.due.today");
+  if (days === 1) return t("common.due.tomorrow");
+  if (days <= 7) return t("common.due.inDays", { days });
+  return new Date(`${date}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined, { day: "numeric", month: "short" });
 }
 
 /** The plan's next deadline (or its last one when they have all passed). On the same date an imposed deadline comes first. */

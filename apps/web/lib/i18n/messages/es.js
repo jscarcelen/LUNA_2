@@ -1,6 +1,8 @@
 import auth from "./es/auth.js";
 import landing from "./es/landing.js";
+import common from "./es/common.js";
 import help from "./es/help.js";
+import home from "./es/home.js";
 import nav from "./es/nav.js";
 import shell from "./es/shell.js";
 
@@ -8,7 +10,9 @@ import shell from "./es/shell.js";
 export default {
   ...auth,
   ...landing,
+  ...common,
   ...help,
+  ...home,
   ...nav,
   ...shell
 };

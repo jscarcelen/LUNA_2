@@ -11,6 +11,7 @@ import { CoachPanel } from "../../performance/dashboard/CoachPanel";
 import { TeacherHome } from "./TeacherHome";
 import { ParentHome } from "./ParentHome";
 import { HOME_PLAN_LIMIT, coachInputFor, documentsOf, firstRunChecklist, greeting, homeShortcuts, nextBestAction, nextSteps, planRowsOf, rankPlans } from "../home";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -26,6 +27,7 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * to any other page.
  */
 function StudentHome({ profileName = "", role = "student", workspaces = [], selectedWorkspaceId = "", loading = false, onOpenPlan, onOpenPage, examDates = [], onDismissExamDate, account = false }) {
+  const t = useT();
   const workspace = workspaces.find((entry) => entry.id === selectedWorkspaceId) || workspaces[0] || null;
   const documents = useMemo(() => documentsOf(workspace), [workspace]);
   const rows = useMemo(() => planRowsOf(workspace), [workspace]);
@@ -55,9 +57,9 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
     />
   ) : null;
 
-  const action = nextBestAction({ hasMaterial, hasPlans: entries.length > 0, steps, hasEvidence, role });
-  const checklist = firstRunChecklist({ hasMaterial, hasPlans: entries.length > 0, hasEvidence });
-  const shortcuts = homeShortcuts(role, Boolean(account));
+  const action = nextBestAction({ hasMaterial, hasPlans: entries.length > 0, steps, hasEvidence, role }, t);
+  const checklist = firstRunChecklist({ hasMaterial, hasPlans: entries.length > 0, hasEvidence }, t);
+  const shortcuts = homeShortcuts(role, Boolean(account), t);
   const go = () => {
     if (action.kind === "step") return onOpenPlan?.({ documentId: action.step.planId, subjectId: action.step.subjectId });
     return onOpenPage?.({ upload: "workspaces", plan: "plans?generate=1", practise: "create", review: "performance" }[action.kind] || "workspaces");
@@ -65,7 +67,7 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
 
   return (
     <section className="tw-scope grid gap-5">
-      <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{greeting(profileName)}</h2>
+      <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{greeting(profileName, t)}</h2>
       {role === "student" && catchUp.headline ? <p className="m-0 -mt-3 text-sm font-semibold text-[#1f7a3a]">✓ {catchUp.headline}</p> : null}
 
       {!workspace && loading ? (
@@ -74,15 +76,15 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
         </div>
       ) : (
         <>
-          <div className={`${card} grid justify-items-start gap-2 border-[var(--accent)]/30`} aria-label="Next step">
-            <p className={kicker}>Your next step</p>
+          <div className={`${card} grid justify-items-start gap-2 border-[var(--accent)]/30`} aria-label={t("home.aria.next")}>
+            <p className={kicker}>{t("home.yourNext")}</p>
             <p className="m-0 text-2xl font-bold tracking-tight text-ink">{action.title}</p>
             {action.detail ? <p className="m-0 text-sm text-soft-ink">{action.detail}</p> : null}
             {role === "student" && catchUp.catchUp ? <p className="m-0 text-sm text-ink">{catchUp.catchUp}</p> : null}
             <button type="button" className={`${primaryBtn} mt-1 px-6 py-2.5`} onClick={go}>{action.cta}</button>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3" aria-label="Shortcuts">
+          <div className="grid gap-3 sm:grid-cols-3" aria-label={t("home.aria.shortcuts")}>
             {shortcuts.map((shortcut) => (
               <button key={shortcut.id} type="button" className="flex items-center gap-3 rounded-2xl border border-ink/10 bg-white px-4 py-3 text-left text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]" onClick={() => onOpenPage?.(shortcut.target)}>
                 <span aria-hidden className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] text-base text-[var(--accent)]">{shortcut.icon}</span>
@@ -93,7 +95,7 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
 
           {checklist && role !== "parent" ? (
             <div className={card}>
-              <p className={kicker}>Getting started</p>
+              <p className={kicker}>{t("home.gettingStarted")}</p>
               <ol className="m-0 mt-3 grid list-none gap-2 p-0">
                 {checklist.map((item, index) => (
                   <li key={item.id}>
@@ -111,8 +113,8 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
 
           {entries.length ? (
             <details className="group">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>Your study plans ({entries.length})</summary>
-              <div className="mt-3 grid grid-flow-col auto-cols-[82%] gap-3 overflow-x-auto pb-1 sm:auto-cols-[calc((100%-0.75rem)/2)] lg:auto-cols-[calc((100%-2.25rem)/4)]" aria-label="Study plans, closest deadline first">
+              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("home.plansSummary", { count: entries.length })}</summary>
+              <div className="mt-3 grid grid-flow-col auto-cols-[82%] gap-3 overflow-x-auto pb-1 sm:auto-cols-[calc((100%-0.75rem)/2)] lg:auto-cols-[calc((100%-2.25rem)/4)]" aria-label={t("home.aria.plans")}>
                 {entries.map((entry) => (
                   <PlanCard
                     key={entry.document.id}
@@ -130,10 +132,10 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
 
           {entries.length ? (
             <details className="group" onToggle={(event) => { if (event.currentTarget.open) setCoachReady(true); }}>
-              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>What Luna suggests</summary>
+              <summary className="cursor-pointer list-none text-sm font-semibold text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("home.suggests")}</summary>
               <div className={`${card} mt-3`}>
                 {hasEvidence && !coachReady ? (
-                  <div className="grid gap-2" aria-busy="true" aria-label="Luna is getting ready">
+                  <div className="grid gap-2" aria-busy="true" aria-label={t("home.aria.getting")}>
                     <div className="h-4 w-2/3 animate-pulse rounded bg-[var(--surface-soft)]" />
                     <div className="h-4 w-full animate-pulse rounded bg-[var(--surface-soft)]" />
                     <div className="h-4 w-1/2 animate-pulse rounded bg-[var(--surface-soft)]" />
@@ -146,13 +148,13 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
                     errorTypes={coach.errorTypes}
                     stuck={coach.stuck}
                     plan={coach.plan}
-                    practiseLabel="See in Progress"
+                    practiseLabel={t("home.seeProgress")}
                     onPractise={() => onOpenPage?.("performance")}
                     autoRead
                   />
                 ) : (
                   <div className="grid gap-3">
-                    <p className="m-0 text-sm text-soft-ink">Do a first activity and Luna will read your results and propose what to work on. Until then, this is what is due soonest.</p>
+                    <p className="m-0 text-sm text-soft-ink">{t("home.firstActivity")}</p>
                     {steps.length ? (
                       <ul className="m-0 grid list-none gap-1.5 p-0">
                         {steps.map((step) => (
@@ -166,7 +168,7 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
                           </li>
                         ))}
                       </ul>
-                    ) : <p className="m-0 text-sm text-soft-ink">Everything in these plans is done.</p>}
+                    ) : <p className="m-0 text-sm text-soft-ink">{t("home.allDone")}</p>}
                   </div>
                 )}
               </div>

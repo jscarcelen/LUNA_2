@@ -1,5 +1,19 @@
 # Implementation Log
 
+## 2026-10-19 (student phone app)
+
+- Students on a phone (≤ 760px) get an iPhone-style app: four tabs Home / Study / Library / Progress, account and the
+  website-only sections behind the avatar (`apps/web/modules/mobile/`, README there). Teachers, parents, tablet and desktop
+  are unchanged; phone-only URLs (`study`, `library`) turn into the website page on a larger screen.
+- Home: one next step from the study plans (else an activity not tried or below 80%), Continue learning from the quiz drafts
+  (`activities/draftStore.js`), at most two upcoming items, quick actions. Study: For you (with the reason for each activity) and
+  Study plan (Not started / In progress / Completed + Start / Continue). Library: search, Added / By Luna, by subject. Progress:
+  the mastery engine in plain words, nothing before a first activity.
+- Add material sheet: camera, photos (redrawn as JPEG by `activities/photoUpload.js`, HEIC included), files, pasted text, real
+  per-file states and retry, then make a quiz / flashcards / summary / plan from it. Phone-specific first-run tour (`tour.phone.*`).
+- Quizzes open in the same reader and one-question-per-screen player as Practice. All new text in English and Spanish
+  (`lib/i18n/messages/*/mobile.js`). No backend, API, prompt or schema change.
+
 ## 2026-10-19 (teacher and parent are no longer the student app with other labels)
 
 - **Home by role**: teacher "Your classes" (a card per group: who is behind, due this week, "Send practice to {class}…" which picks an

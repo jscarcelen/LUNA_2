@@ -26,6 +26,7 @@ The interactive form of a generated resource: the learner answers inside LUNA an
 ## Practice list and catch-up
 
 - `catchUp.js`: pure helpers for "lead with progress" (`doneThisWeek`, `weekHeadline`, `summariseCatchUp`, `lateTone`). Used by the Practice list and the student Home; tested in `tests/catch-up.test.ts`.
+- On a phone, a student also reaches quizzes from the phone app (`modules/mobile`): it opens them in the same reader and player, and reads `loadAllDrafts` for "Continue learning".
 - The Practice card is title, chips, one Start button and a "⋯" menu (deadline, Update, Delete with a confirm). The quiz opens as a full-screen dialog with a "← Leave" button.
 
 ## Save and finish later (drafts)

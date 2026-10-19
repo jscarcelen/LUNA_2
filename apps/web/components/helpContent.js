@@ -21,11 +21,14 @@ export function helpFor(page = "", role = "student", t = tEn) {
 }
 
 /** The first-run tour: one step per section. `video` is an optional short clip (a path under /public); a step shows a still illustration until one is added. */
-const TOURS = {"student": [["home", "⌂"], ["study", "📚"], ["progress", "◴"], ["create", "✦"]], "teacher": [["home", "⌂"], ["study", "📚"], ["progress", "◴"], ["create", "✦"]], "parent": [["home", "⌂"], ["study", "📚"], ["progress", "◴"]]};
+const TOURS = {"phone": [["home", "⌂"], ["study", "📚"], ["library", "▤"], ["progress", "◴"]], "student": [["home", "⌂"], ["study", "📚"], ["progress", "◴"], ["create", "✦"]], "teacher": [["home", "⌂"], ["study", "📚"], ["progress", "◴"], ["create", "✦"]], "parent": [["home", "⌂"], ["study", "📚"], ["progress", "◴"]]};
 
-/** The tour for a teacher (classes) or a parent (their child): the student's tour talks about studying, which is not their job here. */
-export const tourStepsFor = (role = "student", t = tEn) => {
-  const tour = TOURS[role] ? role : "student";
+/**
+ * The tour for a teacher (classes) or a parent (their child): the student's tour talks about studying, which is not their job here.
+ * A student on a phone gets the phone app's four tabs (Home, Study, Library, Progress) instead (`phone`).
+ */
+export const tourStepsFor = (role = "student", t = tEn, { phone = false } = {}) => {
+  const tour = phone && role === "student" ? "phone" : TOURS[role] && role !== "phone" ? role : "student";
   return TOURS[tour].map(([id, icon]) => ({ id, icon, video: "", title: t(`tour.${tour}.${id}.title`), text: t(`tour.${tour}.${id}.text`) }));
 };
 

@@ -9,9 +9,9 @@ import { shouldAutoOpenTour, tourStorageKey } from "../lib/tourSeen.js";
  * A short tour of the sections (four for a student or teacher, three for a parent, each in that role's words). It opens once per account (remembered on the account; the public demo remembers it per browser in localStorage), and again
  * whenever someone chooses "Take the tour" in a page's "?" help. A step plays a short clip when it has one.
  */
-export function FirstRunTour({ role = "student", accountId = "", serverSeen = null }) {
+export function FirstRunTour({ role = "student", accountId = "", serverSeen = null, phone = false }) {
   const t = useT();
-  const TOUR_STEPS = tourStepsFor(role, t);
+  const TOUR_STEPS = tourStepsFor(role, t, { phone });
   const [open, setOpen] = useState(false);
   const [index, setIndex] = useState(0);
   useEffect(() => {
@@ -28,7 +28,7 @@ export function FirstRunTour({ role = "student", accountId = "", serverSeen = nu
   }
   if (!open) return null;
   const step = TOUR_STEPS[Math.min(index, TOUR_STEPS.length - 1)];
-  const last = index === TOUR_STEPS.length - 1;
+  const last = index >= TOUR_STEPS.length - 1;
   return (
     <div className="tw-scope fixed inset-0 z-[400] grid place-items-center bg-black/40 p-4" onClick={close}>
       <div role="dialog" aria-modal="true" aria-label={t("tour.aria")} className="grid w-full max-w-sm gap-3 rounded-[18px] bg-white p-6 text-center shadow-[0_24px_72px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>

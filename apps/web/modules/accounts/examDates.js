@@ -6,6 +6,7 @@
  * (`deadline.setBy` = the sender, `deadline.examDateId`, see modules/plans/deadlines.js).
  */
 import { isIsoDate } from "./shared.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 export const MAX_TITLE = 120;
 export const MAX_SUBJECT_HINT = 80;
@@ -65,8 +66,8 @@ export function sortExamDates(list, today = new Date().toISOString().slice(0, 10
 }
 
 /** "Maths midterm · 24 Oct · Prof. Rivera" for dropdowns. */
-export function examOptionLabel(examDate, shortDate) {
-  return [examDate.title, shortDate(examDate.date), examDate.senderName].filter(Boolean).join(" · ");
+export function examOptionLabel(examDate, shortDate, t = tEn) {
+  return [examDate.title, shortDate(examDate.date, t), examDate.senderName].filter(Boolean).join(" · ");
 }
 
 /** The upcoming exam dates a plan can still be tied to (not hidden, not in the past). */

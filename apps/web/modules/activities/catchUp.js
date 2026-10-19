@@ -6,6 +6,8 @@
  * then ONE catch-up message instead of a badge per row, with the individual chips softened after the first.
  */
 
+import { tEn } from "../../lib/i18n/index.js";
+
 const DAY = 86400000;
 const iso = (value) => new Date(value).toISOString().slice(0, 10);
 
@@ -24,23 +26,23 @@ export function doneThisWeek(attempts = [], now = Date.now()) {
 }
 
 /** "2 quizzes done this week"; empty when nothing was done (no negative framing, just no line). */
-export function weekHeadline(count) {
+export function weekHeadline(count, t = tEn) {
   const n = Math.max(0, Number(count) || 0);
   if (!n) return "";
-  return `${n} ${n === 1 ? "quiz" : "quizzes"} done this week`;
+  return t.plural("practice.weekHeadline", n);
 }
 
 /** How many things are waiting and how many of them are past their date. A row is `{ done, due }`. */
-export function summariseCatchUp(rows = [], { attempts = [], now = Date.now() } = {}) {
+export function summariseCatchUp(rows = [], { attempts = [], now = Date.now() } = {}, t = tEn) {
   const today = iso(now);
   const open = rows.filter((row) => !row.done);
   const late = open.filter((row) => row.due && row.due < today);
   const waiting = open.length;
   const finished = doneThisWeek(attempts, now);
   const catchUp = late.length >= 2
-    ? `${late.length} things are waiting. Start with this one.`
-    : late.length === 1 ? "1 thing is waiting. Start with this one." : "";
-  return { doneThisWeek: finished, headline: weekHeadline(finished), waiting, late: late.length, catchUp };
+    ? t("practice.catchUp.multi", { count: late.length })
+    : late.length === 1 ? t("practice.catchUp.single") : "";
+  return { doneThisWeek: finished, headline: weekHeadline(finished, t), waiting, late: late.length, catchUp };
 }
 
 /**

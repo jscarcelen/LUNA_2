@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiGuidanceNote, card, ghostBtn, kicker } from "./parts";
+import { formatDate } from "../../../lib/i18n/index.js";
+import { useT, useLocale } from "../../../lib/i18n/LocaleProvider.js";
 
 const KIND_LABEL = {
   practise: "Practise",
@@ -25,9 +27,11 @@ const cacheKey = (signature) => `luna.performance.coach.v5.${signature}`;
  * The read is cached against the evidence it was made from, so it is not re-bought on every render
  * and it visibly goes stale when the evidence moves.
  */
-export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, skillDiagnosis = null, onPractise, onSchedule, practiseLabel = "Do it now", autoRead = false }) {
+export function CoachPanel({ role = "student", learner = "", topics = [], errorTypes = [], stuck = [], plan = null, skillDiagnosis = null, onPractise, onSchedule, practiseLabel = "", autoRead = false }) {
+  const t = useT();
+  const { locale } = useLocale();
   const [state, setState] = useState({ status: "idle", read: null, error: "" });
-  const signature = `${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${(skillDiagnosis?.weakSkills || []).map((skill) => `${skill.id}:${Math.round((skill.acc || 0) * 100)}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
+  const signature = `${locale}|${role}|${learner}|${topics.map((topic) => `${topic.topic}:${topic.mastery}:${topic.questions}`).join(",")}|${errorTypes.map((type) => `${type.id}:${type.count}`).join(",")}|${(skillDiagnosis?.weakSkills || []).map((skill) => `${skill.id}:${Math.round((skill.acc || 0) * 100)}`).join(",")}|${plan?.name || ""}|${(plan?.upcoming || []).map((step) => `${step.title}@${step.dueDate}`).join(",")}`;
   const digest = hash(signature);
 
   useEffect(() => {
@@ -44,16 +48,16 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
       const response = await fetch("/api/performance/coach", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, learner, topics, errorTypes, stuck, plan, skills: skillDigest(skillDiagnosis) })
+        body: JSON.stringify({ role, learner, topics, errorTypes, stuck, plan, skills: skillDigest(skillDiagnosis), language: locale })
       });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error || "Could not read the results.");
+      if (!response.ok) throw new Error(payload.error || t("progress.coach.couldNot"));
       try { window.localStorage.setItem(cacheKey(digest), JSON.stringify(payload)); } catch { /* fine without the cache */ }
       setState({ status: "done", read: payload, error: "" });
     } catch (error) {
       setState({ status: "idle", read: null, error: error.message });
     }
-  }, [role, learner, topics, errorTypes, stuck, plan, skillDiagnosis, digest]);
+  }, [role, learner, topics, errorTypes, stuck, plan, skillDiagnosis, digest, locale, t]);
 
   // The Home reads by itself the first time it sees a given state of the evidence (the read is cached against it).
   const triedRef = useRef("");
@@ -67,7 +71,7 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
   const { read: result, status, error } = state;
 
   if (!topics.length && !errorTypes.length) {
-    return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">Once there are a few results, Luna can read them and say what to do next.</p>;
+    return <p className="m-0 rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-soft-ink">{t("progress.coach.empty")}</p>;
   }
 
   return (
@@ -77,23 +81,23 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
         <>
           <p className="m-0 text-[15px] font-semibold leading-snug text-ink">{result.headline}</p>
           <p className="m-0 text-sm leading-relaxed text-soft-ink">{result.diagnosis}</p>
-          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Your top 5 next actions</p>
+          <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{t("progress.coach.top5")}</p>
           <div className="grid gap-2">
             {(result.actions || []).slice(0, 5).map((action, index) => (
               <div key={`${action.title}-${index}`} className="rounded-xl border border-ink/10 p-3">
                 <p className="m-0 flex flex-wrap items-baseline justify-between gap-2 text-sm font-bold text-ink">
                   <span className="min-w-0">{index + 1}. {action.title}</span>
-                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{KIND_LABEL[action.kind] || action.kind} · {action.effort}{action.planStep && action.dueDate ? ` · due ${action.dueDate}` : ""}</span>
+                  <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{KIND_LABEL[action.kind] ? t(`progress.coach.kind.${action.kind}`) : action.kind} · {action.effort}{action.planStep && action.dueDate ? ` · ${t("progress.coach.due", { date: action.dueDate })}` : ""}</span>
                 </p>
                 <p className="m-0 mt-1 text-[11px] text-soft-ink">{action.why}</p>
-                <p className="m-0 mt-1 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{action.planStep ? "Already in your plan" : "New · not in a plan yet"}</p>
+                <p className="m-0 mt-1 text-[10px] font-semibold uppercase tracking-wider text-soft-ink">{action.planStep ? t("progress.coach.inPlan") : t("progress.coach.notInPlan")}</p>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {action.planStep ? (
-                    onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{practiseLabel}</button> : null
+                    onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{practiseLabel || t("progress.coach.doIt")}</button> : null
                   ) : (
                     <>
-                      {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>Create it</button> : null}
-                      {onSchedule ? <button type="button" className={ghostBtn} onClick={() => onSchedule(action)}>Add to a plan</button> : null}
+                      {onPractise ? <button type="button" className={ghostBtn} onClick={() => onPractise(action)}>{t("progress.coach.createIt")}</button> : null}
+                      {onSchedule ? <button type="button" className={ghostBtn} onClick={() => onSchedule(action)}>{t("progress.coach.addToPlan")}</button> : null}
                     </>
                   )}
                 </div>
@@ -102,23 +106,23 @@ export function CoachPanel({ role = "student", learner = "", topics = [], errorT
           </div>
           {result.messages ? (
             <details className="rounded-xl bg-[var(--surface-soft)] p-3">
-              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">The same thing said to a student, a parent and a teacher</summary>
+              <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("progress.coach.sameThing")}</summary>
               <div className="mt-2 grid gap-2">
-                {[["student", "To the learner"], ["parent", "To a parent"], ["teacher", "To a teacher"]].map(([key, label]) => (
+                {[["student", t("progress.coach.toLearner")], ["parent", t("progress.coach.toParent")], ["teacher", t("progress.coach.toTeacher")]].map(([key, label]) => (
                   <p key={key} className="m-0 text-[12px] text-ink"><span className="font-semibold text-soft-ink">{label}: </span>{result.messages[key]}</p>
                 ))}
               </div>
             </details>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            <button type="button" className={ghostBtn} disabled={status === "reading"} onClick={read}>{status === "reading" ? "Reading…" : "Read again"}</button>
-            <span className="text-[10px] text-soft-ink">Read {result.readAt ? new Date(result.readAt).toLocaleString() : "earlier"} from the evidence in this selection.</span>
+            <button type="button" className={ghostBtn} disabled={status === "reading"} onClick={read}>{status === "reading" ? t("progress.coach.reading") : t("progress.coach.readAgain")}</button>
+            <span className="text-[10px] text-soft-ink">{t("progress.coach.readAt", { when: result.readAt ? formatDate(result.readAt, locale, { year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit", second: "2-digit" }) : t("progress.coach.earlier") })}</span>
           </div>
         </>
       ) : (
         <>
-          <p className="m-0 text-sm text-soft-ink">Luna can read the mistakes behind these numbers — which topic is actually the problem, why the answers are wrong, and what to do this week — and turn it into actions you can start from here.</p>
-          <button type="button" className={ghostBtn} disabled={status === "reading"} onClick={read}>{status === "reading" ? "Reading the results…" : "◎ Read my results"}</button>
+          <p className="m-0 text-sm text-soft-ink">{t("progress.coach.intro")}</p>
+          <button type="button" className={ghostBtn} disabled={status === "reading"} onClick={read}>{status === "reading" ? t("progress.coach.readingResults") : t("progress.coach.readMine")}</button>
           {error ? <p className="m-0 text-xs text-[var(--color-danger)]">{error}</p> : null}
         </>
       )}

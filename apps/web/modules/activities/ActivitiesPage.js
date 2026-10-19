@@ -13,6 +13,7 @@ import { OriginBadge } from "../plans/DeadlineBadge";
 import { RowMenu } from "../ui/RowMenu";
 import { displayName } from "../ui/displayName";
 import { LATE_CHIP, lateTone, summariseCatchUp } from "./catchUp";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -37,6 +38,8 @@ function scoreTone(pct) {
  * reviewed and, later, fed into performance tracking.
  */
 export function ActivitiesPage({ role = "student", profileName = "", workspaces = [], selectedWorkspaceId, selectedSubjectId, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument, onUpdateDocumentMeta, onRemoveDocument, onOpenTool, onSelectSubject }) {
+  const t = useT();
+  const dateLocale = t.locale === "es" ? "es-ES" : undefined;
   const subject = workspaces.find((w) => w.id === selectedWorkspaceId)?.subjects?.find((s) => s.id === selectedSubjectId) || null;
   const docs = subject?.documents || [];
   const activities = useMemo(() => docs.filter((d) => (d.tags || []).includes("activity")).map((d) => ({ document: d, parsed: parse(d) })).filter((a) => a.parsed?.activity), [docs]);
@@ -98,11 +101,11 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
   /** Late rows in the order shown: the first keeps the red chip, the rest are amber. */
   const lateOrder = new Map();
   for (const row of visible) if (row.due && !row.done && row.due < new Date().toISOString().slice(0, 10)) lateOrder.set(row.document.id, lateOrder.size);
-  const summary = summariseCatchUp(rows, { attempts });
+  const summary = summariseCatchUp(rows, { attempts }, t);
   const firstLate = visible.find((row) => lateOrder.get(row.document.id) === 0) || null;
   /** Grouping puts each plan's work together, with everything unplanned at the end. */
   const groups = grouped
-    ? [...new Map(visible.map((row) => [row.plan?.id || "", { id: row.plan?.id || "", name: row.plan?.name || "Not in a plan", colour: row.plan?.colour || "#8e98ab" }])).values()]
+    ? [...new Map(visible.map((row) => [row.plan?.id || "", { id: row.plan?.id || "", name: row.plan?.name || t("practice.noPlan"), colour: row.plan?.colour || "#8e98ab" }])).values()]
       .map((group) => ({ ...group, rows: visible.filter((row) => (row.plan?.id || "") === group.id) }))
     : [{ id: "", name: "", colour: "", rows: visible }];
   const active = withPlans.find((r) => r.document.id === selected) || null;
@@ -127,47 +130,47 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
     await onUpdateDocumentMeta(row.document.id, { folderIds: row.document.folderIds || [], tags: date ? [...tags, `${prefix}${date}`] : tags });
   }
 
-  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>Select a workspace and subject to see its activities.</p></section>;
+  if (!subject) return <section className="tw-scope grid gap-3"><SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} /><p className={`${card} p-5 text-sm text-soft-ink`}>{t("practice.selectSubject")}</p></section>;
 
   return (
     <section className="tw-scope grid gap-4">
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
       <div className={`${card} flex flex-wrap items-center justify-between gap-3 p-5`}>
         <div>
-          <p className={kicker}>Activities · {subject.name}</p>
+          <p className={kicker}>{t("practice.kicker", { name: subject.name })}</p>
           {role !== "teacher" && summary.headline ? <p className="m-0 mt-1 text-sm font-semibold text-[#1f7a3a]">✓ {summary.headline}</p> : null}
-          <h3 className="m-0 mt-1 text-xl font-bold text-ink">{rows.filter((r) => !r.done).length} to do · {rows.filter((r) => r.done).length} done</h3>
-          <p className="m-0 mt-1 text-sm text-soft-ink">{role === "teacher" ? "Everything you created for this subject; results per activity and a list of every mistake." : "Quizzes, exams, puzzles and flashcards to do here on Luna. Your results are kept so you can review your mistakes."}</p>
+          <h3 className="m-0 mt-1 text-xl font-bold text-ink">{t("practice.counts", { todo: rows.filter((r) => !r.done).length, done: rows.filter((r) => r.done).length })}</h3>
+          <p className="m-0 mt-1 text-sm text-soft-ink">{role === "teacher" ? t("practice.desc.teacher") : t("practice.desc.student")}</p>
           {role !== "teacher" && summary.catchUp && firstLate ? (
-            <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-sm text-ink">{summary.catchUp}<button type="button" className={ghostBtn} onClick={() => setPlaying(firstLate)}>Start it</button></p>
+            <p className="m-0 mt-2 flex flex-wrap items-center gap-2 text-sm text-ink">{summary.catchUp}<button type="button" className={ghostBtn} onClick={() => setPlaying(firstLate)}>{t("practice.startIt")}</button></p>
           ) : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", "To do"], ["done", "Done"], ["all", "All"], ["errors", `Mistakes (${allErrors.length})`]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
-          {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("create")}>＋ Make something</button> : null}
+          <div className="flex gap-1 rounded-xl bg-[var(--surface-soft)] p-1">{[["todo", t("practice.tab.todo")], ["done", t("practice.tab.done")], ["all", t("practice.tab.all")], ["errors", t("practice.tab.errors", { count: allErrors.length })]].map(([value, text]) => <button key={value} type="button" onClick={() => setView(value)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.08)]" : "text-soft-ink"}`}>{text}</button>)}</div>
+          {onOpenTool ? <button type="button" className={primaryBtn} onClick={() => onOpenTool("create")}>{t("practice.make")}</button> : null}
           {/* Phone: the study-plan, topic and sort filters sit behind this button so the activities are what you see. */}
-          {view !== "errors" ? <button type="button" className={`grid size-10 place-items-center rounded-full border text-lg leading-none md:hidden ${filtersOpen ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink"}`} aria-label="Filter and sort" aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>⚙</button> : null}
+          {view !== "errors" ? <button type="button" className={`grid size-10 place-items-center rounded-full border text-lg leading-none md:hidden ${filtersOpen ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink"}`} aria-label={t("practice.filterSort")} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((value) => !value)}>⚙</button> : null}
         </div>
         {view !== "errors" ? (
           <div className={`${filtersOpen ? "grid" : "hidden"} w-full gap-2 md:flex md:flex-wrap md:items-center`}>
             <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={planFilter} onChange={(event) => setPlanFilter(event.target.value)}>
-              <option value="">Every study plan</option>
+              <option value="">{t("practice.allPlans")}</option>
               {plans.map((row) => <option key={row.document.id} value={row.document.id}>◷ {row.plan.name}</option>)}
-              <option value="__none">Not in a plan</option>
+              <option value="__none">{t("practice.noPlan")}</option>
             </select>
             {allTopics.length ? (
               <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={topicFilter} onChange={(event) => setTopicFilter(event.target.value)}>
-                <option value="">All topics</option>
+                <option value="">{t("practice.allTopics")}</option>
                 {allTopics.map((topic) => <option key={topic} value={topic}>⬡ {topic}</option>)}
               </select>
             ) : null}
             <select className="w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-xs md:w-auto md:py-1.5" value={sort} onChange={(event) => setSort(event.target.value)}>
-              <option value="priority">Sort: what is most urgent</option>
-              <option value="due">Sort: due date</option>
-              <option value="plan">Sort: study plan</option>
-              <option value="name">Sort: name</option>
+              <option value="priority">{t("practice.sort.priority")}</option>
+              <option value="due">{t("practice.sort.due")}</option>
+              <option value="plan">{t("practice.sort.plan")}</option>
+              <option value="name">{t("practice.sort.name")}</option>
             </select>
-            <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink"><input type="checkbox" checked={grouped} onChange={(event) => setGrouped(event.target.checked)} />Group by plan</label>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-soft-ink"><input type="checkbox" checked={grouped} onChange={(event) => setGrouped(event.target.checked)} />{t("practice.group")}</label>
           </div>
         ) : null}
       </div>
@@ -175,18 +178,18 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
       {view === "errors" ? (
         <section className={`${card} p-5`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className={kicker}>Mistakes to review</p>
-            <select className="rounded-xl border border-ink/15 bg-white px-3 py-1.5 text-xs" value={errorFilter} onChange={(event) => setErrorFilter(event.target.value)}><option value="all">All topics</option>{errorTopics.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            <p className={kicker}>{t("practice.errors.title")}</p>
+            <select className="rounded-xl border border-ink/15 bg-white px-3 py-1.5 text-xs" value={errorFilter} onChange={(event) => setErrorFilter(event.target.value)}><option value="all">{t("practice.allTopics")}</option>{errorTopics.map((t) => <option key={t} value={t}>{t}</option>)}</select>
           </div>
           <div className="mt-3 grid gap-2">
             {allErrors.filter((e) => errorFilter === "all" || (e.topic || e.group) === errorFilter).map((e, index) => (
               <div key={`${e.id}-${index}`} className="rounded-xl border border-[rgba(255,59,48,0.3)] bg-[rgba(255,59,48,0.04)] px-3 py-2">
                 <p className="m-0 text-sm font-semibold text-ink">{e.prompt}</p>
-                <p className="m-0 mt-0.5 text-xs text-soft-ink">Your answer: <span className="text-[var(--color-danger)]">{e.given || "—"}</span> · Correct: <span className="text-ink">{e.expected}</span></p>
-                <p className="m-0 mt-0.5 text-[10px] text-soft-ink">{e.activity}{e.topic ? ` · ${e.topic}` : ""}{e.difficulty ? ` · ${e.difficulty}` : ""} · {new Date(e.at).toLocaleDateString()}</p>
+                <p className="m-0 mt-0.5 text-xs text-soft-ink">{t("practice.yourAnswer")} <span className="text-[var(--color-danger)]">{e.given || "—"}</span> · {t("practice.correct")} <span className="text-ink">{e.expected}</span></p>
+                <p className="m-0 mt-0.5 text-[10px] text-soft-ink">{e.activity}{e.topic ? ` · ${e.topic}` : ""}{e.difficulty ? ` · ${e.difficulty}` : ""} · {new Date(e.at).toLocaleDateString(dateLocale)}</p>
               </div>
             ))}
-            {!allErrors.length ? <p className="m-0 text-sm text-soft-ink">No mistakes recorded yet.</p> : null}
+            {!allErrors.length ? <p className="m-0 text-sm text-soft-ink">{t("practice.errors.none")}</p> : null}
           </div>
         </section>
       ) : (
@@ -212,9 +215,9 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 const overdue = r.due && !r.done && r.due < new Date().toISOString().slice(0, 10);
                 const lateChip = overdue ? LATE_CHIP[lateTone(lateOrder.get(r.document.id) ?? 1)] : "";
                 const menu = [
-                  { label: r.dueInfo.imposed ? "Set my own date…" : "Set my deadline…", icon: "◷", onSelect: () => setEditingDue(r.document.id) },
-                  canUpdateResource(r.parsed) ? { label: "Update…", icon: "✦", title: "Say what to change and Luna rewrites it", onSelect: () => setUpdating(r) } : null,
-                  onRemoveDocument ? { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete "${displayName(r.parsed.activity.title)}"? This cannot be undone.`)) onRemoveDocument(r.document.id); } } : null
+                  { label: r.dueInfo.imposed ? t("practice.menu.ownDate") : t("practice.menu.deadline"), icon: "◷", onSelect: () => setEditingDue(r.document.id) },
+                  canUpdateResource(r.parsed) ? { label: t("practice.menu.update"), icon: "✦", title: t("practice.menu.updateHint"), onSelect: () => setUpdating(r) } : null,
+                  onRemoveDocument ? { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("practice.confirmDelete", { title: displayName(r.parsed.activity.title) }))) onRemoveDocument(r.document.id); } } : null
                 ];
                 return (
                   <div key={r.document.id} className={`grid gap-3 rounded-2xl border p-3 transition ${selected === r.document.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10"}`}>
@@ -222,29 +225,29 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                       <button type="button" className="min-w-0 flex-1 text-left" onClick={() => setSelected(r.document.id)}>
                         <span className="m-0 block break-words text-sm font-bold leading-snug text-ink [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:3] overflow-hidden">{displayName(r.parsed.activity.title)}</span>
                         <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          {r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>done</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>to do</span>}
-                          {overdue ? <span className={`${chip} ${lateChip}`}>{dueLabel(r.due)}</span> : null}
+                          {r.done ? <span className={`${chip} bg-[rgba(52,199,89,0.15)] text-[#1f7a3a]`}>{t("practice.chip.done")}</span> : <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("practice.chip.todo")}</span>}
+                          {overdue ? <span className={`${chip} ${lateChip}`}>{dueLabel(r.due, t)}</span> : null}
                         </span>
-                        <span className="m-0 mt-1.5 block text-xs text-soft-ink">{q} question{q === 1 ? "" : "s"}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${r.attempts.length} attempt${r.attempts.length === 1 ? "" : "s"} · best ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</span>
+                        <span className="m-0 mt-1.5 block text-xs text-soft-ink">{t.plural("practice.questions", q)}{r.parsed.agentName ? ` · ${r.parsed.agentName}` : ""}{r.plan ? ` · ◷ ${r.plan.name}` : r.folder ? ` · 📁 ${r.folder}` : ""}{r.attempts.length ? ` · ${t.plural("practice.attempts", r.attempts.length)} · ${t("practice.best")} ` : ""}{r.attempts.length ? <span className={`font-semibold ${scoreTone(pct)}`}>{pct}%</span> : null}</span>
                       </button>
-                      <RowMenu label="More for this activity" items={menu} />
+                      <RowMenu label={t("practice.moreFor")} items={menu} />
                     </div>
                     {r.dueInfo.imposed ? (
-                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink" title={`Set by ${r.dueBy || "your teacher"}. You cannot change it; add your own earlier date.`}>
+                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink" title={t("practice.setBy", { name: r.dueBy || t("practice.yourTeacher") })}>
                         <OriginBadge imposed by={r.dueBy} />
-                        <span className="font-semibold text-ink">{dueLabel(r.dueInfo.imposed.date)}</span>
-                        {r.dueInfo.own?.date ? <span>· your date {dueLabel(r.dueInfo.own.date)}</span> : null}
+                        <span className="font-semibold text-ink">{dueLabel(r.dueInfo.imposed.date, t)}</span>
+                        {r.dueInfo.own?.date ? <span>· {t("practice.yourDate", { date: dueLabel(r.dueInfo.own.date, t) })}</span> : null}
                       </p>
                     ) : r.due ? (
-                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink"><OriginBadge imposed={false} /><span className="font-semibold text-ink">{dueLabel(r.due)}</span></p>
+                      <p className="m-0 flex flex-wrap items-center gap-1.5 text-[11px] text-soft-ink"><OriginBadge imposed={false} /><span className="font-semibold text-ink">{dueLabel(r.due, t)}</span></p>
                     ) : null}
                     {editingDue === r.document.id ? (
-                      <label className="flex flex-wrap items-center gap-2 text-xs text-soft-ink">{r.dueInfo.imposed ? "My own date" : "My deadline"}
+                      <label className="flex flex-wrap items-center gap-2 text-xs text-soft-ink">{r.dueInfo.imposed ? t("practice.myOwnDate") : t("practice.myDeadline")}
                         <input type="date" className="rounded-lg border border-ink/25 px-2 py-1 text-xs" max={r.dueInfo.imposed?.date || undefined} value={r.dueInfo.imposed ? r.dueInfo.own?.date || "" : r.due} onChange={(event) => setDue(r, event.target.value)} />
-                        <button type="button" className={ghostBtn} onClick={() => setEditingDue("")}>Done</button>
+                        <button type="button" className={ghostBtn} onClick={() => setEditingDue("")}>{t("practice.done")}</button>
                       </label>
                     ) : null}
-                    <button type="button" className={`${primaryBtn} w-full py-2.5 text-base`} onClick={() => setPlaying(r)}>{r.done ? "Try again" : "Start"}</button>
+                    <button type="button" className={`${primaryBtn} w-full py-2.5 text-base`} onClick={() => setPlaying(r)}>{r.done ? t("practice.tryAgain") : t("practice.start")}</button>
                   </div>
                 );
               })}
@@ -252,17 +255,17 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 </div>
                 );
               })}
-              {!visible.length ? <EmptyState title={view === "todo" ? "Nothing to practise right now" : "Nothing here yet"} text={view === "todo" ? "Practice is where you answer quizzes, flashcards and worksheets. Make one from your material, or let a study plan build them for you." : "Finished activities show up here with your score."} action={view === "todo" ? "Make a quiz" : undefined} onAction={() => onOpenTool?.("create")} /> : null}
+              {!visible.length ? <EmptyState title={view === "todo" ? t("practice.empty.todoTitle") : t("practice.empty.title")} text={view === "todo" ? t("practice.empty.todoText") : t("practice.empty.text")} action={view === "todo" ? t("practice.empty.action") : undefined} onAction={() => onOpenTool?.("create")} /> : null}
             </div>
           </section>
           <section className={`${card} p-5`}>
-            <p className={kicker}>Results</p>
-            {!active ? <p className="m-0 mt-2 text-sm text-soft-ink">Select an activity to see its attempts and mistakes.</p> : (
+            <p className={kicker}>{t("practice.results")}</p>
+            {!active ? <p className="m-0 mt-2 text-sm text-soft-ink">{t("practice.selectToSee")}</p> : (
               <div className="mt-2 grid gap-3">
                 <p className="m-0 text-base font-bold text-ink">{active.parsed.activity.title}</p>
-                {!active.attempts.length ? <p className="m-0 text-sm text-soft-ink">Not attempted yet.</p> : active.attempts.map((p, index) => (
+                {!active.attempts.length ? <p className="m-0 text-sm text-soft-ink">{t("practice.notAttempted")}</p> : active.attempts.map((p, index) => (
                   <div key={index} className="rounded-xl border border-ink/10 p-3">
-                    <p className="m-0 flex items-center justify-between text-sm"><span className="text-soft-ink">{new Date(p.attempt.at).toLocaleString()}</span><span className={`font-bold ${scoreTone(p.attempt.total ? (p.attempt.score / p.attempt.total) * 100 : 0)}`}>{p.attempt.score} / {p.attempt.total}</span></p>
+                    <p className="m-0 flex items-center justify-between text-sm"><span className="text-soft-ink">{new Date(p.attempt.at).toLocaleString(dateLocale)}</span><span className={`font-bold ${scoreTone(p.attempt.total ? (p.attempt.score / p.attempt.total) * 100 : 0)}`}>{p.attempt.score} / {p.attempt.total}</span></p>
                     {(p.attempt.results || []).filter((r) => r.correct === false).slice(0, 6).map((r) => <p key={r.id} className="m-0 mt-1 text-xs text-ink">✗ {r.prompt} <span className="text-soft-ink">→ {r.expected}</span></p>)}
                   </div>
                 ))}

@@ -75,6 +75,7 @@ Who is reading (the evidence says "This is read by a student / parent / teacher"
 - Give every action its own "why", built from that action's own evidence (its topic's score, the kind and number of its mistakes, whether it is slipping, or its due date). Two actions must never share the same sentence, even when they fix the same kind of mistake, because the learner reads them one after another and a repeated reason looks like nothing was read.
 
 Wording:
+- Write the headline, the diagnosis, every action title and "why", and the three messages in the language named in the <language> block of the user message, because the person reads them in the app in that language. Keep topic names and plan step titles exactly as the evidence writes them, even when they are in another language, because Luna matches them by name. The schema enums (kind, effort) stay as they are.
 - Pair any practice with a reason or a method (what to practise and why), because "do more questions" on its own does not tell the learner what to change.
 - Describe results as a diagnosis; report time spent only as context, because time is not an achievement.
 - Copy topic names exactly as the evidence writes them, so Luna can link each action to the right material.
@@ -103,7 +104,11 @@ export async function POST(request) {
     const plan = body?.plan || null;
     if (!topics.length && !errorTypes.length) return NextResponse.json({ error: "Not enough evidence yet to read." }, { status: 400 });
 
+    // The UI language of the person reading ("en" | "es"): every sentence of the answer is written in it.
+    const languageName = body?.language === "es" ? "Spanish (neutral, friendly, informal \"tú\")" : "English";
     const evidence = [
+      `<language>${languageName}</language>`,
+      "",
       "<evidence>",
       `Learner: ${learner}. This is read by a ${role}${role === "student" ? ", so write to them as \"you\"" : ""}.`,
       plan ? `Study plan being tracked: “${plan.name}”${plan.deadline ? `, next deadline ${plan.deadline}` : ""}${plan.done !== undefined ? `, ${plan.done} of ${plan.total} steps done` : ""}${plan.late ? `, ${plan.late} steps late` : ""}.` : "No study plan is being tracked.",

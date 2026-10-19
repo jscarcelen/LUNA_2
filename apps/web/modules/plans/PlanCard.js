@@ -2,6 +2,7 @@
 
 import { dueLabel } from "./plan";
 import { PlanDeadlines } from "./DeadlineBadge";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -29,7 +30,8 @@ export function Ring({ ratio, colour, size = 56 }) {
  * the Build and Delete controls only appear when their handlers are given. `subjectName` adds a
  * small line above the title for views that mix several subjects.
  */
-export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", sharedLabel = "", shareLabel = "Share…", onShare, onBuild, onUpdate, onOpen, onDelete }) {
+export function PlanCard({ document, plan, subPlans = [], progress, building = "", subjectName = "", sharedLabel = "", shareLabel = "", onShare, onBuild, onUpdate, onOpen, onDelete }) {
+  const t = useT();
   const pendingBuilds = plan.items.filter((item) => item.generate && !item.resourceId).length;
   return (
     <article className={`${card} flex flex-col gap-3 p-5`} style={{ borderTop: `4px solid ${plan.colour}` }}>
@@ -40,15 +42,15 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
           {sharedLabel ? <p className="m-0 mt-0.5 text-[11px] font-semibold text-[#0058b0]">{sharedLabel}</p> : null}
           {/* The next deadline with who set it (solid dark badge = a teacher or parent, outlined = your own); both when the plan has both. */}
           <PlanDeadlines plan={{ ...plan, deadlines: [...(plan.deadlines || []), ...subPlans.flatMap((row) => row.plan.deadlines || [])] }} className="mt-1" />
-          {subPlans.length ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{subPlans.length} sub-plan{subPlans.length === 1 ? "" : "s"}</p> : null}
+          {subPlans.length ? <p className="m-0 mt-0.5 text-xs text-soft-ink">{t.plural("plans.card.subPlans", subPlans.length)}</p> : null}
         </div>
         <Ring ratio={progress.ratio} colour={plan.colour} />
       </div>
       <div className="flex flex-wrap gap-1">
-        <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{progress.done}/{progress.total} steps</span>
-        {progress.goals.length ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{progress.goals.filter((goal) => goal.met).length}/{progress.goals.length} goals</span> : null}
-        {progress.late.length ? <span className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{progress.late.length} late</span> : null}
-        {progress.average ? <span className={`${chip} bg-[#2f9e5b]/10 text-[#1d7a44]`}>avg {Math.round(progress.average * 100)}%</span> : null}
+        <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("plans.card.steps", { done: progress.done, total: progress.total })}</span>
+        {progress.goals.length ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("plans.card.goals", { done: progress.goals.filter((goal) => goal.met).length, total: progress.goals.length })}</span> : null}
+        {progress.late.length ? <span className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{t("plans.card.late", { count: progress.late.length })}</span> : null}
+        {progress.average ? <span className={`${chip} bg-[#2f9e5b]/10 text-[#1d7a44]`}>{t("plans.card.avg", { pct: Math.round(progress.average * 100) })}</span> : null}
       </div>
       {subPlans.length ? (
         <ul className="m-0 grid list-none gap-0.5 p-0">
@@ -57,34 +59,34 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
       ) : null}
       {progress.next.length ? (
         <div>
-          <p className={kicker}>Next up</p>
+          <p className={kicker}>{t("plans.card.nextUp")}</p>
           <ul className="m-0 mt-1 grid list-none gap-1 p-0">
             {progress.next.slice(0, 3).map((item) => (
               <li key={item.id} className="flex items-center justify-between gap-2 text-xs text-ink">
                 <span className="truncate">{item.title}</span>
                 {/* A step of a plan somebody assigned: its date is theirs (locked); an own date added next to it shows too. */}
                 <span className="flex shrink-0 items-center gap-1 text-soft-ink">
-                  {plan.receivedFrom && item.dueDate ? <span title={`Set by ${plan.receivedFrom.name || "your teacher"}`} aria-label="Set by your teacher">🔒</span> : null}
-                  {dueLabel(item.dueDate)}
-                  {item.ownDueDate ? <span className="rounded-full border border-ink/25 px-1.5 text-[10px] font-semibold text-ink" title="Your own deadline">{dueLabel(item.ownDueDate)}</span> : null}
+                  {plan.receivedFrom && item.dueDate ? <span title={t("plans.card.setBy", { by: plan.receivedFrom.name || t("plans.origin.yourTeacher") })} aria-label={t("plans.card.setByTeacher")}>🔒</span> : null}
+                  {dueLabel(item.dueDate, t)}
+                  {item.ownDueDate ? <span className="rounded-full border border-ink/25 px-1.5 text-[10px] font-semibold text-ink" title={t("plans.card.ownDeadline")}>{dueLabel(item.ownDueDate, t)}</span> : null}
                 </span>
               </li>
             ))}
           </ul>
         </div>
-      ) : <p className="m-0 text-xs text-soft-ink">Everything done. 🎉</p>}
+      ) : <p className="m-0 text-xs text-soft-ink">{t("plans.card.allDone")}</p>}
       <div className="mt-auto grid gap-1.5">
         {onBuild && pendingBuilds ? (
           <button type="button" className={ghostBtn} disabled={building === document.id} onClick={() => onBuild({ document, plan })}>
-            {building === document.id ? "Building…" : `✦ Build ${pendingBuilds} resources`}
+            {building === document.id ? t("plans.card.building") : t("plans.card.build", { count: pendingBuilds })}
           </button>
         ) : null}
         <div className="flex items-center gap-1.5">
-          <button type="button" className={`${primaryBtn} flex-1`} onClick={() => onOpen?.(document.id)}>Open plan</button>
-          {onUpdate ? <button type="button" className={ghostBtn} title="Say what to change in this plan" onClick={() => onUpdate({ document, plan })}>✎ Update…</button> : null}
-          {onShare ? <button type="button" className={ghostBtn} onClick={onShare}>{shareLabel}</button> : null}
+          <button type="button" className={`${primaryBtn} flex-1`} onClick={() => onOpen?.(document.id)}>{t("plans.card.open")}</button>
+          {onUpdate ? <button type="button" className={ghostBtn} title={t("plans.card.sayChange")} onClick={() => onUpdate({ document, plan })}>{t("plans.card.update")}</button> : null}
+          {onShare ? <button type="button" className={ghostBtn} onClick={onShare}>{shareLabel || t("plans.card.share")}</button> : null}
           {onDelete ? (
-            <button type="button" title="Delete plan…" className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => onDelete({ document, plan })}>🗑</button>
+            <button type="button" title={t("plans.card.delete")} className="grid size-9 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]" onClick={() => onDelete({ document, plan })}>🗑</button>
           ) : null}
         </div>
       </div>

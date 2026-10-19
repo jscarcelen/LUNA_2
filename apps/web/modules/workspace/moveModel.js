@@ -6,8 +6,7 @@
  */
 import { subjectStructure } from "../plans/folders.js";
 import { branchOf, parseNode, pathOf } from "./ui/folderModel.js";
-
-const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+import { tEn } from "../../lib/i18n/index.js";
 
 /**
  * The folder (raw folder id; "" = the root of the topic) a document goes to when it is dropped on `targetNodeId`.
@@ -30,22 +29,24 @@ export function blockedTargets(folders, draggedNodeId) {
 }
 
 /** "Statistics / Uploaded material" for a node. */
-export function targetPath(folders, targetNodeId) {
-  return pathOf(folders, targetNodeId) || "the top level";
+export function targetPath(folders, targetNodeId, t = tEn) {
+  return pathOf(folders, targetNodeId) || t("courses.mm.topLevel");
 }
 
 /** One line for the status area after moving documents. */
-export function documentMoveMessage({ moved = 0, readOnly = 0, path = "", notes = [] }) {
-  const parts = [moved ? `${plural(moved, "item")} moved to ${path}` : "Nothing to move — already there"];
-  if (readOnly) parts.push(`${plural(readOnly, "read-only item")} stayed where ${readOnly === 1 ? "it was" : "they were"}`);
+export function documentMoveMessage({ moved = 0, readOnly = 0, path = "", notes = [] }, t = tEn) {
+  const parts = [moved ? t.plural("courses.mm.moved", moved, { path }) : t("courses.mm.nothing")];
+  if (readOnly) parts.push(t.plural("courses.mm.readOnly", readOnly));
   return `${parts.join(" · ")}.${notes.length ? ` ${notes.join(" ")}` : ""}`;
 }
 
 /** One line for the status area after moving a folder. `result` is what the server returned. */
-export function folderMoveMessage({ result, path = "" }) {
-  if (result?.unchanged) return "That folder is already there.";
-  const contents = [result?.folders > 1 ? plural(result.folders - 1, "subfolder") : "", result?.documents ? plural(result.documents, "document") : ""].filter(Boolean);
-  return `“${result?.name || "Folder"}” moved to ${path}${contents.length ? ` with ${contents.join(" and ")}` : ""}.${result?.notes?.length ? ` ${result.notes.join(" ")}` : ""}`;
+export function folderMoveMessage({ result, path = "" }, t = tEn) {
+  if (result?.unchanged) return t("courses.mm.already");
+  const contents = [result?.folders > 1 ? t.plural("courses.mm.subfolders", result.folders - 1) : "", result?.documents ? t.plural("courses.mm.documents", result.documents) : ""].filter(Boolean);
+  const name = result?.name || t("courses.mm.folder");
+  const head = contents.length ? t("courses.mm.folderWith", { name, path, contents: contents.join(t("courses.wb.and")) }) : t("courses.mm.folderMoved", { name, path });
+  return `${head}.${result?.notes?.length ? ` ${result.notes.join(" ")}` : ""}`;
 }
 
 /**

@@ -7,20 +7,22 @@ import { streamChat } from "./client";
 import { CITE_CSS, GroundingNote, SourceList, jumpToCitation, renderAssistant } from "./ChatParts";
 import { useAskLunaWorkspace } from "./AskLunaContext";
 import { describeView, selectMaterial } from "./materialChat";
+import { formatNumber } from "../../lib/i18n/index.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
 
 let counter = 0;
 const uid = (prefix) => `${prefix}${Date.now().toString(36)}${(counter += 1).toString(36)}`;
-const fmt = (n) => Number(n || 0).toLocaleString("en-US");
+const fmt = (n, locale) => formatNumber(Number(n || 0), locale);
 
 const SUGGESTIONS = {
-  quiz: ["Give me a hint for the question I am on", "Which part of the material covers this quiz?", "Explain the idea behind this topic simply"],
-  flashcards: ["Explain the card I am on with an example", "How do these terms connect to each other?", "Which part of the material covers these cards?"],
-  page: ["What am I looking at on this page?", "What should I do next?", "Explain a topic from my material"],
-  document: ["Summarise the part I am reading", "Explain this part in simpler words", "What are the key points to remember?"],
-  generated: ["Summarise this in five points", "Explain the hardest idea here simply", "Where in the material does this come from?"]
+  quiz: ["misc.sug.quiz.0", "misc.sug.quiz.1", "misc.sug.quiz.2"],
+  flashcards: ["misc.sug.flashcards.0", "misc.sug.flashcards.1", "misc.sug.flashcards.2"],
+  page: ["misc.sug.page.0", "misc.sug.page.1", "misc.sug.page.2"],
+  document: ["misc.sug.document.0", "misc.sug.document.1", "misc.sug.document.2"],
+  generated: ["misc.sug.generated.0", "misc.sug.generated.1", "misc.sug.generated.2"]
 };
 
 /**
@@ -37,6 +39,7 @@ const SUGGESTIONS = {
  *   open / onOpenChange   controlled by the host, so it can keep the notes panel and this one apart
  */
 export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "aside", launcherClassName = "", launcherPosition = "", mode = "material", prefill = null, hideLauncher = false }) {
+  const t = useT();
   const { workspaces, selectedWorkspaceId, selectedSubjectId, claim } = useAskLunaWorkspace();
   // A reader's own Ask Luna button replaces the page-level one (never two buttons for the same corner).
   useEffect(() => (mode === "page" ? undefined : claim?.()), [mode, claim]);
@@ -67,7 +70,7 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
     const clean = String(text || "").trim();
     if (!clean || busy) return;
     const userMessage = reuse?.user || { id: uid("u"), role: "user", text: clean };
-    const reply = { id: uid("a"), role: "assistant", text: "", status: "Thinking…" };
+    const reply = { id: uid("a"), role: "assistant", text: "", status: t("misc.thinking") };
     const base = reuse ? reuse.history : messages;
     const transcript = [...base, userMessage].map((message) => ({ role: message.role, content: message.text }));
     setMessages([...base, userMessage, reply]);
@@ -121,36 +124,36 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
   return (
     <>
       {!open && !hideLauncher ? (
-        <button type="button" aria-label={page ? "Ask Luna" : "Ask Luna about this material"} onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
-          <span aria-hidden>✦</span> Ask Luna
+        <button type="button" aria-label={page ? t("misc.ask") : t("misc.askLuna.aboutMaterial")} onClick={() => onOpenChange?.(true)} className={`${launcherBase} ${launcherClassName} inline-flex items-center gap-2 rounded-full bg-[var(--accent)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_rgba(0,113,227,0.35)] transition hover:bg-[#0077ed] active:scale-[0.98]`}>
+          <span aria-hidden>✦</span> {t("misc.ask")}
         </button>
       ) : null}
       {open ? (
-        <aside className={`tw-scope ${panelClass}`} aria-label="Ask Luna">
+        <aside className={`tw-scope ${panelClass}`} aria-label={t("misc.ask")}>
           <style>{MARKDOWN_CSS}{CITE_CSS}</style>
           <div className="flex items-center gap-2 border-b border-ink/8 px-4 py-2.5">
             <span className="grid size-7 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-xs font-bold text-white">L</span>
             <div className="min-w-0 flex-1">
-              <p className="m-0 text-sm font-bold text-ink">Ask Luna</p>
+              <p className="m-0 text-sm font-bold text-ink">{t("misc.ask")}</p>
               <p className="m-0 truncate text-[11px] text-soft-ink" title={context}>{selection.label}</p>
             </div>
-            {messages.length ? <button type="button" className={ghostBtn} onClick={newChat}>New chat</button> : null}
-            <button type="button" className={ghostBtn} aria-label="Close Ask Luna" onClick={() => onOpenChange?.(false)}>Close</button>
+            {messages.length ? <button type="button" className={ghostBtn} onClick={newChat}>{t("misc.askLuna.newChat")}</button> : null}
+            <button type="button" className={ghostBtn} aria-label={t("misc.askLuna.close")} onClick={() => onOpenChange?.(false)}>{t("common.close")}</button>
           </div>
           {selection.documents.length ? (
             <details className="border-b border-ink/8 px-4 py-1.5 text-[11px] text-soft-ink">
-              <summary className="cursor-pointer font-semibold">Reading from {selection.documents.length} document{selection.documents.length === 1 ? "" : "s"}{selection.plans.length ? ` of ${selection.plans.length === 1 ? `“${selection.plans[0].name}”` : `${selection.plans.length} plans`}` : ""}</summary>
+              <summary className="cursor-pointer font-semibold">{t.plural("misc.askLuna.reading", selection.documents.length)}{selection.plans.length ? ` ${selection.plans.length === 1 ? t("misc.askLuna.ofPlan", { name: selection.plans[0].name }) : t("misc.askLuna.ofPlans", { count: selection.plans.length })}` : ""}</summary>
               <ul className="m-0 mt-1 grid list-none gap-0.5 p-0">{selection.documents.slice(0, 30).map((document) => <li key={document.id} className="truncate">· {document.name}</li>)}</ul>
             </details>
           ) : null}
           <div ref={threadRef} onClick={jumpToCitation} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {!messages.length ? (
               <div className="grid gap-3 py-2">
-                <p className="m-0 text-sm text-soft-ink">{page ? "Ask about what is on your screen, your material, how Luna works, or anything else you want to learn." : kind === "quiz" || kind === "flashcards" ? "Stuck? Ask for a hint or an explanation — I answer from your material and will not give away an answer you have not checked." : "Ask anything about what you are reading — I answer from your material and show where it came from."}</p>
+                <p className="m-0 text-sm text-soft-ink">{page ? t("misc.askLuna.introPage") : kind === "quiz" || kind === "flashcards" ? t("misc.askLuna.introQuiz") : t("misc.askLuna.introDoc")}</p>
                 <div className="grid gap-2">
-                  {SUGGESTIONS[page ? "page" : kind].map((suggestion) => <button key={suggestion} type="button" onClick={() => send(suggestion)} className="rounded-2xl border border-ink/10 bg-white px-3 py-2 text-left text-sm text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">{suggestion}</button>)}
+                  {SUGGESTIONS[page ? "page" : kind].map((suggestion) => <button key={suggestion} type="button" onClick={() => send(t(suggestion))} className="rounded-2xl border border-ink/10 bg-white px-3 py-2 text-left text-sm text-ink transition hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]">{t(suggestion)}</button>)}
                 </div>
-                <p className="m-0 text-[11px] text-soft-ink">{page ? "Chatting here does not change your plans or results." : "Chatting here does not count as an attempt and does not change your results."}</p>
+                <p className="m-0 text-[11px] text-soft-ink">{page ? t("misc.askLuna.noteChatPage") : t("misc.askLuna.noteChatDoc")}</p>
               </div>
             ) : (
               <div className="grid gap-5">
@@ -165,13 +168,13 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
                         {message.error ? <p className="m-0 mt-2 rounded-xl bg-[rgba(255,59,48,0.08)] px-3 py-2 text-sm text-[var(--color-danger)]">{message.error}</p> : null}
                         {message.confirm ? (
                           <div className="mt-2 rounded-2xl border border-ink/10 bg-white p-3">
-                            <p className="m-0 text-sm font-semibold text-ink">This is a big request</p>
-                            <p className="m-0 mt-1 text-xs text-soft-ink">It would use about <strong className="text-ink">{fmt(message.confirm.tokens)} lunas</strong>. Run it?</p>
-                            <div className="mt-2 flex gap-2"><button type="button" className={primaryBtn} onClick={() => confirmRun(message)}>Run it</button><button type="button" className={ghostBtn} onClick={() => cancelRun(message)}>Cancel</button></div>
+                            <p className="m-0 text-sm font-semibold text-ink">{t("misc.askLuna.bigRequest")}</p>
+                            <p className="m-0 mt-1 text-xs text-soft-ink">{t("misc.askLuna.wouldUse")} <strong className="text-ink">{t("misc.askLuna.lunas", { n: fmt(message.confirm.tokens, t.locale) })}</strong>{t("misc.askLuna.runIt")}</p>
+                            <div className="mt-2 flex gap-2"><button type="button" className={primaryBtn} onClick={() => confirmRun(message)}>{t("misc.runIt")}</button><button type="button" className={ghostBtn} onClick={() => cancelRun(message)}>{t("common.cancel")}</button></div>
                           </div>
                         ) : null}
                         <SourceList messageId={message.id} sources={message.sources} /><GroundingNote grounding={message.grounding} />
-                        {message.usage ? <p className="m-0 mt-2 text-[10px] text-soft-ink">{fmt(message.usage.totalTokens)} lunas used</p> : null}
+                        {message.usage ? <p className="m-0 mt-2 text-[10px] text-soft-ink">{t("misc.askLuna.used", { n: fmt(message.usage.totalTokens, t.locale) })}</p> : null}
                       </div>
                     )}
                   </div>
@@ -185,16 +188,16 @@ export function AskLuna({ open, onOpenChange, item = {}, view = {}, layout = "as
                 ref={inputRef}
                 value={input}
                 rows={1}
-                placeholder="Ask about this material…"
+                placeholder={t("misc.askLuna.placeholder")}
                 onChange={(event) => { setInput(event.target.value); event.target.style.height = "auto"; event.target.style.height = `${Math.min(120, event.target.scrollHeight)}px`; }}
                 onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); send(input); } }}
                 className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-ink outline-none"
               />
               {busy
-                ? <button type="button" onClick={() => abortRef.current?.abort()} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-white" aria-label="Stop">■</button>
-                : <button type="button" disabled={!input.trim()} onClick={() => send(input)} className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition disabled:opacity-40" aria-label="Send">↑</button>}
+                ? <button type="button" onClick={() => abortRef.current?.abort()} className="grid size-9 shrink-0 place-items-center rounded-full bg-ink text-white" aria-label={t("misc.stop")}>■</button>
+                : <button type="button" disabled={!input.trim()} onClick={() => send(input)} className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-white transition disabled:opacity-40" aria-label={t("common.send")}>↑</button>}
             </div>
-            <p className="m-0 mt-1 text-center text-[10px] text-soft-ink">Answers come from your material. It can be wrong — check the references.</p>
+            <p className="m-0 mt-1 text-center text-[10px] text-soft-ink">{t("misc.askLuna.disclaimer")}</p>
           </div>
         </aside>
       ) : null}

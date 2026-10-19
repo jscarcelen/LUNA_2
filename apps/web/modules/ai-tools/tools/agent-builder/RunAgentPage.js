@@ -29,6 +29,8 @@ import { LOOSE_FOLDER } from "../../../plans/folders";
 import { WorkspaceDocumentPicker } from "./WorkspaceDocumentPicker";
 import { MASTER_TAG } from "../../pipeline/masterDocument";
 import { SaveAndExportDialog, SaveProgressView } from "./SaveExportViews";
+import { useLocale } from "../../../../lib/i18n/LocaleProvider.js";
+import { LANGUAGE_NAME } from "../../../../lib/i18n/index.js";
 
 const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
 const TEMPLATE_BUILDER_STORAGE_KEY = "luna-template-builder-drafts";
@@ -270,6 +272,7 @@ function legacyToFieldDefs(fields = []) {
  * Generator). Every agent in LUNA goes through this component so the experience is identical.
  */
 export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent = null }) {
+  const { locale: uiLocale } = useLocale();
   const workspaces = toolContext?.workspaces || [];
   const workspaceId = toolContext?.selectedWorkspaceId || workspaces[0]?.id || "";
   const subjectId = toolContext?.selectedSubjectId || "";
@@ -393,6 +396,8 @@ export function RunAgentPage({ toolContext, agentDocumentId = "", builtinAgent =
     const initialAnswers = {};
     for (const question of Array.isArray(parsed.questions) ? parsed.questions : []) {
       initialAnswers[question.id] = defaultAnswerForQuestion(question);
+      // A "Language" question starts on the UI language when the person uses the app in Spanish (English keeps "Same as material").
+      if (uiLocale !== "en" && /^language$/i.test(String(question.text || "").trim()) && Array.isArray(question.options) && question.options.includes(LANGUAGE_NAME[uiLocale])) initialAnswers[question.id] = LANGUAGE_NAME[uiLocale];
     }
     setAnswersByQuestionId(initialAnswers);
     if (Array.isArray(parsed.savedOutput?.items) && parsed.savedOutput.items.length) setOutput(parsed.savedOutput);

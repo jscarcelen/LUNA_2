@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { ITEM_KINDS, PLAN_COLOURS, PLAN_TAG, buildPlan, newItem, parsePlan } from "./plan";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const input = "w-full rounded-xl border border-ink/12 bg-white px-3 py-2 text-sm text-ink";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
@@ -13,6 +14,7 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
  * leaving the library.
  */
 export function AddToPlanDialog({ documents = [], resourceId, resourceName, isActivity = false, onCancel, onDone, onSaveGeneratedQuizDocument, onUpdateGeneratedDocument }) {
+  const t = useT();
   const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document) })).filter((row) => row.plan), [documents]);
   const [planId, setPlanId] = useState(plans[0]?.document.id || "__new");
   const [planName, setPlanName] = useState("");
@@ -29,17 +31,17 @@ export function AddToPlanDialog({ documents = [], resourceId, resourceName, isAc
     try {
       const item = newItem({ resourceId, title: resourceName, kind, dueDate, goalId });
       if (planId === "__new") {
-        const plan = buildPlan({ name: planName.trim() || `Plan · ${resourceName}`, examDate: dueDate, colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], items: [item] });
+        const plan = buildPlan({ name: planName.trim() || t("plans.add.defaultName", { name: resourceName }), examDate: dueDate, colour: PLAN_COLOURS[plans.length % PLAN_COLOURS.length], items: [item] });
         const content = JSON.stringify(plan, null, 2);
-        await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file: { name: `${plan.name}.plan.json`, content, preview: "1 step", sizeBytes: content.length } });
-        onDone?.(`“${resourceName}” scheduled in the new plan “${plan.name}”.`);
+        await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: [PLAN_TAG], file: { name: `${plan.name}.plan.json`, content, preview: t("plans.add.oneStep"), sizeBytes: content.length } });
+        onDone?.(t("plans.add.scheduledNew", { name: resourceName, plan: plan.name }));
         return;
       }
-      if (!chosen) throw new Error("Choose a plan first.");
+      if (!chosen) throw new Error(t("plans.add.choosePlan"));
       const next = { ...chosen.plan, items: [...(chosen.plan.items || []), item], updatedAt: new Date().toISOString() };
       const content = JSON.stringify(next, null, 2);
-      await onUpdateGeneratedDocument?.(chosen.document.id, { file: { name: chosen.document.name, content, preview: `${next.items.length} steps`, sizeBytes: content.length } });
-      onDone?.(`“${resourceName}” added to “${next.name}”${dueDate ? `, due ${new Date(`${dueDate}T00:00:00`).toLocaleDateString()}` : ""}.`);
+      await onUpdateGeneratedDocument?.(chosen.document.id, { file: { name: chosen.document.name, content, preview: t("plans.add.manySteps", { count: next.items.length }), sizeBytes: content.length } });
+      onDone?.(dueDate ? t("plans.add.addedDue", { name: resourceName, plan: next.name, date: new Date(`${dueDate}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined) }) : t("plans.add.added", { name: resourceName, plan: next.name }));
     } catch (problem) {
       setError(String(problem.message || problem));
     } finally {
@@ -50,28 +52,28 @@ export function AddToPlanDialog({ documents = [], resourceId, resourceName, isAc
   return (
     <div className="tw-scope fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onCancel}>
       <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-[0_24px_64px_rgba(0,0,0,0.25)]" onClick={(event) => event.stopPropagation()}>
-        <h4 className="m-0 text-lg font-bold text-ink">Add as an activity</h4>
-        <p className="m-0 mt-1 text-xs text-soft-ink">“{resourceName}” gets a due date inside a study plan. Doing it on Luna ticks it off.</p>
+        <h4 className="m-0 text-lg font-bold text-ink">{t("plans.add.title")}</h4>
+        <p className="m-0 mt-1 text-xs text-soft-ink">{t("plans.add.intro", { name: resourceName })}</p>
         <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">Study plan
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.add.plan")}
             <select className={input} value={planId} onChange={(event) => setPlanId(event.target.value)}>
               {plans.map((row) => <option key={row.document.id} value={row.document.id}>{row.plan.name}</option>)}
-              <option value="__new">＋ A new plan…</option>
+              <option value="__new">{t("plans.add.newPlanOpt")}</option>
             </select>
           </label>
-          {planId === "__new" ? <label className="grid gap-1 text-xs font-semibold text-soft-ink">New plan name<input className={input} value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder="Maths final · June" /></label> : null}
+          {planId === "__new" ? <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.add.newName")}<input className={input} value={planName} onChange={(event) => setPlanName(event.target.value)} placeholder={t("plans.add.placeholder")} /></label> : null}
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Due date<input type="date" className={input} value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">What kind of work
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.add.due")}<input type="date" className={input} value={dueDate} onChange={(event) => setDueDate(event.target.value)} /></label>
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.add.kind")}
               <select className={input} value={kind} onChange={(event) => setKind(event.target.value)}>
-                {ITEM_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{entry.label}</option>)}
+                {ITEM_KINDS.map((entry) => <option key={entry.id} value={entry.id}>{t(`plans.itemKind.${entry.id}`)}</option>)}
               </select>
             </label>
           </div>
           {chosen && (chosen.plan.goals || []).length ? (
-            <label className="grid gap-1 text-xs font-semibold text-soft-ink">Towards which goal
+            <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("plans.add.goal")}
               <select className={input} value={goalId} onChange={(event) => setGoalId(event.target.value)}>
-                <option value="">Not linked to a goal</option>
+                <option value="">{t("plans.add.noGoal")}</option>
                 {chosen.plan.goals.map((goal) => <option key={goal.id} value={goal.id}>{goal.title}</option>)}
               </select>
             </label>
@@ -79,8 +81,8 @@ export function AddToPlanDialog({ documents = [], resourceId, resourceName, isAc
         </div>
         {error ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{error}</p> : null}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onCancel}>Cancel</button>
-          <button type="button" className={primaryBtn} disabled={busy} onClick={submit}>{busy ? "Adding…" : "Add to plan"}</button>
+          <button type="button" className={ghostBtn} onClick={onCancel}>{t("common.cancel")}</button>
+          <button type="button" className={primaryBtn} disabled={busy} onClick={submit}>{busy ? t("plans.add.adding") : t("plans.add.submit")}</button>
         </div>
       </div>
     </div>

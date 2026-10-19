@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { WorkspacesManagerView } from "../../../components/views";
 import { WorkspaceBrowser } from "./WorkspaceBrowser";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 /**
  * The workspace: one folder tree holding everything — the material you uploaded, everything the
@@ -10,14 +11,15 @@ import { WorkspaceBrowser } from "./WorkspaceBrowser";
  * still reachable for the rare heavy jobs (fixing an extraction by hand, tag colours).
  */
 export function WorkspacePage(props) {
+  const t = useT();
   const [classic, setClassic] = useState(false);
   const workspace = props.workspaces?.find((item) => item.id === props.selectedWorkspaceId) || props.workspaces?.[0] || null;
   if (classic) {
     return (
       <div className="grid gap-3">
         <div className="tw-scope flex flex-wrap items-center gap-2">
-          <button type="button" className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink" onClick={() => setClassic(false)}>← Back to folders</button>
-          <p className="m-0 text-xs text-soft-ink">Extraction repair, tag colours and the template repository.</p>
+          <button type="button" className="rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink" onClick={() => setClassic(false)}>{t("courses.page.backFolders")}</button>
+          <p className="m-0 text-xs text-soft-ink">{t("courses.page.classicNote")}</p>
         </div>
         <WorkspacesManagerView {...props} />
       </div>

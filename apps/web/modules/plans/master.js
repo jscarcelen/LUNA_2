@@ -18,6 +18,8 @@
  * Pure functions: no I/O.
  */
 
+import { tEn } from "../../lib/i18n/index.js";
+
 export const MASTER_STEP_ID = "master";
 
 const isUploaded = (document) => document && document.sourceType !== "generated";
@@ -61,12 +63,12 @@ export const masterTitle = (plan) => `${String(plan?.name || "Study plan").trim(
  * The ordered steps of the plan build the dialog shows. With a master document it is the FIRST thing
  * built, before any quiz or summary, so it comes right before the writing step.
  */
-export function planBuildSteps({ documentCount = 0, uploadedCount = documentCount, buildNow = true, withMaster = uploadedCount >= 2 } = {}) {
+export function planBuildSteps({ documentCount = 0, uploadedCount = documentCount, buildNow = true, withMaster = uploadedCount >= 2 } = {}, t = tEn) {
   return [
-    { id: "concepts", title: "Reading your material", detail: `Luna is reading ${documentCount} document${documentCount === 1 ? "" : "s"} and listing the concepts in them, so the plan can cover every one.` },
-    { id: "schedule", title: "Planning the schedule", detail: "Spreading the concepts over the weeks until your deadline, fitted to your time per week and what you keep getting wrong — then checking that nothing is left untested." },
-    { id: "save", title: "Saving the plan and setting up its folders", detail: "Filing the plan under Generated material → Study plans, with a link to your uploaded material." },
-    ...(buildNow && withMaster ? [{ id: MASTER_STEP_ID, title: "Merging your documents into one master document", detail: `Luna is consolidating ${uploadedCount} documents into a single set of notes — every fact once, with formulas, tables and figures, each tagged with the document it came from. Quizzes and summaries will cite this document.` }] : []),
-    ...(buildNow ? [{ id: "build", title: "Writing the quizzes, flashcards and summaries", detail: `Each study step gets its material, written by the agent you allowed from ${withMaster ? "the master document" : "your documents"}. This is the longest part.` }] : [])
+    { id: "concepts", title: t("plans.build.concepts.title"), detail: t.plural("plans.build.concepts.detail", documentCount) },
+    { id: "schedule", title: t("plans.build.schedule.title"), detail: t("plans.build.schedule.detail") },
+    { id: "save", title: t("plans.build.save.title"), detail: t("plans.build.save.detail") },
+    ...(buildNow && withMaster ? [{ id: MASTER_STEP_ID, title: t("plans.build.master.title"), detail: t("plans.build.master.detail", { count: uploadedCount }) }] : []),
+    ...(buildNow ? [{ id: "build", title: t("plans.build.write.title"), detail: t("plans.build.write.detail", { source: withMaster ? t("plans.build.write.master") : t("plans.build.write.docs") }) }] : [])
   ];
 }

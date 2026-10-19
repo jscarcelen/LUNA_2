@@ -4,6 +4,7 @@
  * builds the request that makes a short question set for one topic.
  */
 import { classifyDeliverable } from "./shared.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 const text = (value) => String(value || "").trim();
 
@@ -59,8 +60,8 @@ export function questionSetConfig({ topic = "", why = "", count = 10, workspaceI
 }
 
 /** The label of the weak-topic button, by who is looking. */
-export function practiseButtonLabel(viewer, action = {}, studentName = "") {
-  if (viewer === "teacher") return `Send ${action.questions || 10} questions to ${text(studentName) || "the student"}`;
-  if (viewer === "parent") return "How to help";
-  return `Practise ${action.questions} questions`;
+export function practiseButtonLabel(viewer, action = {}, studentName = "", t = tEn) {
+  if (viewer === "teacher") return t.plural("dialogs.btn.sendQuestions", Number(action.questions) || 10, { name: text(studentName) || t("dialogs.questions.theStudent") });
+  if (viewer === "parent") return t("dialogs.btn.howToHelp");
+  return t.plural("dialogs.btn.practise", Number(action.questions), { count: action.questions });
 }

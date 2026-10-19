@@ -8,6 +8,7 @@
  * screen useful before any plan exists: the folder a resource is filed in, or the topic tags the
  * questions carry.
  */
+import { tEn } from "../../lib/i18n/index.js";
 
 export const TRACK_BY = [
   { id: "plan", label: "Study plans", blurb: "Plans are the subjects, their goals are the topics. What you set out to achieve is what gets measured." },
@@ -21,13 +22,13 @@ export const TRACK_BY = [
  * `plans` are `{ document, plan }` rows, `folderSubjectOf` maps an attempt to its top-level folder
  * name, and `conceptsOfResource` gives the concepts a resource says it teaches.
  */
-export function targetsFor(trackBy, { plans = [], folderSubjectOf, conceptsOfResource, fallbackSubject = "" } = {}) {
+export function targetsFor(trackBy, { plans = [], folderSubjectOf, conceptsOfResource, fallbackSubject = "", t = tEn } = {}) {
   if (trackBy === "plan") {
     /** resourceId → { subject: plan name, topics: [goal titles] }, so one lookup answers both. */
     const index = new Map();
     for (const row of plans) {
       const plan = row.plan || row;
-      const name = plan.name || "Plan";
+      const name = plan.name || t("progress.targets.plan");
       const add = (resourceId, topic) => {
         if (!resourceId) return;
         const entry = index.get(resourceId) || { subject: name, topics: [] };
@@ -43,7 +44,7 @@ export function targetsFor(trackBy, { plans = [], folderSubjectOf, conceptsOfRes
       for (const materialId of plan.materialIds || []) add(materialId, "");
     }
     return {
-      subjectOf: (attempt) => index.get(attempt.resourceId)?.subject || "Outside any plan",
+      subjectOf: (attempt) => index.get(attempt.resourceId)?.subject || t("progress.targets.outside"),
       conceptsOf: (attempt) => {
         const entry = index.get(attempt.resourceId);
         if (entry?.topics?.length) return entry.topics;
@@ -61,11 +62,11 @@ export function targetsFor(trackBy, { plans = [], folderSubjectOf, conceptsOfRes
 }
 
 /** How much of the evidence a way of tracking actually accounts for — shown so the choice is informed. */
-export function coverageOf(attempts = [], subjectOf) {
+export function coverageOf(attempts = [], subjectOf, t = tEn) {
   if (!attempts.length) return { covered: 0, total: 0, share: 0 };
   const covered = attempts.filter((attempt) => {
     const subject = subjectOf(attempt);
-    return subject && subject !== "Outside any plan";
+    return subject && subject !== t("progress.targets.outside");
   }).length;
   return { covered, total: attempts.length, share: covered / attempts.length };
 }

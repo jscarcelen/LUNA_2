@@ -1,6 +1,7 @@
 "use client";
 
 import { visibleSubjects } from "./subjects.js";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * Which main folder (subject) a screen is about. Activities, study plans and performance each read
@@ -8,11 +9,12 @@ import { visibleSubjects } from "./subjects.js";
  * switch between them. Nothing is drawn when there is only one.
  */
 export function SubjectTabs({ workspaces = [], selectedWorkspaceId, selectedSubjectId, onSelectSubject }) {
+  const t = useT();
   const subjects = visibleSubjects(workspaces.find((workspace) => workspace.id === selectedWorkspaceId)?.subjects || []);
   if (subjects.length < 2 || typeof onSelectSubject !== "function") return null;
   return (
-    <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Main topic">
-      <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">Topic</span>
+    <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label={t("courses.subjectTabs.aria")}>
+      <span className="mr-1 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{t("courses.subjectTabs.topic")}</span>
       {subjects.map((subject) => (
         <button
           key={subject.id}

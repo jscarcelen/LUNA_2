@@ -1,4 +1,7 @@
+import { tEn } from "../../lib/i18n/index.js";
+
 /**
+import { tEn } from "../../lib/i18n/index.js";
  * Taking the file that was uploaded, in the format it was uploaded in (a Word file stays Word, a PDF stays a PDF).
  * `onDownloadDocument` is the host's download action; it answers { fileName, contentBase64, mimeType }.
  */
@@ -20,14 +23,14 @@ export function saveFile(file, fallbackName) {
  * A download-by-id function for a reader that shows something made from several uploads (a master document):
  * it finds the uploaded document among `documents` and downloads it. Returns "" on success, else a message.
  */
-export function originalDownloader(documents = [], onDownloadDocument) {
+export function originalDownloader(documents = [], onDownloadDocument, t = tEn) {
   if (typeof onDownloadDocument !== "function") return undefined;
   return async (id) => {
     const document = documents.find((entry) => entry.id === id);
-    if (!document) return "That original is no longer in your workspace.";
+    if (!document) return t("courses.dl.gone");
     try {
       const file = await onDownloadDocument(document);
-      return saveFile(file, document.name) ? "" : "Nothing to download for this file.";
+      return saveFile(file, document.name) ? "" : t("courses.wb.nothingFile");
     } catch (error) {
       return String(error?.message || error);
     }
@@ -35,9 +38,9 @@ export function originalDownloader(documents = [], onDownloadDocument) {
 }
 
 /** The uploaded documents a master (merged) document was made from: [{ id, name }], empty for anything else. */
-export function masterOriginals(resource) {
+export function masterOriginals(resource, t = tEn) {
   const list = resource && typeof resource.master === "object" && resource.master && Array.isArray(resource.master.originals)
     ? resource.master.originals
     : Array.isArray(resource?.data?.originals) ? resource.data.originals : [];
-  return list.filter((entry) => entry && entry.id).map((entry) => ({ id: String(entry.id), name: String(entry.name || "Original") }));
+  return list.filter((entry) => entry && entry.id).map((entry) => ({ id: String(entry.id), name: String(entry.name || t("courses.rv.original")) }));
 }

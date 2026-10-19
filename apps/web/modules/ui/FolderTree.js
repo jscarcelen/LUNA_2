@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * The folder tree shared by the workspace and by the resources library.
@@ -39,8 +40,9 @@ export function FolderTree({
   onRenameFolder,
   onRemoveFolder,
   onDropDocuments,
-  countLabel = "item"
+  countLabel
 }) {
+  const t = useT();
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const [open, setOpen] = useState({});
   const [renaming, setRenaming] = useState("");
@@ -79,7 +81,7 @@ export function FolderTree({
             type="button"
             className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`}
             onClick={() => setOpen((current) => ({ ...current, [node.id]: !expanded }))}
-            aria-label={expanded ? "Collapse" : "Expand"}
+            aria-label={expanded ? t("courses.tree.collapse") : t("courses.tree.expand")}
           >
             {expanded ? "▾" : "▸"}
           </button>
@@ -103,9 +105,9 @@ export function FolderTree({
             </button>
           )}
           <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 max-[760px]:opacity-100">
-            {onCreateFolder ? <button type="button" title="New subfolder" className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setAdding(node.id); setNewName(""); setOpen((current) => ({ ...current, [node.id]: true })); }}>＋</button> : null}
-            {onRenameFolder ? <button type="button" title="Rename" className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setRenaming(node.id); setDraftName(node.name); }}>✎</button> : null}
-            {onRemoveFolder ? <button type="button" title="Delete folder" className="w-7 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete the folder “${node.name}”? Its documents stay, unfiled.`)) onRemoveFolder(node.id); }}>🗑</button> : null}
+            {onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setAdding(node.id); setNewName(""); setOpen((current) => ({ ...current, [node.id]: true })); }}>＋</button> : null}
+            {onRenameFolder ? <button type="button" title={t("common.rename")} className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setRenaming(node.id); setDraftName(node.name); }}>✎</button> : null}
+            {onRemoveFolder ? <button type="button" title={t("courses.tree.deleteFolder")} className="w-7 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(t("courses.tree.confirmDelete", { name: node.name }))) onRemoveFolder(node.id); }}>🗑</button> : null}
           </span>
         </div>
         {adding === node.id ? (
@@ -114,7 +116,7 @@ export function FolderTree({
               autoFocus
               className="flex-1 rounded-md border border-ink/15 px-2 py-0.5 text-sm"
               value={newName}
-              placeholder="Folder name"
+              placeholder={t("courses.tree.folderName")}
               onChange={(event) => setNewName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && newName.trim()) { onCreateFolder?.(newName.trim(), node.id); setAdding(""); setNewName(""); }
@@ -136,7 +138,7 @@ export function FolderTree({
         className={`flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${selectedId === "" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}
         onClick={() => onSelect?.("")}
       >
-        <span aria-hidden>🗂</span><span className="min-w-0 truncate font-medium">All {countLabel}s</span><span className="ml-auto text-[11px] text-soft-ink">{documents.length || ""}</span>
+        <span aria-hidden>🗂</span><span className="min-w-0 truncate font-medium">{countLabel ? t("courses.tree.allCustom", { label: countLabel }) : t("courses.tree.allItems")}</span><span className="ml-auto text-[11px] text-soft-ink">{documents.length || ""}</span>
       </button>
       {tree.map(row)}
       <button
@@ -151,7 +153,7 @@ export function FolderTree({
           if (ids.length) onDropDocuments(ids, "");
         }}
       >
-        <span aria-hidden>▫</span><span className="font-medium">Unfiled</span><span className="ml-auto text-[11px] text-soft-ink">{unfiled || ""}</span>
+        <span aria-hidden>▫</span><span className="font-medium">{t("courses.unfiled")}</span><span className="ml-auto text-[11px] text-soft-ink">{unfiled || ""}</span>
       </button>
       {onCreateFolder ? (
         adding === "__root" ? (
@@ -159,7 +161,7 @@ export function FolderTree({
             autoFocus
             className="rounded-md border border-ink/15 px-2 py-1 text-sm"
             value={newName}
-            placeholder="Folder name"
+            placeholder={t("courses.tree.folderName")}
             onChange={(event) => setNewName(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && newName.trim()) { onCreateFolder(newName.trim(), ""); setAdding(""); setNewName(""); }
@@ -168,7 +170,7 @@ export function FolderTree({
             onBlur={() => setAdding("")}
           />
         ) : (
-          <button type="button" className="justify-self-start px-2 py-1 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setAdding("__root"); setNewName(""); }}>＋ New folder</button>
+          <button type="button" className="justify-self-start px-2 py-1 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setAdding("__root"); setNewName(""); }}>＋ {t("courses.tree.newFolder")}</button>
         )
       ) : null}
     </div>
@@ -182,6 +184,7 @@ export function FolderTree({
  * with `isSubject` is drawn as a topic (the workspace's move picker lists topics as the roots of the tree).
  */
 export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeight = 220, hideUnfiled = false, disabledIds = [] }) {
+  const t = useT();
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const disabled = useMemo(() => new Set(disabledIds), [disabledIds]);
   const [collapsed, setCollapsed] = useState({});
@@ -192,8 +195,8 @@ export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeigh
     return (
       <div key={node.id}>
         <div className={`flex min-w-0 items-center gap-1 rounded-lg py-1 pr-2 text-sm transition ${blocked ? "opacity-40" : ""} ${isSelected ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} style={{ paddingLeft: 4 + node.depth * 16 }}>
-          <button type="button" className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`} onClick={() => setCollapsed((current) => ({ ...current, [node.id]: isOpen }))} aria-label={isOpen ? `Collapse ${node.name}` : `Expand ${node.name}`} aria-expanded={isOpen}>{isOpen ? "▾" : "▸"}</button>
-          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed" disabled={blocked} title={blocked ? "A folder cannot go inside itself" : undefined} onClick={() => onSelect?.(node.id)} aria-pressed={isSelected}>
+          <button type="button" className={`w-6 shrink-0 text-[10px] text-soft-ink ${node.children.length ? "" : "invisible"}`} onClick={() => setCollapsed((current) => ({ ...current, [node.id]: isOpen }))} aria-label={isOpen ? t("courses.tree.collapseName", { name: node.name }) : t("courses.tree.expandName", { name: node.name })} aria-expanded={isOpen}>{isOpen ? "▾" : "▸"}</button>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed" disabled={blocked} title={blocked ? t("courses.tree.noSelf") : undefined} onClick={() => onSelect?.(node.id)} aria-pressed={isSelected}>
             <span aria-hidden>{node.isSubject ? "🗂" : "📁"}</span>
             <span className="truncate font-medium">{node.name}</span>
             {isSelected ? <span className="ml-auto shrink-0 text-xs font-bold" aria-hidden>✓</span> : null}
@@ -204,10 +207,10 @@ export function FolderPicker({ folders = [], selectedId = "", onSelect, maxHeigh
     );
   };
   return (
-    <div className="grid gap-0.5 overflow-y-auto rounded-xl border border-ink/10 bg-white p-1.5" style={{ maxHeight }} role="tree" aria-label="Folders">
+    <div className="grid gap-0.5 overflow-y-auto rounded-xl border border-ink/10 bg-white p-1.5" style={{ maxHeight }} role="tree" aria-label={t("courses.tree.folders")}>
       {hideUnfiled ? null : (
         <button type="button" className={`flex min-w-0 items-center gap-2 rounded-lg py-1 pl-7 pr-2 text-left text-sm transition ${selectedId === "" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`} onClick={() => onSelect?.("")} aria-pressed={selectedId === ""}>
-          <span aria-hidden>▫</span><span className="font-medium">Unfiled</span>{selectedId === "" ? <span className="ml-auto text-xs font-bold" aria-hidden>✓</span> : null}
+          <span aria-hidden>▫</span><span className="font-medium">{t("courses.unfiled")}</span>{selectedId === "" ? <span className="ml-auto text-xs font-bold" aria-hidden>✓</span> : null}
         </button>
       )}
       {tree.map(row)}

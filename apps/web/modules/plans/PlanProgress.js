@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * What is happening while a study plan is built, step by step. Building takes a minute or more,
@@ -10,7 +11,8 @@ import { useEffect, useState } from "react";
  *
  * `steps`: [{ id, title, detail }] in order · `currentId`: the one running · `sub`: { done, total, label } for a step that counts.
  */
-export function PlanProgress({ steps = [], currentId = "", sub = null, headline = "Building your plan" }) {
+export function PlanProgress({ steps = [], currentId = "", sub = null, headline = "" }) {
+  const t = useT();
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1000);
@@ -27,8 +29,8 @@ export function PlanProgress({ steps = [], currentId = "", sub = null, headline 
           <span className="text-sm font-bold text-[var(--accent-ink)]">{Math.min(99, Math.round(ratio * 100))}%</span>
         </span>
         <div className="min-w-0">
-          <p className="m-0 text-base font-bold text-ink">{headline}</p>
-          <p className="m-0 text-xs text-soft-ink">This takes a minute or two — you can keep this window open. {clock}</p>
+          <p className="m-0 text-base font-bold text-ink">{headline || t("plans.progress.headline")}</p>
+          <p className="m-0 text-xs text-soft-ink">{t("plans.progress.wait", { clock })}</p>
         </div>
       </div>
       <div className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full bg-[var(--accent)] transition-all duration-700" style={{ width: `${Math.round(ratio * 100)}%` }} /></div>
@@ -46,7 +48,7 @@ export function PlanProgress({ steps = [], currentId = "", sub = null, headline 
                 {state === "active" && sub?.total ? (
                   <span className="mt-1.5 block">
                     <span className="block h-1 overflow-hidden rounded-full bg-white"><span className="block h-full rounded-full bg-[var(--accent)] transition-all duration-500" style={{ width: `${Math.round((sub.done / sub.total) * 100)}%` }} /></span>
-                    <span className="mt-1 block truncate text-[11px] font-medium text-ink">{sub.done} of {sub.total} done{sub.label ? ` · now: ${sub.label}` : ""}</span>
+                    <span className="mt-1 block truncate text-[11px] font-medium text-ink">{t("plans.progress.subDone", { done: sub.done, total: sub.total })}{sub.label ? ` · ${t("plans.progress.now", { label: sub.label })}` : ""}</span>
                   </span>
                 ) : null}
               </span>

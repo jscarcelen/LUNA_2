@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * The "…" menu for a row of actions.
@@ -9,7 +10,9 @@ import { useEffect, useRef, useState } from "react";
  * out of its box and, on a phone, off the screen entirely. A row now shows the one or two actions
  * people reach for and hides the rest behind this menu, so a row is always as wide as the row.
  */
-export function RowMenu({ items = [], label = "More actions", align = "right" }) {
+export function RowMenu({ items = [], label, align = "right" }) {
+  const t = useT();
+  const menuLabel = label ?? t("courses.rowMenu.more");
   const [open, setOpen] = useState(false);
   const holder = useRef(null);
   const usable = items.filter(Boolean);
@@ -29,8 +32,8 @@ export function RowMenu({ items = [], label = "More actions", align = "right" })
     <span ref={holder} className="relative shrink-0">
       <button
         type="button"
-        title={label}
-        aria-label={label}
+        title={menuLabel}
+        aria-label={menuLabel}
         aria-expanded={open}
         className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 bg-white text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]"
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}

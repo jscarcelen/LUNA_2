@@ -1321,3 +1321,10 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Quiz (C5): the quiz overlay is a full-screen dialog with a "← Leave" button.
 - Reader (C8): `repairLatexEscapes` typesets `\bar{x}` (also when the backslash was lost); an empty "Figure" label with no picture is no longer drawn.
 - Progress first (C9): `modules/activities/catchUp.js` — "N quizzes done this week" before late items, one catch-up message instead of a wall of late badges, first late chip red and the rest amber (Practice and student Home).
+
+## 2026-10-19 — A9: English / Spanish (branch feat/rollout-2026-10-19)
+- New dependency-free i18n layer in `apps/web/lib/i18n/` (see its README): `t(key, vars)`, `t.plural`, `LocaleProvider`/`useT`/`useLocale`, `LanguageSwitch`, server detection (cookie `luna_lang` then Accept-Language, default en), `<html lang>` from `app/layout.js` (the layout is now dynamic). Legal pages reuse the cookie when there is no `?lang=`.
+- Switch "EN | ES" in the top bar (desktop and phone), landing header, auth dialog, token screens and Account settings. Cookie only: no migration, so the choice is per browser.
+- Translated (es): landing, sign-up/login incl. class code, navigation and titles (long and phone-short), student Home, "?" help and first-run tour, Study plans, Practice and the quiz player, Progress incl. coach panel text, Courses tree/row menus/reader chrome, teacher and parent Home, People/Connections, share/send dialogs, notifications, Ask Luna menu, feedback widget, Account settings, error messages (`friendlyError.js`). Remaining English: see `lib/i18n/README.md`.
+- AI content: coach request sends `language`; `/api/performance/coach` adds a `<language>` block (`npm run dashboard:check` passes); agent runners' "Language" question defaults to the UI language when Spanish.
+- Tests: `tests/i18n/i18n.test.js` (same keys and `{placeholders}` in en and es, detection, plurals, fallback), `tests/i18n/keys-used.test.js` (literal keys used in code exist). Existing English tests unchanged: pure helpers keep English output without `t`.

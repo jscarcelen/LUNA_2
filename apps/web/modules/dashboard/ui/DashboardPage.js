@@ -36,7 +36,7 @@ function StudentHome({ profileName = "", role = "student", workspaces = [], sele
   const coach = useMemo(() => coachInputFor(entries, documents, rows), [entries, documents, rows]);
   const steps = useMemo(() => nextSteps(entries, 5), [entries]);
   // Students see what they finished before anything that is late; many late steps become one calm message.
-  const catchUp = useMemo(() => summariseCatchUp(steps.map((step) => ({ done: false, due: step.dueDate })), { attempts }), [steps, attempts]);
+  const catchUp = useMemo(() => summariseCatchUp(steps.map((step) => ({ done: false, due: step.dueDate })), { attempts }, t), [steps, attempts, t]);
   const hasMaterial = documents.some((document) => document.sourceType !== "generated" && !(document.tags || []).includes(PLAN_TAG));
   const hasEvidence = coach.topics.length > 0 || coach.errorTypes.length > 0;
   // "What Luna suggests" calls the model (4-5 s): it never blocks the first paint. The panel is mounted (and so reads) only

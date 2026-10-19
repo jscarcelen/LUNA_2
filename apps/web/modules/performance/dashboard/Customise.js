@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { MODES, SIZES, movePanel, reorderPanels, setPanelMode, setPanelSize, togglePanel } from "../views";
-import { panelsForRole } from "./registry";
+import { panelBlurb, panelTitle, panelsForRole } from "./registry";
+import { viewName } from "../views";
 import { ghostBtn, kicker } from "./parts";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 /**
  * Arranging the dashboard.
@@ -14,6 +16,7 @@ import { ghostBtn, kicker } from "./parts";
  * arrangement is safe to save, share and sell.
  */
 export function Customise({ view, role = "student", onChange, onSaveAs, onDelete, onPublish, onReset, canDelete = false }) {
+  const t = useT();
   const [dragging, setDragging] = useState("");
   const available = panelsForRole(role);
   const inView = view.panels.filter((panel) => available.some((entry) => entry.id === panel.id));
@@ -23,14 +26,14 @@ export function Customise({ view, role = "student", onChange, onSaveAs, onDelete
     <section className="grid gap-3 rounded-2xl border border-[var(--accent)]/25 bg-[var(--accent-soft)]/25 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className={kicker}>Arrange “{view.name}”</p>
-          <p className="m-0 mt-0.5 text-[11px] text-soft-ink">Drag a row to reorder it. Hide what you do not want to see; every metric stays available.</p>
+          <p className={kicker}>{t("progress.cu.arrange", { name: viewName(view, role, t) })}</p>
+          <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{t("progress.cu.hint")}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          <button type="button" className={ghostBtn} onClick={onSaveAs}>Save as a new view</button>
-          {onPublish ? <button type="button" className={ghostBtn} onClick={onPublish}>Sell this arrangement</button> : null}
-          {onReset ? <button type="button" className={ghostBtn} onClick={onReset}>Reset to Luna's default</button> : null}
-          {canDelete && onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={onDelete}>Delete this view</button> : null}
+          <button type="button" className={ghostBtn} onClick={onSaveAs}>{t("progress.cu.saveAs")}</button>
+          {onPublish ? <button type="button" className={ghostBtn} onClick={onPublish}>{t("progress.cu.sell")}</button> : null}
+          {onReset ? <button type="button" className={ghostBtn} onClick={onReset}>{t("progress.cu.reset")}</button> : null}
+          {canDelete && onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={onDelete}>{t("progress.cu.delete")}</button> : null}
         </div>
       </div>
 
@@ -51,8 +54,8 @@ export function Customise({ view, role = "student", onChange, onSaveAs, onDelete
                 <label className="flex min-w-0 items-center gap-2">
                   <input type="checkbox" checked={panel.visible} onChange={() => onChange(togglePanel(view, panel.id))} />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-ink">{definition.title}</span>
-                    <span className="block truncate text-[11px] text-soft-ink">{definition.blurb}</span>
+                    <span className="block truncate text-sm font-semibold text-ink">{panelTitle(definition.id, t)}</span>
+                    <span className="block truncate text-[11px] text-soft-ink">{panelBlurb(definition.id, t)}</span>
                   </span>
                 </label>
               </div>
@@ -62,21 +65,21 @@ export function Customise({ view, role = "student", onChange, onSaveAs, onDelete
                     className="min-w-[6.5rem] rounded-lg border border-ink/12 bg-white py-1 pl-2 pr-1 text-[11px] text-ink"
                     value={panel.mode}
                     onChange={(event) => onChange(setPanelMode(view, panel.id, event.target.value))}
-                    aria-label="How this panel reads"
+                    aria-label={t("progress.cu.reads")}
                   >
-                    {MODES.filter((mode) => definition.modes.includes(mode.id)).map((mode) => <option key={mode.id} value={mode.id}>{mode.label}</option>)}
+                    {MODES.filter((mode) => definition.modes.includes(mode.id)).map((mode) => <option key={mode.id} value={mode.id}>{t(`progress.mode.${mode.id}`)}</option>)}
                   </select>
                 ) : null}
                 <select
                   className="min-w-[7rem] rounded-lg border border-ink/12 bg-white py-1 pl-2 pr-1 text-[11px] text-ink"
                   value={panel.size}
                   onChange={(event) => onChange(setPanelSize(view, panel.id, event.target.value))}
-                  aria-label="Panel width"
+                  aria-label={t("progress.cu.width")}
                 >
-                  {SIZES.map((size) => <option key={size.id} value={size.id}>{size.label}</option>)}
+                  {SIZES.map((size) => <option key={size.id} value={size.id}>{t(`progress.size.${size.id}`)}</option>)}
                 </select>
-                <button type="button" className="h-7 w-7 rounded-full border border-ink/15 bg-white text-xs" aria-label="Move up" disabled={index === 0} onClick={() => onChange(movePanel(view, panel.id, -1))}>↑</button>
-                <button type="button" className="h-7 w-7 rounded-full border border-ink/15 bg-white text-xs" aria-label="Move down" disabled={index === inView.length - 1} onClick={() => onChange(movePanel(view, panel.id, 1))}>↓</button>
+                <button type="button" className="h-7 w-7 rounded-full border border-ink/15 bg-white text-xs" aria-label={t("progress.cu.up")} disabled={index === 0} onClick={() => onChange(movePanel(view, panel.id, -1))}>↑</button>
+                <button type="button" className="h-7 w-7 rounded-full border border-ink/15 bg-white text-xs" aria-label={t("progress.cu.down")} disabled={index === inView.length - 1} onClick={() => onChange(movePanel(view, panel.id, 1))}>↓</button>
               </div>
             </div>
           );
@@ -85,10 +88,10 @@ export function Customise({ view, role = "student", onChange, onSaveAs, onDelete
 
       {notInView.length ? (
         <div>
-          <p className={kicker}>Add a panel</p>
+          <p className={kicker}>{t("progress.cu.add")}</p>
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {notInView.map((entry) => (
-              <button key={entry.id} type="button" title={entry.blurb} className={ghostBtn} onClick={() => onChange(togglePanel(view, entry.id))}>＋ {entry.title}</button>
+              <button key={entry.id} type="button" title={panelBlurb(entry.id, t)} className={ghostBtn} onClick={() => onChange(togglePanel(view, entry.id))}>＋ {panelTitle(entry.id, t)}</button>
             ))}
           </div>
         </div>

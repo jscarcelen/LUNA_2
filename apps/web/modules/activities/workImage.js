@@ -5,6 +5,8 @@
  * kept in the saved attempt, which carries the notes and the fact that there was a photo.
  */
 
+import { tEn } from "../../lib/i18n/index.js";
+
 export const MAX_SIDE = 900;
 export const NOTES_LIMIT = 1500;
 
@@ -24,9 +26,9 @@ export function workSummary(work) {
 }
 
 /** A photo file → a downscaled JPEG data URL (browser only). Rejects what is not an image. */
-export function fileToWorkImage(file, maxSide = MAX_SIDE, quality = 0.72) {
+export function fileToWorkImage(file, maxSide = MAX_SIDE, quality = 0.72, t = tEn) {
   return new Promise((resolve, reject) => {
-    if (!file || !String(file.type || "").startsWith("image/")) { reject(new Error("Choose a photo or an image file.")); return; }
+    if (!file || !String(file.type || "").startsWith("image/")) { reject(new Error(t("practice.work.notImage"))); return; }
     const url = URL.createObjectURL(file);
     const image = new Image();
     image.onload = () => {
@@ -41,7 +43,7 @@ export function fileToWorkImage(file, maxSide = MAX_SIDE, quality = 0.72) {
       URL.revokeObjectURL(url);
       resolve(canvas.toDataURL("image/jpeg", quality));
     };
-    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That image could not be read.")); };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error(t("practice.work.unreadable"))); };
     image.src = url;
   });
 }

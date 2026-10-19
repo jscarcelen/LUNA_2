@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { askLuna } from "./GlobalAskLuna";
 import { openFeedback } from "../feedback/feedbackEvents";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
  * The ONE small "Ask Luna" button of the app: it holds both the assistant ("Ask Luna") and "Send feedback", so two
@@ -11,6 +12,7 @@ import { openFeedback } from "../feedback/feedbackEvents";
  * Luna button (`claimed`), only feedback is offered here.
  */
 export function AskLunaMenu({ variant = "floating", claimed = false }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -29,20 +31,20 @@ export function AskLunaMenu({ variant = "floating", claimed = false }) {
     <div ref={ref} className={`tw-scope ${wrap}`}>
       <button
         type="button"
-        aria-label="Ask Luna"
+        aria-label={t("misc.ask")}
         aria-expanded={open}
-        title="Ask Luna"
+        title={t("misc.ask")}
         onClick={() => setOpen((value) => !value)}
         className={bar
           ? "grid size-9 place-items-center rounded-full bg-[var(--accent)] text-sm text-white transition active:scale-95"
           : "inline-flex items-center gap-1.5 rounded-full bg-[var(--accent)] px-3.5 py-2 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(0,113,227,0.3)] transition hover:bg-[#0077ed] active:scale-95"}
       >
-        <span aria-hidden>✦</span>{bar ? null : " Ask Luna"}
+        <span aria-hidden>✦</span>{bar ? null : ` ${t("misc.ask")}`}
       </button>
       {open ? (
         <div role="menu" className={`absolute ${bar ? "right-0 top-11" : "bottom-11 right-0"} z-[60] grid w-44 gap-0.5 rounded-2xl border border-ink/10 bg-white p-1.5 shadow-[0_12px_36px_rgba(0,0,0,0.18)]`}>
-          {claimed ? null : <button type="button" role="menuitem" className={item} onClick={() => pick(() => askLuna())}>Ask Luna</button>}
-          <button type="button" role="menuitem" className={item} onClick={() => pick(openFeedback)}>Send feedback</button>
+          {claimed ? null : <button type="button" role="menuitem" className={item} onClick={() => pick(() => askLuna())}>{t("misc.ask")}</button>}
+          <button type="button" role="menuitem" className={item} onClick={() => pick(openFeedback)}>{t("misc.sendFeedback")}</button>
         </div>
       ) : null}
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { markdownToHtml } from "../reader/markdown";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /** Styles of the small numbered citation buttons ([P1] → ①) inside an answer. */
 export const CITE_CSS = ".md-cite{display:inline-grid;place-items:center;min-width:17px;height:17px;margin:0 2px;padding:0 4px;border-radius:9px;background:#e8f1fd;color:#0a4aa6;font:700 10px/1 -apple-system,sans-serif;border:0;cursor:pointer;vertical-align:text-top}.md-cite:hover{background:#0071e3;color:#fff}";
@@ -12,19 +13,20 @@ export function renderAssistant(text) {
 
 /** The "References" block under an answer: which passage of which document each [P#] came from. */
 export function SourceList({ messageId, sources = [] }) {
+  const t = useT();
   if (!sources.length) return null;
   return (
     <div className="mt-3 grid gap-2">
-      <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">References</p>
+      <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink">{t("misc.chat.references")}</p>
       {sources.map((source) => (
         <div key={source.n} id={`src-${messageId}-${source.n}`} className="rounded-xl border border-ink/10 bg-[var(--surface-soft)] px-3 py-2 text-xs transition">
           <p className="m-0 flex flex-wrap items-center gap-x-2 text-soft-ink">
             <span className="grid size-4 place-items-center rounded-full bg-[#e8f1fd] text-[10px] font-bold text-[#0a4aa6]">{source.n.replace("P", "")}</span>
             <strong className="text-ink">{source.documentName}</strong>
             {source.heading ? <span>› {source.heading}</span> : null}
-            {source.page ? <span>· p. {source.page}</span> : null}
-            <span>· passage {source.chunkIndex}</span>
-            {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-[var(--accent)] hover:underline">Open this part →</a> : null}
+            {source.page ? <span>{t("misc.chat.page", { page: source.page })}</span> : null}
+            <span>{t("misc.chat.passage", { n: source.chunkIndex })}</span>
+            {source.url ? <a href={source.url} target="_blank" rel="noreferrer" className="ml-auto font-semibold text-[var(--accent)] hover:underline">{t("misc.chat.openPart")}</a> : null}
           </p>
           {source.extract ? <p className="m-0 mt-1 border-l-2 border-[var(--accent)] pl-2 italic text-ink">“{source.extract}”</p> : null}
         </div>
@@ -35,16 +37,17 @@ export function SourceList({ messageId, sources = [] }) {
 
 /** What the grounding check found about an answer: confirmed against the material, partly, or not taken from it. */
 export function GroundingNote({ grounding }) {
+  const t = useT();
   if (!grounding) return null;
-  if (grounding.uncited) return <p className="m-0 mt-2 text-[11px] text-[#8a4a00]">This answer cites none of your material, so treat it as general knowledge.</p>;
+  if (grounding.uncited) return <p className="m-0 mt-2 text-[11px] text-[#8a4a00]">{t("misc.chat.uncited")}</p>;
   const bad = (grounding.unsupported || 0) + (grounding.partly || 0) + (grounding.invalidCitations?.length || 0);
-  if (!bad) return grounding.judged === false ? null : <p className="m-0 mt-2 text-[11px] text-[#1f7a3d]">✓ Checked against your material: {grounding.supported} of {grounding.checked} cited statements confirmed.</p>;
+  if (!bad) return grounding.judged === false ? null : <p className="m-0 mt-2 text-[11px] text-[#1f7a3d]">{t("misc.chat.checked", { supported: grounding.supported, checked: grounding.checked })}</p>;
   return (
     <div className="mt-2 rounded-xl bg-[#fff4e5] px-3 py-2 text-[11px] text-[#8a4a00]">
-      <p className="m-0 font-semibold">⚠ Check this against your material</p>
+      <p className="m-0 font-semibold">{t("misc.chat.checkThis")}</p>
       <ul className="m-0 mt-1 list-disc pl-4">
         {(grounding.flagged || []).map((item) => <li key={item.text}>“{item.text.slice(0, 110)}” — {item.reason}</li>)}
-        {grounding.invalidCitations?.length ? <li>Some references do not exist: {grounding.invalidCitations.join(", ")}.</li> : null}
+        {grounding.invalidCitations?.length ? <li>{t("misc.chat.badRefs", { list: grounding.invalidCitations.join(", ") })}</li> : null}
       </ul>
     </div>
   );

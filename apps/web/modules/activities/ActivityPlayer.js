@@ -15,6 +15,7 @@ function Rich({ text, className = "" }) {
 import { cleanWork, fileToWorkImage } from "./workImage.js";
 import { skillLabel } from "../skills/taxonomy.js";
 import { SourceNote } from "./SourceNote";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -38,7 +39,7 @@ function shuffle(list, seed) {
  * answer means: sure and wrong is a misconception to correct, unsure and wrong is a gap to teach,
  * and unsure and right is something to revisit before it is forgotten.
  */
-const CONFIDENCE = [["high", "Sure"], ["medium", "Fairly sure"], ["low", "Guessing"]];
+const CONFIDENCE = [["high", "practice.sure.high"], ["medium", "practice.sure.medium"], ["low", "practice.sure.low"]];
 
 /** The document's colour and format, applied to the player through the same variables the rest of the app uses. */
 function lookStyle(look) {
@@ -48,21 +49,22 @@ function lookStyle(look) {
 
 /** How a written answer was marked: the verdict, what it earned, and the sentence that says why. */
 const VERDICT_CHIP = {
-  correct: ["Correct", "bg-[rgba(52,199,89,0.14)] text-[#1d7a44]"],
-  close: ["Almost", "bg-[rgba(255,159,10,0.16)] text-[#8a4a00]"],
-  incorrect: ["Not quite", "bg-[rgba(255,59,48,0.12)] text-[#b30031]"]
+  correct: ["practice.verdict.correct", "bg-[rgba(52,199,89,0.14)] text-[#1d7a44]"],
+  close: ["practice.verdict.close", "bg-[rgba(255,159,10,0.16)] text-[#8a4a00]"],
+  incorrect: ["practice.verdict.incorrect", "bg-[rgba(255,59,48,0.12)] text-[#b30031]"]
 };
 
 function MarkNote({ result }) {
+  const t = useT();
   if (!result.graded || !result.verdict) return null;
   const [label, tone] = VERDICT_CHIP[result.verdict] || VERDICT_CHIP.incorrect;
-  const credit = result.verdict === "close" ? ` · ${Math.round((Number(result.score) || 0) * 100)}% credit` : "";
+  const credit = result.verdict === "close" ? ` · ${t("practice.credit", { pct: Math.round((Number(result.score) || 0) * 100) })}` : "";
   return (
     <div className="mt-2" role="note">
-      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>{label}{credit}</span>
+      <span className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${tone}`}>{t(label)}{credit}</span>
       {result.feedback ? <p className="m-0 mt-1.5 text-sm text-ink">{result.feedback}</p> : null}
-      {result.failedSkill ? <p className="m-0 mt-1 text-xs text-soft-ink">The skill that tripped this one: <strong className="text-ink">{skillLabel(result.failedSkill)}</strong>.</p> : null}
-      {result.makesSense === false && result.given ? <p className="m-0 mt-1 text-xs text-soft-ink">This does not read as an answer to the question.</p> : null}
+      {result.failedSkill ? <p className="m-0 mt-1 text-xs text-soft-ink">{t("practice.failedSkill")} <strong className="text-ink">{skillLabel(result.failedSkill)}</strong>.</p> : null}
+      {result.makesSense === false && result.given ? <p className="m-0 mt-1 text-xs text-soft-ink">{t("practice.noSense")}</p> : null}
     </div>
   );
 }
@@ -100,6 +102,7 @@ async function gradeWritten(activity, questions, answers, signal, work = {}) {
  * reason for a mistake. "This is my full answer" asks the grader to mark the working too.
  */
 function WorkBox({ value, locked, onChange }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const work = value || { text: "", image: "", full: false };
@@ -110,26 +113,26 @@ function WorkBox({ value, locked, onChange }) {
     event.target.value = "";
     if (!file) return;
     setBusy(true); setError("");
-    try { patch({ image: await fileToWorkImage(file) }); } catch (problem) { setError(String(problem.message || problem)); } finally { setBusy(false); }
+    try { patch({ image: await fileToWorkImage(file, undefined, undefined, t) }); } catch (problem) { setError(String(problem.message || problem)); } finally { setBusy(false); }
   }
   return (
     <details className="mt-3 rounded-xl border border-ink/10 px-3 py-2" open={filled && !locked ? true : undefined}>
-      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Show your working (optional){filled ? " · added" : ""}</summary>
+      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("practice.work.title")}{filled ? t("practice.work.added") : ""}</summary>
       <div className="mt-2 grid gap-2">
-        <textarea className="w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-[var(--accent)]" rows={3} disabled={locked} value={work.text} onChange={(event) => patch({ text: event.target.value })} placeholder="Notes, steps, or why you chose this answer" />
+        <textarea className="w-full rounded-xl border border-ink/15 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-[var(--accent)]" rows={3} disabled={locked} value={work.text} onChange={(event) => patch({ text: event.target.value })} placeholder={t("practice.work.placeholder")} />
         <div className="flex flex-wrap items-center gap-2">
-          {!locked ? <label className="inline-flex cursor-pointer items-center rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold text-ink hover:bg-[var(--surface-soft)]">{busy ? "Reading the photo…" : work.image ? "Replace the photo" : "Add a photo of your working"}<input type="file" accept="image/*" className="sr-only" disabled={busy} onChange={pick} /></label> : null}
+          {!locked ? <label className="inline-flex cursor-pointer items-center rounded-full border border-ink/15 px-3 py-1 text-xs font-semibold text-ink hover:bg-[var(--surface-soft)]">{busy ? t("practice.work.reading") : work.image ? t("practice.work.replace") : t("practice.work.add")}<input type="file" accept="image/*" className="sr-only" disabled={busy} onChange={pick} /></label> : null}
           {work.image ? (
             <span className="inline-flex items-center gap-2">
-              <img src={work.image} alt="Your working" className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
-              {!locked ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => patch({ image: "" })}>Remove</button> : null}
+              <img src={work.image} alt={t("practice.work.alt")} className="h-14 w-14 rounded-lg border border-ink/10 object-cover" />
+              {!locked ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => patch({ image: "" })}>{t("common.remove")}</button> : null}
             </span>
           ) : null}
         </div>
         {error ? <p className="m-0 text-xs text-[var(--color-danger)]">{error}</p> : null}
         <label className="flex items-start gap-2 text-xs text-soft-ink">
           <input type="checkbox" className="mt-0.5" disabled={locked || !filled} checked={work.full === true} onChange={(event) => patch({ full: event.target.checked })} />
-          <span><strong className="text-ink">This is my full answer.</strong> Mark my working too, and use it to find the reason for a mistake. Without the tick, the working only helps explain a wrong answer.</span>
+          <span><strong className="text-ink">{t("practice.work.full")}</strong> {t("practice.work.fullHint")}</span>
         </label>
       </div>
     </details>
@@ -138,38 +141,40 @@ function WorkBox({ value, locked, onChange }) {
 
 /** "Ask my teacher to review this mark": the AI mark is guidance, a person decides. Only offered when the quiz is a saved document. */
 function ReviewRequest({ documentId, question, result, existing, onSent }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [state, setState] = useState({ busy: false, error: "" });
   if (existing && existing.status !== "requested") {
-    return <p className="m-0 mt-2 text-xs font-semibold text-ink">Your teacher {existing.status === "overridden" ? "changed this mark" : "confirmed this mark"}: now {existing.final_correct ? "right" : "wrong"}{existing.teacher_note ? ` — ${existing.teacher_note}` : ""}</p>;
+    return <p className="m-0 mt-2 text-xs font-semibold text-ink">{t("practice.review.decided", { action: existing.status === "overridden" ? t("practice.review.changed") : t("practice.review.confirmed"), now: existing.final_correct ? t("practice.review.right") : t("practice.review.wrong") })}{existing.teacher_note ? ` — ${existing.teacher_note}` : ""}</p>;
   }
-  if (existing) return <p className="m-0 mt-2 text-xs text-soft-ink">Review requested — your teacher will look at it.</p>;
+  if (existing) return <p className="m-0 mt-2 text-xs text-soft-ink">{t("practice.review.requested")}</p>;
   async function send() {
     setState({ busy: true, error: "" });
     try {
       const response = await fetch("/api/attempts/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ activityDocumentId: documentId, questionId: question.id, questionPrompt: question.prompt, given: result.given, expected: result.expected, aiCorrect: result.correct, note }) });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) { setState({ busy: false, error: response.status === 401 ? "Log in with your student account to ask for a review." : body.setupNeeded ? "Reviews are not switched on yet." : body.error || "Could not send." }); return; }
+      if (!response.ok) { setState({ busy: false, error: response.status === 401 ? t("practice.review.login") : body.setupNeeded ? t("practice.review.off") : body.error || t("practice.review.couldNot") }); return; }
       setState({ busy: false, error: "" });
       onSent?.(body.review);
     } catch {
-      setState({ busy: false, error: "Could not send. Try again." });
+      setState({ busy: false, error: t("practice.review.tryAgain") });
     }
   }
   return open ? (
     <div className="mt-2 grid gap-1.5">
-      <input className={input} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Why do you think the mark is wrong? (optional)" />
+      <input className={input} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder={t("practice.review.why")} />
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={ghostBtn} disabled={state.busy} onClick={send}>{state.busy ? "Sending…" : "Send to my teacher"}</button>
-        <button type="button" className="text-xs font-semibold text-soft-ink underline" onClick={() => setOpen(false)}>Cancel</button>
+        <button type="button" className={ghostBtn} disabled={state.busy} onClick={send}>{state.busy ? t("practice.review.sending") : t("practice.review.send")}</button>
+        <button type="button" className="text-xs font-semibold text-soft-ink underline" onClick={() => setOpen(false)}>{t("common.cancel")}</button>
         {state.error ? <span className="text-xs text-[var(--color-danger)]" role="alert">{state.error}</span> : null}
       </div>
     </div>
-  ) : <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent-ink)] underline" onClick={() => setOpen(true)}>Ask my teacher to review this mark</button>;
+  ) : <button type="button" className="mt-2 text-xs font-semibold text-[var(--accent-ink)] underline" onClick={() => setOpen(true)}>{t("practice.review.ask")}</button>;
 }
 
 function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, documentId = "" }) {
+  const t = useT();
   const [reviews, setReviews] = useState({});
   useEffect(() => {
     if (!documentId) return;
@@ -211,7 +216,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
     if (typeof onProgress !== "function") return;
     const index = activity.questions.findIndex((q) => q.id === lastId);
     const question = activity.questions[index];
-    onProgress({ answered, total: activity.questions.length, checked: Boolean(attempt), score: attempt?.score ?? 0, current: question ? { number: index + 1, prompt: question.kind === "match" ? "Match each pair" : question.kind === "tiles" ? "Rebuild the grid" : String(question.prompt || "") } : null });
+    onProgress({ answered, total: activity.questions.length, checked: Boolean(attempt), score: attempt?.score ?? 0, current: question ? { number: index + 1, prompt: question.kind === "match" ? t("practice.q.matchEach") : question.kind === "tiles" ? t("practice.q.rebuild") : String(question.prompt || "") } : null });
   }, [answered, attempt, lastId]);
   const resultById = useMemo(() => Object.fromEntries((attempt?.results || []).map((r) => [r.id, r])), [attempt]);
 
@@ -236,9 +241,9 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
         const { grades, note } = await gradeWritten(activity, written, answers, controller.signal, work);
         graded = applyGrades(graded, grades);
         if (note && mounted.current) setGradingNote(note);
-        else if (!Object.keys(grades).length && mounted.current) setGradingNote("Luna could not check the written answers, so they were marked by comparing words.");
+        else if (!Object.keys(grades).length && mounted.current) setGradingNote(t("practice.gradingNote"));
       } catch {
-        if (mounted.current) setGradingNote("Luna could not check the written answers, so they were marked by comparing words.");
+        if (mounted.current) setGradingNote(t("practice.gradingNote"));
       } finally {
         clearTimeout(timer);
         if (mounted.current) setChecking(false);
@@ -256,17 +261,17 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
           <div><h3 className="m-0 text-2xl font-bold tracking-tight text-ink">{activity.title}</h3>{activity.subtitle ? <p className="m-0 mt-1 text-sm text-soft-ink">{activity.subtitle}</p> : null}
             {activity.intro ? (
               <details className="mt-3 rounded-xl bg-[var(--surface-soft)] p-3" open>
-                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Quick refresher</summary>
+                <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("practice.refresher")}</summary>
                 <div className="mt-2 grid gap-1.5">{String(activity.intro).split(/\n+/).map((line) => line.trim()).filter(Boolean).map((line, lineIndex) => <p key={lineIndex} className="m-0 text-sm text-ink" dangerouslySetInnerHTML={{ __html: renderInline(line) }} />)}</div>
               </details>
             ) : null}
           </div>
-          {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? "Done" : "Leave"}</button> : null}
+          {onClose ? <button type="button" className={ghostBtn} onClick={onClose}>{attempt ? t("practice.done") : t("practice.leave")}</button> : null}
         </div>
         {attempt ? (
           <div className="mt-4 rounded-2xl bg-[var(--accent-soft)] p-4">
             <p className="m-0 text-3xl font-bold text-ink">{Number.isInteger(attempt.score) ? attempt.score : attempt.score.toFixed(1)} / {attempt.total}</p>
-            <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${Math.max(1, Math.round(attempt.durationMs / 60000))} min · ` : ""}{attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0}% correct{attempt.results.some((r) => r.correct === false) ? " — the mistakes are marked below, with the right answer." : " — perfect!"}{attempt.results.some((r) => r.verdict === "close") ? " Answers that were almost right earn part of a point." : ""}</p>
+            <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${t("practice.result.min", { n: Math.max(1, Math.round(attempt.durationMs / 60000)) })} · ` : ""}{t("practice.result.pct", { pct: attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0 })}{attempt.results.some((r) => r.correct === false) ? t("practice.result.mistakes") : t("practice.result.perfect")}{attempt.results.some((r) => r.verdict === "close") ? t("practice.result.partial") : ""}</p>
             {gradingNote ? <p className="m-0 mt-1 text-xs text-soft-ink">{gradingNote}</p> : null}
             <AiGuidanceNote className="mt-1" />
             {(() => {
@@ -276,8 +281,8 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
               if (!sureWrong && !unsureRight) return null;
               return (
                 <p className="m-0 mt-2 text-xs text-ink">
-                  {sureWrong ? `${sureWrong} you were sure about ${sureWrong === 1 ? "was" : "were"} wrong — those are misunderstandings, not slips. ` : ""}
-                  {unsureRight ? `${unsureRight} you guessed ${unsureRight === 1 ? "was" : "were"} right — worth going over once more.` : ""}
+                  {sureWrong ? `${t.plural("practice.sureWrong", sureWrong)} ` : ""}
+                  {unsureRight ? t.plural("practice.unsureRight", unsureRight) : ""}
                 </p>
               );
             })()}
@@ -300,7 +305,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
               <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--accent)] text-sm font-bold text-white">{index + 1}</span>
               <div className="min-w-0 flex-1">
                 {q.group ? <p className="m-0 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{q.group}</p> : null}
-                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? "Match each pair" : q.kind === "tiles" ? "Rebuild the grid — matching edges together" : <Rich text={q.tex?.prompt || q.prompt} />}</p>
+                <p className="m-0 text-base font-semibold text-ink">{q.kind === "match" ? t("practice.q.matchEach") : q.kind === "tiles" ? t("practice.q.rebuildFull") : <Rich text={q.tex?.prompt || q.prompt} />}</p>
 
                 {q.kind === "choice" ? (
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -314,7 +319,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
 
                 {q.kind === "boolean" ? (
                   <div className="mt-3 flex gap-2">
-                    {[["true", "True"], ["false", "False"]].map(([value, label]) => <button key={value} type="button" disabled={locked} onClick={() => set(q.id, value)} className={`rounded-full border px-5 py-2 text-sm font-semibold ${answers[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-ink" : "border-ink/10 text-ink"} ${result && value === result.expected ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{label}</button>)}
+                    {[["true", t("practice.true")], ["false", t("practice.false")]].map(([value, label]) => <button key={value} type="button" disabled={locked} onClick={() => set(q.id, value)} className={`rounded-full border px-5 py-2 text-sm font-semibold ${answers[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-ink" : "border-ink/10 text-ink"} ${result && value === result.expected ? "ring-2 ring-[rgba(52,199,89,0.6)]" : ""}`}>{label}</button>)}
                   </div>
                 ) : null}
 
@@ -325,13 +330,13 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                     disabled={locked}
                     value={answers[q.id] || ""}
                     onChange={(event) => set(q.id, event.target.value)}
-                    placeholder="Write your answer"
+                    placeholder={t("practice.q.write")}
                     style={{ lineHeight: "28px", backgroundImage: "repeating-linear-gradient(transparent, transparent 27px, var(--accent-soft) 27px, var(--accent-soft) 28px)", backgroundPositionY: "8px" }}
                   />
                 ) : null}
 
                 {(q.kind === "text" && !look?.ruled) || q.kind === "number" ? (
-                  <input className={`${input} mt-3 max-w-sm`} inputMode={q.kind === "number" ? "decimal" : "text"} disabled={locked} value={answers[q.id] || ""} onChange={(event) => set(q.id, event.target.value)} placeholder={q.kind === "number" ? "Your result" : "Your answer"} />
+                  <input className={`${input} mt-3 max-w-sm`} inputMode={q.kind === "number" ? "decimal" : "text"} disabled={locked} value={answers[q.id] || ""} onChange={(event) => set(q.id, event.target.value)} placeholder={q.kind === "number" ? t("practice.q.yourResult") : t("practice.q.yourAnswer")} />
                 ) : null}
 
                 {q.kind === "match" ? (
@@ -345,10 +350,10 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                           <span className="text-sm font-semibold text-ink">{pair.left}</span>
                           <span className="text-soft-ink">→</span>
                           <select className={input} disabled={locked} value={chosen} onChange={(event) => set(q.id, { ...(answers[q.id] || {}), [pair.left]: event.target.value })}>
-                            <option value="">Choose…</option>
+                            <option value="">{t("practice.q.choose")}</option>
                             {rights.map((right) => <option key={right} value={right}>{right}</option>)}
                           </select>
-                          {good === false ? <span className="col-span-3 text-xs text-[var(--color-danger)]">Correct: {q.answer[pair.left]}</span> : null}
+                          {good === false ? <span className="col-span-3 text-xs text-[var(--color-danger)]">{t("practice.correct")} {q.answer[pair.left]}</span> : null}
                         </div>
                       );
                     })}
@@ -393,10 +398,10 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                         })}
                       </div>
                       <div>
-                        <p className="m-0 text-xs text-soft-ink">Tap a tile, then tap a slot. Touching edges must match (word ↔ translation).</p>
+                        <p className="m-0 text-xs text-soft-ink">{t("practice.q.tapTile")}</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {tray.map((i) => <button key={i} type="button" disabled={locked} onClick={() => setPickedTile(pickedTile === i ? null : i)}><Tile t={tiles[i]} i={i} small /></button>)}
-                          {!tray.length ? <span className="text-xs text-soft-ink">All tiles placed — tap two placed tiles to swap them.</span> : null}
+                          {!tray.length ? <span className="text-xs text-soft-ink">{t("practice.q.allPlaced")}</span> : null}
                         </div>
                       </div>
                     </div>
@@ -405,8 +410,8 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
 
                 {q.kind === "flashcard" ? (
                   <div className="mt-3 grid gap-2">
-                    <button type="button" className="rounded-2xl border border-ink/10 bg-[var(--surface-soft)] p-5 text-center text-lg font-semibold text-ink" onClick={() => setFlipped((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}>{flipped[q.id] ? q.back : "Tap to reveal the answer"}</button>
-                    {flipped[q.id] ? <div className="flex gap-2">{[["known", "✓ I knew it"], ["unknown", "✗ Not yet"]].map(([value, label]) => <button key={value} type="button" disabled={locked} onClick={() => set(q.id, value)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${answers[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-ink" : "border-ink/10 text-ink"}`}>{label}</button>)}</div> : null}
+                    <button type="button" className="rounded-2xl border border-ink/10 bg-[var(--surface-soft)] p-5 text-center text-lg font-semibold text-ink" onClick={() => setFlipped((prev) => ({ ...prev, [q.id]: !prev[q.id] }))}>{flipped[q.id] ? q.back : t("practice.q.reveal")}</button>
+                    {flipped[q.id] ? <div className="flex gap-2">{[["known", t("practice.q.knew")], ["unknown", t("practice.q.notYet")]].map(([value, label]) => <button key={value} type="button" disabled={locked} onClick={() => set(q.id, value)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${answers[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-ink" : "border-ink/10 text-ink"}`}>{label}</button>)}</div> : null}
                   </div>
                 ) : null}
 
@@ -416,7 +421,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
 
                 {!attempt && answers[q.id] !== undefined && answers[q.id] !== "" ? (
                   <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                    <span className="text-[11px] font-semibold text-soft-ink">How sure are you?</span>
+                    <span className="text-[11px] font-semibold text-soft-ink">{t("practice.q.howSure")}</span>
                     {CONFIDENCE.map(([value, label]) => (
                       <button
                         key={value}
@@ -424,26 +429,26 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
                         onClick={() => setConfidence((prev) => ({ ...prev, [q.id]: prev[q.id] === value ? "" : value }))}
                         className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${confidence[q.id] === value ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/12 text-soft-ink hover:bg-[var(--surface-soft)]"}`}
                       >
-                        {label}
+                        {t(label)}
                       </button>
                     ))}
                   </div>
                 ) : null}
                 {result && result.confidence ? (
                   <p className="m-0 mt-2 text-[11px] text-soft-ink">
-                    You said you were <strong className="text-ink">{CONFIDENCE.find(([value]) => value === result.confidence)?.[1].toLowerCase() || result.confidence}</strong>
-                    {result.correct === false && result.confidence === "high" ? " — worth a second look: this one is a misunderstanding rather than a slip." : ""}
-                    {result.correct === true && result.confidence === "low" ? " — but you got it right. Come back to it once more and it will stick." : ""}
+                    {t("practice.q.saidBefore")} <strong className="text-ink">{t(CONFIDENCE.find(([value]) => value === result.confidence)?.[1] || "").toLowerCase() || result.confidence}</strong>
+                    {result.correct === false && result.confidence === "high" ? t("practice.q.misunderstanding") : ""}
+                    {result.correct === true && result.confidence === "low" ? t("practice.q.gotRight") : ""}
                   </p>
                 ) : null}
                 {result ? <MarkNote result={result} /> : null}
                 {result && Array.isArray(q.steps) && q.steps.length ? (
                   <div className="mt-2 grid gap-1.5 rounded-xl bg-[var(--surface-soft)] p-3">
-                    <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-soft-ink">Step by step</p>
+                    <p className="m-0 text-[11px] font-semibold uppercase tracking-wider text-soft-ink">{t("practice.q.steps")}</p>
                     {q.steps.map((step, stepIndex) => <p key={stepIndex} className="m-0 text-sm text-ink" dangerouslySetInnerHTML={{ __html: renderInline(step) }} />)}
                   </div>
                 ) : null}
-                {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? "Expected answer" : "Correct answer"}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
+                {result && result.correct === false && q.kind !== "match" ? <p className={`m-0 mt-2 text-sm ${result.verdict === "close" ? "text-[#8a4a00]" : "text-[var(--color-danger)]"}`}>{result.verdict === "close" ? t("practice.q.expected") : t("practice.q.correctAnswer")}: <strong>{result.expected}</strong>{q.explanation ? <span className="text-soft-ink"> — {q.explanation}</span> : null}</p> : null}
                 {result && (q.source?.extract || q.source?.grounding) ? <SourceNote source={q.source} /> : null}
                 {result ? <p className="m-0 mt-1 flex flex-wrap gap-1 text-[10px] text-soft-ink">{q.skill ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.skill}</span> : null}{q.difficulty ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{q.difficulty}</span> : null}{result.ms ? <span className="rounded-full bg-[var(--surface-soft)] px-2 py-0.5 font-semibold">{Math.round(result.ms / 1000)}s</span> : null}</p> : null}
                 {result && result.correct && q.explanation ? <p className="m-0 mt-2 whitespace-pre-line text-xs text-soft-ink"><Rich text={q.tex?.explanation || q.explanation} /></p> : null}
@@ -456,11 +461,11 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
 
       {!attempt ? (
         <div className="flex flex-wrap items-center justify-end gap-3">
-          {checking ? <p className="m-0 flex items-center gap-2 text-sm text-soft-ink" role="status" aria-live="polite"><span className="inline-block size-3.5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />Luna is checking your written answers…</p> : null}
-          <button type="button" className={primaryBtn} disabled={!activity.questions.length || checking} onClick={check}>{checking ? "Checking…" : "Check my answers"}</button>
+          {checking ? <p className="m-0 flex items-center gap-2 text-sm text-soft-ink" role="status" aria-live="polite"><span className="inline-block size-3.5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" aria-hidden />{t("practice.checkingWritten")}</p> : null}
+          <button type="button" className={primaryBtn} disabled={!activity.questions.length || checking} onClick={check}>{checking ? t("practice.checking") : t("practice.check")}</button>
         </div>
       ) : null}
-      {!activity.questions.length ? <p className={`${card} p-5 text-sm text-soft-ink`}>This document has nothing to answer — it is a reading document. Export it instead.</p> : null}
+      {!activity.questions.length ? <p className={`${card} p-5 text-sm text-soft-ink`}>{t("practice.nothingToAnswer")}</p> : null}
     </section>
   );
 }

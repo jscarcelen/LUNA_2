@@ -10,6 +10,8 @@
  * for a saved agent.
  */
 
+import { tEn } from "../../lib/i18n/index.js";
+
 // The built-in agents of the Create tab (the Summary Notes Consolidator is not here: the plan builds its master document itself), then whatever the learner built or bought.
 export const BUILTIN_PLAN_AGENTS = [
   { id: "quiz", label: "Quiz Generator", purpose: "Questions to answer — multiple choice, true/false and short answer — plus practice exams and worksheets.", makes: ["quiz", "exam", "worksheet"] },
@@ -62,12 +64,14 @@ export function scopeFromIds(ids = [], catalog = []) {
 /** The `generate` values the plan may use. */
 export const generateKeys = (scope) => [...new Set((scope || []).flatMap((agent) => agent.makes || []))];
 
+const GEN_KEYS = new Set(["quiz", "exam", "worksheet", "flashcards", "summary", "math", "concept-flashcards", "document-summarizer", "formulas", "reading", "level-test"]);
+
 /** Human name of a `generate` key, for step notes and previews. */
-export function generateLabel(key, scope) {
+export function generateLabel(key, scope, t = tEn) {
   if (!key) return "";
   const agent = (scope || []).find((entry) => (entry.makes || []).includes(key));
-  if (isCustomKey(key)) return agent?.label || "agent";
-  return ({ quiz: "quiz", exam: "practice exam", worksheet: "worksheet", flashcards: "flashcards", summary: "summary", math: "problem set", "concept-flashcards": "concept flashcards", "document-summarizer": "document summary", formulas: "formula sheet", reading: "reading part", "level-test": "level test" })[key] || key;
+  if (isCustomKey(key)) return agent?.label || t("plans.gen.agent");
+  return (GEN_KEYS.has(key) ? t(`plans.gen.${key}`) : "") || key;
 }
 
 /** Text for the planner prompt: which agents exist and what each can make. */

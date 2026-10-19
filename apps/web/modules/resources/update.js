@@ -33,6 +33,7 @@ import { parsePlan } from "../plans/plan";
 import { isSharedDocument, sharedInfoOf } from "../accounts/shared";
 import { attemptsFor, parseResource, trimSources } from "./resource";
 import { resourceBlocks } from "./look";
+import { tEn } from "../../lib/i18n/index.js";
 
 /* ------------------------------------------------------------------------------------ constants */
 
@@ -59,15 +60,15 @@ export const BUILTIN_AGENTS = [
 ];
 
 /** The same quick suggestions as Iterate, then the ones that fit the kind of resource. */
-const COMMON_SUGGESTIONS = ["Focus more on…", "Make it shorter", "Add more detail", "Simpler language", "Add examples", "Cover the formulas"];
+const COMMON_SUGGESTIONS = ["focus", "shorter", "detail", "simpler", "examples", "formulas"];
 const KIND_SUGGESTIONS = {
-  quiz: ["Make it harder", "More calculation questions", "Cover chapter 3 only", "Translate to Spanish"],
-  flashcards: ["Make the cards harder", "Add 10 more cards", "Add an example to each card", "Translate to Spanish"],
-  summary: ["Shorter", "Add examples", "Add formulas"],
-  document: ["Shorter", "Add examples", "Add formulas"],
-  master: ["Shorter", "Add examples", "Add formulas", "Add a section on…"]
+  quiz: ["harder", "calc", "ch3", "translate"],
+  flashcards: ["cardsHarder", "more10", "exampleEach", "translate"],
+  summary: ["shortShort", "examples", "addFormulas"],
+  document: ["shortShort", "examples", "addFormulas"],
+  master: ["shortShort", "examples", "addFormulas", "addSection"]
 };
-export const suggestionsFor = (kind) => [...(KIND_SUGGESTIONS[kind] || KIND_SUGGESTIONS.document), ...COMMON_SUGGESTIONS];
+export const suggestionsFor = (kind, t = tEn) => [...(KIND_SUGGESTIONS[kind] || KIND_SUGGESTIONS.document), ...COMMON_SUGGESTIONS].map((key) => t(`courses.upd.sg.${key}`));
 
 /* ------------------------------------------------------------------------------------ what it is */
 
@@ -85,18 +86,15 @@ export function kindOfResource(resource, document = null) {
   return "document";
 }
 
-const KIND_WORDS = { quiz: "question", flashcards: "card", summary: "section", document: "section", master: "section" };
-
 /** "Quiz Generator · 10 questions · made from Accounting.pdf" */
-export function describeResource(resource, document = null) {
+export function describeResource(resource, document = null, t = tEn) {
   const kind = kindOfResource(resource, document);
   const count = resource?.activity?.questions?.length || (resourceBlocks(resource) || []).length || 0;
-  const word = KIND_WORDS[kind];
   const names = (resource?.meta?.sourceNames || []).filter(Boolean);
   return [
     resource?.meta?.agentName || "Luna",
-    count ? `${count} ${kind === "quiz" || kind === "flashcards" ? word : "block"}${count === 1 ? "" : "s"}` : "",
-    names.length ? `made from ${names.slice(0, 3).join(", ")}${names.length > 3 ? ` +${names.length - 3}` : ""}` : ""
+    count ? t.plural(kind === "quiz" ? "courses.upd.unit.question" : kind === "flashcards" ? "courses.upd.unit.card" : "courses.upd.unit.block", count) : "",
+    names.length ? t("courses.upd.madeFrom", { names: `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` +${names.length - 3}` : ""}` }) : ""
   ].filter(Boolean).join(" · ");
 }
 
@@ -449,7 +447,7 @@ export function dependantsOf(documentId, documents = []) {
  * is kept as it is and the update is saved as a copy (the original stays what the attempts and the plans
  * refer to). An item nobody used is replaced. A document someone shared read-only can only be copied.
  */
-export function decideMode({ document = null, resource = null, documents = [], attempts = null }) {
+export function decideMode({ document = null, resource = null, documents = [], attempts = null }, t = tEn) {
   if (!document) return { mode: "replace", canReplace: true, reasons: [] };
   const list = attempts || attemptsFor(document.id, resource?.activity?.id, documents);
   const plans = plansUsing(document.id, documents);
@@ -457,10 +455,10 @@ export function decideMode({ document = null, resource = null, documents = [], a
   const readOnly = isSharedDocument(document) || (shared && shared.permission !== "edit");
   const dependants = (document.tags || []).includes(MASTER_TAG) ? dependantsOf(document.id, documents) : [];
   const reasons = [];
-  if (list.length) reasons.push(`it has ${list.length} attempt${list.length === 1 ? "" : "s"}`);
-  if (plans.length) reasons.push(`it is a step of ${plans.map((plan) => `“${plan.name}”`).join(", ")}`);
-  if (dependants.length) reasons.push(`${dependants.length} other item${dependants.length === 1 ? " is" : "s are"} made from it`);
-  if (readOnly) reasons.push("it was shared with you as view only");
+  if (list.length) reasons.push(t.plural("courses.upd.reason.attempts", list.length));
+  if (plans.length) reasons.push(t("courses.upd.reason.plans", { plans: plans.map((plan) => `“${plan.name}”`).join(", ") }));
+  if (dependants.length) reasons.push(t.plural("courses.upd.reason.dependants", dependants.length));
+  if (readOnly) reasons.push(t("courses.upd.reason.viewOnly"));
   return { mode: reasons.length ? "copy" : "replace", canReplace: !readOnly, reasons, attempts: list.length, plans, dependants: dependants.length };
 }
 
@@ -669,21 +667,21 @@ export class UpdateError extends Error {
  *
  * Returns { resource, previous, diff, usage, model, understood, agent, material, answers, checks }.
  */
-export async function updateResource({ document = null, resource, instruction, material = null, keepFormat = true, workspace = null, useFallback = false, onProgress, fetchImpl = fetch, now = new Date().toISOString() }) {
+export async function updateResource({ document = null, resource, instruction, material = null, keepFormat = true, workspace = null, useFallback = false, onProgress, fetchImpl = fetch, now = new Date().toISOString(), t = tEn }) {
   const words = clean(instruction);
-  if (!words) throw new UpdateError("no-instruction", "Say what to change.");
+  if (!words) throw new UpdateError("no-instruction", t("courses.upd.err.noInstruction"));
   const documents = (workspace?.subjects || []).flatMap((subject) => subject.documents || []);
   const resolution = resolveAgent({ resource, document, agentDocuments: agentDocumentsOf(documents) });
-  if (resolution.status === "unsupported") throw new UpdateError("unsupported", "This was written by the assistant in chat — ask Luna in the chat to change it.");
+  if (resolution.status === "unsupported") throw new UpdateError("unsupported", t("courses.upd.err.unsupported"));
   const chosen = chooseAgent(resolution, useFallback);
-  if (!chosen) throw new UpdateError("agent-missing", `The agent that made this (${resolution.name || "unknown"}) is no longer in your workspace.`, { fallback: resolution.fallback });
+  if (!chosen) throw new UpdateError("agent-missing", t("courses.upd.err.agentMissing", { name: resolution.name || t("courses.upd.unknown") }), { fallback: resolution.fallback });
   const agent = chosen.agent;
 
   const resolved = resolveMaterial({ resource, picked: material?.documentIds || null, documents });
   const names = resolved.documentIds.map((id) => documents.find((entry) => entry.id === id)?.name).filter(Boolean);
   const usedMaterial = { ...resolved, names };
   if (!hasMaterial(agent, usedMaterial)) {
-    throw new UpdateError("no-material", resolved.missing.length ? "The documents this was made from are no longer in your workspace. Choose different material to update it from." : "Choose the material to update it from.", { missing: resolved.missing });
+    throw new UpdateError("no-material", resolved.missing.length ? t("courses.upd.err.noMaterialGone") : t("courses.upd.err.noMaterial"), { missing: resolved.missing });
   }
 
   const answers = answersForResource(agent, resource);

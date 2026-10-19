@@ -18,6 +18,7 @@ import { CoverageLines } from "./CoverageLines";
 import { RowMenu } from "../ui/RowMenu";
 import { displayName } from "../ui/displayName";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
+import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
 
@@ -37,6 +38,7 @@ const ghostBtn = "inline-flex items-center justify-center rounded-full border bo
  * readSelf }; every field is optional (nothing known = the subject's uploaded documents), and `chat={false}` hides it.
  */
 export function ReaderView({ title = "", resource, activity = null, html: htmlOverride = "", highlights = [], onSaveHighlights, onSubmit, onClose, notice = "", onDownloadOriginal, originals = [], onDownloadOriginalById, initialView = "", onSaveContent, onEditStart, focusInfo = null, showingAll = false, onToggleFocus, chat = null, onUpdate, onOpenSource, scrollTo = null, extra = null, coverage = null, menuItems = [] }) {
+  const t = useT();
   const rootRef = useRef(null);
   const saved = useRef(highlights);
   const [list, setList] = useState(Array.isArray(highlights) ? highlights : []);
@@ -67,8 +69,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     if (playable) return "";
     if (htmlOverride) return htmlOverride;
     const blocks = resourceBlocks(resource);
-    return blocks ? blocksToReaderHtml(blocks, { title: title || outputTitle(resource), grounding: resource?.data?.grounding || null }) : "";
-  }, [playable, resource, title, htmlOverride]);
+    return blocks ? blocksToReaderHtml(blocks, { title: title || outputTitle(resource), grounding: resource?.data?.grounding || null, t }) : "";
+  }, [playable, resource, title, htmlOverride, t]);
 
   // A document opens as its original unless it already has notes; a quiz or flashcard set always allows highlighting.
   const [view, setView] = useState(initialView || (playable || list.length ? "notes" : "original"));
@@ -121,10 +123,10 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   // Notes and highlights save by themselves a moment after the last change, and when the reader is closed.
   useEffect(() => {
     if (list === saved.current) return undefined;
-    setSaveState("Saving…");
+    setSaveState(t("courses.rs.saving"));
     const timer = window.setTimeout(async () => {
       saved.current = list;
-      try { await onSaveHighlights?.(list); setSaveState("Saved ✓"); } catch { setSaveState("Not saved"); }
+      try { await onSaveHighlights?.(list); setSaveState(t("courses.rv.saved")); } catch { setSaveState(t("courses.rv.notSaved")); }
     }, 600);
     return () => window.clearTimeout(timer);
   }, [list]);
@@ -172,7 +174,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     askFormula("", (tex) => exec("insertHTML", mathHtml(tex, false)));
   }
   function insertTable() {
-    const answer = window.prompt("Table: type its size (for example 3x4 = 3 rows, 4 columns), or paste the rows, one per line, cells separated by commas or tabs.");
+    const answer = window.prompt(t("courses.rv.tablePrompt"));
     if (!answer?.trim()) return;
     const size = /^\s*(\d+)\s*[x×]\s*(\d+)\s*$/i.exec(answer);
     const rows = size
@@ -218,24 +220,24 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     setArticleKey((key) => key + 1);
   }
   function cancelEditing() {
-    if (dirty && !window.confirm("Discard your changes?")) return;
+    if (dirty && !window.confirm(t("courses.rv.discard"))) return;
     stopEditing();
   }
   async function saveEditing() {
     const article = rootRef.current?.querySelector("article");
     if (!article || !onSaveContent) return;
-    if (!window.confirm("Save these changes? They replace the document itself, so they show in the Original view and in the Notes view. Your highlights and notes are kept.")) return;
+    if (!window.confirm(t("courses.rv.confirmSave"))) return;
     const copy = article.cloneNode(true);
     copy.querySelectorAll("[contenteditable]").forEach((element) => element.removeAttribute("contenteditable"));
     copy.removeAttribute("contenteditable");
-    setSaveState("Saving…");
+    setSaveState(t("courses.rs.saving"));
     try {
       await onSaveContent({ html: copy.innerHTML, markdown: htmlToMarkdown(copy) });
-      setSaveState("Document saved ✓");
+      setSaveState(t("courses.rv.docSaved"));
       stopEditing();
     } catch (error) {
-      setProblem(`Could not save the changes: ${String(error?.message || error)}`);
-      setSaveState("Not saved");
+      setProblem(t("courses.rv.saveFailed", { error: String(error?.message || error) }));
+      setSaveState(t("courses.rv.notSaved"));
     }
   }
 
@@ -294,7 +296,7 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   function getHtml({ notes = false } = {}) {
     const article = rootRef.current?.querySelector("article");
     if (!article) return "";
-    return markedHtml(article, notes ? list : [], { notes });
+    return markedHtml(article, notes ? list : [], { notes, heading: t("courses.rv.myNotes") });
   }
 
   const noted = list.filter((entry) => String(entry.note || "").trim()).length;
@@ -304,30 +306,30 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
       <style>{MARKDOWN_CSS}{READER_CSS}</style>
       <header className="relative flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-ink/10 bg-white px-4 py-2.5">
         <div className="min-w-0 flex-1 basis-40">
-          <p className="m-0 truncate text-sm font-bold text-ink">{displayName(title || resource?.name) || "Document"}</p>
-          <p className="m-0 text-[11px] text-soft-ink">{playable ? "Interactive view — read, highlight and answer" : view === "notes" ? "Select text to highlight it or add a note" : "Original text"}</p>
+          <p className="m-0 truncate text-sm font-bold text-ink">{displayName(title || resource?.name) || t("courses.rv.document")}</p>
+          <p className="m-0 text-[11px] text-soft-ink">{playable ? t("courses.rv.interactive") : view === "notes" ? t("courses.rv.selectHint") : t("courses.rv.originalText")}</p>
         </div>
         {!playable && !editing ? (
-          <div className="flex items-center gap-1 rounded-full bg-[var(--surface-soft)] p-1" role="group" aria-label="View">
-            {[["original", "Original"], ["notes", `Notes${list.length ? ` (${list.length})` : ""}`]].map(([value, label]) => (
+          <div className="flex items-center gap-1 rounded-full bg-[var(--surface-soft)] p-1" role="group" aria-label={t("courses.rv.view")}>
+            {[["original", t("courses.rv.original")], ["notes", `${t("courses.rv.notes")}${list.length ? ` (${list.length})` : ""}`]].map(([value, label]) => (
               <button key={value} type="button" onClick={() => { setView(value); setToolbar(null); if (value === "original") setNotesOpen(false); }} className={`rounded-full px-3 py-1 text-xs font-semibold ${view === value ? "bg-white text-ink shadow-[0_1px_2px_rgba(0,0,0,0.1)]" : "text-soft-ink"}`}>{label}</button>
             ))}
           </div>
         ) : null}
-        {coverage?.refs?.length && !playable && !editing ? <button type="button" className={ghostBtn} aria-pressed={coverageOn} title="Lines beside the text show which parts are tested or covered by your activities" onClick={() => setCoverageOn((on) => !on)}>▤<span className="ml-1">Coverage</span></button> : null}
-        {noting ? <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ Notes{list.length ? ` (${noted}/${list.length})` : ""}</button> : view === "notes" && !editing ? <span className="text-xs text-soft-ink">Highlighting needs a newer browser.</span> : null}
+        {coverage?.refs?.length && !playable && !editing ? <button type="button" className={ghostBtn} aria-pressed={coverageOn} title={t("courses.rv.coverageTip")} onClick={() => setCoverageOn((on) => !on)}>▤<span className="ml-1">{t("courses.rv.coverage")}</span></button> : null}
+        {noting ? <button type="button" className={ghostBtn} aria-pressed={notesOpen} onClick={() => setNotesOpen((open) => !open)}>✎ {t("courses.rv.notes")}{list.length ? ` (${noted}/${list.length})` : ""}</button> : view === "notes" && !editing ? <span className="text-xs text-soft-ink">{t("courses.rv.oldBrowser")}</span> : null}
         {saveState ? <span className="text-[11px] text-soft-ink" aria-live="polite">{saveState}</span> : null}
-        {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ Edit content</button> : null}
-        {onUpdate && !editing ? <button type="button" className={ghostBtn} title="Say what to change and Luna rewrites it" onClick={onUpdate}>✦<span className="ml-1">Update…</span></button> : null}
-        {onDownloadOriginal && !editing ? <button type="button" className={ghostBtn} title="The file you uploaded, in the format it was uploaded in" onClick={onDownloadOriginal}>⤓<span className="ml-1">Original file</span></button> : null}
-        <button type="button" className={ghostBtn} aria-label="Download" aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">Download</span></button>
-        {menuItems.filter(Boolean).length ? <RowMenu label="More" items={menuItems} /> : null}
-        {playable && onClose ? <button type="button" className={`${ghostBtn} order-first`} onClick={onClose} aria-label="Leave the quiz">← Leave</button> : <button type="button" className={ghostBtn} onClick={onClose}>Close</button>}
+        {onSaveContent && !playable && !editing ? <button type="button" className={ghostBtn} onClick={startEditing}>✎ {t("courses.rv.editContent")}</button> : null}
+        {onUpdate && !editing ? <button type="button" className={ghostBtn} title={t("courses.rv.updateTip")} onClick={onUpdate}>✦<span className="ml-1">{t("courses.wb.update")}</span></button> : null}
+        {onDownloadOriginal && !editing ? <button type="button" className={ghostBtn} title={t("courses.rv.originalTip")} onClick={onDownloadOriginal}>⤓<span className="ml-1">{t("courses.wb.fmt.original")}</span></button> : null}
+        <button type="button" className={ghostBtn} aria-label={t("common.download")} aria-expanded={downloadOpen} onClick={() => setDownloadOpen((open) => !open)}>⤓<span className="ml-1 hidden sm:inline">{t("common.download")}</span></button>
+        {menuItems.filter(Boolean).length ? <RowMenu label={t("common.more")} items={menuItems} /> : null}
+        {playable && onClose ? <button type="button" className={`${ghostBtn} order-first`} onClick={onClose} aria-label={t("courses.rv.leaveQuiz")}>← {t("courses.rv.leave")}</button> : <button type="button" className={ghostBtn} onClick={onClose}>{t("common.close")}</button>}
         {downloadOpen ? (
           <>
-            <button type="button" aria-label="Close download" className="fixed inset-0 z-10 cursor-default bg-black/20" onClick={() => setDownloadOpen(false)} />
+            <button type="button" aria-label={t("courses.rv.closeDownload")} className="fixed inset-0 z-10 cursor-default bg-black/20" onClick={() => setDownloadOpen(false)} />
             <div className="absolute right-3 top-full z-20 mt-1 max-h-[75vh] w-[min(94vw,540px)] overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.25)]">
-              <div className="mb-3 flex items-center justify-between"><p className="m-0 text-sm font-bold text-ink">Download</p><button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setDownloadOpen(false)}>Close</button></div>
+              <div className="mb-3 flex items-center justify-between"><p className="m-0 text-sm font-bold text-ink">{t("common.download")}</p><button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setDownloadOpen(false)}>{t("common.close")}</button></div>
               <DownloadPanel resource={resource} filename={title || resource?.name} activity={playable} getHtml={getHtml} highlightCount={list.length} onOriginal={onDownloadOriginal} originals={originals} onOriginalById={onDownloadOriginalById} onError={setProblem} />
               {problem ? <p className="m-0 mt-2 text-xs text-[var(--color-danger)]">{problem}</p> : null}
             </div>
@@ -338,26 +340,26 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
       {extra && !editing ? extra : null}
       {focusInfo?.focused && !editing ? (
         <p className="m-0 flex flex-wrap items-center gap-2 bg-[var(--accent-soft)] px-4 py-1.5 text-xs text-[var(--accent-ink)]">
-          {showingAll ? "Showing the whole document." : `Showing the part for this step: ${focusInfo.label || "the relevant sections"}.`}
-          <button type="button" className="font-semibold underline" onClick={onToggleFocus}>{showingAll ? "Show only this step's part" : "Show the whole document"}</button>
-          <span className="text-soft-ink">Notes are kept with the whole document.</span>
+          {showingAll ? t("courses.rv.showingAll") : t("courses.rv.showingPart", { label: focusInfo.label || t("courses.rv.relevant") })}
+          <button type="button" className="font-semibold underline" onClick={onToggleFocus}>{showingAll ? t("courses.rv.onlyStep") : t("courses.rv.wholeDoc")}</button>
+          <span className="text-soft-ink">{t("courses.rv.notesKept")}</span>
         </p>
       ) : null}
       {editing ? (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-ink/10 bg-white px-4 py-2" onMouseDown={(event) => { if (event.target.closest("button")) event.preventDefault(); }}>
           <button type="button" className={ghostBtn} onClick={() => exec("bold")}><strong>B</strong></button>
           <button type="button" className={ghostBtn} onClick={() => exec("italic")}><em>I</em></button>
-          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "h2")}>Heading</button>
-          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "p")}>Text</button>
-          <button type="button" className={ghostBtn} onClick={() => exec("insertUnorderedList")}>• List</button>
-          <button type="button" className={ghostBtn} onClick={insertMath}>Σ Formula</button>
-          <button type="button" className={ghostBtn} onClick={insertTable}>▦ Table</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "h2")}>{t("courses.rv.heading")}</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("formatBlock", "p")}>{t("courses.rv.text")}</button>
+          <button type="button" className={ghostBtn} onClick={() => exec("insertUnorderedList")}>• {t("courses.rv.list")}</button>
+          <button type="button" className={ghostBtn} onClick={insertMath}>Σ {t("courses.rv.formula")}</button>
+          <button type="button" className={ghostBtn} onClick={insertTable}>▦ {t("courses.rv.table")}</button>
           <button type="button" className={ghostBtn} onClick={() => exec("undo")}>↶</button>
           <button type="button" className={ghostBtn} onClick={() => exec("redo")}>↷</button>
           <span className="flex-1" />
-          <span className="hidden text-[11px] text-soft-ink md:inline">Double-tap a formula to edit it visually.</span>
-          <button type="button" className={ghostBtn} onClick={cancelEditing}>Cancel</button>
-          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white" onClick={saveEditing}>Save changes</button>
+          <span className="hidden text-[11px] text-soft-ink md:inline">{t("courses.rv.doubleTap")}</span>
+          <button type="button" className={ghostBtn} onClick={cancelEditing}>{t("common.cancel")}</button>
+          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-1.5 text-xs font-semibold text-white" onClick={saveEditing}>{t("courses.rv.saveChanges")}</button>
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1">
@@ -365,10 +367,10 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
           <div className={`relative ${coverageOn && coverage?.refs?.length && html && !playable && !editing ? "pt-10" : ""}`}>
           <div ref={rootRef}>
             {playable
-              ? <ErrorBoundary onClose={onClose} title="This activity hit a problem"><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
+              ? <ErrorBoundary onClose={onClose} title={t("courses.rv.activityProblem")}><ActivityPlayer activity={{ ...playable, title: outputTitle(resource) || playable.title }} look={look} onSubmit={onSubmit} onClose={onClose} onProgress={askOn ? setChatProgress : undefined} /></ErrorBoundary>
               : html
                 ? <article key={articleKey} className={`md mx-auto max-w-3xl rounded-[18px] border bg-white px-6 py-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] outline-none sm:px-10 ${editing ? "border-[var(--accent)] ring-4 ring-[var(--accent-soft)]" : "border-ink/8"}`} contentEditable={editing} suppressContentEditableWarning onInput={() => setDirty(true)} onDoubleClick={editMath} dangerouslySetInnerHTML={{ __html: html }} />
-                : <p className="mx-auto max-w-3xl text-sm text-soft-ink">There is nothing to read here.</p>}
+                : <p className="mx-auto max-w-3xl text-sm text-soft-ink">{t("courses.rv.nothing")}</p>}
           </div>
           {coverageOn && coverage?.refs?.length && html && !playable && !editing ? <CoverageLines rootRef={rootRef} refs={coverage.refs} html={html} onOpen={coverage.onOpen} /> : null}
           </div>
@@ -376,8 +378,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
         {notesOpen && noting ? (
           <aside className="fixed inset-x-0 bottom-0 z-[61] flex max-h-[55vh] flex-col border-t border-ink/10 bg-white shadow-[0_-12px_32px_rgba(0,0,0,0.15)] lg:static lg:z-auto lg:max-h-none lg:w-80 lg:shrink-0 lg:border-l lg:border-t-0 lg:shadow-none">
             <div className="flex items-center justify-between border-b border-ink/8 px-4 py-2.5">
-              <p className="m-0 text-sm font-bold text-ink">My notes</p>
-              <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setNotesOpen(false)}>Hide</button>
+              <p className="m-0 text-sm font-bold text-ink">{t("courses.rv.myNotes")}</p>
+              <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => setNotesOpen(false)}>{t("courses.rv.hide")}</button>
             </div>
             <div className="grid flex-1 content-start gap-3 overflow-y-auto p-3">
               {list.length ? list.map((entry) => (
@@ -387,17 +389,17 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
                     autoFocus={focusId === entry.id}
                     rows={2}
                     className="w-full rounded-lg border border-ink/12 bg-white px-2 py-1.5 text-sm text-ink"
-                    placeholder="Write a note…"
+                    placeholder={t("courses.rv.writeNote")}
                     value={entry.note || ""}
                     onFocus={() => setFocusId(entry.id)}
                     onChange={(event) => setNote(entry.id, event.target.value)}
                   />
                   <div className="flex items-center gap-1">
-                    {HIGHLIGHT_COLORS.map((item) => <button key={item.id} type="button" aria-label={item.label} onClick={() => recolour(entry.id, item.id)} className={`size-4 rounded-full border-2 ${entry.color === item.id ? "border-ink" : "border-transparent"}`} style={{ background: item.css }} />)}
-                    <button type="button" className="ml-auto text-[11px] font-semibold text-soft-ink hover:text-[var(--color-danger)]" onClick={() => dropOne(entry.id)}>Delete</button>
+                    {HIGHLIGHT_COLORS.map((item) => <button key={item.id} type="button" aria-label={t(`courses.rv.color.${item.id}`)} onClick={() => recolour(entry.id, item.id)} className={`size-4 rounded-full border-2 ${entry.color === item.id ? "border-ink" : "border-transparent"}`} style={{ background: item.css }} />)}
+                    <button type="button" className="ml-auto text-[11px] font-semibold text-soft-ink hover:text-[var(--color-danger)]" onClick={() => dropOne(entry.id)}>{t("common.delete")}</button>
                   </div>
                 </div>
-              )) : <p className="m-0 text-xs text-soft-ink">Select some text, choose a colour, and add a note to it with the ✎ button. Tap a highlight to come back to its note.</p>}
+              )) : <p className="m-0 text-xs text-soft-ink">{t("courses.rv.notesEmpty")}</p>}
             </div>
           </aside>
         ) : null}
@@ -408,9 +410,9 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
       {peek ? <SourcePeek target={peek} onClose={() => setPeek(null)} /> : null}
       {toolbar ? (
         <div className="fixed z-[62] flex items-center gap-1.5 rounded-full border border-ink/10 bg-white px-2.5 py-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]" style={{ left: toolbar.x, top: toolbar.y }} onMouseDown={(event) => event.preventDefault()}>
-          {HIGHLIGHT_COLORS.map((entry) => <button key={entry.id} type="button" title={entry.label} aria-label={`Highlight ${entry.label}`} onClick={() => apply(entry.id)} className="size-6 rounded-full border border-ink/15 transition hover:scale-110" style={{ background: entry.css }} />)}
-          <button type="button" className="ml-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white" onClick={() => apply(color, { note: true })}>✎ Note</button>
-          {toolbar.touches ? <button type="button" className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" onClick={remove}>Remove</button> : null}
+          {HIGHLIGHT_COLORS.map((entry) => <button key={entry.id} type="button" title={t(`courses.rv.color.${entry.id}`)} aria-label={t("courses.rv.highlightColor", { color: t(`courses.rv.color.${entry.id}`) })} onClick={() => apply(entry.id)} className="size-6 rounded-full border border-ink/15 transition hover:scale-110" style={{ background: entry.css }} />)}
+          <button type="button" className="ml-1 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-semibold text-white" onClick={() => apply(color, { note: true })}>✎ {t("courses.rv.note")}</button>
+          {toolbar.touches ? <button type="button" className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" onClick={remove}>{t("common.remove")}</button> : null}
         </div>
       ) : null}
     </div>

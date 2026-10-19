@@ -80,3 +80,6 @@ export const accountsApi = {
 };
 
 export const ROLE_LABEL = { student: "Student", teacher: "Teacher", parent: "Parent" };
+
+/** The role in the UI language (uses shell.role.*); an unknown role is returned as it came. */
+export const roleLabel = (role, t) => (ROLE_LABEL[role] ? t(`shell.role.${role}`) : role);

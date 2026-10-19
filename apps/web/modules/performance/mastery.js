@@ -16,6 +16,8 @@
  * keeps a nearly-right answer from reading as "does not know it".
  */
 import { creditOf } from "../activities/grading.js";
+import { errorText } from "./errors.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 const DIFFICULTY_WEIGHT = { easy: 0.8, medium: 1, hard: 1.25 };
 
@@ -226,9 +228,9 @@ export function errorRecovery(evidence = []) {
 
 /** How each kind of mistake sounds when it is said to the learner. */
 const MISTAKE_IN_PLAIN_WORDS = {
-  knowledge: "the idea itself got mixed up",
-  analytical: "the working went wrong along the way",
-  accuracy: "you were close but slipped on a detail"
+  knowledge: "progress.why.phrase.knowledge",
+  analytical: "progress.why.phrase.analytical",
+  accuracy: "progress.why.phrase.accuracy"
 };
 
 /**
@@ -236,24 +238,24 @@ const MISTAKE_IN_PLAIN_WORDS = {
  * mistakes and whether it is slipping). Two topics with the same kind of mistake still get different sentences because
  * the figures differ; a topic with too little evidence says so instead of inventing a reason.
  */
-export function whyThisTopic(topic, errors = []) {
+export function whyThisTopic(topic, errors = [], t = tEn) {
   const questions = Number(topic?.questions) || 0;
   const score = Math.round((Number(topic?.accuracy) || 0) * 100);
   const wrong = errors.reduce((sum, entry) => sum + (Number(entry.count) || 0), 0);
   const main = errors[0] || null;
   if (!questions || (topic.coverage !== undefined && topic.coverage < 0.4 && !main)) {
-    return `You have only answered ${questions} question${questions === 1 ? "" : "s"} here, so Luna cannot tell yet how well you know it.`;
+    return t.plural("progress.why.few", questions);
   }
-  const parts = [`You got ${score}% of ${questions} question${questions === 1 ? "" : "s"} right`];
+  const parts = [t.plural("progress.why.score", questions, { score })];
   const slipping = Number(topic.trend) <= -0.05;
   const recent = topic.recentAccuracy === undefined ? null : Math.round(topic.recentAccuracy * 100);
-  if (slipping && recent !== null) parts[0] += `, and your latest answers are at ${recent}%`;
+  if (slipping && recent !== null) parts[0] += t("progress.why.slipping", { recent });
   let text = `${parts[0]}.`;
   if (main && wrong) {
-    const phrase = MISTAKE_IN_PLAIN_WORDS[main.id] || main.label.toLowerCase();
-    text += main.count === wrong ? ` Your ${wrong === 1 ? "mistake" : `${wrong} mistakes`} here: ${phrase}.` : ` ${main.count} of your ${wrong} mistakes here: ${phrase}.`;
+    const phrase = MISTAKE_IN_PLAIN_WORDS[main.id] ? t(MISTAKE_IN_PLAIN_WORDS[main.id]) : errorText(main.id, "label", t).toLowerCase();
+    text += main.count === wrong ? ` ${t.plural("progress.why.only", wrong, { phrase })}` : ` ${t("progress.why.some", { main: main.count, wrong, phrase })}`;
   } else if (!main) {
-    text += " Your recent answers are still going wrong here.";
+    text += ` ${t("progress.why.stillWrong")}`;
   }
   return text;
 }
@@ -262,7 +264,7 @@ export function whyThisTopic(topic, errors = []) {
  * What to do next: the weakest topics with enough evidence to be believed, each with the reason it
  * is weak and a concrete amount of practice.
  */
-export function nextActions(topics = [], errorsByTopic = new Map(), limit = 3) {
+export function nextActions(topics = [], errorsByTopic = new Map(), limit = 3, t = tEn) {
   return topics
     .filter((topic) => topic.questions >= 2 && topic.mastery < MASTERY_THRESHOLD + 10)
     .slice(0, limit)
@@ -272,10 +274,10 @@ export function nextActions(topics = [], errorsByTopic = new Map(), limit = 3) {
       return {
         topic: topic.topic,
         mastery: topic.mastery,
-        why: whyThisTopic(topic, errors),
-        reason: main ? main.label : topic.coverage < 0.4 ? "Barely practised" : "Recent answers still wrong",
+        why: whyThisTopic(topic, errors, t),
+        reason: main ? errorText(main.id, "label", t) : topic.coverage < 0.4 ? t("progress.action.barely") : t("progress.action.recent"),
         reasonId: main?.id || (topic.coverage < 0.4 ? "coverage" : "accuracy"),
-        advice: main?.advice || (topic.coverage < 0.4 ? "Do a short set to get a real reading of this topic." : "Practise it again, then review the mistakes."),
+        advice: main ? errorText(main.id, "advice", t) : (topic.coverage < 0.4 ? t("progress.action.adviceFew") : t("progress.action.adviceAgain")),
         questions: topic.mastery < 50 ? 10 : 6
       };
     });
@@ -349,16 +351,16 @@ export function learnerSubjectMatrix(evidence = []) {
 }
 
 /** Why a learner is on the list: the signals a teacher acts on, not a ranking. */
-export function attentionFlags(entry, errorsFor = () => []) {
+export function attentionFlags(entry, errorsFor = () => [], t = tEn) {
   const flags = [];
-  if (entry.mastery < MASTERY_THRESHOLD) flags.push({ id: "below", label: "Below mastery" });
+  if (entry.mastery < MASTERY_THRESHOLD) flags.push({ id: "below", label: t("progress.flag.below") });
   const declining = entry.topics.filter((topic) => topic.trend < -0.1);
-  if (declining.length >= 2) flags.push({ id: "declining", label: `Declining in ${declining.length} topics` });
+  if (declining.length >= 2) flags.push({ id: "declining", label: t("progress.flag.declining", { count: declining.length }) });
   const thin = entry.topics.filter((topic) => topic.coverage < 0.3).length;
-  if (thin && thin === entry.topics.length) flags.push({ id: "coverage", label: "Too little evidence" });
+  if (thin && thin === entry.topics.length) flags.push({ id: "coverage", label: t("progress.flag.coverage") });
   const conceptual = errorsFor(entry).find((error) => error.id === "knowledge");
-  if (conceptual && conceptual.share > 0.4) flags.push({ id: "knowledge", label: "Mostly topic-knowledge gaps" });
+  if (conceptual && conceptual.share > 0.4) flags.push({ id: "knowledge", label: t("progress.flag.knowledge") });
   const retention = retentionOf(entry.topics);
-  if (retention.value !== null && retention.value < 0.6) flags.push({ id: "retention", label: "Forgets after a gap" });
+  if (retention.value !== null && retention.value < 0.6) flags.push({ id: "retention", label: t("progress.flag.retention") });
   return flags;
 }

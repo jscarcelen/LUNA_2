@@ -30,6 +30,7 @@
  */
 import { gradeLocally, creditOf } from "../activities/grading.js";
 import { isQuantitative, numbersIn } from "../activities/quantitative.js";
+import { tEn } from "../../lib/i18n/index.js";
 
 export const ERROR_TYPES = [
   { id: "knowledge", label: "Topic knowledge gap", blurb: "The idea, definition, fact or relationship is not known or is confused — every wrong answer to a question that needs no maths.", advice: "Go back to the explanation and the prerequisite before practising again.", colour: "#d7003a", ink: "#b30031", covers: ["conceptual", "gap"] },
@@ -42,6 +43,9 @@ export const groupOf = (id) => ERROR_TYPES.find((type) => type.id === id || type
 export const typeOf = (id) => ERROR_TYPES.find((type) => type.id === groupOf(id)) || ERROR_TYPES[0];
 
 export { isQuantitative };
+
+/** The translated label / blurb / advice of an error group (or of a finer cause that belongs to one). */
+export const errorText = (id, field, t = tEn) => t(`progress.err.${groupOf(id)}.${field}`);
 
 /** How strong the learner has to be on the rest of a topic for a blank answer to be a lapse, not a gap. */
 export const STRONG_TOPIC = 0.7;
@@ -75,20 +79,20 @@ export function verdictOfWrong(row) {
  * `context.topicEvidence` how many answers that is based on (unknown = enough).
  */
 export function decideError(row, context = {}) {
-  const { topicAccuracy = 0, topicEvidence = Infinity } = context;
+  const { topicAccuracy = 0, topicEvidence = Infinity, t = tEn } = context;
   const quantitative = isQuantitative(row);
   const stored = String(row.errorCause || "").toLowerCase();
   const verdict = verdictOfWrong(row);
-  if (stored && isKnownCause(stored)) return { group: groupOf(stored), verdict, quantitative, reason: "graded together with the answer" };
+  if (stored && isKnownCause(stored)) return { group: groupOf(stored), verdict, quantitative, reason: t("progress.err.reason.graded") };
   if (verdict === "blank") {
     const strong = topicAccuracy >= STRONG_TOPIC && topicEvidence >= MIN_TOPIC_EVIDENCE;
     return strong
-      ? { group: "accuracy", verdict, quantitative, reason: "left blank on a topic that is otherwise strong" }
-      : { group: "knowledge", verdict, quantitative, reason: "left blank on a topic that is not yet strong" };
+      ? { group: "accuracy", verdict, quantitative, reason: t("progress.err.reason.blankStrong") }
+      : { group: "knowledge", verdict, quantitative, reason: t("progress.err.reason.blankWeak") };
   }
-  if (verdict === "close") return { group: "accuracy", verdict, quantitative, reason: "close to the expected answer but not exact" };
-  if (quantitative) return { group: "analytical", verdict, quantitative, reason: "wrong in a question that needs maths: the calculation or method went wrong" };
-  return { group: "knowledge", verdict, quantitative, reason: "wrong in a question that needs no maths: the idea is not known or is confused" };
+  if (verdict === "close") return { group: "accuracy", verdict, quantitative, reason: t("progress.err.reason.close") };
+  if (quantitative) return { group: "analytical", verdict, quantitative, reason: t("progress.err.reason.maths") };
+  return { group: "knowledge", verdict, quantitative, reason: t("progress.err.reason.idea") };
 }
 
 /** The finer cause inside the chosen group, from the other evidence (repeats, certainty, how close). */
@@ -140,7 +144,7 @@ export function classifyError(row, context = {}) {
  * Every wrong answer in the evidence, classified, with the shares that make the picture:
  * "42% of your mistakes are conceptual" is the sentence this produces.
  */
-export function analyseErrors(evidence = []) {
+export function analyseErrors(evidence = [], t = tEn) {
   const wrong = evidence.filter((row) => !row.correct);
   if (!wrong.length) return { total: 0, types: [], byTopic: new Map(), rows: [] };
 
@@ -156,7 +160,7 @@ export function analyseErrors(evidence = []) {
     // How the learner did on the REST of the topic: a blank answer is a lapse only if the rest is strong.
     const elsewhere = (byTopic.get(row.topic) || []).filter((entry) => entry !== row);
     const topicAccuracy = elsewhere.length ? elsewhere.reduce((sum, entry) => sum + creditOf(entry), 0) / elsewhere.length : 0;
-    const context = { topicAccuracy, topicEvidence: elsewhere.length, repeats: repeatsOf(row), options: optionsOf(row) };
+    const context = { topicAccuracy, topicEvidence: elsewhere.length, repeats: repeatsOf(row), options: optionsOf(row), t };
     const decision = decideError(row, context);
     const cause = fineCause(decision.group, row, context, decision);
     return { ...row, errorType: decision.group, cause, reason: decision.reason, quantitative: decision.quantitative, verdict: row.verdict || decision.verdict };
@@ -186,9 +190,9 @@ export function analyseErrors(evidence = []) {
 }
 
 /** One sentence a parent can read: what the mistakes are mostly about. */
-export function errorSummary(analysis) {
-  if (!analysis.total) return "No mistakes recorded yet.";
+export function errorSummary(analysis, t = tEn) {
+  if (!analysis.total) return t("progress.err.none");
   const [first, second] = analysis.types;
-  const part = (entry) => `${Math.round(entry.share * 100)}% ${entry.label.toLowerCase()}`;
-  return `${part(first)}${second ? `, ${part(second)}` : ""} — ${first.blurb.toLowerCase()}`;
+  const part = (entry) => `${Math.round(entry.share * 100)}% ${errorText(entry.id, "label", t).toLowerCase()}`;
+  return `${part(first)}${second ? `, ${part(second)}` : ""} — ${errorText(first.id, "blurb", t).toLowerCase()}`;
 }

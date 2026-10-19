@@ -25,6 +25,7 @@ import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isShar
 import { SharedNotice } from "../../accounts/SharedNotice";
 import { requestLeaveShare } from "../../accounts/shareEvents";
 import { displayName, keepStorageSuffix } from "../../ui/displayName";
+import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -81,17 +82,17 @@ function wrapPreviewHtml(html = "") {
 
 /** What a processed document can be exported as — the point of having parsed it in the first place. */
 const FORMATS = {
-  uploaded: [["original", "Original file"], ["html", "HTML"], ["editable-html", "HTML (editable)"], ["markdown", "Markdown"], ["blocks-json", "JSON (structure)"], ["txt", "Plain text"]],
+  uploaded: ["original", "html", "editable-html", "markdown", "blocks-json", "txt"],
   // A generated resource is data, so JSON, HTML and text are produced here from what it holds;
   // PDF, Word and PowerPoint come from its template, in the resource's own Downloads tab.
-  generated: [["json", "JSON (the data)"], ["html", "HTML"], ["txt", "Plain text"], ["template", "PDF / Word / slides…"]]
+  generated: ["json", "html", "txt", "template"]
 };
 
 const KINDS = [
-  { id: "all", label: "Everything" },
-  { id: "uploaded", label: "Material" },
-  { id: "generated", label: "Generated" },
-  { id: "favourite", label: "★ Favourites" }
+  { id: "all", labelKey: "courses.wb.kind.all" },
+  { id: "uploaded", labelKey: "courses.wb.kind.uploaded" },
+  { id: "generated", labelKey: "courses.wb.kind.generated" },
+  { id: "favourite", labelKey: "courses.wb.kind.favourite" }
 ];
 
 /** Documents Luna files by itself; they belong to other screens, not to the folder browser. */
@@ -145,6 +146,7 @@ export function WorkspaceBrowser({
   focusDocumentId = "",
   onSelectFolder
 }) {
+  const t = useT();
   const [nodeId, setNodeId] = useState("");
   const [kind, setKind] = useState("all");
   const [query, setQuery] = useState("");
@@ -268,13 +270,13 @@ export function WorkspaceBrowser({
   async function deleteSelected() {
     const folderIds = topSelectedFolders();
     const docs = selectedIds.map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean).filter((document) => !isSharedDocument(document) && !sharedInfoOf(document));
-    const parts = [docs.length ? `${docs.length} file${docs.length === 1 ? "" : "s"}` : "", folderIds.length ? `${folderIds.length} folder${folderIds.length === 1 ? "" : "s"} with everything inside` : ""].filter(Boolean);
-    if (!parts.length) { setStatus("Documents sent or shared with you are read-only, so they cannot be deleted."); return; }
-    if (!window.confirm(`Delete ${parts.join(" and ")}? This cannot be undone.`)) return;
+    const parts = [docs.length ? t.plural("courses.wb.nFiles", docs.length) : "", folderIds.length ? t.plural("courses.wb.nFoldersInside", folderIds.length) : ""].filter(Boolean);
+    if (!parts.length) { setStatus(t("courses.wb.cannotDelete")); return; }
+    if (!window.confirm(t("courses.wb.confirmDeleteMany", { parts: parts.join(t("courses.wb.and")) }))) return;
     if (docs.length) removeDocuments(docs.map((document) => document.id));
     for (const folderNodeId of folderIds) await removeFolder(folderNodeId);
     clearSelection();
-    setStatus(`Deleted ${parts.join(" and ")}.`);
+    setStatus(t("courses.wb.deletedMany", { parts: parts.join(t("courses.wb.and")) }));
   }
   const toggleSelected = (id) => setSelectedIds((list) => (list.includes(id) ? list.filter((entry) => entry !== id) : [...list, id]));
   const openAt = (...nodeIds) => setOpenNodes((prev) => new Set([...prev, ...nodeIds.filter(Boolean)]));
@@ -288,12 +290,12 @@ export function WorkspaceBrowser({
   async function move(ids, targetNodeId) {
     const target = parseNode(targetNodeId);
     if (!onMoveDocuments || !target.subjectId) return;
-    if (sharedTopic(target.subjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be moved into them."); return; }
+    if (sharedTopic(target.subjectId)) { setStatus(t("courses.wb.sharedNoMove")); return; }
     const documents = [...new Set(ids)].map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean);
     const movable = documents.filter((document) => !isSharedDocument(document));
     const readOnly = documents.length - movable.length;
     setSelectedIds([]);
-    if (!movable.length) { setStatus(readOnly ? "Documents sent to you are read-only, so they cannot be moved." : ""); return; }
+    if (!movable.length) { setStatus(readOnly ? t("courses.wb.cannotMove") : ""); return; }
 
     // One request per destination: dropped on another topic's top level, uploaded and generated material go to different folders of it.
     const groups = new Map();
@@ -307,23 +309,23 @@ export function WorkspaceBrowser({
     const previous = [];
     for (const [folderId, groupIds] of groups) {
       const result = await onMoveDocuments(groupIds, { targetSubjectId: target.subjectId, targetFolderId: folderId });
-      if (!result || result.error) { failure = result?.error || "The move did not go through."; break; }
+      if (!result || result.error) { failure = result?.error || t("courses.wb.moveFailed"); break; }
       moved += result.documents || 0;
       notes.push(...(result.notes || []));
       previous.push(...(result.previous || []));
     }
     const paths = [...new Set([...groups.keys()].map((folderId) => pathOf(folders, folderId ? folderNode(target.subjectId, folderId) : targetNodeId)))];
     openAt(targetNodeId, ...[...groups.keys()].filter(Boolean).map((folderId) => folderNode(target.subjectId, folderId)));
-    if (failure) { setStatus(`${failure}${moved ? ` (${moved} item${moved === 1 ? " was" : "s were"} already moved.)` : ""}`); return; }
-    const text = documentMoveMessage({ moved, readOnly, path: paths.join(" and "), notes: [...new Set(notes)] });
+    if (failure) { setStatus(`${failure}${moved ? ` ${t.plural("courses.wb.alreadyMoved", moved)}` : ""}`); return; }
+    const text = documentMoveMessage({ moved, readOnly, path: paths.join(t("courses.wb.and")), notes: [...new Set(notes)] }, t);
     if (!moved || !previous.length) { setStatus(text); return; }
     offerUndo(text, async () => {
-      setStatus("Moving back…");
+      setStatus(t("courses.wb.movingBack"));
       for (const group of undoGroups(previous)) {
         const back = await onMoveDocuments(group.ids, { targetSubjectId: group.targetSubjectId, targetFolderIds: group.targetFolderIds });
-        if (!back || back.error) { setStatus(back?.error || "Could not move them back."); return; }
+        if (!back || back.error) { setStatus(back?.error || t("courses.wb.moveBackFailed")); return; }
       }
-      setStatus(`${moved} item${moved === 1 ? "" : "s"} moved back.`);
+      setStatus(t.plural("courses.wb.movedBack", moved));
     });
   }
 
@@ -335,29 +337,29 @@ export function WorkspaceBrowser({
     const dragged = parseNode(draggedNodeId);
     const target = parseNode(targetNodeId);
     if (!onMoveFolder || !target.subjectId) return;
-    if (dragged.kind === "subject") { setStatus("A topic stays at the top level. Move the folders or documents inside it instead."); return; }
+    if (dragged.kind === "subject") { setStatus(t("courses.wb.topicTop")); return; }
     if (draggedNodeId === targetNodeId) return; // same folder
     // Prevent dropping into a descendant (would create a cycle).
-    if (branchOf(folders, draggedNodeId).has(targetNodeId)) { setStatus("A folder cannot be moved inside one of its own subfolders."); return; }
-    if (sharedTopic(target.subjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be moved into them."); return; }
+    if (branchOf(folders, draggedNodeId).has(targetNodeId)) { setStatus(t("courses.wb.noCycle")); return; }
+    if (sharedTopic(target.subjectId)) { setStatus(t("courses.wb.sharedNoMove")); return; }
     const result = await onMoveFolder(dragged.folderId, target.kind === "folder" ? target.folderId : "", { targetSubjectId: target.subjectId });
-    if (!result || result.error) { setStatus(result?.error || "The folder could not be moved."); return; }
+    if (!result || result.error) { setStatus(result?.error || t("courses.wb.folderMoveFailed")); return; }
     // A study plan's folder keeps its place under "Study plans", wherever it was dropped.
     const redirected = Boolean(result.parentFolderId) && result.parentFolderId !== target.folderId;
-    const path = redirected ? `${result.subjectName} / Generated material / Study plans` : pathOf(folders, targetNodeId);
+    const path = redirected ? `${result.subjectName} / ${t("courses.wb.generatedPath")}` : pathOf(folders, targetNodeId);
     const movedNode = folderNode(result.subjectId, result.folderId);
     openAt(targetNodeId, movedNode);
     if (nodeId === draggedNodeId) setNodeId(movedNode);
-    if (result.unchanged) { setStatus(folderMoveMessage({ result, path })); return; }
-    offerUndo(folderMoveMessage({ result, path }), async () => {
-      setStatus("Moving back…");
+    if (result.unchanged) { setStatus(folderMoveMessage({ result, path }, t)); return; }
+    offerUndo(folderMoveMessage({ result, path }, t), async () => {
+      setStatus(t("courses.wb.movingBack"));
       const back = await onMoveFolder(result.folderId, result.previous.parentFolderId, { targetSubjectId: result.previous.subjectId, nextName: result.previous.name });
-      setStatus(!back || back.error ? back?.error || "Could not move it back." : `“${result.previous.name}” moved back.`);
+      setStatus(!back || back.error ? back?.error || t("courses.wb.folderBackFailed") : t("courses.wb.folderMovedBack", { name: result.previous.name }));
     });
   }
 
   function copyHere(ids) {
-    if (!current || current.kind !== "folder") { setStatus("Open a subfolder first — that is where the copies go."); return; }
+    if (!current || current.kind !== "folder") { setStatus(t("courses.wb.openSubfolder")); return; }
     for (const id of ids) {
       const document = allDocuments.find((item) => item.id === id);
       if (!document || document.subjectId !== current.subjectId) continue;
@@ -365,7 +367,7 @@ export function WorkspaceBrowser({
       const folderIds = [...new Set([...((raw?.folderIds) || []), current.folderId])];
       onUpdateDocumentMeta?.(id, { folderIds, tags: document.tags || [] }, document.subjectId);
     }
-    setStatus(`${ids.length} item${ids.length === 1 ? "" : "s"} also filed here.`);
+    setStatus(t.plural("courses.wb.alsoFiled", ids.length));
   }
 
   function removeDocuments(ids) {
@@ -374,7 +376,7 @@ export function WorkspaceBrowser({
       onRemoveDocument?.(id, document?.subjectId);
     }
     setSelectedIds([]);
-    setStatus(`Deleted ${ids.length} item${ids.length === 1 ? "" : "s"}.`);
+    setStatus(t.plural("courses.wb.deletedItems", ids.length));
   }
 
   function toggleFavourite(document) {
@@ -386,7 +388,7 @@ export function WorkspaceBrowser({
 
   function editTags(document) {
     const keep = (document.tags || []).filter((entry) => entry === "resource" || entry === "favourite" || entry === "activity" || String(entry).includes(":"));
-    const value = window.prompt("Tags, separated by commas", resourceTags(document).join(", "));
+    const value = window.prompt(t("courses.wb.tagsPrompt"), resourceTags(document).join(", "));
     if (value === null) return;
     const raw = rawDocuments.find((item) => item.id === document.id);
     onUpdateDocumentMeta?.(document.id, { folderIds: raw?.folderIds || [], tags: [...keep, ...value.split(",").map((entry) => entry.trim()).filter(Boolean)] }, document.subjectId);
@@ -395,7 +397,7 @@ export function WorkspaceBrowser({
   async function downloadOne(document, format = "") {
     const row = rowsByDocumentId.get(document.id);
     // Anything a resource already holds is written here; only the original files need the server.
-    if (row && format === "template") { setOpenId(document.id); setStatus("Pick the view and the format in Downloads."); return; }
+    if (row && format === "template") { setOpenId(document.id); setStatus(t("courses.wb.pickFormat")); return; }
     if (row && (format === "json" || format === "html" || format === "txt")) {
       const raw = rawDocuments.find((item) => item.id === document.id);
       const fields = Object.keys(row.resource.data?.items?.[0] || {}).map((name) => ({ name, label: name }));
@@ -410,9 +412,9 @@ export function WorkspaceBrowser({
       return;
     }
     if (!onDownloadDocument) return;
-    setStatus(`Preparing “${displayName(document.name)}”${format && format !== "original" ? ` as ${format.toUpperCase()}` : ""}…`);
+    setStatus(format && format !== "original" ? t("courses.wb.preparingAs", { name: displayName(document.name), format: format.toUpperCase() }) : t("courses.wb.preparing", { name: displayName(document.name) }));
     const file = await onDownloadDocument(document, format);
-    if (!file) { setStatus("Nothing to download for this item."); return; }
+    if (!file) { setStatus(t("courses.wb.nothingDownload")); return; }
     download(file.fileName || document.name, file.contentBase64, file.mimeType);
     setStatus("");
   }
@@ -420,7 +422,7 @@ export function WorkspaceBrowser({
   /** Several files (or a whole folder) come down as one zip that keeps the folder structure. */
   async function downloadMany(documents, zipName, zipFormat = "") {
     if (!onDownloadDocument || !documents.length) return;
-    setStatus(`Preparing ${documents.length} file${documents.length === 1 ? "" : "s"}…`);
+    setStatus(t.plural("courses.wb.preparingMany", documents.length));
     const zip = new JSZip();
     let added = 0;
     for (const document of documents) {
@@ -432,10 +434,10 @@ export function WorkspaceBrowser({
         added += 1;
       } catch { /* skip what cannot be fetched */ }
     }
-    if (!added) { setStatus("None of the selected items could be downloaded."); return; }
+    if (!added) { setStatus(t("courses.wb.noneDownloaded")); return; }
     const blob = await zip.generateAsync({ type: "base64" });
     download(`${zipName || "luna-files"}.zip`, blob, "application/zip");
-    setStatus(`${added} file${added === 1 ? "" : "s"} downloaded.`);
+    setStatus(t.plural("courses.wb.downloadedN", added));
   }
 
   /**
@@ -447,11 +449,11 @@ export function WorkspaceBrowser({
     if (!files.length || !onUpload) return;
     if (!currentSubjectId) {
       // No subjects exist yet — ask for one so the upload has a home.
-      const name = window.prompt("Name the folder these files will go into:");
-      if (!name?.trim()) { setStatus("Upload cancelled — create a folder first."); return; }
+      const name = window.prompt(t("courses.wb.namePrompt"));
+      if (!name?.trim()) { setStatus(t("courses.wb.uploadCancelled")); return; }
       const created = await onCreateSubject?.(name.trim());
       const subjectId = created?.id || workspace?.subjects?.[0]?.id || "";
-      if (!subjectId) { setStatus("Could not create folder — try again."); return; }
+      if (!subjectId) { setStatus(t("courses.wb.createFailed")); return; }
       await runUpload(files, subjectNode(subjectId));
       return;
     }
@@ -462,7 +464,7 @@ export function WorkspaceBrowser({
   async function runUpload(files, targetNodeId) {
     const target = parseNode(targetNodeId);
     const uploadSubjectId = target.subjectId || currentSubjectId;
-    if (sharedTopic(uploadSubjectId)) { setStatus("“Shared documents” and “Shared with me” are filled by the people you are connected to, so nothing can be uploaded into them."); return; }
+    if (sharedTopic(uploadSubjectId)) { setStatus(t("courses.wb.sharedNoUpload")); return; }
     const uploadedHome = subjectStructure((workspace?.subjects || []).find((entry) => entry.id === uploadSubjectId)?.folders || []).uploadedId;
     const base = target.kind === "folder" ? target.folderId : (uploadedHome || "");
     const destination = pathOf(folders, target.kind === "folder" ? targetNodeId : (uploadedHome ? folderNode(uploadSubjectId, uploadedHome) : targetNodeId));
@@ -493,7 +495,7 @@ export function WorkspaceBrowser({
       const byFolder = new Map();
       for (const file of planned.flat()) byFolder.set(folderOfFile.get(file), [...(byFolder.get(folderOfFile.get(file)) || []), file]);
       const send = async (group, folderId) => {
-        progress.current = group.length === 1 ? group[0].name : `${group[0].name} and ${group.length - 1} more`;
+        progress.current = group.length === 1 ? group[0].name : t("courses.wb.andMore", { name: group[0].name, count: group.length - 1 });
         publish();
         await onUpload(group, { folderIds: folderId ? [folderId] : [], subjectId: uploadSubjectId });
         progress.done += group.length;
@@ -513,9 +515,9 @@ export function WorkspaceBrowser({
           publish();
         }
       }
-      setStatus(progress.failures.length ? `${progress.done} of ${files.length} files uploaded; ${progress.failures.length} could not be.` : `${files.length} file${files.length === 1 ? "" : "s"} uploaded.`);
+      setStatus(progress.failures.length ? t("courses.wb.uploadPartial", { done: progress.done, total: files.length, failed: progress.failures.length }) : t.plural("courses.wb.uploadedN", files.length));
     } catch (error) {
-      progress.failures.push({ name: "Upload", reason: String(error?.message || error) });
+      progress.failures.push({ name: t("courses.wb.uploadLabel"), reason: String(error?.message || error) });
       setStatus(String(error?.message || error));
     } finally {
       clearInterval(tick);
@@ -556,7 +558,7 @@ export function WorkspaceBrowser({
     // The window stays open after checking: that is when the answers are read.
     try {
       await onSaveGeneratedQuizDocument?.({ folderIds: [], tags: ["activity-attempt"], file: { name: `${attempt.activityTitle || "Activity"} · attempt.json`, content, preview: `${attempt.score}/${attempt.total}`, sizeBytes: content.length } }, row?.document.subjectId);
-      setStatus(`Saved: ${attempt.score}/${attempt.total}.`);
+      setStatus(t("courses.wb.saved", { score: attempt.score, total: attempt.total }));
     } catch { /* the attempt still shows locally */ }
   }
 
@@ -567,12 +569,12 @@ export function WorkspaceBrowser({
     const stats = row ? resourceStats(document.id, row.resource.activity?.id, rawDocuments) : null;
     return (
       <span className="flex flex-wrap items-center gap-1 text-[11px] text-soft-ink">
-        <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? "generated" : "material"}</span>
-        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>Shared by {sharedInfoOf(document).ownerName || "another account"} · {sharedInfoOf(document).permission === "edit" ? "can edit" : "can view"}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title="Read-only: sent to you by another account">{isAssignedDocument(document) ? "Assigned" : "Shared"} by {senderNameOf(document, folders) || "another account"}{dueDateOf(document) ? ` · due ${dueDateOf(document)}${dueInfoOf(document).imposed ? `, set by ${senderNameOf(document, folders) || "the sender"}` : ""}` : ""}</span> : null}
+        <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? t("courses.wb.chipGenerated") : t("courses.wb.chipMaterial")}</span>
+        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{t("courses.wb.sharedBy", { name: sharedInfoOf(document).ownerName || t("courses.wb.anotherAccount") })} · {sharedInfoOf(document).permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={t("courses.wb.readOnlyTip")}>{t(isAssignedDocument(document) ? "courses.wb.assignedBy" : "courses.wb.sharedBy", { name: senderNameOf(document, folders) || t("courses.wb.anotherAccount") })}{dueDateOf(document) ? ` · ${t("courses.wb.due", { date: dueDateOf(document) })}${dueInfoOf(document).imposed ? `, ${t("courses.wb.setBy", { name: senderNameOf(document, folders) || t("courses.wb.theSender") })}` : ""}` : ""}</span> : null}
         {isFavourite(document) ? <span className={`${chip} bg-[#fff3cd] text-[#8a5a00]`}>★</span> : null}
-        {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{row.resource.meta.questionCount} questions</span> : null}
+        {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("courses.wb.nQuestions", { count: row.resource.meta.questionCount })}</span> : null}
         {resourceDifficulty(document) ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{resourceDifficulty(document)}</span> : null}
-        {stats?.times ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>done {stats.times}×</span> : null}
+        {stats?.times ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("courses.wb.doneTimes", { count: stats.times })}</span> : null}
         {document.sizeLabel && !row ? <span>{document.sizeLabel}</span> : null}
         {resourceTags(document).slice(0, 3).map((entry) => <span key={entry} className={`${chip} border border-ink/10 text-soft-ink`}>{entry}</span>)}
       </span>
@@ -592,33 +594,33 @@ export function WorkspaceBrowser({
     return (
       <span className="flex shrink-0 items-center gap-1" onClick={(event) => event.stopPropagation()}>
         {/* On a phone (max-sm: beats the inline-flex inside ghostBtn, which a plain "hidden" does not) Open, favourite and download live in the ⋯ menu so a row is only its name and one button. */}
-        <button type="button" className={`${ghostBtn} max-sm:hidden`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? "Open" : "Preview"}</button>
+        <button type="button" className={`${ghostBtn} max-sm:hidden`} onClick={() => (row ? setOpenId(document.id) : setPreview(document))}>{row ? t("common.open") : t("courses.wb.preview")}</button>
         <RowMenu
           items={[
-            { label: row ? "Open" : "Preview", icon: "👁", className: "sm:hidden", onSelect: () => (row ? setOpenId(document.id) : setPreview(document)) },
-            { label: isFavourite(document) ? "Remove from favourites" : "Add to favourites", icon: isFavourite(document) ? "★" : "☆", onSelect: () => toggleFavourite(document) },
-            ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map(([value, label]) => ({ label: `Download · ${label}`, icon: "⤓", onSelect: () => downloadOne(document, value) })),
-            reviewing && onReviewDocument ? { label: "Approve the text", icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(`“${displayName(document.name)}” approved.`)) } : null,
-            reviewing && onReprocessDocument ? { label: "Read the file again", icon: "↻", onSelect: () => { setStatus(`Re-reading “${displayName(document.name)}”…`); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus("Re-read finished.")); } } : null,
-            !row && onMakeFrom ? { label: "Make a quiz", icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Make a level test", icon: "◎", onSelect: () => onMakeFrom("level-test", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Make a problem set", icon: "∑", onSelect: () => onMakeFrom("math-problem-set", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Make flashcards", icon: "▭", onSelect: () => onMakeFrom("concept-flashcards", [document.id]) } : null,
-            !row && onMakeFrom ? { label: "Summarise", icon: "☰", onSelect: () => onMakeFrom("document-summarizer", [document.id]) } : null,
-            row ? { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow(row) } : { label: "Add to a study plan", icon: "◷", onSelect: () => setPlanningRow({ document, resource: { name: document.name } }) },
-            { label: "Ask Luna", icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: `Help me study “${displayName(document.name)}”.` }) },
-            row && canUpdateResource(row.resource) ? { label: "Update…", icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
+            { label: row ? t("common.open") : t("courses.wb.preview"), icon: "👁", className: "sm:hidden", onSelect: () => (row ? setOpenId(document.id) : setPreview(document)) },
+            { label: isFavourite(document) ? t("courses.wb.unfav") : t("courses.wb.fav"), icon: isFavourite(document) ? "★" : "☆", onSelect: () => toggleFavourite(document) },
+            ...(document.sourceType === "generated" ? FORMATS.generated : FORMATS.uploaded).map((value) => ({ label: t("courses.wb.downloadAs", { format: t(`courses.wb.fmt.${value}`) }), icon: "⤓", onSelect: () => downloadOne(document, value) })),
+            reviewing && onReviewDocument ? { label: t("courses.wb.approve"), icon: "✓", onSelect: () => onReviewDocument(document.id, { decision: "approved", subjectId: document.subjectId }).then(() => setStatus(t("courses.wb.approved", { name: displayName(document.name) }))) } : null,
+            reviewing && onReprocessDocument ? { label: t("courses.wb.reread"), icon: "↻", onSelect: () => { setStatus(t("courses.wb.rereading", { name: displayName(document.name) })); onReprocessDocument(document.id, { subjectId: document.subjectId }).then(() => setStatus(t("courses.wb.rereadDone"))); } } : null,
+            !row && onMakeFrom ? { label: t("courses.wb.makeQuiz"), icon: "✎", onSelect: () => onMakeFrom("quiz-generator", [document.id]) } : null,
+            !row && onMakeFrom ? { label: t("courses.wb.makeLevel"), icon: "◎", onSelect: () => onMakeFrom("level-test", [document.id]) } : null,
+            !row && onMakeFrom ? { label: t("courses.wb.makeProblems"), icon: "∑", onSelect: () => onMakeFrom("math-problem-set", [document.id]) } : null,
+            !row && onMakeFrom ? { label: t("courses.wb.makeFlash"), icon: "▭", onSelect: () => onMakeFrom("concept-flashcards", [document.id]) } : null,
+            !row && onMakeFrom ? { label: t("courses.wb.summarise"), icon: "☰", onSelect: () => onMakeFrom("document-summarizer", [document.id]) } : null,
+            row ? { label: t("courses.wb.addToPlan"), icon: "◷", onSelect: () => setPlanningRow(row) } : { label: t("courses.wb.addToPlan"), icon: "◷", onSelect: () => setPlanningRow({ document, resource: { name: document.name } }) },
+            { label: t("courses.wb.askLuna"), icon: "💬", onSelect: () => askLuna({ documentIds: [document.id], text: t("courses.wb.helpStudy", { name: displayName(document.name) }) }) },
+            row && canUpdateResource(row.resource) ? { label: t("courses.wb.update"), icon: "✦", onSelect: () => setUpdatingRow(row) } : null,
             ...(locked ? [] : [
-            onShareDocument ? { label: "Share with…", icon: "↗", onSelect: () => onShareDocument(document) } : null,
-            row && onRegenerateResource ? { label: "Regenerate", icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
-            onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? `Move ${selectedIds.length} selected to…` : "Move to…", icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
-            { label: "Tags", icon: "🏷", onSelect: () => editTags(document) },
-            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } },
-            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete “${displayName(document.name)}”?`)) removeDocuments([document.id]); } }
+            onShareDocument ? { label: t("courses.wb.shareWith"), icon: "↗", onSelect: () => onShareDocument(document) } : null,
+            row && onRegenerateResource ? { label: t("courses.wb.regenerate"), icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
+            onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? t("courses.wb.moveSelected", { count: selectedIds.length }) : t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
+            { label: t("courses.wb.tags"), icon: "🏷", onSelect: () => editTags(document) },
+            { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } },
+            { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteOne", { name: displayName(document.name) }))) removeDocuments([document.id]); } }
             ]),
-            sharedWithMe?.permission === "edit" ? { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } } : null,
-            sharedWithMe?.root ? { label: "Leave this share", icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
-            locked && sharedWithMe ? { label: sharedWithMe.permission === "edit" ? "Shared with you · you can edit" : "Shared with you · view only", icon: "🔒", onSelect: () => setStatus(sharedWithMe.permission === "edit" ? `Shared by ${sharedWithMe.ownerName}. Your edits change the original: everyone who has it sees them. Only the owner can delete, move or share it.` : `Shared by ${sharedWithMe.ownerName} as view only. You can read, highlight, take notes and answer it.`) } : locked ? { label: "Read-only — sent to you", icon: "🔒", onSelect: () => setStatus("Documents sent to you are read-only. You can read, highlight, take notes and answer them.") } : null
+            sharedWithMe?.permission === "edit" ? { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } } : null,
+            sharedWithMe?.root ? { label: t("courses.wb.leaveShare"), icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
+            locked && sharedWithMe ? { label: sharedWithMe.permission === "edit" ? t("courses.wb.lockEdit") : t("courses.wb.lockView"), icon: "🔒", onSelect: () => setStatus(sharedWithMe.permission === "edit" ? t("courses.wb.lockEditMsg", { name: sharedWithMe.ownerName }) : t("courses.wb.lockViewMsg", { name: sharedWithMe.ownerName })) } : locked ? { label: t("courses.wb.lockSent"), icon: "🔒", onSelect: () => setStatus(t("courses.wb.lockSentMsg")) } : null
           ]}
         />
       </span>
@@ -633,40 +635,40 @@ export function WorkspaceBrowser({
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <p className={kicker}>{workspace.name}</p>
-            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{allDocuments.length} item{allDocuments.length === 1 ? "" : "s"}</p>
+            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{t.plural("courses.wb.items", allDocuments.length)}</p>
           </div>
           {/* Phone: the filters, uploads and downloads fold into this menu so the folders are what you see. */}
-          <button type="button" className="grid size-10 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xl leading-none text-ink lg:hidden" aria-label={toolsOpen ? "Close menu" : "Filters, upload and more"} aria-expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>{toolsOpen ? "✕" : "＋"}</button>
+          <button type="button" className="grid size-10 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xl leading-none text-ink lg:hidden" aria-label={toolsOpen ? t("courses.wb.closeMenu") : t("courses.wb.openMenu")} aria-expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>{toolsOpen ? "✕" : "＋"}</button>
         </div>
 
-        <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search…" aria-label="Search workspace" />
+        <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("courses.wb.searchPh")} aria-label={t("courses.wb.searchAria")} />
 
-        {toolsOpen ? <button type="button" aria-label="Close menu" className="fixed inset-0 z-40 cursor-default bg-black/30 lg:hidden" onClick={() => setToolsOpen(false)} /> : null}
+        {toolsOpen ? <button type="button" aria-label={t("courses.wb.closeMenu")} className="fixed inset-0 z-40 cursor-default bg-black/30 lg:hidden" onClick={() => setToolsOpen(false)} /> : null}
         <div className={`${toolsOpen ? "grid" : "hidden"} fixed inset-x-3 bottom-24 top-20 z-50 content-start gap-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.25)] lg:static lg:inset-auto lg:z-auto lg:grid lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
         <div className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center justify-between bg-white px-4 py-3 lg:hidden">
-          <p className="m-0 text-sm font-bold text-ink">Filters and tools</p>
-          <button type="button" className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white" onClick={() => setToolsOpen(false)}>Close</button>
+          <p className="m-0 text-sm font-bold text-ink">{t("courses.wb.filters")}</p>
+          <button type="button" className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white" onClick={() => setToolsOpen(false)}>{t("common.close")}</button>
         </div>
         <div>
-          <p className={`${kicker} mb-1.5`}>Show</p>
+          <p className={`${kicker} mb-1.5`}>{t("courses.wb.show")}</p>
           <div className="flex flex-wrap gap-1">
-            {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`${chip} transition ${kind === entry.id ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry.label}</button>)}
+            {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`${chip} transition ${kind === entry.id ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{t(entry.labelKey)}</button>)}
           </div>
         </div>
 
         <div>
-          <p className={`${kicker} mb-1`}>Date</p>
+          <p className={`${kicker} mb-1`}>{t("courses.wb.date")}</p>
           <select className={`${field} w-full text-xs`} value={dateSort} onChange={(e) => setDateSort(e.target.value)}>
-            <option value="newest">Newest first</option>
-            <option value="oldest">Oldest first</option>
+            <option value="newest">{t("courses.wb.newest")}</option>
+            <option value="oldest">{t("courses.wb.oldest")}</option>
           </select>
         </div>
 
         {studyPlans.length ? (
           <div>
-            <p className={`${kicker} mb-1`}>Study plan</p>
+            <p className={`${kicker} mb-1`}>{t("courses.wb.studyPlan")}</p>
             <select className={`${field} w-full text-xs`} value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
-              <option value="">All plans</option>
+              <option value="">{t("courses.wb.allPlans")}</option>
               {studyPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
             </select>
           </div>
@@ -674,7 +676,7 @@ export function WorkspaceBrowser({
 
         {allTopics.length ? (
           <div>
-            <p className={`${kicker} mb-1.5`}>Topic</p>
+            <p className={`${kicker} mb-1.5`}>{t("courses.wb.topic")}</p>
             <div className="flex flex-wrap gap-1">
               {allTopics.map((topic) => <button key={topic} type="button" onClick={() => setTopicFilter(topicFilter === topic ? "" : topic)} className={`${chip} transition ${topicFilter === topic ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{topic}</button>)}
             </div>
@@ -683,7 +685,7 @@ export function WorkspaceBrowser({
 
         {allTags.length ? (
           <div>
-            <p className={`${kicker} mb-1.5`}>Tags</p>
+            <p className={`${kicker} mb-1.5`}>{t("courses.wb.tags")}</p>
             <div className="flex flex-wrap gap-1">
               {allTags.map((entry) => <button key={entry} type="button" onClick={() => setTag(tag === entry ? "" : entry)} className={`${chip} transition ${tag === entry ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry}</button>)}
             </div>
@@ -692,31 +694,31 @@ export function WorkspaceBrowser({
 
         <div className="grid gap-1.5 border-t border-ink/8 pt-3">
           {/* One main action; the rest is under "More". */}
-          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50" disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ Upload files</button>
+          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50" disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ {t("courses.wb.uploadFiles")}</button>
           {needsReview.length ? (
             <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
               className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
-              <span aria-hidden>🛡</span><span>Needs a look</span>
+              <span aria-hidden>🛡</span><span>{t("courses.wb.needsLook")}</span>
               <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span>
             </button>
           ) : null}
           <details className="group">
-            <summary className="cursor-pointer list-none px-1 text-xs font-semibold text-soft-ink hover:text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>More</summary>
+            <summary className="cursor-pointer list-none px-1 text-xs font-semibold text-soft-ink hover:text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("common.more")}</summary>
             <div className="mt-1.5 grid gap-1.5">
               {onCreateSubject ? (
-                <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ New folder</button>
+                <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ {t("courses.tree.newFolder")}</button>
               ) : null}
-              <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ Upload a folder</button>
+              <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ {t("courses.wb.uploadFolder")}</button>
               {!needsReview.length ? (
                 <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
                   className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
-                  <span aria-hidden>🛡</span><span>Check extracted text</span>
+                  <span aria-hidden>🛡</span><span>{t("courses.wb.checkText")}</span>
                 </button>
               ) : null}
-              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">Download visible as
+              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">{t("courses.wb.downloadVisible")}
                 <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
-                  <option value="">Choose a format…</option>
-                  {[["original", "Original files"], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", "Plain text"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  <option value="">{t("courses.wb.chooseFormat")}</option>
+                  {[["original", t("courses.wb.dlOriginal")], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", t("courses.wb.fmt.txt")]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
             </div>
@@ -731,13 +733,13 @@ export function WorkspaceBrowser({
       <div className={`${card} min-w-0 p-4`}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <p className="m-0 text-sm font-bold text-ink">{reviewing ? "Review centre — needs attention" : "All folders"}</p>
-            <p className="m-0 text-[11px] text-soft-ink">{visible.length} item{visible.length === 1 ? "" : "s"}</p>
+            <p className="m-0 text-sm font-bold text-ink">{reviewing ? t("courses.wb.reviewTitle") : t("courses.wb.allFolders")}</p>
+            <p className="m-0 text-[11px] text-soft-ink">{t.plural("courses.wb.items", visible.length)}</p>
           </div>
           {!reviewing && folders.length ? (
             <button type="button" className={ghostBtn}
               onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
-              {openNodes.size ? "Collapse all" : "Expand all"}
+              {openNodes.size ? t("courses.wb.collapseAll") : t("courses.wb.expandAll")}
             </button>
           ) : null}
         </div>
@@ -745,7 +747,7 @@ export function WorkspaceBrowser({
         {status ? (
           <p className="mb-3 text-xs text-[var(--accent-ink)]" role="status">
             {status}{isWorking ? " …" : ""}
-            {undo && undo.text === status && !isWorking ? <button type="button" className="ml-2 font-semibold underline" onClick={runUndo}>Undo</button> : null}
+            {undo && undo.text === status && !isWorking ? <button type="button" className="ml-2 font-semibold underline" onClick={runUndo}>{t("courses.wb.undo")}</button> : null}
           </p>
         ) : null}
 
@@ -758,23 +760,23 @@ export function WorkspaceBrowser({
           const singleRow = single ? rowsByDocumentId.get(single.id) : null;
           return (
             <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl bg-[var(--accent-soft)]/40 px-3 py-2 text-xs text-ink">
-              <span className="font-semibold">{selectedIds.length + selectedFolderIds.length} selected{selectedFolderIds.length ? ` (${selectedFolderIds.length} folder${selectedFolderIds.length === 1 ? "" : "s"})` : ""}</span>
+              <span className="font-semibold">{t("courses.browser.selected", { count: selectedIds.length + selectedFolderIds.length })}{selectedFolderIds.length ? ` (${t.plural("courses.wb.nFolders", selectedFolderIds.length)})` : ""}</span>
               {materialIds.length && onMakeFrom ? (
                 <>
-                  <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>Make a quiz</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("concept-flashcards", materialIds)}>Flashcards</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("level-test", materialIds)}>Level test</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("math-problem-set", materialIds)}>Problem set</button>
-                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("document-summarizer", materialIds)}>Summarise</button>
+                  <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-[#0077ed]" onClick={() => onMakeFrom("quiz-generator", materialIds)}>{t("courses.wb.makeQuiz")}</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("concept-flashcards", materialIds)}>{t("courses.wb.flashcards")}</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("level-test", materialIds)}>{t("courses.wb.levelTest")}</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("math-problem-set", materialIds)}>{t("courses.wb.problemSet")}</button>
+                  <button type="button" className={ghostBtn} onClick={() => onMakeFrom("document-summarizer", materialIds)}>{t("courses.wb.summarise")}</button>
                 </>
               ) : null}
-              {materialIds.length && onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => onPlanFrom(materialIds)}>Plan it</button> : null}
-              {single && !materialIds.length ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
-              {single && materialIds.length && !onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>Add to a plan</button> : null}
-              {picked.length ? <button type="button" className={ghostBtn} onClick={() => askLuna({ documentIds: picked.map((document) => document.id), text: picked.length === 1 ? `Help me study “${picked[0].name}”.` : "Help me study these documents." })}>Ask Luna</button> : null}
-              {onMoveDocuments || onMoveFolder ? <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds, folderNodeIds: topSelectedFolders() })}>Move to…</button> : null}
-              <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} disabled={isWorking} onClick={deleteSelected}>Delete</button>
-              <button type="button" className={ghostBtn} onClick={clearSelection}>Clear</button>
+              {materialIds.length && onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => onPlanFrom(materialIds)}>{t("courses.wb.planIt")}</button> : null}
+              {single && !materialIds.length ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>{t("courses.wb.addToAPlan")}</button> : null}
+              {single && materialIds.length && !onPlanFrom ? <button type="button" className={ghostBtn} onClick={() => setPlanningRow(singleRow || { document: single, resource: { name: single.name } })}>{t("courses.wb.addToAPlan")}</button> : null}
+              {picked.length ? <button type="button" className={ghostBtn} onClick={() => askLuna({ documentIds: picked.map((document) => document.id), text: picked.length === 1 ? t("courses.wb.helpStudy", { name: picked[0].name }) : t("courses.wb.helpStudyMany") })}>{t("courses.wb.askLuna")}</button> : null}
+              {onMoveDocuments || onMoveFolder ? <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => setMovePicker({ documentIds: selectedIds, folderNodeIds: topSelectedFolders() })}>{t("courses.wb.moveTo")}</button> : null}
+              <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} disabled={isWorking} onClick={deleteSelected}>{t("common.delete")}</button>
+              <button type="button" className={ghostBtn} onClick={clearSelection}>{t("courses.browser.clear")}</button>
             </div>
           );
         })() : null}
@@ -790,7 +792,7 @@ export function WorkspaceBrowser({
                 </div>
                 {actions(document)}
               </div>
-            )) : <p className="py-4 text-center text-sm text-soft-ink">No documents need attention.</p>}
+            )) : <p className="py-4 text-center text-sm text-soft-ink">{t("courses.wb.noAttention")}</p>}
           </div>
         ) : (
           <div className="grid gap-0.5">
@@ -845,30 +847,30 @@ export function WorkspaceBrowser({
                       className="group flex cursor-pointer items-center gap-1.5 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)]" style={{ paddingLeft }}>
                       <button type="button" className="w-4 shrink-0 text-center text-[10px] text-soft-ink" onClick={() => toggleNode(folder.id)}>{isOpen ? "▾" : "▸"}</button>
                       {!folder.isSubject && !folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
-                        <input type="checkbox" aria-label={`Select folder “${folder.name}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length || selectedFolderIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedFolderIds.includes(folder.id)} onChange={() => toggleFolderSelected(folder.id)} onClick={(event) => event.stopPropagation()} />
+                        <input type="checkbox" aria-label={t("courses.wb.selectFolder", { name: folder.name })} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length || selectedFolderIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedFolderIds.includes(folder.id)} onChange={() => toggleFolderSelected(folder.id)} onClick={(event) => event.stopPropagation()} />
                       ) : null}
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
-                      {folder.shared ? <span className={`${chip} shrink-0 bg-[#e8f2ff] text-[#0058b0]`} title={folder.shared.permission === "edit" ? "Shared with you: your edits change the original" : "Shared with you: view only"}>{folder.shared.permission === "edit" ? "can edit" : "can view"}</span> : null}
+                      {folder.shared ? <span className={`${chip} shrink-0 bg-[#e8f2ff] text-[#0058b0]`} title={folder.shared.permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{folder.shared.permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : null}
                       {folder.shared ? (
                         <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                          {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title="New subfolder" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
-                          {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title="Rename" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button> : null}
-                          {folder.shared.root ? <button type="button" title="Leave this share" className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => requestLeaveShare(folder.shared.grantId)}>↩</button> : null}
+                          {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
+                          {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title={t("common.rename")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt(t("courses.wb.newName"), folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button> : null}
+                          {folder.shared.root ? <button type="button" title={t("courses.wb.leaveShare")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => requestLeaveShare(folder.shared.grantId)}>↩</button> : null}
                         </span>
                       ) : null}
                       {/* On a phone there is no hover: the same actions, and "Move to…", live in the ⋯ menu. */}
                       {!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
                         <span onClick={(e) => e.stopPropagation()}>
                         <RowMenu
-                          label={`Actions for ${folder.name}`}
+                          label={t("courses.wb.actionsFor", { name: folder.name })}
                           items={[
-                            (onCreateFolder || onCreateSubject) ? { label: "New subfolder", icon: "＋", onSelect: () => { const name = window.prompt("Folder name"); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
-                            { label: "Rename", icon: "✎", onSelect: () => { const name = window.prompt("New name", folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
-                            onShareDocument ? { label: "Share…", icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
-                            onMoveFolder && !folder.isSubject ? { label: "Move to…", icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
-                            { label: "Delete", icon: "🗑", danger: true, onSelect: () => { if (window.confirm(`Delete "${folder.name}" and its files?`)) removeFolder(folder.id); } }
+                            (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: () => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
+                            { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
+                            onShareDocument ? { label: t("courses.wb.share"), icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
+                            onMoveFolder && !folder.isSubject ? { label: t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
+                            { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteFolder", { name: folder.name }))) removeFolder(folder.id); } }
                           ]}
                         />
                         </span>
@@ -883,9 +885,9 @@ export function WorkspaceBrowser({
                             <span aria-hidden>↪</span>
                             {uploadedTarget ? (
                               <button type="button" className="min-w-0 truncate text-left font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setNodeId(uploadedTarget.id); setOpenNodes((current) => new Set([...current, uploadedTarget.id])); }}>
-                                Linked to “{UPLOADED_FOLDER}” · {countVisible(uploadedTarget.id)} document{countVisible(uploadedTarget.id) === 1 ? "" : "s"} — open
+                                {t.plural("courses.wb.linked", countVisible(uploadedTarget.id), { name: UPLOADED_FOLDER })}
                               </button>
-                            ) : <span className="text-soft-ink">Linked to the uploaded material of this topic.</span>}
+                            ) : <span className="text-soft-ink">{t("courses.wb.linkedTopic")}</span>}
                           </div>
                         ) : null}
                         {docs.map((document) => (
@@ -896,7 +898,7 @@ export function WorkspaceBrowser({
                             className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}
                             style={{ paddingLeft: paddingLeft + 20 }}>
                             {onMoveDocuments && !isSharedDocument(document) ? (
-                              <input type="checkbox" aria-label={`Select “${displayName(document.name)}”`} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
+                              <input type="checkbox" aria-label={t("courses.wb.selectDoc", { name: displayName(document.name) })} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} onClick={(event) => event.stopPropagation()} />
                             ) : null}
                             <span className="shrink-0 text-sm max-sm:hidden" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
                             <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
@@ -915,7 +917,7 @@ export function WorkspaceBrowser({
 
               const roots = childrenOf.get("") || [];
               if (!roots.length && !visible.length) {
-                return <EmptyState key="empty" title="Nothing here yet" text="This is where your course material lives. Upload your notes, slides or a whole folder, and Luna builds quizzes, summaries and plans from them." action="Upload files" onAction={() => fileRef.current?.click()} secondary="Upload a folder" onSecondary={() => folderRef.current?.click()} />;
+                return <EmptyState key="empty" title={t("courses.wb.emptyTitle")} text={t("courses.wb.emptyText")} action={t("courses.wb.uploadFiles")} onAction={() => fileRef.current?.click()} secondary={t("courses.wb.uploadFolder")} onSecondary={() => folderRef.current?.click()} />;
               }
               if (!roots.length && visible.length) {
                 // Documents with no folder structure — flat list
@@ -949,7 +951,7 @@ export function WorkspaceBrowser({
           onRegenerate={onRegenerateResource ? (row) => onRegenerateResource(row.document.id) : undefined}
           onUpdate={canUpdateResource(openRow.resource) ? setUpdatingRow : undefined}
           onRestoreVersion={(row, versionId) => updateResource(row, (resource) => restoreVersion(resource, versionId))}
-          notices={staleSources(openRow.resource, rawDocuments).map((source) => `Based on an older version of “${source.name}” (updated ${new Date(source.updatedAt).toLocaleDateString()}).`)}
+          notices={staleSources(openRow.resource, rawDocuments).map((source) => t("courses.wb.olderVersion", { name: source.name, date: new Date(source.updatedAt).toLocaleDateString(t.locale) }))}
           onDelete={(row) => removeDocuments([row.document.id])}
           onClassify={classify}
           onBulkClassify={bulkClassify}
@@ -967,12 +969,12 @@ export function WorkspaceBrowser({
         const firstFolder = String(uploadPicker.files[0]?.webkitRelativePath || "").split("/")[0];
         return (
           <MoveDialog
-            title={firstFolder && count > 1 ? `Upload “${firstFolder}” (${count} files)` : `Upload ${count} file${count === 1 ? "" : "s"}`}
-            subtitle="Choose the folder everything goes into. A folder keeps its own subfolders."
+            title={firstFolder && count > 1 ? t("courses.wb.uploadFolderTitle", { name: firstFolder, count }) : t.plural("courses.wb.uploadTitle", count)}
+            subtitle={t("courses.wb.uploadSubtitle")}
             folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
             initialId={nodeId && !reviewing ? nodeId : ""}
-            confirmLabel="Upload here"
-            pathLabel="Upload to"
+            confirmLabel={t("courses.wb.uploadHere")}
+            pathLabel={t("courses.wb.uploadTo")}
             onCancel={() => setUploadPicker(null)}
             onPick={(targetNodeId) => { const { files } = uploadPicker; setUploadPicker(null); runUpload(files, targetNodeId); }}
           />
@@ -987,8 +989,8 @@ export function WorkspaceBrowser({
         const hidden = new Set(subjectsList.filter((entry) => isReservedSubjectName(entry.name)).map((entry) => entry.id));
         return (
           <MoveDialog
-            title={moving ? `Move “${moving.name}”` : count === 1 ? `Move “${allDocuments.find((entry) => entry.id === movePicker.documentIds[0])?.name || "this item"}”` : `Move ${count} items`}
-            subtitle={moving ? "With everything inside it. Pick a topic to put it at the top of that topic, or a folder." : "Pick a topic to put it at the top of that topic, or a folder inside any topic."}
+            title={moving ? t("courses.wb.moveOne", { name: moving.name }) : count === 1 ? t("courses.wb.moveOne", { name: allDocuments.find((entry) => entry.id === movePicker.documentIds[0])?.name || t("courses.wb.thisItem") }) : t("courses.wb.moveMany", { count })}
+            subtitle={moving ? t("courses.wb.moveSubFolder") : t("courses.wb.moveSubDocs")}
             folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
             disabledIds={movingIds.flatMap((id) => blockedTargets(folders, id))}
             onCancel={() => setMovePicker(null)}
@@ -1038,8 +1040,8 @@ export function WorkspaceBrowser({
             if (original) { setPreviewScroll({ page: target.page, section: target.section }); setPreview(original); } else window.open(sourceHref(target), "_blank", "noopener");
           }}
           chat={{ documentId: playing.document.id }}
-          originals={masterOriginals(playing.resource)}
-          onDownloadOriginalById={originalDownloader(rawDocuments, onDownloadDocument)}
+          originals={masterOriginals(playing.resource, t)}
+          onDownloadOriginalById={originalDownloader(rawDocuments, onDownloadDocument, t)}
           highlights={playing.resource.highlights || []}
           onSaveHighlights={(list) => updateResource(playing, (resource) => ({ ...resource, highlights: list }))}
           onSubmit={(attempt) => saveAttempt(attempt, playing.document.id)}

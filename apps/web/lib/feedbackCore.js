@@ -24,7 +24,7 @@ export const STATUSES = [
 
 const LIMITS = { message: 4000, quote: 1500, selector: 320, snippet: 300, section: 120, page: 120, location: 200, name: 80, viewport: 24, context: 4000, screenshot: 1_200_000 };
 const IMAGE_URL = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
-const text = (value, max) => String(value || "").replace(/\u0000/g, "").trim().slice(0, max);
+const text = (value, max) => String(value || "").split("\u0000").join("").trim().slice(0, max);
 
 /**
  * Where in the code each page lives, so a piece of feedback can be handed to Claude with "start here".

@@ -8,7 +8,7 @@ import { ExamDatePicker } from "./ExamDates";
 import { DEFAULT_PLAN_AGENT_IDS, generateKeys, generateLabel, scopeFromIds } from "./agents";
 import { DEFAULT_MAX_MINUTES_PER_DAY } from "./dailyCap.js";
 import { capConceptTree } from "./conceptTree";
-import { MASTER_STEP_ID, planBuildSteps } from "./master";
+import { CONSOLIDATED_KEY, MASTER_STEP_ID, documentChars, needsConsolidatedView, planBuildSteps } from "./master";
 import { resourceConcepts } from "../resources/concepts";
 import { bySkill, summarise } from "../performance/metrics";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
@@ -179,7 +179,9 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
   const documentCount = picked.length;
   // With two or more uploaded documents, the first thing built is their master document.
   const uploadedCount = picked.filter((id) => documents.find((doc) => doc.id === id)?.sourceType !== "generated").length;
-  const withMaster = uploadedCount >= 2;
+  const uploadedChars = picked.reduce((sum, id) => { const doc = documents.find((item) => item.id === id); return doc && doc.sourceType !== "generated" ? sum + documentChars(doc) : sum; }, 0);
+  // Many documents or a lot of material: the plan's first step is a consolidated view of all of it (its master document).
+  const withMaster = uploadedCount >= 2 || needsConsolidatedView({ uploadedCount, totalChars: uploadedChars });
   const steps = planBuildSteps({ documentCount, uploadedCount, buildNow, withMaster }, t);
 
   async function generate() {
@@ -205,6 +207,8 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
           // Concept map: canonical concept list so the AI only uses these names as tags
           // and covers all of them across the plan.
           conceptMap,
+          // The title of the consolidated first step, in the learner's language (used when the plan needs one).
+          consolidatedTitle: t("plans.gen.consolidatedTitle"),
           materials: picked.map((id) => {
             const document = documents.find((item) => item.id === id);
             const resource = resourceByDocumentId.get(id);
@@ -212,6 +216,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
               id,
               name: resource?.name || document?.name || "",
               kind: resource ? "generated resource" : "material",
+              chars: resource ? 0 : documentChars(document),
               concepts: resource ? resourceConcepts(resource).map((concept) => concept.name) : []
             };
           })
@@ -233,7 +238,7 @@ export function GeneratePlanDialog({ documents = [], agents = [], folders = [], 
             goalId: goal?.id || "",
             minutes: item.minutes || 30
           }),
-          note: item.generate ? `Luna will generate ${generateLabel(item.generate, agentScope)} from "${known?.name || "the material"}".` : (known ? `Material: ${known.name}` : ""),
+          note: item.generate === CONSOLIDATED_KEY ? t("plans.gen.consolidatedNote") : item.generate ? `Luna will generate ${generateLabel(item.generate, agentScope)} from "${known?.name || "the material"}".` : (known ? `Material: ${known.name}` : ""),
           generate: item.generate || "",
           sourceDocumentId: item.sourceId || "",
           concepts: item.concepts || []

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FolderPicker } from "../ui/FolderTree";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { nameToSave } from "../ui/displayName";
 
 const input = "w-full rounded-xl border border-ink/10 bg-white px-3 py-2 text-sm text-ink outline-none focus:border-[var(--accent)]";
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]";
@@ -11,7 +12,10 @@ const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var
 /** Name, folder, tags and difficulty before a generated resource is saved. */
 export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId = "", summary = "", busy = false, hideUnfiled = false, plans = [], canActivity = false, onCancel, onSave, onCreateFolder }) {
   const t = useT();
+  // The name may be empty while it is typed (cleared to retype); it is checked only on Save.
   const [name, setName] = useState(defaultName || "");
+  const [nameMissing, setNameMissing] = useState(false);
+  const nameRef = useRef(null);
   const [folderId, setFolderId] = useState(defaultFolderId);
   const [tags, setTags] = useState("");
   const [difficulty, setDifficulty] = useState("");
@@ -42,7 +46,7 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
         <h4 className="m-0 text-lg font-bold text-ink">{t("courses.sr.title")}</h4>
         <p className="m-0 mt-1 text-xs text-soft-ink">{summary || t("courses.sr.summary")}</p>
         <div className="mt-4 grid gap-3">
-          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("courses.sr.name")}<input autoFocus className={input} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("courses.sr.namePh")} /></label>
+          <label className="grid gap-1 text-xs font-semibold text-soft-ink">{t("courses.sr.name")}<input ref={nameRef} autoFocus className={`${input} placeholder:text-soft-ink/60 ${nameMissing ? "border-[var(--color-danger)]" : ""}`} value={name} aria-invalid={nameMissing || undefined} onChange={(event) => { setName(event.target.value); if (nameMissing && event.target.value.trim()) setNameMissing(false); }} placeholder={t("courses.sr.namePh")} />{nameMissing ? <span className="font-normal text-[var(--color-danger)]" role="alert">{t("courses.sr.nameNeeded")}</span> : null}</label>
           <div className="grid gap-1 text-xs font-semibold text-soft-ink">
             <span>{t("courses.sr.where")} <span className="font-normal">· {hideUnfiled ? t("courses.sr.pickSubject") : t("courses.sr.filedHere")}</span></span>
             <FolderPicker folders={folders} selectedId={folderId} onSelect={setFolderId} hideUnfiled={hideUnfiled} />
@@ -94,7 +98,7 @@ export function SaveResourceDialog({ defaultName, folders = [], defaultFolderId 
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <button type="button" className={ghostBtn} onClick={onCancel}>{t("common.cancel")}</button>
-          <button type="button" className={primaryBtn} disabled={busy || !name.trim()} onClick={() => onSave({ name: name.trim(), folderId, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), difficulty, favourite, openAfter, addActivity: canActivity && addActivity, planId: addPlan ? planId : "", dueDate: ((canActivity && addActivity) || addPlan) ? dueDate : "" })}>{busy ? t("courses.rs.saving") : t("courses.sr.save")}</button>
+          <button type="button" className={primaryBtn} disabled={busy} onClick={() => { const checked = nameToSave(name); if (!checked.ok) { setNameMissing(true); nameRef.current?.focus(); return; } onSave({ name: checked.name, folderId, tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean), difficulty, favourite, openAfter, addActivity: canActivity && addActivity, planId: addPlan ? planId : "", dueDate: ((canActivity && addActivity) || addPlan) ? dueDate : "" }); }}>{busy ? t("courses.rs.saving") : t("courses.sr.save")}</button>
         </div>
       </div>
     </div>

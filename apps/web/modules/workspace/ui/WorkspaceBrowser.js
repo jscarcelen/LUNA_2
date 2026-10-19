@@ -24,7 +24,7 @@ import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../pl
 import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
 import { requestLeaveShare } from "../../accounts/shareEvents";
-import { displayName, keepStorageSuffix } from "../../ui/displayName";
+import { displayName, nameToSave } from "../../ui/displayName";
 import { useT } from "../../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -236,6 +236,27 @@ export function WorkspaceBrowser({
     if (!parentNodeId) return onCreateSubject?.(name); // a top-level folder
     const parent = parseNode(parentNodeId);
     return onCreateFolder?.(name, parent.kind === "folder" ? parent.folderId : "", parent.subjectId);
+  }
+  /**
+   * Rename through the browser's own box: it can be cleared and retyped freely; an empty name is refused
+   * with a reason (and the box opens again) instead of being ignored. Cancel leaves the name as it was.
+   */
+  function askName(current) {
+    let typed = window.prompt(t("courses.wb.newName"), current);
+    while (typed !== null) {
+      const checked = nameToSave(typed);
+      if (checked.ok) return checked.name;
+      typed = window.prompt(`${t("courses.sr.nameNeeded")} ${t("courses.wb.newName")}`, "");
+    }
+    return null;
+  }
+  function renameDocument(document) {
+    const name = askName(displayName(document.name));
+    if (name !== null) onRenameDocument?.(document.id, nameToSave(name, document.name).name, document.subjectId);
+  }
+  function promptRenameFolder(folder) {
+    const name = askName(folder.name);
+    if (name !== null) renameFolder(folder.id, name);
   }
   function renameFolder(id, name) {
     const node = parseNode(id);
@@ -615,10 +636,10 @@ export function WorkspaceBrowser({
             row && onRegenerateResource ? { label: t("courses.wb.regenerate"), icon: "✨", onSelect: () => onRegenerateResource(document.id) } : null,
             onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? t("courses.wb.moveSelected", { count: selectedIds.length }) : t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
             { label: t("courses.wb.tags"), icon: "🏷", onSelect: () => editTags(document) },
-            { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } },
+            { label: t("common.rename"), icon: "✎", onSelect: () => renameDocument(document) },
             { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteOne", { name: displayName(document.name) }))) removeDocuments([document.id]); } }
             ]),
-            sharedWithMe?.permission === "edit" ? { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), displayName(document.name)); if (name?.trim()) onRenameDocument?.(document.id, keepStorageSuffix(document.name, name.trim()), document.subjectId); } } : null,
+            sharedWithMe?.permission === "edit" ? { label: t("common.rename"), icon: "✎", onSelect: () => renameDocument(document) } : null,
             sharedWithMe?.root ? { label: t("courses.wb.leaveShare"), icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
             locked && sharedWithMe ? { label: sharedWithMe.permission === "edit" ? t("courses.wb.lockEdit") : t("courses.wb.lockView"), icon: "🔒", onSelect: () => setStatus(sharedWithMe.permission === "edit" ? t("courses.wb.lockEditMsg", { name: sharedWithMe.ownerName }) : t("courses.wb.lockViewMsg", { name: sharedWithMe.ownerName })) } : locked ? { label: t("courses.wb.lockSent"), icon: "🔒", onSelect: () => setStatus(t("courses.wb.lockSentMsg")) } : null
           ]}
@@ -856,7 +877,7 @@ export function WorkspaceBrowser({
                       {folder.shared ? (
                         <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
                           {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
-                          {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title={t("common.rename")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt(t("courses.wb.newName"), folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); }}>✎</button> : null}
+                          {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title={t("common.rename")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => promptRenameFolder(folder)}>✎</button> : null}
                           {folder.shared.root ? <button type="button" title={t("courses.wb.leaveShare")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => requestLeaveShare(folder.shared.grantId)}>↩</button> : null}
                         </span>
                       ) : null}
@@ -867,7 +888,7 @@ export function WorkspaceBrowser({
                           label={t("courses.wb.actionsFor", { name: folder.name })}
                           items={[
                             (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: () => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
-                            { label: t("common.rename"), icon: "✎", onSelect: () => { const name = window.prompt(t("courses.wb.newName"), folder.name); if (name?.trim()) renameFolder(folder.id, name.trim()); } },
+                            { label: t("common.rename"), icon: "✎", onSelect: () => promptRenameFolder(folder) },
                             onShareDocument ? { label: t("courses.wb.share"), icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
                             onMoveFolder && !folder.isSubject ? { label: t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
                             { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteFolder", { name: folder.name }))) removeFolder(folder.id); } }

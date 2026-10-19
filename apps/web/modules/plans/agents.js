@@ -64,7 +64,7 @@ export function scopeFromIds(ids = [], catalog = []) {
 /** The `generate` values the plan may use. */
 export const generateKeys = (scope) => [...new Set((scope || []).flatMap((agent) => agent.makes || []))];
 
-const GEN_KEYS = new Set(["quiz", "exam", "worksheet", "flashcards", "summary", "math", "concept-flashcards", "document-summarizer", "formulas", "reading", "level-test"]);
+const GEN_KEYS = new Set(["quiz", "exam", "worksheet", "flashcards", "summary", "math", "concept-flashcards", "document-summarizer", "formulas", "reading", "level-test", "master"]);
 
 /** Human name of a `generate` key, for step notes and previews. */
 export function generateLabel(key, scope, t = tEn) {

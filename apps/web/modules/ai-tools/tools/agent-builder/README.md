@@ -37,3 +37,11 @@ globally. Legacy pages keep the hand-written class system.
 
 The non-streaming `POST /api/ai-tools/agent-builder` is unchanged and still used by tests/tools.
 Node runtime with `maxDuration = 60`; the open stream keeps Vercel from idling the function.
+
+## Count shortfalls and "Make more" (2026-10-19)
+`CountNotice.js` replaces the red "Some checks did not pass" bar. A result with fewer items than asked (`countOutcome.kind === "short"`,
+or a failed `count_matches_input` check on an older result) shows a calm note, e.g. "Made 8 cards: the material had 8 key ideas. Make
+more?", with a "Make N more" button that re-runs with `topUp` (only the missing items, the existing ones listed so none is repeated).
+Only real problems (missing fields, duplicates, an answer not among its options) keep the red style. The server already tops a short
+set up automatically before answering (`pipeline/itemCount.js`), so the note appears only when the material ran out or a follow-up failed.
+The Reading Splitter streams `{ step: "generate", status: "progress", phase: "split", done, total, label }` while its batches run.

@@ -1328,3 +1328,28 @@ Founder: "any generated material, for example by the AI study planner, can be up
 - Translated (es): landing, sign-up/login incl. class code, navigation and titles (long and phone-short), student Home, "?" help and first-run tour, Study plans, Practice and the quiz player, Progress incl. coach panel text, Courses tree/row menus/reader chrome, teacher and parent Home, People/Connections, share/send dialogs, notifications, Ask Luna menu, feedback widget, Account settings, error messages (`friendlyError.js`). Remaining English: see `lib/i18n/README.md`.
 - AI content: coach request sends `language`; `/api/performance/coach` adds a `<language>` block (`npm run dashboard:check` passes); agent runners' "Language" question defaults to the UI language when Spanish.
 - Tests: `tests/i18n/i18n.test.js` (same keys and `{placeholders}` in en and es, detection, plurals, fallback), `tests/i18n/keys-used.test.js` (literal keys used in code exist). Existing English tests unchanged: pure helpers keep English output without `t`.
+
+## 2026-10-19 — agents rollout: Reading Splitter, consolidated view, flashcard counts, save names (branch feat/rollout-agents)
+- **Reading Splitter covers the whole document.** Root cause: it ran as one block-agent call over the best-ranked chunks that fit the
+  48k-character retrieval budget (`selectChunksWithinBudget`, max 40 chunks) with a 6k-token output cap (3k on retry), and the model
+  had to copy the text itself, so long documents came back as 2–3 parts, some with only a heading. Now the spec is `pipeline: "split"`
+  and `pipeline/readingParts.js` cuts every document in code from its headings/blocks (merge/split to the minutes per part, never
+  inside a table, list, formula or code block), copies every passage exactly, and asks the model only for titles, "Why read this",
+  difficulty and "Check yourself" questions in batches of 6 (streamed progress `phase: "split"`). Pasted text works too. Tests:
+  `tests/ai-tools/reading-parts.test.ts` (long Accounting fixture: 100 % of headings, every word in order, no empty part).
+- **Plans and the splitter:** plan generation does NOT use the splitter to make topic chunks (the planner sees names + the concept
+  map); plan *building* used it for reading steps (`STEP_RECIPES.reading`) through the same truncated path. Reading steps now run the
+  whole-document pipeline on their own upload with `readingFocus` = the step's concepts.
+- **Consolidated view of the resources** (plans): 3+ uploaded documents or > 150,000 characters → step 1 is the consolidated view
+  (`generate: "master"`), enforced by `master.js ensureConsolidatedStep` after the other checks and asked for in the planner prompt
+  (rule 14, `<consolidated_view>`); `executePlan` builds it once as the master document (Summary Notes Consolidator) and points step 1
+  at it. New `localPlan.js`: plan generation without an OpenAI key. Tests: `tests/plans/consolidated-view.test.ts`.
+- **Flashcards "8 items, 20 requested":** the count check failed because one call (6k tokens, 3k on retry) had to write every card with
+  its source, quote and support, models stop early on long lists, and grounding drops unverified cards. `pipeline/itemCount.js`: output
+  budget sized to the count (6k–16k), up to 3 automatic top-up calls listing the items made (no repeats), stop when the material runs
+  out; never more than asked. Runner: `CountNotice.js` shows "Made 8 cards: the material had 8 key ideas. Make more?" with "Make N
+  more" (`config.topUp`); red only for real problems. Applies to every count-based agent and to plan steps. Tests:
+  `tests/ai-tools/item-count.test.ts` (incl. `runAgentGeneration` with a fake model).
+- **Save / rename names:** the Save dialog's Name can be empty while typing and is checked on Save ("Give it a name."); Courses
+  rename re-asks on an empty name (Cancel keeps it; `.resource.json` kept), folder-tree rename shows the hint. `ui/displayName.js nameToSave`.
+- Dashboard: P1 and A1 updated, new A15 (splitter light pass); `npm run dashboard:check` clean.

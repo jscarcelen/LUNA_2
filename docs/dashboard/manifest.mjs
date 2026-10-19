@@ -52,6 +52,7 @@ const SRC = {
   concepts: "apps/web/modules/ai-tools/pipeline/conceptExtractor.js",
   agent: "apps/web/modules/ai-tools/pipeline/agentBuilder.js",
   consolidator: "apps/web/modules/ai-tools/pipeline/consolidator.js",
+  splitter: "apps/web/modules/ai-tools/pipeline/readingParts.js",
   embed: "apps/web/modules/ai-tools/pipeline/embeddings.js",
   quiz: "apps/web/modules/ai-tools/pipeline/provider-openai.js",
   designer: "apps/web/modules/template-studio/server/designer.js",
@@ -219,8 +220,8 @@ export const REQUESTS = [
     model: "gpt-4o", modelEnv: "LUNA_PLAN_MODEL", provider: "OpenAI · chat/completions",
     params: { temperature: 0.3, maxTokens: "default", format: "JSON schema (strict)", streaming: false },
     input: "Deadline, minutes per week, the most minutes in one day, the learner's optional instructions (preferred activities, what each exam covers) and format wishes for the material, the agents the learner put in scope (built-in and their own, each with what it can make), the learner's performance history, the document's concept map (canonical names only) and the list of chosen material.",
-    output: "Plan name and note, 2–6 goals, a coverage ledger (every concept → where it is studied and tested) and dated steps (read / activity / review / exam) saying what Luna should generate for each. The result is then checked in code: any concept not studied and tested is added to a step, and the final exam lists them all.",
-    fallbacks: "Error shown; nothing saved. Before the call, concepts are read from the material (U7) if the documents have none yet.",
+    output: "Plan name and note, 2–6 goals, a coverage ledger (every concept → where it is studied and tested) and dated steps (read / activity / review / exam) saying what Luna should generate for each. The result is then checked in code: any concept not studied and tested is added to a step, and the final exam lists them all. With 3+ uploaded documents or more than 150,000 characters of material the FIRST step is the 'Consolidated view of the resources' (generate = master: the Summary Notes Consolidator's master document, A9–A12), enforced in code (master.js ensureConsolidatedStep).",
+    fallbacks: "Without an OpenAI key a plain schedule is built by code (plans/localPlan.js) and gets the same checks. Before the call, concepts are read from the material (U7) if the documents have none yet.",
     tokens: { basis: "measured", scale: { unit: "step", label: "plan step", fixedIn: 1500, inPer: 0, outPer: 85, units: 9 } },
     seconds: { typical: 5, note: "measured 4.7 s for 9 steps" },
     prompts: [
@@ -295,16 +296,36 @@ export const REQUESTS = [
     trigger: "Agent run page → Generate (streamed)",
     file: SRC.agent, anchor: /async function callOpenAiAgent\(/,
     model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro; the runner can upgrade to Max = gpt-4.1)", provider: "OpenAI · chat/completions (streaming)",
-    params: { temperature: "0.2 low · 0.55 medium · 0.9 high", maxTokens: 6000, format: "JSON schema (strict), built from the agent's output fields + a _source field", streaming: true },
+    params: { temperature: "0.2 low · 0.55 medium · 0.9 high", maxTokens: "6,000–16,000 (sized to the requested count, itemCount.js)", format: "JSON schema (strict), built from the agent's output fields + a _source field", streaming: true },
     input: "System prompt + one JSON message: agent instructions, output fields, the learner's answers (count, difficulty, language…), the best-matching chunks of the material (up to 48,000 characters ≈ 12k tokens) and optional style examples.",
     output: "{ items: [...] } validated against the agent's rules; each item cites the passage it came from (_source) which becomes the source link in the answer key.",
-    fallbacks: "One retry at temperature 0.2 and 3,000 tokens; then a local heuristic generator.",
+    fallbacks: "One retry at temperature 0.2 with the same output budget; then a local heuristic generator. A set shorter than the requested count is topped up by up to 3 follow-up calls that list the items already made and ask only for the missing ones (\"TOP-UP\" note below); a follow-up that brings nothing new means the material has no more distinct ideas and the shorter set is accepted (shown as a calm note with 'Make more').",
     tokens: { basis: "measured", scale: { unit: "1,000 characters of material", label: "k chars of material", fixedIn: 1150, inPer: 294, outPer: 0, units: 12, outPerItem: 87, items: 10 } },
     seconds: { typical: 12, note: "measured 11.6–12.1 s for 10 questions" },
     prompts: [
       { label: "System prompt", file: SRC.agent, re: /content: withRevision\("(You are a configurable AI agent runtime[^"]*)", config\)/ },
       { label: "Added when the user iterates (A7 + this note)", file: SRC.agent, re: /const REVISION_NOTE = `([\s\S]*?)`;/ },
-      { label: "User message builder", file: SRC.agent, re: /(function buildUserMessage\([\s\S]*?\n\})/ }
+      { label: "User message builder", file: SRC.agent, re: /(function buildUserMessage\([\s\S]*?\n\})/ },
+      { label: "Added to a follow-up call that tops up a short set", file: "apps/web/modules/ai-tools/pipeline/itemCount.js", re: /export function topUpInstruction\([^)]*\) \{[\s\S]*?return `([\s\S]*?)`;\n\}/ }
+    ]
+  },
+  {
+    id: "A15", stage: "agents", name: "Reading Splitter · titles and 'Check yourself' questions", status: "live",
+    purpose: "The Reading Splitter cuts WHOLE documents into reading parts in code (by their headings, merged or split to the minutes per part) and copies every passage exactly; this call only writes, per part, a title, one line on why to read it, a difficulty and two or three 'Check yourself' questions.",
+    why: "One call used to read only the best-ranked passages (≈ 48k characters) and write ≈ 6k tokens, so long documents came back as two or three parts, some with an empty body. Copying text is code's job; the model does the light part, in batches.",
+    position: "When the Reading Splitter runs (Create → Make, or a study-plan reading step, which is focused on the step's topics). One call per 6 parts, 4 at a time.",
+    trigger: "Create → Make → Reading Splitter → Generate · plan reading steps",
+    file: SRC.splitter, anchor: /export function lightSystemPrompt/,
+    model: "gpt-4o", modelEnv: "LUNA_AGENT_MODEL (floored at Pro)", provider: "OpenAI · chat/completions",
+    params: { temperature: 0.2, maxTokens: 3000, format: "JSON schema (strict): parts [{ index, title, why, difficulty, questions }]", streaming: false },
+    input: "System prompt + <parts>: for each part its index, document, headings, minutes and the first ≈ 1,800 and last ≈ 500 characters of its text.",
+    output: "Notes matched to the parts by index; anything missing falls back to the part's own heading. The parts' text is never written by the model.",
+    fallbacks: "No key or a failed call: titles come from the headings and there are no questions; every part is still complete.",
+    tokens: { basis: "estimated", scale: { unit: "reading part", label: "part", fixedIn: 75, inPer: 650, outPer: 150, units: 12 } },
+    seconds: { typical: 6, note: "estimate per batch of 6 parts; batches run 4 at a time" },
+    prompts: [
+      { label: "System prompt", file: SRC.splitter, re: /export function lightSystemPrompt\(options = \{\}\) \{\n  return `([\s\S]*?)`;\n\}/ },
+      { label: "User message", file: SRC.splitter, re: /export function lightUserMessage\(batch\) \{[\s\S]*?return (`<parts>[\s\S]*?`);\n\}/ }
     ]
   },
   {

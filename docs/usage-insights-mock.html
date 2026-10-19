@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LUNA — Usage & feedback loop (mock, sample data)</title>
+<style>
+:root{--bg:#f5f5f7;--paper:#fff;--ink:#1d1d1f;--mute:#6e6e73;--line:#e5e5ea;--accent:#0071e3;--good:#1a8f4c;--warn:#c77700;--bad:#d62f2f;--r:16px}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+header{background:var(--paper);border-bottom:1px solid var(--line);padding:16px 28px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+h1{font-size:18px;margin:0;flex:1}h1 small{display:block;font-weight:400;color:var(--mute);font-size:12px}
+select,button{font:inherit;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:6px 14px;cursor:pointer}
+button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+nav{display:flex;gap:6px;padding:12px 28px 0;flex-wrap:wrap}
+main{padding:16px 28px 48px;max-width:1280px;margin:auto}
+.banner{background:#fff8e6;border:1px solid #f0d58a;color:#7a5600;border-radius:12px;padding:8px 14px;margin-bottom:16px;font-size:12px}
+.grid{display:grid;gap:14px}.k6{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}.c2{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px}
+.card h2{font-size:13px;margin:0 0 2px}.card p.q{margin:0 0 12px;color:var(--mute);font-size:12px}
+.kpi b{font-size:26px;display:block;letter-spacing:-.5px}.kpi span{color:var(--mute);font-size:12px}
+.d{font-size:12px;font-weight:600}.up{color:var(--good)}.down{color:var(--bad)}
+.bar{display:flex;align-items:center;gap:10px;margin:7px 0}.bar label{width:130px;font-size:12px;flex:none}
+.bar i{display:block;height:10px;border-radius:99px;background:var(--accent)}.bar .t{flex:1;background:#eef1f5;border-radius:99px}.bar em{font-style:normal;width:64px;text-align:right;color:var(--mute);font-size:12px}
+.fun{display:flex;gap:4px;align-items:stretch}.fun div{flex:1;text-align:center}.fun .b{background:var(--accent);color:#fff;border-radius:8px;padding:10px 4px;font-weight:600}.fun small{display:block;color:var(--mute);font-size:11px;margin-top:4px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}th{text-align:left;color:var(--mute);font-weight:500;border-bottom:1px solid var(--line);padding:6px 4px}td{padding:7px 4px;border-bottom:1px solid #f0f0f3}
+.pill{display:inline-block;border-radius:99px;padding:1px 9px;font-size:11px;font-weight:600}
+.red{background:#fde8e8;color:var(--bad)}.amb{background:#fff1d6;color:var(--warn)}.grn{background:#e2f5ea;color:var(--good)}.blu{background:#e5f0fd;color:var(--accent)}
+.heat{position:relative;height:210px;border:1px solid var(--line);border-radius:12px;background:#fafafa;overflow:hidden}
+.heat .el{position:absolute;border:1px dashed #c9ccd3;border-radius:8px;font-size:10px;color:var(--mute);padding:2px 6px;background:#fff}
+.heat .dot{position:absolute;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none}
+.ret td.c{text-align:center;border-radius:4px;color:#06304f;font-weight:600}
+.spark{display:flex;align-items:flex-end;gap:3px;height:60px}.spark i{flex:1;background:var(--accent);border-radius:3px 3px 0 0;opacity:.85}
+.hidden{display:none}.note{color:var(--mute);font-size:12px;margin-top:8px}
+</style></head><body>
+<header>
+ <h1>Usage &amp; feedback loop<small>Owner view · pseudonymous events · no content, names or emails</small></h1>
+ <select id="range"><option>Last 7 days</option><option selected>Last 28 days</option><option>Last 90 days</option></select>
+ <select id="role"><option>All roles</option><option>Students</option><option>Teachers</option><option>Parents</option></select>
+ <select id="dev"><option>All devices</option><option>Desktop</option><option>Phone</option><option>iPhone app</option></select>
+ <select id="rel"><option>All releases</option><option>2026-10-14</option><option>2026-10-07</option></select>
+</header>
+<nav id="tabs"></nav>
+<main>
+<div class="banner">Mock with invented sample data to iterate on layout and questions. Filters change the numbers slightly to show behaviour; nothing is connected yet.</div>
+
+<section data-tab="Overview">
+ <div class="grid k6" id="kpis"></div><br>
+ <div class="grid c2">
+  <div class="card"><h2>Where time goes</h2><p class="q">Which features hold attention? Pair with outcome before deciding.</p><div id="time"></div></div>
+  <div class="card"><h2>Activation funnel</h2><p class="q">New accounts, last 28 days. Where do people stop before the first "aha"?</p><div class="fun" id="fun"></div><div class="note">Biggest drop: upload → first generated item. Candidate fix: one-click sample document.</div></div>
+  <div class="card"><h2>Top struggles right now</h2><p class="q">Ranked by users affected.</p><table id="struggle"></table></div>
+  <div class="card"><h2>Downloads &amp; output value</h2><p class="q">Do people take Luna's output out of the app, and in what form?</p><div id="dl"></div><div class="note">Save rate 61 % · regenerate rate 22 % · generated items actually done 48 %.</div></div>
+ </div>
+</section>
+
+<section data-tab="Usability" class="hidden">
+ <div class="grid c2">
+  <div class="card"><h2>Click map — Reader</h2><p class="q">Dot size = share of clicks. Red = rage clicks.</p><div class="heat" id="heat"></div></div>
+  <div class="card"><h2>Which buttons work best</h2><p class="q">Click-through and what happened next (task finished within the session).</p><table id="cta"></table></div>
+  <div class="card"><h2>Task completion &amp; time</h2><p class="q">Started ÷ finished, median time vs target.</p><table id="tasks"></table></div>
+  <div class="card"><h2>Wait experience</h2><p class="q">Time from "Generate" to result and who left meanwhile.</p><div id="wait"></div></div>
+ </div>
+</section>
+
+<section data-tab="AI quality" class="hidden">
+ <div class="grid c2">
+  <div class="card"><h2>Grounding quality</h2><p class="q">Share of generated items by label. The hallucination number.</p><div id="ground"></div></div>
+  <div class="card"><h2>Result usefulness by agent</h2><p class="q">👍 rate, regenerate rate, cost per saved output.</p><table id="agents"></table></div>
+  <div class="card"><h2>Teacher review of AI marks</h2><p class="q">Is AI marking trusted?</p><div id="rev"></div></div>
+  <div class="card"><h2>Chat with Luna</h2><p class="q">Found? Used? Answered from material?</p><div id="chat"></div></div>
+ </div>
+</section>
+
+<section data-tab="Retention" class="hidden">
+ <div class="grid c2">
+  <div class="card"><h2>Weekly retention by sign-up cohort</h2><p class="q">% still active N weeks after sign-up.</p><table class="ret" id="ret"></table></div>
+  <div class="card"><h2>Active users</h2><p class="q">DAU by day, last 28 days. Stickiness (DAU÷MAU) 24 %.</p><div class="spark" id="dau"></div></div>
+  <div class="card"><h2>Cost per active user</h2><p class="q">AI cost vs value.</p><div id="cost"></div></div>
+ </div>
+</section>
+
+<section data-tab="Feedback & iterations" class="hidden">
+ <div class="grid c2">
+  <div class="card"><h2>Feedback themes</h2><p class="q">Clustered, with usage data of the same screen.</p><table id="themes"></table></div>
+  <div class="card"><h2>Feedback pipeline</h2><p class="q">New → queued → shipped. Median days to first response: 1.2.</p><div class="fun" id="pipe"></div></div>
+  <div class="card" style="grid-column:1/-1"><h2>Iteration tracker</h2><p class="q">Every shipped change: hypothesis, metric, baseline, result, decision.</p><table id="iter"></table></div>
+ </div>
+</section>
+
+<section data-tab="Privacy" class="hidden">
+ <div class="card"><h2>What is and is not collected</h2><p class="q">Shown to the owner so the dashboard never drifts past the privacy policy.</p>
+ <table><tr><th>Collected (events)</th><th>Never collected</th></tr>
+ <tr><td>Screen name, element id clicked, task start/done, error type, timings, device class, release, role, hashed account id</td><td>Names, emails, typed text, document content, answers, chat messages, IP address, screen recordings</td></tr>
+ <tr><td>Retention: raw events 13 months, then aggregates only</td><td>Third-party trackers, advertising or analytics cookies</td></tr>
+ <tr><td>Under 14: aggregate-only (proposed), parent can switch off</td><td>Experiments that change prices, lunas or marks for minors</td></tr></table></div>
+</section>
+</main>
+<script>
+const tabs=[...document.querySelectorAll('section[data-tab]')].map(s=>s.dataset.tab);
+const tb=document.getElementById('tabs');
+tabs.forEach((t,i)=>{const b=document.createElement('button');b.textContent=t;if(!i)b.className='on';b.onclick=()=>{[...tb.children].forEach(x=>x.className='');b.className='on';document.querySelectorAll('section[data-tab]').forEach(s=>s.classList.toggle('hidden',s.dataset.tab!==t))};tb.append(b)});
+const $=id=>document.getElementById(id);
+const bars=(rows,unit='%',max)=>{const m=max||Math.max(...rows.map(r=>r[1]));return rows.map(r=>`<div class="bar"><label>${r[0]}</label><div class="t"><i style="width:${r[1]/m*100}%${r[2]?';background:'+r[2]:''}"></i></div><em>${r[1]}${unit}</em></div>`).join('')};
+function seed(){const f=[$('range'),$('role'),$('dev'),$('rel')].reduce((a,e)=>a+e.selectedIndex,0);return 1+f*0.015}
+function render(){const k=seed();
+ const kp=[['Active users (WAU)',Math.round(412*k),'+8%',1],['Activation rate (7 d)',Math.round(34/k)+'%','+3 pts',1],['Task completion',Math.round(71/k)+'%','−2 pts',0],['Download rate',Math.round(38*k)+'%','+5 pts',1],['Regenerate rate',Math.round(22*k)+'%','+1 pt',0],['Error sessions',(2.4*k).toFixed(1)+'%','−0.6 pts',1],['Median generate wait',Math.round(41*k)+' s','+4 s',0],['Pulse 👍 rate',Math.round(78/k)+'%','+2 pts',1]];
+ $('kpis').innerHTML=kp.map(x=>`<div class="card kpi"><span>${x[0]}</span><b>${x[1]}</b><span class="d ${x[3]?'up':'down'}">${x[2]} vs prev.</span></div>`).join('');
+ $('time').innerHTML=bars([['Study / activities',31],['Reader',22],['Create agents',14],['Plans',11],['Chat with Luna',9],['Progress',6],['Marketplace',4],['Settings',3]]);
+ const fn=[['Landing visits',1000],['Sign-ups',182],['Uploaded document',124],['First generated item',79],['Finished an activity',61],['Back in 7 days',42]];
+ $('fun').innerHTML=fn.map((x,i)=>`<div><div class="b" style="opacity:${1-i*.12}">${x[1]}</div><small>${x[0]}${i?`<br>${Math.round(x[1]/fn[i-1][1]*100)}%`:''}</small></div>`).join('');
+ $('struggle').innerHTML='<tr><th>Signal</th><th>Where</th><th>Users</th><th></th></tr>'+[['Rage clicks','Generate button, plan page','64','red'],['Long wait (>60 s)','Study plan generation','51','red'],['Dead clicks','Coverage legend','37','amb'],['Abandon','Upload (after file picked)','33','amb'],['Error shown','PDF extraction','18','amb'],['Back-and-forth','Resources ↔ Reader','15','blu']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td><span class="pill ${r[3]}">${r[3]=='red'?'fix now':r[3]=='amb'?'investigate':'watch'}</span></td></tr>`).join('');
+ $('dl').innerHTML=bars([['PDF',44],['Word (.docx)',27],['HTML (offline)',19],['PowerPoint',6],['Original file',4]],'% of downloads');
+ $('heat').innerHTML=[['Back',2,4,60,26],['Document text',2,34,66,60],['Chat with Luna',72,6,26,22],['Download',72,32,26,18],['Coverage',72,56,26,30]].map(e=>`<div class="el" style="left:${e[1]}%;top:${e[2]}%;width:${e[3]}%;height:${e[4]}%">${e[0]}</div>`).join('')+[[43,56,34,'#0071e3'],[85,18,26,'#0071e3'],[85,43,18,'#0071e3'],[81,75,22,'#d62f2f'],[12,16,10,'#0071e3']].map(d=>`<div class="dot" style="left:${d[0]}%;top:${d[1]}%;width:${d[2]}px;height:${d[2]}px;background:${d[3]}55;border:1px solid ${d[3]}"></div>`).join('');
+ $('cta').innerHTML='<tr><th>Button</th><th>Click rate</th><th>→ finished</th></tr>'+[['Generate','83%','74%'],['Download PDF','31%','—'],['Chat with Luna','18%','52%'],['Make a plan','14%','39%'],['Share','4%','61%'],['Marketplace','3%','12%']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+ $('tasks').innerHTML='<tr><th>Task</th><th>Completion</th><th>Median</th><th>Target</th></tr>'+[['Upload a document','88%','0:42','0:30'],['Generate an activity','79%','0:41','0:30'],['Finish a quiz','72%','6:10','—'],['Create a plan','58%','2:55','2:00'],['Export','91%','0:12','0:15'],['Build an agent','46%','5:40','4:00']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+ $('wait').innerHTML=bars([['Under 15 s',34,'#1a8f4c'],['15–30 s',29],['30–60 s',23,'#c77700'],['Over 60 s',14,'#d62f2f']])+'<div class="note">9% of people leave during waits over 30 s.</div>';
+ $('ground').innerHTML=bars([['Stated in your material',71,'#1a8f4c'],['Inferred',21,'#c77700'],['Could not be confirmed',5,'#d62f2f'],['Dropped (strict)',3,'#8e8e93']])+'<div class="note">Goal: Stated ≥ 80 %, unconfirmed ≤ 2 %.</div>';
+ $('agents').innerHTML='<tr><th>Agent</th><th>👍</th><th>Regen.</th><th>€/saved</th></tr>'+[['Quiz','84%','14%','0.021'],['Flashcards','81%','11%','0.012'],['Summary','72%','26%','0.034'],['Reading splitter','69%','31%','0.058'],['Written document','64%','35%','0.071']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('');
+ $('rev').innerHTML=bars([['Review requested',9],['Mark changed by teacher',3.4]],'% of marks',10)+'<div class="note">Of reviewed marks, 38 % were changed.</div>';
+ $('chat').innerHTML=bars([['Reader views that opened chat',18],['Chats with 2+ questions',47],['Answers with citation',83],['"Not in your material"',12]]);
+ const rc=[['Sep 14',[100,52,41,36,33]],['Sep 21',[100,49,39,33]],['Sep 28',[100,55,44]],['Oct 5',[100,58]],['Oct 12',[100]]];
+ $('ret').innerHTML='<tr><th>Cohort</th>'+[0,1,2,3,4].map(i=>`<th>W${i}</th>`).join('')+'</tr>'+rc.map(r=>`<tr><td>${r[0]}</td>`+[0,1,2,3,4].map(i=>r[1][i]!=null?`<td class="c" style="background:rgba(0,113,227,${r[1][i]/140})">${r[1][i]}%</td>`:'<td></td>').join('')+'</tr>').join('');
+ $('dau').innerHTML=Array.from({length:28},(_,i)=>`<i style="height:${30+((i*37)%29)+(i>20?15:0)+(i%7>4?-18:0)}%"></i>`).join('');
+ $('cost').innerHTML=bars([['Study plans',0.41],['Documents (extraction)',0.33],['Activities',0.19],['Chat',0.07]],' €/user/mo',0.45)+'<div class="note">Total ≈ €1.00 per active user per month; lunas revenue target must exceed it.</div>';
+ $('themes').innerHTML='<tr><th>Theme</th><th>Items</th><th>Screen signal</th></tr>'+[['Generation is slow','23','wait >60 s: 14%'],['Images missing in reader','17','PDF embed errors: 18'],['Plan does not fit my week','12','replans: 31%'],['Want dark mode','9','—'],['Chat context unclear','6','chat opened: 18%']].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join('');
+ $('pipe').innerHTML=[['New',14],['Queued',21],['In progress',6],['Shipped',38]].map((x,i)=>`<div><div class="b" style="opacity:${1-i*.1}">${x[1]}</div><small>${x[0]}</small></div>`).join('');
+ $('iter').innerHTML='<tr><th>Change</th><th>Hypothesis</th><th>Metric</th><th>Baseline</th><th>After 7 d</th><th>Decision</th></tr>'+[['Sample document on empty state','Raises first-week activation','Activation 7 d','31%','34%','<span class="pill grn">keep</span>'],['Chat launcher moved up','More chats from reader','Reader→chat','11%','18%','<span class="pill grn">keep</span>'],['Plan uses all selected agents','Fewer empty plan steps','Steps completed','44%','49%','<span class="pill amb">tweak</span>'],['Grounding second pass','Fewer unconfirmed items','Unconfirmed','9%','5%','<span class="pill grn">keep</span>'],['Reading splitter default on','More reading steps done','Plan completion','—','running','<span class="pill blu">measuring</span>']].map(r=>'<tr>'+r.map(c=>`<td>${c}</td>`).join('')+'</tr>').join('');
+}
+['range','role','dev','rel'].forEach(i=>$(i).onchange=render);render();
+</script></body></html>

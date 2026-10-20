@@ -1,5 +1,23 @@
 # Implementation Log
 
+## 2026-10-20 (security pass before the school rollout)
+
+- **Logged-out requests could reach any account's items by id.** The public demo (no session, or a logged-in browser whose
+  Referer is `/app`) acted as the demo owner and skipped `workspaceGuard`, and the repository updates/deletes by id alone. A
+  person with a view-only share could send the owner's ids with `Referer: /app` and rename, rewrite, download or delete the
+  original. Now `guardDemoAction` (pure `authorizeDemoAction`) refuses any id owned by someone else, and `denyUnlessOwner` does
+  the same for the demo.
+- **AI routes were open to anyone.** `lib/aiAccess.js` `denyAnonymousAi` now guards every route that calls a model provider
+  (grading, coach, plans, quiz, agent builder, template chats, concepts, chat) and demo uploads/reprocessing. Logged-out use is
+  off in production unless `LUNA_DEMO_AI=on`. The AI pipeline's `currentOwnerUserId` now ignores sessions revoked by a password change.
+- **Stored script injection.** `sanitizeEditableHtml` was three regular expressions (`<img src=x onerror=…>` passed). It now uses
+  `lib/htmlSanitizer.js` (linkedom parser: drops script/frame elements, `on*` handlers, script URLs) on every write of
+  `source_render_html` and on download. Generated-document and template HTML previews render in `sandbox="allow-scripts"` iframes.
+- Uploads: zip-based files whose central directory declares more than 300 MB or 5,000 entries are refused before parsing
+  (`lib/zipLimits.js`). Security headers in `next.config.js`. Account deletion now also erases `activity_drafts`; the data export
+  includes drafts, mark reviews and connections requested of the account. The chat no longer logs a learner's request text.
+- Migration `202610200001_revoke_public_function_execute.sql` (defence in depth). Tests: `tests/security/*`.
+
 ## 2026-10-19 (student phone app)
 
 - Students on a phone (≤ 760px) get an iPhone-style app: four tabs Home / Study / Library / Progress, account and the

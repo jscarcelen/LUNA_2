@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { chat, designComponent, DESIGN_RULES } from "../../../../modules/template-studio/server/designer";
 import { builtInBlocks } from "../../../../modules/template-studio/engine/blocks";
 import { flattenFields } from "../../../../modules/template-studio/engine/model";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,6 +99,8 @@ function matchBlock(section, blocks) {
  * views — and hands back a template they can edit like any other.
  */
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const prompt = String(body?.prompt || "").trim();

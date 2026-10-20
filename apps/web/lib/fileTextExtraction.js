@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { zipWithinLimits } from "./zipLimits.js";
 import mammoth from "mammoth";
 import omml2mathml from "omml2mathml";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
@@ -1695,6 +1696,16 @@ export async function extractTextFromUploadedFile(file, options = {}) {
   const extension = getExtension(name);
   const mimeType = String(file?.mimeType || "").toLowerCase();
   const buffer = decodeBase64ToBuffer(file?.contentBase64 || "");
+
+  if (buffer.length && !zipWithinLimits(buffer)) {
+    return createExtractionResult({
+      text: "",
+      markdown: "",
+      method: "rejected",
+      issues: ["archive-too-large"],
+      minConfidence
+    });
+  }
 
   if (!buffer.length) {
     return createExtractionResult({

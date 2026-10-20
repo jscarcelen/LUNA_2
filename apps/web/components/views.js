@@ -5687,6 +5687,7 @@ export function WorkspacesManagerView({
                   <iframe
                     title={`HTML preview for ${previewDoc.name}`}
                     className="doc-preview-frame"
+                    sandbox="allow-scripts"
                     srcDoc={previewDownloads.html.content}
                   />
                 ) : null}

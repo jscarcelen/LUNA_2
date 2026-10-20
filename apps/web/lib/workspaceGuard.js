@@ -393,3 +393,32 @@ export async function guardWorkspaceAction({ client, action, payload, ownerUserI
   }
   return authorizeWorkspaceAction({ action, payload: body, ownerUserId, facts });
 }
+
+/**
+ * The public demo (no account, or a logged-in browser on `/app`) acts as the shared demo owner. It skips the grant
+ * rules above, but it must still only touch the demo owner's own workspaces: the repository functions update and
+ * delete by id alone, so without this check anyone could rename, rewrite, download or delete another account's
+ * items by sending their ids with no session. Pure: decides from the facts `loadWorkspaceFacts` loaded.
+ */
+export function authorizeDemoAction({ payload = {}, ownerUserId, facts }) {
+  const refs = referencesIn(payload);
+  const subjectOwner = (subjectId) => facts.workspaceOwner.get(facts.subjects.get(subjectId)?.workspaceId);
+  // An id that resolves to nothing is left alone (the update or delete then touches no row); one that resolves to
+  // another owner's item is refused like something that does not exist.
+  const foreign = (owner) => owner !== undefined && owner !== ownerUserId;
+  if (refs.workspaceIds.some((id) => foreign(facts.workspaceOwner.get(id)))) return NOT_YOURS;
+  if (refs.subjectIds.some((id) => foreign(subjectOwner(id)))) return NOT_YOURS;
+  if (refs.folderIds.some((id) => foreign(subjectOwner(facts.folders.get(id)?.subjectId)))) return NOT_YOURS;
+  if (refs.documentIds.some((id) => foreign(subjectOwner(facts.documents.get(id)?.subjectId)))) return NOT_YOURS;
+  return { ok: true, payload };
+}
+
+/** `authorizeDemoAction` with the facts fetched. */
+export async function guardDemoAction({ client, payload, ownerUserId }) {
+  const refs = referencesIn(payload || {});
+  if (!Object.values(refs).some((list) => list.length)) return { ok: true, payload: payload || {} };
+  // A shared-topic stand-in id is never the demo's; it simply resolves to nothing and is refused below.
+  const lookups = { ...refs, folderIds: refs.folderIds.filter((id) => !isSubjectNodeId(id)) };
+  const facts = await loadWorkspaceFacts(client, lookups);
+  return authorizeDemoAction({ payload: payload || {}, ownerUserId, facts });
+}

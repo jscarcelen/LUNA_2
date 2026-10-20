@@ -1,4 +1,6 @@
 import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } from "./supabaseClient.js";
+import { sanitizeHtml } from "./htmlSanitizer.js";
+import { zipWithinLimits } from "./zipLimits.js";
 import {
   DEFAULT_DOCUMENT_SOURCE_TYPE,
   DEFAULT_SUBJECT_COLOR,
@@ -103,11 +105,9 @@ function splitEquationKeywordTags(keywords = []) {
   };
 }
 
+/** Stored document HTML is rendered for other accounts (shares, copies): only markup that cannot run script is kept. */
 function sanitizeEditableHtml(html = "") {
-  return String(html || "")
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, "")
-    .replace(/\son[a-z]+\s*=\s*'[^']*'/gi, "");
+  return sanitizeHtml(html);
 }
 
 function htmlToPlainText(html = "") {
@@ -1501,7 +1501,7 @@ async function persistTextDocuments(subjectId, files, options = {}) {
       row.source_mime_type = String(file?.extraction?.sourceMimeType || "").trim().toLowerCase() || null;
       row.source_content_base64 = String(file?.extraction?.sourceContentBase64 || "") || null;
       // Run KaTeX on CDM math tags (cdm-inline-math, cdm-display-math) before storing
-      row.source_render_html = renderLatexWithKatex(String(file?.extraction?.sourceRenderHtml || "")) || null;
+      row.source_render_html = sanitizeEditableHtml(renderLatexWithKatex(String(file?.extraction?.sourceRenderHtml || ""))) || null;
     }
 
     if (hasDocumentReviewFields) {
@@ -1706,6 +1706,12 @@ export async function prepareUploadedDocumentsForPersistence(files, options = {}
   const minConfidence = Number(options?.minConfidence || 0.72);
 
   const extractionReport = [];
+  // A zip-based file (DOCX, PPTX, XLSX) that declares far more content than a document needs is refused before any parser unpacks it.
+  for (const file of files || []) {
+    if (typeof file?.contentBase64 === "string" && !zipWithinLimits(Buffer.from(file.contentBase64, "base64"))) {
+      throw new Error(`"${String(file?.name || "That file").slice(0, 120)}" could not be opened safely: it unpacks to far more than a document needs.`);
+    }
+  }
   const parsedFiles = await Promise.all((files || []).map(async (file) => {
     if (typeof file?.content === "string") {
       const markdown = String(file?.content || "");
@@ -2024,7 +2030,7 @@ export async function reprocessStoredDocument(subjectId, documentId, options = {
   if (hasDocumentSourceVisualFields) {
     updatePayload.source_mime_type = String(extracted.sourceMimeType || file.mimeType || "").trim().toLowerCase() || null;
     updatePayload.source_content_base64 = contentBase64;
-    updatePayload.source_render_html = String(extracted.sourceRenderHtml || "") || null;
+    updatePayload.source_render_html = sanitizeEditableHtml(String(extracted.sourceRenderHtml || "")) || null;
   }
 
   if (hasDocumentReviewFields) {
@@ -2316,7 +2322,7 @@ export async function getUploadedDocumentDownload(documentId, format = "") {
   const requestedFormat = String(format || "").trim().toLowerCase();
   const sourceMimeType = String(document.source_mime_type || "").trim().toLowerCase();
   const sourceContentBase64 = String(document.source_content_base64 || "").trim();
-  const sourceRenderHtml = String(document.source_render_html || "").trim();
+  const sourceRenderHtml = sanitizeEditableHtml(String(document.source_render_html || "")).trim();
   const contentTemplateId = String(document.content_template_id || "").trim();
   const contentBlocksJson = normalizeDocumentBlocksJson(document.content_blocks_json);
   const contentBlocksSchemaVersion = String(document.content_blocks_schema_version || "").trim() || DOCUMENT_BLOCK_SCHEMA_VERSION;
@@ -2681,7 +2687,7 @@ async function refreshDocumentsUsingTemplate(client, templateId, template = null
     const { error: updateError } = await client
       .from("documents")
       .update({
-        source_render_html: html,
+        source_render_html: sanitizeEditableHtml(html),
         content: plain,
         preview: plain.slice(0, 180) || "(empty file)",
         size_bytes: Buffer.byteLength(plain, "utf8"),

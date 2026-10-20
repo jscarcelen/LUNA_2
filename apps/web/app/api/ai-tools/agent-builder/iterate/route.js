@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { scrubPii } from "../../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../../modules/ai-tools/pipeline/agentBuilder.js";
+import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,8 @@ Before answering, check that every target ref exists in the outline, that scope 
  * names the original constraints the request overrides.
  */
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const text = scrubPii(String(body?.request || "").trim());

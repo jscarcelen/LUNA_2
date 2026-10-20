@@ -1,23 +1,26 @@
 import { runChat } from "../../../modules/chat/engine.js";
 import { createSupabaseAdminClient } from "../../../lib/supabaseClient.js";
 import { ownerUserIdForFresh, runAsOwner } from "../../../lib/session.js";
+import { denyAnonymousAi } from "../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
-/** Requests Luna cannot do yet are kept for the Luna team (table `feature_requests`; logged if it does not exist yet). */
+/** Requests Luna cannot do yet are kept for the Luna team (table `feature_requests`). The text is never logged: it is what a learner typed. */
 async function recordRequest(summary, ownerUserId) {
   try {
     const client = createSupabaseAdminClient();
     const { error } = await client.from("feature_requests").insert({ summary, source: "assistant", owner_user_id: ownerUserId || null });
     if (error) throw error;
   } catch (error) {
-    console.warn("[chat] feature request (not stored):", summary, String(error?.message || error));
+    console.warn("[chat] feature request not stored:", String(error?.message || error));
   }
 }
 
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   const body = await request.json().catch(() => ({}));
   const ownerUserId = await ownerUserIdForFresh(request);
   const encoder = new TextEncoder();

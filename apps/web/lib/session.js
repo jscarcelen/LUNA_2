@@ -88,7 +88,8 @@ export async function currentOwnerUserId() {
   if (scoped) return scoped;
   try {
     const { headers } = await import("next/headers");
-    return ownerUserIdFor({ headers: await headers() });
+    // Fresh: a session from before a password change must not keep reading the account's material through the AI.
+    return ownerUserIdForFresh({ headers: await headers() });
   } catch {
     return getDemoOwnerUserId();
   }

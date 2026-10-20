@@ -15,12 +15,15 @@ import { createSupabaseAdminClient } from "../../../../lib/supabaseClient.js";
 import { extractAndSaveConcepts } from "../../../../lib/conceptsRepository.js";
 import { ownerUserIdForFresh } from "../../../../lib/session.js";
 import { denyUnlessOwner } from "../../../../lib/resourceAccess.js";
+import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request) {
+  const blocked = await denyAnonymousAi(request);
+  if (blocked) return blocked;
   try {
     const body = await request.json();
     const documentId  = String(body?.documentId  || "").trim();

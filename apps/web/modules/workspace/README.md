@@ -7,6 +7,13 @@ review centre). A topic (a `subject`) is the top-level folder; everything below 
 - Two views of the same tree, switched with **List / Gallery** above it (remembered per browser): the list is the
   expandable tree; the gallery shows top-level folders as big coloured tiles and, inside one, its folders as tiles and its
   documents as cards, with a path to go back. Menus, selection, drag and drop and filters are shared.
+- The header holds everything (there is no side column): **＋** (Add files, Add folder = upload a folder with its
+  subfolders, Create folder = inside the open folder, or top level), **search** (folders and documents by name; typos,
+  accents and English/Spanish spellings forgiven, see `nameSearch.js`), a **filters** menu (Show, Date, Study plan,
+  Topic, Tags, Check extracted text) and, when there is any, the orange "Needs a look" pill.
+- **Drag and drop from Finder**: files and whole folders dropped on a folder go into it; dropped anywhere else they go
+  into the open folder, or the upload box asks where. `fileDrop.js` opens dropped folders and gives each file its path
+  (`webkitRelativePath`), so the upload recreates the subfolders exactly like "Add folder".
 - `ui/folderModel.js` — "just folders" node ids (`s:<subject>`, `f:<subject>:<folder>`) over the subject/folder storage.
 - `ui/MoveDialog.js` — the "Move to…" folder picker (every topic is the root of its branch).
 - `moveModel.js` — pure helpers for moving: where a dropped document lands, status-line texts, undo grouping.

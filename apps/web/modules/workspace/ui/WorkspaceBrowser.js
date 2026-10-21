@@ -2,7 +2,6 @@
 
 import { sourceHref } from "../../ai-tools/pipeline/sourceLinks.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import JSZip from "jszip";
 import { RowMenu } from "../../ui/RowMenu";
 import { ResourceDetail } from "../../resources/ResourceDetail";
 import { AddToPlanDialog } from "../../plans/AddToPlanDialog";
@@ -17,6 +16,8 @@ import { UploadProgress } from "./UploadProgress";
 import { EmptyState } from "../../../components/EmptyState";
 import { askLuna } from "../../chat/GlobalAskLuna";
 import { planUploadBatches, tooLargeMessage } from "../uploadPlan";
+import { nameMatchScore, searchByName } from "../nameSearch.js";
+import { filesFromDrop, isFileDrag } from "../fileDrop.js";
 import { ReaderView } from "../../reader/ReaderView";
 import { DocumentReader } from "../../reader/DocumentReader";
 import { masterOriginals, originalDownloader } from "../../reader/downloadOriginal";
@@ -164,7 +165,9 @@ export function WorkspaceBrowser({
   const [nodeId, setNodeId] = useState("");
   const [kind, setKind] = useState("all");
   const [query, setQuery] = useState("");
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [dropping, setDropping] = useState(false); // files from Finder are being dragged over the workspace
   const [tag, setTag] = useState("");
   const [topicFilter, setTopicFilter] = useState("");
   const [dateSort, setDateSort] = useState("newest");
@@ -191,6 +194,28 @@ export function WorkspaceBrowser({
   function chooseView(next) { setView(next); try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* not remembered */ } }
   const fileRef = useRef(null);
   const folderRef = useRef(null);
+  const searchRef = useRef(null);
+  const filtersRef = useRef(null);
+  const dragDepth = useRef(0);
+  useEffect(() => {
+    if (!filtersOpen) return undefined;
+    const close = (event) => { if (!filtersRef.current?.contains(event.target)) setFiltersOpen(false); };
+    const escape = (event) => { if (event.key === "Escape") setFiltersOpen(false); };
+    window.addEventListener("mousedown", close);
+    window.addEventListener("keydown", escape);
+    return () => { window.removeEventListener("mousedown", close); window.removeEventListener("keydown", escape); };
+  }, [filtersOpen]);
+  useEffect(() => { if (searchOpen) searchRef.current?.focus(); }, [searchOpen]);
+  // A file dropped just outside a drop area would make the browser open it and leave Luna: never let it.
+  useEffect(() => {
+    const keep = (event) => { if (isFileDrag(event)) event.preventDefault(); };
+    const done = () => { dragDepth.current = 0; setDropping(false); };
+    window.addEventListener("dragover", keep);
+    window.addEventListener("drop", keep);
+    window.addEventListener("drop", done);
+    window.addEventListener("dragend", done);
+    return () => { window.removeEventListener("dragover", keep); window.removeEventListener("drop", keep); window.removeEventListener("drop", done); window.removeEventListener("dragend", done); };
+  }, []);
   // dragRef tracks { type: "file"|"folder", id: string } for the current drag.
   const dragRef = useRef(null);
   function toggleNode(id) { setOpenNodes((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); }
@@ -239,8 +264,9 @@ export function WorkspaceBrowser({
     if (tag && !resourceTags(document).includes(tag)) return false;
     if (topicFilter && !(document.tags || []).includes(`topic:${topicFilter}`)) return false;
     if (docIdsInPlan && !docIdsInPlan.has(document.id)) return false;
+    // Names are matched forgivingly (typos, accents); a tag still has to contain what was typed.
     const term = query.trim().toLowerCase();
-    if (term && !`${document.name} ${(document.tags || []).join(" ")}`.toLowerCase().includes(term)) return false;
+    if (term && !nameMatchScore(term, displayName(document.name)) && !resourceTags(document).some((entry) => entry.toLowerCase().includes(term))) return false;
     return true;
   }).sort((a, b) => {
     const da = new Date(a.uploadedAt || a.createdAt || 0).getTime();
@@ -455,27 +481,6 @@ export function WorkspaceBrowser({
     setStatus("");
   }
 
-  /** Several files (or a whole folder) come down as one zip that keeps the folder structure. */
-  async function downloadMany(documents, zipName, zipFormat = "") {
-    if (!onDownloadDocument || !documents.length) return;
-    setStatus(t.plural("courses.wb.preparingMany", documents.length));
-    const zip = new JSZip();
-    let added = 0;
-    for (const document of documents) {
-      try {
-        const file = await onDownloadDocument(document, zipFormat);
-        if (!file?.contentBase64) continue;
-        const folder = (document.folderIds || []).map((id) => pathOf(folders, id)).find(Boolean) || "";
-        zip.file(`${folder ? `${folder}/` : ""}${file.fileName || document.name}`, file.contentBase64, { base64: true });
-        added += 1;
-      } catch { /* skip what cannot be fetched */ }
-    }
-    if (!added) { setStatus(t("courses.wb.noneDownloaded")); return; }
-    const blob = await zip.generateAsync({ type: "base64" });
-    download(`${zipName || "luna-files"}.zip`, blob, "application/zip");
-    setStatus(t.plural("courses.wb.downloadedN", added));
-  }
-
   /**
    * Choosing files or a folder first asks where they go (the folder selected in the workspace is pre-chosen and
    * shown in grey); a topic with no folders yet gets one named on the spot.
@@ -562,6 +567,39 @@ export function WorkspaceBrowser({
       publish();
       if (!progress.failures.length) setTimeout(() => setUploadProgress((value) => (value && value.finished && !value.failures.length ? null : value)), 4000);
     }
+  }
+
+  /**
+   * Files and folders dragged in from Finder. Dropped on a folder they go straight into it; dropped anywhere else
+   * they go into the folder that is open, or, with none open, the upload box asks where.
+   */
+  const openFolderId = () => (reviewing ? "" : view === "gallery" ? galleryId : nodeId);
+  function dropFiles(event, targetNodeId = openFolderId()) {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
+    setDropping(false);
+    filesFromDrop(event.dataTransfer).then((files) => {
+      if (!files.length) return;
+      if (targetNodeId && currentSubjectId) runUpload(files, targetNodeId);
+      else upload(files);
+    });
+  }
+  const fileDropZone = {
+    onDragEnter: (e) => { if (!isFileDrag(e)) return; e.preventDefault(); dragDepth.current += 1; setDropping(true); },
+    onDragOver: (e) => { if (!isFileDrag(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; },
+    onDragLeave: (e) => { if (!isFileDrag(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDropping(false); },
+    onDrop: (e) => { if (isFileDrag(e)) dropFiles(e); }
+  };
+
+  /** "Create folder" makes it inside the folder that is open, or as a new top-level folder. */
+  async function createFolderHere() {
+    const hereId = openFolderId();
+    const here = hereId ? folders.find((entry) => entry.id === hereId) : null;
+    const inside = here && !(here.shared && here.shared.permission !== "edit") && !sharedTopic(here.subjectId) ? here : null;
+    if (!inside && !onCreateSubject) return;
+    const name = await askText({ title: t("courses.wb.createFolder"), label: inside ? t("courses.wb.createInside", { name: inside.name }) : t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") });
+    if (name?.trim()) createFolder(name.trim(), inside ? inside.id : "");
   }
 
   /* ---------------------------------------------------------------- resources */
@@ -690,6 +728,7 @@ export function WorkspaceBrowser({
     onDrop: (e) => {
       e.stopPropagation();
       e.currentTarget.style.background = "";
+      if (isFileDrag(e) && !dragRef.current) { dropFiles(e, folderId); return; }
       const drag = dragRef.current;
       if (!drag) return;
       dragRef.current = null;
@@ -809,6 +848,70 @@ export function WorkspaceBrowser({
     );
   }
 
+  /**
+   * Search results: folders and documents whose names look like what was typed (typos forgiven), best first,
+   * each with where it lives. Opening a folder clears the search and shows it in the current view.
+   */
+  function renderSearch() {
+    const foundFolders = searchByName(query, folders);
+    const foundDocs = searchByName(query, visible, (document) => displayName(document.name));
+    // Documents that only matched on a tag come after the name matches.
+    for (const document of visible) if (!foundDocs.includes(document)) foundDocs.push(document);
+    const showFolder = (folder) => {
+      setQuery("");
+      setSearchOpen(false);
+      if (view === "gallery") { setGalleryId(folder.id); return; }
+      const trail = [];
+      for (let node = folder; node; node = node.parentFolderId ? folders.find((entry) => entry.id === node.parentFolderId) : null) trail.push(node.id);
+      openAt(...trail);
+    };
+    const where = (document) => (document.folderIds || []).map((id) => pathOf(folders, id)).find(Boolean) || "";
+    if (!foundFolders.length && !foundDocs.length) return <p className="py-8 text-center text-sm text-soft-ink">{t("courses.wb.noMatches", { query: query.trim() })}</p>;
+    return (
+      <div className="grid gap-4">
+        {foundFolders.length ? (
+          <div className="grid gap-1">
+            <p className={kicker}>{t("courses.wb.foundFolders")}</p>
+            {foundFolders.map((folder) => {
+              const parent = folder.parentFolderId ? pathOf(folders, folder.parentFolderId) : "";
+              return (
+                <button key={folder.id} type="button" className="flex min-w-0 items-center gap-2 rounded-xl px-2 py-1.5 text-left transition hover:bg-[var(--surface-soft)]" onClick={() => showFolder(folder)} {...dropOn(folder.id)}>
+                  <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : "📁"}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-ink">{folder.name}</span>
+                    {parent ? <span className="block truncate text-[11px] text-soft-ink">{t("courses.wb.inPath", { path: parent })}</span> : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {foundDocs.length ? (
+          <div className="grid gap-1">
+            <p className={kicker}>{t("courses.wb.foundDocs")}</p>
+            {foundDocs.map((document) => (
+              <div key={document.id} draggable
+                onDragStart={(e) => { e.stopPropagation(); dragRef.current = dragFile(document); }}
+                onDragEnd={() => { dragRef.current = null; }}
+                className={`group flex items-center gap-2 rounded-xl px-2 py-1.5 transition hover:bg-[var(--surface-soft)] ${selectedIds.includes(document.id) ? "bg-[var(--accent-soft)]/40" : ""}`}>
+                {onMoveDocuments && !isSharedDocument(document) ? (
+                  <input type="checkbox" aria-label={t("courses.wb.selectDoc", { name: displayName(document.name) })} className={`size-3.5 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} />
+                ) : null}
+                <span className="shrink-0 text-sm max-sm:hidden" aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
+                  <p className="m-0 truncate text-sm leading-tight text-ink">{displayName(document.name)}</p>
+                  {where(document) ? <p className="m-0 truncate text-[11px] text-soft-ink">{t("courses.wb.inPath", { path: where(document) })}</p> : null}
+                  {meta(document)}
+                </div>
+                {actions(document)}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   /** The ⋯ menu of one of your own folders (the tree and the gallery share it); none on what was shared with you. */
   const folderMenu = (folder) => (!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
     <span onClick={(e) => e.stopPropagation()}>
@@ -826,133 +929,134 @@ export function WorkspaceBrowser({
   ) : null);
 
   return (
-    <section className="tw-scope grid items-start gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+    <section className="tw-scope grid items-start gap-3">
+      <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
+      <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
 
-      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <aside className={`${card} relative grid min-w-0 content-start gap-3 p-4 lg:sticky lg:top-4`}>
-        <div className="flex items-start justify-between gap-2">
+      {/* ── Folders: the header holds everything (search, filters, ＋); files and folders can be dropped anywhere on it ── */}
+      <div className={`${card} relative min-w-0 p-4 transition ${dropping ? "outline-dashed outline-2 outline-offset-2 outline-[var(--accent)]" : ""}`} {...fileDropZone}>
+        {dropping ? (
+          <p className="pointer-events-none absolute inset-x-0 -top-3 z-30 m-0 flex justify-center" role="status">
+            <span className="rounded-full bg-[var(--accent)] px-3 py-1 text-xs font-semibold text-white shadow-[0_6px_18px_rgba(0,113,227,0.35)]">
+              {openFolderId() ? t("courses.wb.dropInto", { path: pathOf(folders, openFolderId()) }) : t("courses.wb.dropHere")}
+            </span>
+          </p>
+        ) : null}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0">
-            <p className={kicker}>{workspace.name}</p>
-            <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{t.plural("courses.wb.items", allDocuments.length)}</p>
-          </div>
-          {/* Phone: the filters, uploads and downloads fold into this menu so the folders are what you see. */}
-          <button type="button" className="grid size-10 shrink-0 place-items-center rounded-full border border-ink/15 bg-white text-xl leading-none text-ink lg:hidden" aria-label={toolsOpen ? t("courses.wb.closeMenu") : t("courses.wb.openMenu")} aria-expanded={toolsOpen} onClick={() => setToolsOpen((value) => !value)}>{toolsOpen ? "✕" : "＋"}</button>
-        </div>
-
-        <input className={`${field} w-full`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("courses.wb.searchPh")} aria-label={t("courses.wb.searchAria")} />
-
-        {toolsOpen ? <button type="button" aria-label={t("courses.wb.closeMenu")} className="fixed inset-0 z-40 cursor-default bg-black/30 lg:hidden" onClick={() => setToolsOpen(false)} /> : null}
-        <div className={`${toolsOpen ? "grid" : "hidden"} fixed inset-x-3 bottom-24 top-20 z-50 content-start gap-3 overflow-y-auto rounded-2xl border border-ink/10 bg-white p-4 shadow-[0_16px_48px_rgba(0,0,0,0.25)] lg:static lg:inset-auto lg:z-auto lg:grid lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none`}>
-        <div className="sticky top-0 z-10 -mx-4 -mt-4 flex items-center justify-between bg-white px-4 py-3 lg:hidden">
-          <p className="m-0 text-sm font-bold text-ink">{t("courses.wb.filters")}</p>
-          <button type="button" className="rounded-full bg-ink px-4 py-1.5 text-sm font-semibold text-white" onClick={() => setToolsOpen(false)}>{t("common.close")}</button>
-        </div>
-        <div>
-          <p className={`${kicker} mb-1.5`}>{t("courses.wb.show")}</p>
-          <div className="flex flex-wrap gap-1">
-            {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`${chip} transition ${kind === entry.id ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{t(entry.labelKey)}</button>)}
-          </div>
-        </div>
-
-        <div>
-          <p className={`${kicker} mb-1`}>{t("courses.wb.date")}</p>
-          <select className={`${field} w-full text-xs`} value={dateSort} onChange={(e) => setDateSort(e.target.value)}>
-            <option value="newest">{t("courses.wb.newest")}</option>
-            <option value="oldest">{t("courses.wb.oldest")}</option>
-          </select>
-        </div>
-
-        {studyPlans.length ? (
-          <div>
-            <p className={`${kicker} mb-1`}>{t("courses.wb.studyPlan")}</p>
-            <select className={`${field} w-full text-xs`} value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
-              <option value="">{t("courses.wb.allPlans")}</option>
-              {studyPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
-            </select>
-          </div>
-        ) : null}
-
-        {allTopics.length ? (
-          <div>
-            <p className={`${kicker} mb-1.5`}>{t("courses.wb.topic")}</p>
-            <div className="flex flex-wrap gap-1">
-              {allTopics.map((topic) => <button key={topic} type="button" onClick={() => setTopicFilter(topicFilter === topic ? "" : topic)} className={`${chip} transition ${topicFilter === topic ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{topic}</button>)}
-            </div>
-          </div>
-        ) : null}
-
-        {allTags.length ? (
-          <div>
-            <p className={`${kicker} mb-1.5`}>{t("courses.wb.tags")}</p>
-            <div className="flex flex-wrap gap-1">
-              {allTags.map((entry) => <button key={entry} type="button" onClick={() => setTag(tag === entry ? "" : entry)} className={`${chip} transition ${tag === entry ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry}</button>)}
-            </div>
-          </div>
-        ) : null}
-
-        <div className="grid gap-1.5 border-t border-ink/8 pt-3">
-          {/* One main action; the rest is under "More". */}
-          <button type="button" className="inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50" disabled={isWorking} onClick={() => fileRef.current?.click()}>⇪ {t("courses.wb.uploadFiles")}</button>
-          {needsReview.length ? (
-            <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
-              <span aria-hidden>🛡</span><span>{t("courses.wb.needsLook")}</span>
-              <span className="ml-auto rounded-full bg-[rgba(255,149,0,0.18)] px-1.5 text-[10px] font-bold text-[#b25e00]">{needsReview.length}</span>
-            </button>
-          ) : null}
-          <details className="group">
-            <summary className="cursor-pointer list-none px-1 text-xs font-semibold text-soft-ink hover:text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("common.more")}</summary>
-            <div className="mt-1.5 grid gap-1.5">
-              {onCreateSubject ? (
-                <button type="button" className={ghostBtn} onClick={async () => { const name = await askText({ title: t("courses.tree.newFolder"), label: t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") }); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ {t("courses.tree.newFolder")}</button>
-              ) : null}
-              <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ {t("courses.wb.uploadFolder")}</button>
-              {!needsReview.length ? (
-                <button type="button" onClick={() => setNodeId(reviewing ? "" : "__review")}
-                  className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition ${reviewing ? "bg-[var(--accent-soft)] font-semibold text-[var(--accent-ink)]" : "hover:bg-[var(--surface-soft)]"}`}>
-                  <span aria-hidden>🛡</span><span>{t("courses.wb.checkText")}</span>
-                </button>
-              ) : null}
-              <label className="grid gap-1 text-[11px] font-semibold text-soft-ink">{t("courses.wb.downloadVisible")}
-                <select className={field} value="" disabled={!visible.length} onChange={(e) => { if (e.target.value) downloadMany(visible, workspace.name, e.target.value); e.target.value = ""; }}>
-                  <option value="">{t("courses.wb.chooseFormat")}</option>
-                  {[["original", t("courses.wb.dlOriginal")], ["html", "HTML"], ["markdown", "Markdown"], ["json", "JSON"], ["txt", t("courses.wb.fmt.txt")]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </label>
-            </div>
-          </details>
-          <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
-          <input ref={folderRef} type="file" multiple webkitdirectory="" directory="" className="hidden" onChange={(e) => { upload(e.target.files); e.target.value = ""; }} />
-        </div>
-        </div>
-      </aside>
-
-      {/* ── Finder tree ─────────────────────────────────────────────────── */}
-      <div className={`${card} min-w-0 p-4`}>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div>
             <p className="m-0 text-sm font-bold text-ink">{reviewing ? t("courses.wb.reviewTitle") : view === "gallery" ? t("courses.wb.galleryTitle") : t("courses.wb.allFolders")}</p>
             <p className="m-0 text-[11px] text-soft-ink">{t.plural("courses.wb.items", visible.length)}</p>
           </div>
-          {!reviewing ? (
-            <div className="flex shrink-0 items-center gap-2">
-              {view === "list" && folders.length ? (
-                <button type="button" className={`${ghostBtn} max-sm:hidden`}
-                  onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
-                  {openNodes.size ? t("courses.wb.collapseAll") : t("courses.wb.expandAll")}
-                </button>
-              ) : null}
+          <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            {/* Material whose text needs checking stays in sight: it is the one thing in the old side column that asked for action. */}
+            {needsReview.length && !reviewing ? (
+              <button type="button" className="inline-flex items-center gap-1 rounded-full bg-[rgba(255,149,0,0.14)] px-2.5 py-1 text-[11px] font-semibold text-[#b25e00] transition hover:bg-[rgba(255,149,0,0.24)]" onClick={() => setNodeId("__review")}>
+                <span aria-hidden>🛡</span>{t("courses.wb.needsLook")}<span className="rounded-full bg-white/70 px-1.5">{needsReview.length}</span>
+              </button>
+            ) : null}
+            {reviewing ? <button type="button" className={ghostBtn} onClick={() => setNodeId("")}>{t("courses.wb.backToFolders")}</button> : null}
+            {!reviewing && view === "list" && folders.length ? (
+              <button type="button" className={`${ghostBtn} max-sm:hidden`}
+                onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
+                {openNodes.size ? t("courses.wb.collapseAll") : t("courses.wb.expandAll")}
+              </button>
+            ) : null}
+            {!reviewing ? (
               <div role="group" aria-label={t("courses.wb.viewAs")} className="inline-flex rounded-full bg-[var(--surface-soft)] p-0.5">
                 {[["list", "☰", t("courses.wb.viewList")], ["gallery", "▦", t("courses.wb.viewGallery")]].map(([id, icon, label]) => (
-                  <button key={id} type="button" aria-pressed={view === id} onClick={() => chooseView(id)}
+                  <button key={id} type="button" aria-pressed={view === id} title={label} onClick={() => chooseView(id)}
                     className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${view === id ? "bg-white text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-soft-ink hover:text-ink"}`}>
-                    <span aria-hidden>{icon}</span>{label}
+                    <span aria-hidden>{icon}</span><span className="max-sm:sr-only">{label}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          ) : null}
+            ) : null}
+            <button type="button" aria-label={t("courses.wb.searchAria")} title={t("courses.wb.searchAria")} aria-expanded={searchOpen || Boolean(query)}
+              className={`grid size-9 place-items-center rounded-full border transition ${searchOpen || query ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink hover:bg-[var(--surface-soft)]"}`}
+              onClick={() => { if (searchOpen || query) { setSearchOpen(false); setQuery(""); } else setSearchOpen(true); }}>
+              <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+            </button>
+            <span ref={filtersRef} className="relative">
+              {(() => {
+                const active = [kind !== "all", dateSort !== "newest", Boolean(planFilter), Boolean(topicFilter), Boolean(tag)].filter(Boolean).length;
+                return (
+                  <button type="button" aria-label={t("courses.wb.filters")} title={t("courses.wb.filters")} aria-expanded={filtersOpen}
+                    className={`relative grid size-9 place-items-center rounded-full border transition ${active ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "border-ink/15 bg-white text-ink hover:bg-[var(--surface-soft)]"}`}
+                    onClick={() => setFiltersOpen((value) => !value)}>
+                    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><path d="M4 7h16M7 12h10M10 17h4" /></svg>
+                    {active ? <span className="absolute -right-1 -top-1 grid size-4 place-items-center rounded-full bg-[var(--accent)] text-[9px] font-bold text-white">{active}</span> : null}
+                  </button>
+                );
+              })()}
+              {filtersOpen ? (
+                <div className="absolute right-0 top-full z-40 mt-1.5 grid max-h-[70vh] w-[min(18rem,calc(100vw-2rem))] content-start gap-3 overflow-y-auto rounded-2xl border border-ink/12 bg-white p-4 shadow-[0_12px_32px_rgba(0,0,0,0.16)]">
+                  <div>
+                    <p className={`${kicker} mb-1.5`}>{t("courses.wb.show")}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {KINDS.map((entry) => <button key={entry.id} type="button" onClick={() => setKind(entry.id)} className={`${chip} transition ${kind === entry.id ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{t(entry.labelKey)}</button>)}
+                    </div>
+                  </div>
+                  <div>
+                    <p className={`${kicker} mb-1`}>{t("courses.wb.date")}</p>
+                    <select className={`${field} w-full text-xs`} value={dateSort} onChange={(e) => setDateSort(e.target.value)}>
+                      <option value="newest">{t("courses.wb.newest")}</option>
+                      <option value="oldest">{t("courses.wb.oldest")}</option>
+                    </select>
+                  </div>
+                  {studyPlans.length ? (
+                    <div>
+                      <p className={`${kicker} mb-1`}>{t("courses.wb.studyPlan")}</p>
+                      <select className={`${field} w-full text-xs`} value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}>
+                        <option value="">{t("courses.wb.allPlans")}</option>
+                        {studyPlans.map((plan) => <option key={plan.id} value={plan.id}>{plan.name}</option>)}
+                      </select>
+                    </div>
+                  ) : null}
+                  {allTopics.length ? (
+                    <div>
+                      <p className={`${kicker} mb-1.5`}>{t("courses.wb.topic")}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {allTopics.map((topic) => <button key={topic} type="button" onClick={() => setTopicFilter(topicFilter === topic ? "" : topic)} className={`${chip} transition ${topicFilter === topic ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{topic}</button>)}
+                      </div>
+                    </div>
+                  ) : null}
+                  {allTags.length ? (
+                    <div>
+                      <p className={`${kicker} mb-1.5`}>{t("courses.wb.tags")}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {allTags.map((entry) => <button key={entry} type="button" onClick={() => setTag(tag === entry ? "" : entry)} className={`${chip} transition ${tag === entry ? "bg-[var(--accent)] text-white" : "bg-[var(--surface-soft)] text-soft-ink hover:bg-ink/8"}`}>{entry}</button>)}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-between gap-2 border-t border-ink/8 pt-3">
+                    <button type="button" className="rounded-lg px-1 text-xs font-semibold text-soft-ink hover:text-ink" onClick={() => { setNodeId("__review"); setFiltersOpen(false); }}><span aria-hidden>🛡 </span>{t("courses.wb.checkText")}</button>
+                    <button type="button" className="rounded-lg px-1 text-xs font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => { setKind("all"); setDateSort("newest"); setPlanFilter(""); setTopicFilter(""); setTag(""); }}>{t("courses.wb.resetFilters")}</button>
+                  </div>
+                </div>
+              ) : null}
+            </span>
+            <RowMenu
+              label={t("courses.wb.addMenu")}
+              trigger={<span aria-hidden className="text-xl leading-none">＋</span>}
+              triggerClassName="grid size-9 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_2px_8px_rgba(0,113,227,0.3)] transition hover:bg-[#0077ed]"
+              items={[
+                onUpload ? { label: t("courses.wb.addFiles"), icon: "⇪", title: t("courses.wb.addFilesTip"), onSelect: () => fileRef.current?.click() } : null,
+                onUpload ? { label: t("courses.wb.addFolder"), icon: "🗂", title: t("courses.wb.addFolderTip"), onSelect: () => folderRef.current?.click() } : null,
+                onCreateSubject || onCreateFolder ? { label: t("courses.wb.createFolder"), icon: "📁", title: t("courses.wb.createFolderTip"), onSelect: createFolderHere } : null
+              ]}
+            />
+          </div>
         </div>
+
+        {searchOpen || query ? (
+          <div className="mb-3 flex items-center gap-2 rounded-full border border-ink/12 bg-white px-3 py-1.5 focus-within:border-[var(--accent)]">
+            <svg viewBox="0 0 24 24" className="size-4 shrink-0 text-soft-ink" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4.5 4.5" /></svg>
+            <input ref={searchRef} type="text" enterKeyHint="search" className="min-w-0 flex-1 border-0 bg-transparent text-sm text-ink outline-none" value={query} onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape") { setQuery(""); setSearchOpen(false); } }}
+              placeholder={t("courses.wb.searchPh")} aria-label={t("courses.wb.searchAria")} />
+            {query ? <button type="button" className="shrink-0 rounded-full px-2 text-xs font-semibold text-soft-ink hover:text-ink" onClick={() => { setQuery(""); searchRef.current?.focus(); }}>{t("courses.browser.clear")}</button> : null}
+          </div>
+        ) : null}
 
         <WhoCanSeeCard className="mb-3" />
 
@@ -1006,7 +1110,7 @@ export function WorkspaceBrowser({
               </div>
             )) : <p className="py-4 text-center text-sm text-soft-ink">{t("courses.wb.noAttention")}</p>}
           </div>
-        ) : view === "gallery" ? renderGallery() : (
+        ) : query.trim() ? renderSearch() : view === "gallery" ? renderGallery() : (
           <div className="grid gap-0.5">
             {(() => {
               /* ── Finder tree builder ── */
@@ -1026,6 +1130,7 @@ export function WorkspaceBrowser({
                     onDrop={(e) => {
                       e.stopPropagation();
                       e.currentTarget.style.background = "";
+                      if (isFileDrag(e) && !dragRef.current) { dropFiles(e, folder.id); return; }
                       const drag = dragRef.current;
                       if (!drag) return;
                       dragRef.current = null;
@@ -1147,7 +1252,8 @@ export function WorkspaceBrowser({
       {uploadPicker ? (() => {
         const hidden = new Set(subjectsList.filter((entry) => isReservedSubjectName(entry.name)).map((entry) => entry.id));
         const count = uploadPicker.files.length;
-        const firstFolder = String(uploadPicker.files[0]?.webkitRelativePath || "").split("/")[0];
+        const tops = new Set(uploadPicker.files.map((file) => (String(file.webkitRelativePath || "").includes("/") ? file.webkitRelativePath.split("/")[0] : "")));
+        const firstFolder = tops.size === 1 ? [...tops][0] : "";
         return (
           <MoveDialog
             title={firstFolder && count > 1 ? t("courses.wb.uploadFolderTitle", { name: firstFolder, count }) : t.plural("courses.wb.uploadTitle", count)}

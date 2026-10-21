@@ -1,5 +1,16 @@
 # Implementation Log
 
+## 2026-10-21 (workspace: ＋ button, search, drag and drop from Finder)
+
+- Courses page lost its left column. The folder card's header now has a **＋** menu (Add files, Add folder, Create folder),
+  a **search** button (folders and documents by name, typos/accents/English-Spanish spellings forgiven:
+  `modules/workspace/nameSearch.js`, tested) and a **filters** menu holding what the column had (Show, Date, Study plan,
+  Topic, Tags, Check extracted text). "Needs a look" stays visible as a pill when something needs checking.
+  "Download visible as" was removed (each file and resource still downloads from its ⋯ menu).
+- **Drag and drop from Finder**: files and whole folders (with subfolders) dropped on a folder go into it; anywhere else
+  into the open folder, or the upload box asks where. `modules/workspace/fileDrop.js` (tested); dropping just outside
+  never makes the browser open the file.
+
 ## 2026-10-21 (in-app confirmation dialogs)
 
 - Every browser `window.confirm` / `prompt` / `alert` ("luna2-share-web.vercel.app says … OK") is now LUNA's own box:

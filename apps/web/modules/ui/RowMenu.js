@@ -10,7 +10,7 @@ import { useT } from "../../lib/i18n/LocaleProvider.js";
  * out of its box and, on a phone, off the screen entirely. A row now shows the one or two actions
  * people reach for and hides the rest behind this menu, so a row is always as wide as the row.
  */
-export function RowMenu({ items = [], label, align = "right" }) {
+export function RowMenu({ items = [], label, align = "right", trigger = "⋯", triggerClassName = "" }) {
   const t = useT();
   const menuLabel = label ?? t("courses.rowMenu.more");
   const [open, setOpen] = useState(false);
@@ -35,10 +35,10 @@ export function RowMenu({ items = [], label, align = "right" }) {
         title={menuLabel}
         aria-label={menuLabel}
         aria-expanded={open}
-        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 bg-white text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]"
+        className={triggerClassName || "inline-flex h-8 w-8 items-center justify-center rounded-full border border-ink/15 bg-white text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]"}
         onClick={(event) => { event.stopPropagation(); setOpen((value) => !value); }}
       >
-        ⋯
+        {trigger}
       </button>
       {open ? (
         <span className={`absolute ${align === "right" ? "right-0" : "left-0"} top-full z-40 mt-1 grid w-56 gap-0.5 rounded-xl border border-ink/12 bg-white p-1 shadow-[0_12px_32px_rgba(0,0,0,0.16)]`}>

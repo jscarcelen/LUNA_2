@@ -26,6 +26,7 @@ import { SharedNotice } from "../../accounts/SharedNotice";
 import { requestLeaveShare } from "../../accounts/shareEvents";
 import { displayName, nameToSave } from "../../ui/displayName";
 import { useT } from "../../../lib/i18n/LocaleProvider.js";
+import { DEFAULT_SUBJECT_COLOR } from "../../core/contracts.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -94,6 +95,17 @@ const KINDS = [
   { id: "generated", labelKey: "courses.wb.kind.generated" },
   { id: "favourite", labelKey: "courses.wb.kind.favourite" }
 ];
+
+const VIEW_KEY = "luna.workspace.view";
+
+/** Tile colours for top-level folders that still have the default colour, so the gallery is easy to scan. */
+const GALLERY_COLOURS = ["#0071e3", "#34a853", "#ff9500", "#af52de", "#ff3b30", "#00a6a6", "#5856d6", "#c9821b"];
+function galleryColour(folder) {
+  if (folder.colour && folder.colour !== DEFAULT_SUBJECT_COLOR) return folder.colour;
+  let hash = 0;
+  for (const char of String(folder.id)) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  return GALLERY_COLOURS[Math.abs(hash) % GALLERY_COLOURS.length];
+}
 
 /** Documents Luna files by itself; they belong to other screens, not to the folder browser. */
 const SYSTEM_TAGS = ["activity-attempt", "study-plan", "study-goal", "ai-agent", "doc-notes"];
@@ -170,6 +182,11 @@ export function WorkspaceBrowser({
   const [uploadProgress, setUploadProgress] = useState(null);
   const [movePicker, setMovePicker] = useState(null); // { documentIds } or { folderNodeId }: the "Move to…" dialog
   const [undo, setUndo] = useState(null); // { text, run }: offered while `text` is still what the status line says
+  // "list" is the folder tree; "gallery" is big folder tiles you open one level at a time (remembered per browser).
+  const [view, setView] = useState("list");
+  const [galleryId, setGalleryId] = useState(""); // the folder the gallery is showing ("" = every top-level folder)
+  useEffect(() => { try { if (window.localStorage.getItem(VIEW_KEY) === "gallery") setView("gallery"); } catch { /* storage blocked: stay on the list */ } }, []);
+  function chooseView(next) { setView(next); try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* not remembered */ } }
   const fileRef = useRef(null);
   const folderRef = useRef(null);
   // dragRef tracks { type: "file"|"folder", id: string } for the current drag.
@@ -191,6 +208,7 @@ export function WorkspaceBrowser({
   const docIdsInPlan = useMemo(() => { if (!planFilter) return null; const plan = studyPlans.find((p) => p.id === planFilter); if (!plan) return null; return new Set(plan.items.map((item) => item.resourceId).filter(Boolean)); }, [planFilter, studyPlans]);
 
   useEffect(() => { onSelectFolder?.(nodeId && nodeId !== "__review" ? parseNode(nodeId) : null); }, [nodeId, onSelectFolder]);
+  useEffect(() => { if (view === "gallery" && galleryId) onSelectFolder?.(parseNode(galleryId)); }, [view, galleryId, onSelectFolder]);
 
   /**
    * Arriving with a document in mind (from a study plan step): show the folder it is filed in and
@@ -648,6 +666,167 @@ export function WorkspaceBrowser({
     );
   };
 
+  /* Where each visible document sits and which folders are inside which: the tree and the gallery read both. */
+  const docsByNode = new Map();
+  for (const document of visible) {
+    const primaryNode = (document.folderIds || [])[0] || "";
+    if (!docsByNode.has(primaryNode)) docsByNode.set(primaryNode, []);
+    docsByNode.get(primaryNode).push(document);
+  }
+  const childrenOf = new Map();
+  for (const folder of folders) {
+    const key = folder.parentFolderId || "";
+    if (!childrenOf.has(key)) childrenOf.set(key, []);
+    childrenOf.get(key).push(folder);
+  }
+  function countVisible(folderId) {
+    let n = (docsByNode.get(folderId) || []).length;
+    for (const child of childrenOf.get(folderId) || []) n += countVisible(child.id);
+    return n;
+  }
+
+  /** Drop target props for a folder (tree row or gallery tile): documents and folders dragged onto it move there. */
+  const dropOn = (folderId) => ({
+    onDragOver: (e) => { e.preventDefault(); e.currentTarget.style.background = "var(--accent-soft)"; },
+    onDragLeave: (e) => { e.currentTarget.style.background = ""; },
+    onDrop: (e) => {
+      e.stopPropagation();
+      e.currentTarget.style.background = "";
+      const drag = dragRef.current;
+      if (!drag) return;
+      dragRef.current = null;
+      if (drag.type === "file") move(drag.ids || [drag.id], folderId);
+      else if (drag.type === "folder" && drag.id !== folderId) moveFolder(drag.id, folderId);
+    }
+  });
+
+  /**
+   * The gallery: like a course dashboard, every top-level folder is a big coloured tile; opening one
+   * shows its folders as tiles and its documents as cards, one level at a time, with a path to go back.
+   * Same data, menus, selection and drag and drop as the tree — only the layout differs.
+   */
+  function renderGallery() {
+    const here = galleryId ? folders.find((folder) => folder.id === galleryId) : null;
+    const at = here ? here.id : "";
+    const trail = [];
+    for (let node = here; node; node = node.parentFolderId ? folders.find((folder) => folder.id === node.parentFolderId) : null) trail.unshift(node);
+    const subfolders = childrenOf.get(at) || [];
+    const docs = at ? docsByNode.get(at) || [] : visible.filter((document) => !(document.folderIds || []).some((id) => folders.some((folder) => folder.id === id)));
+    const shortcut = here && isReferenceShortcut(here, folders);
+    const uploadedTarget = shortcut ? folders.find((entry) => entry.subjectId === here.subjectId && entry.name === UPLOADED_FOLDER && entry.parentFolderId === subjectNode(entry.subjectId)) : null;
+    const open = (folder) => {
+      const linked = isReferenceShortcut(folder, folders) ? folders.find((entry) => entry.subjectId === folder.subjectId && entry.name === UPLOADED_FOLDER && entry.parentFolderId === subjectNode(entry.subjectId)) : null;
+      setGalleryId((linked || folder).id);
+    };
+    const top = !at;
+    if (top && !subfolders.length && !docs.length) {
+      return <EmptyState title={t("courses.wb.emptyTitle")} text={t("courses.wb.emptyText")} action={t("courses.wb.uploadFiles")} onAction={() => fileRef.current?.click()} secondary={t("courses.wb.uploadFolder")} onSecondary={() => folderRef.current?.click()} />;
+    }
+    return (
+      <div className="grid gap-4">
+        <nav aria-label={t("courses.wb.galleryPath")} className="flex flex-wrap items-center gap-1 text-sm">
+          <button type="button" className={`rounded-lg px-1.5 py-0.5 font-semibold transition hover:bg-[var(--surface-soft)] ${top ? "text-ink" : "text-[var(--accent-ink)]"}`} onClick={() => setGalleryId("")}>{t("courses.wb.allFolders")}</button>
+          {trail.map((node, index) => (
+            <span key={node.id} className="flex min-w-0 items-center gap-1">
+              <span className="text-soft-ink" aria-hidden>›</span>
+              <button type="button" className={`max-w-[14rem] truncate rounded-lg px-1.5 py-0.5 font-semibold transition hover:bg-[var(--surface-soft)] ${index === trail.length - 1 ? "text-ink" : "text-[var(--accent-ink)]"}`} aria-current={index === trail.length - 1 ? "page" : undefined} onClick={() => setGalleryId(node.id)} {...dropOn(node.id)}>{node.name}</button>
+            </span>
+          ))}
+          {here ? <span className="ml-auto">{folderMenu(here)}</span> : null}
+        </nav>
+
+        {shortcut ? (
+          <p className="m-0 text-sm">
+            <span aria-hidden>↪ </span>
+            {uploadedTarget ? <button type="button" className="font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setGalleryId(uploadedTarget.id)}>{t.plural("courses.wb.linked", countVisible(uploadedTarget.id), { name: UPLOADED_FOLDER })}</button> : <span className="text-soft-ink">{t("courses.wb.linkedTopic")}</span>}
+          </p>
+        ) : null}
+
+        {subfolders.length ? (
+          <div className={`grid gap-3 ${top ? "grid-cols-[repeat(auto-fill,minmax(min(100%,230px),1fr))]" : "grid-cols-[repeat(auto-fill,minmax(min(100%,180px),1fr))]"}`}>
+            {subfolders.map((folder) => {
+              const colour = top ? galleryColour(folder) : "";
+              const inside = childrenOf.get(folder.id) || [];
+              const total = countVisible(folder.id);
+              const linked = isReferenceShortcut(folder, folders);
+              return (
+                <div key={folder.id} {...dropOn(folder.id)}
+                  draggable={!folder.isSubject}
+                  onDragStart={(e) => { e.stopPropagation(); dragRef.current = { type: "folder", id: folder.id }; }}
+                  onDragEnd={() => { dragRef.current = null; }}
+                  className={`group relative flex min-w-0 flex-col overflow-hidden rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)] transition hover:shadow-[0_2px_4px_rgba(0,0,0,0.05),0_14px_32px_rgba(0,0,0,0.09)] ${selectedFolderIds.includes(folder.id) ? "ring-2 ring-[var(--accent)]" : ""}`}>
+                  <button type="button" className="flex min-w-0 flex-1 flex-col text-left" onClick={() => open(folder)} aria-label={t("courses.wb.openFolder", { name: folder.name })}>
+                    {top ? (
+                      <span className="grid h-24 place-items-center" style={{ background: colour }} aria-hidden>
+                        <svg viewBox="0 0 24 24" className="size-10 fill-white/90"><path d="M3 6.5A2.5 2.5 0 0 1 5.5 4h3.6c.66 0 1.3.26 1.77.73L12.4 6.3h6.1A2.5 2.5 0 0 1 21 8.8v8.7a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z" /></svg>
+                      </span>
+                    ) : (
+                      <span className="grid h-16 place-items-center bg-[var(--surface-soft)] text-3xl" aria-hidden>{linked ? "🔗" : "📁"}</span>
+                    )}
+                    <span className="grid min-w-0 gap-0.5 px-3.5 py-3">
+                      <span className="truncate text-[15px] font-bold text-ink" style={top ? { color: colour } : undefined}>{folder.name}</span>
+                      <span className="text-[11px] text-soft-ink">
+                        {[inside.length ? t.plural("courses.wb.nFolders", inside.length) : "", t.plural("courses.wb.items", total)].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                  </button>
+                  {folder.shared ? <span className={`${chip} absolute left-2.5 top-2.5 bg-white/95 text-[#0058b0]`} title={folder.shared.permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{folder.shared.permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : null}
+                  <span className="absolute right-2 top-2">{folderMenu(folder)}</span>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {docs.length ? (
+          <div className="grid gap-2">
+            {subfolders.length ? <p className={kicker}>{t("courses.wb.galleryFiles")}</p> : null}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,200px),1fr))] gap-3">
+              {docs.map((document) => (
+                <div key={document.id} draggable
+                  onDragStart={(e) => { e.stopPropagation(); dragRef.current = dragFile(document); }}
+                  onDragEnd={() => { dragRef.current = null; }}
+                  className={`group relative flex min-w-0 flex-col rounded-[16px] border bg-white p-3 transition hover:shadow-[0_8px_24px_rgba(0,0,0,0.07)] ${selectedIds.includes(document.id) ? "border-[var(--accent)] bg-[var(--accent-soft)]/30" : "border-ink/8"}`}>
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <span className={`grid size-10 shrink-0 place-items-center rounded-xl text-xl ${document.sourceType === "generated" ? "bg-[var(--accent-soft)]" : "bg-[var(--surface-soft)]"}`} aria-hidden>{document.sourceType === "generated" ? "✨" : "📄"}</span>
+                    {onMoveDocuments && !isSharedDocument(document) ? (
+                      <input type="checkbox" aria-label={t("courses.wb.selectDoc", { name: displayName(document.name) })} className={`mt-1 size-4 shrink-0 cursor-pointer accent-[var(--accent)] transition focus:opacity-100 ${selectedIds.length ? "" : "opacity-0 group-hover:opacity-100 max-[760px]:opacity-100"}`} checked={selectedIds.includes(document.id)} onChange={() => toggleSelected(document.id)} />
+                    ) : null}
+                  </div>
+                  <button type="button" className="mb-1 min-w-0 text-left" onClick={() => (rowsByDocumentId.has(document.id) ? setOpenId(document.id) : setPreview(document))}>
+                    <span className="line-clamp-2 text-sm font-semibold leading-snug text-ink">{displayName(document.name)}</span>
+                  </button>
+                  <div className="mt-auto grid gap-2">
+                    {meta(document)}
+                    <div className="flex justify-end">{actions(document)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {!top && !subfolders.length && !docs.length && !shortcut ? <p className="py-6 text-center text-sm text-soft-ink">{t("courses.wb.galleryEmpty")}</p> : null}
+      </div>
+    );
+  }
+
+  /** The ⋯ menu of one of your own folders (the tree and the gallery share it); none on what was shared with you. */
+  const folderMenu = (folder) => (!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
+    <span onClick={(e) => e.stopPropagation()}>
+      <RowMenu
+        label={t("courses.wb.actionsFor", { name: folder.name })}
+        items={[
+          (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: () => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
+          { label: t("common.rename"), icon: "✎", onSelect: () => promptRenameFolder(folder) },
+          onShareDocument ? { label: t("courses.wb.share"), icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
+          onMoveFolder && !folder.isSubject ? { label: t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
+          { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteFolder", { name: folder.name }))) removeFolder(folder.id); } }
+        ]}
+      />
+    </span>
+  ) : null);
+
   return (
     <section className="tw-scope grid items-start gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
 
@@ -754,14 +933,26 @@ export function WorkspaceBrowser({
       <div className={`${card} min-w-0 p-4`}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
-            <p className="m-0 text-sm font-bold text-ink">{reviewing ? t("courses.wb.reviewTitle") : t("courses.wb.allFolders")}</p>
+            <p className="m-0 text-sm font-bold text-ink">{reviewing ? t("courses.wb.reviewTitle") : view === "gallery" ? t("courses.wb.galleryTitle") : t("courses.wb.allFolders")}</p>
             <p className="m-0 text-[11px] text-soft-ink">{t.plural("courses.wb.items", visible.length)}</p>
           </div>
-          {!reviewing && folders.length ? (
-            <button type="button" className={ghostBtn}
-              onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
-              {openNodes.size ? t("courses.wb.collapseAll") : t("courses.wb.expandAll")}
-            </button>
+          {!reviewing ? (
+            <div className="flex shrink-0 items-center gap-2">
+              {view === "list" && folders.length ? (
+                <button type="button" className={`${ghostBtn} max-sm:hidden`}
+                  onClick={() => setOpenNodes((prev) => prev.size ? new Set() : new Set(folders.map((f) => f.id)))}>
+                  {openNodes.size ? t("courses.wb.collapseAll") : t("courses.wb.expandAll")}
+                </button>
+              ) : null}
+              <div role="group" aria-label={t("courses.wb.viewAs")} className="inline-flex rounded-full bg-[var(--surface-soft)] p-0.5">
+                {[["list", "☰", t("courses.wb.viewList")], ["gallery", "▦", t("courses.wb.viewGallery")]].map(([id, icon, label]) => (
+                  <button key={id} type="button" aria-pressed={view === id} onClick={() => chooseView(id)}
+                    className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition ${view === id ? "bg-white text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-soft-ink hover:text-ink"}`}>
+                    <span aria-hidden>{icon}</span>{label}
+                  </button>
+                ))}
+              </div>
+            </div>
           ) : null}
         </div>
 
@@ -815,29 +1006,10 @@ export function WorkspaceBrowser({
               </div>
             )) : <p className="py-4 text-center text-sm text-soft-ink">{t("courses.wb.noAttention")}</p>}
           </div>
-        ) : (
+        ) : view === "gallery" ? renderGallery() : (
           <div className="grid gap-0.5">
             {(() => {
               /* ── Finder tree builder ── */
-              const docsByNode = new Map();
-              for (const document of visible) {
-                const primaryNode = (document.folderIds || [])[0] || "";
-                if (!docsByNode.has(primaryNode)) docsByNode.set(primaryNode, []);
-                docsByNode.get(primaryNode).push(document);
-              }
-              const childrenOf = new Map();
-              for (const folder of folders) {
-                const key = folder.parentFolderId || "";
-                if (!childrenOf.has(key)) childrenOf.set(key, []);
-                childrenOf.get(key).push(folder);
-              }
-
-              function countVisible(folderId) {
-                let n = (docsByNode.get(folderId) || []).length;
-                for (const child of childrenOf.get(folderId) || []) n += countVisible(child.id);
-                return n;
-              }
-
               function renderFolderRow(folder, depth) {
                 const isOpen = openNodes.has(folder.id);
                 const docs = docsByNode.get(folder.id) || [];
@@ -882,20 +1054,7 @@ export function WorkspaceBrowser({
                         </span>
                       ) : null}
                       {/* On a phone there is no hover: the same actions, and "Move to…", live in the ⋯ menu. */}
-                      {!folder.shared && !isReservedSubjectName((workspace.subjects || []).find((entry) => entry.id === folder.subjectId)?.name) ? (
-                        <span onClick={(e) => e.stopPropagation()}>
-                        <RowMenu
-                          label={t("courses.wb.actionsFor", { name: folder.name })}
-                          items={[
-                            (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: () => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
-                            { label: t("common.rename"), icon: "✎", onSelect: () => promptRenameFolder(folder) },
-                            onShareDocument ? { label: t("courses.wb.share"), icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
-                            onMoveFolder && !folder.isSubject ? { label: t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
-                            { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteFolder", { name: folder.name }))) removeFolder(folder.id); } }
-                          ]}
-                        />
-                        </span>
-                      ) : null}
+                      {folderMenu(folder)}
                     </div>
 
                     {isOpen && (
@@ -993,7 +1152,7 @@ export function WorkspaceBrowser({
             title={firstFolder && count > 1 ? t("courses.wb.uploadFolderTitle", { name: firstFolder, count }) : t.plural("courses.wb.uploadTitle", count)}
             subtitle={t("courses.wb.uploadSubtitle")}
             folders={folders.filter((entry) => !hidden.has(entry.subjectId))}
-            initialId={nodeId && !reviewing ? nodeId : ""}
+            initialId={view === "gallery" && !reviewing ? galleryId : nodeId && !reviewing ? nodeId : ""}
             confirmLabel={t("courses.wb.uploadHere")}
             pathLabel={t("courses.wb.uploadTo")}
             onCancel={() => setUploadPicker(null)}

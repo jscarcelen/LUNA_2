@@ -1,5 +1,14 @@
 # Implementation Log
 
+## 2026-10-21 (workspace gallery view)
+
+- Courses page (`modules/workspace/ui/WorkspaceBrowser.js`) has a **List / Gallery** switch next to the folder title,
+  remembered per browser (`localStorage` `luna.workspace.view`; the list stays the default).
+- Gallery: every top-level folder is a big coloured tile (subject colour, or a stable colour from the palette when it
+  still has the default); opening one shows its folders as tiles and its documents as cards, one level at a time, with a
+  clickable path back. Same data, filters, ⋯ menus, checkboxes, drag and drop and upload target as the tree; no new
+  requests (it reads the tree already loaded).
+
 ## 2026-10-20 (security pass before the school rollout)
 
 - **Logged-out requests could reach any account's items by id.** The public demo (no session, or a logged-in browser whose

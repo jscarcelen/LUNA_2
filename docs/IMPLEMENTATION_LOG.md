@@ -1,6 +1,6 @@
 # Implementation Log
 
-## 2026-10-21 (students: who can see my things)
+## 2026-10-21 (students: who can see my things, #7)
 
 - Students see, with plain tags, who can see each thing: 🔒 Only you, 👀 Teacher / Parent can see (their connected teacher or
   parent sees generated work, plans and scores; uploads only by name), 👥 Shared with Ana (live shares they gave, also inherited

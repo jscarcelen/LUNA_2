@@ -6,6 +6,7 @@ import { applyGrades, needsModel } from "./grading.js";
 import { chargeRun } from "../credits/credits";
 import { AiGuidanceNote } from "../performance/dashboard/parts";
 import { FlashcardDeck } from "./FlashcardDeck";
+import { ScoreAudienceNote } from "../accounts/VisibilityTags";
 import { renderInline, renderRich } from "../reader/markdown";
 
 /** Text with typeset maths (formulas the model wrote with or without `$`). */
@@ -645,6 +646,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
             <p className="m-0 text-sm text-soft-ink">{attempt.durationMs ? `${t("practice.result.min", { n: Math.max(1, Math.round(attempt.durationMs / 60000)) })} · ` : ""}{t("practice.result.pct", { pct: attempt.total ? Math.round((attempt.score / attempt.total) * 100) : 0 })}{attempt.results.some((r) => r.correct === false) ? t("practice.result.mistakes") : t("practice.result.perfect")}{attempt.results.some((r) => r.verdict === "close") ? t("practice.result.partial") : ""}</p>
             {gradingNote ? <p className="m-0 mt-1 text-xs text-soft-ink">{gradingNote}</p> : null}
             <AiGuidanceNote className="mt-1" />
+            <ScoreAudienceNote className="mt-1" />
             {(() => {
               // Where certainty and correctness disagree is the most useful thing on this screen.
               const sureWrong = attempt.results.filter((row) => row.confidence === "high" && row.correct === false).length;
@@ -666,6 +668,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
               <span className="text-xs font-semibold text-soft-ink">{answered} / {questions.length}</span>
               {savedNote}
             </div>
+            {!stepMode || index === 0 ? <ScoreAudienceNote /> : null}
           </div>
         )}
       </header>

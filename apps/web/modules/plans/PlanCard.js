@@ -3,6 +3,7 @@
 import { dueLabel } from "./plan";
 import { PlanDeadlines } from "./DeadlineBadge";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { VisibilityChips } from "../accounts/VisibilityTags";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -51,6 +52,7 @@ export function PlanCard({ document, plan, subPlans = [], progress, building = "
         {progress.goals.length ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("plans.card.goals", { done: progress.goals.filter((goal) => goal.met).length, total: progress.goals.length })}</span> : null}
         {progress.late.length ? <span className={`${chip} bg-[rgba(255,59,48,0.1)] text-[var(--color-danger)]`}>{t("plans.card.late", { count: progress.late.length })}</span> : null}
         {progress.average ? <span className={`${chip} bg-[#2f9e5b]/10 text-[#1d7a44]`}>{t("plans.card.avg", { pct: Math.round(progress.average * 100) })}</span> : null}
+        <VisibilityChips document={document} />
       </div>
       {subPlans.length ? (
         <ul className="m-0 grid list-none gap-0.5 p-0">

@@ -23,6 +23,7 @@ import { masterOriginals, originalDownloader } from "../../reader/downloadOrigin
 import { UPLOADED_FOLDER, isReferenceShortcut, subjectStructure } from "../../plans/folders";
 import { dueDateOf, dueInfoOf, isAssignedDocument, isReservedSubjectName, isSharedDocument, senderNameOf, sharedInfoOf } from "../../accounts/shared";
 import { SharedNotice } from "../../accounts/SharedNotice";
+import { FolderVisibilityChip, VisibilityChips, WhoCanSeeCard } from "../../accounts/VisibilityTags";
 import { requestLeaveShare } from "../../accounts/shareEvents";
 import { displayName, nameToSave } from "../../ui/displayName";
 import { useT } from "../../../lib/i18n/LocaleProvider.js";
@@ -591,7 +592,8 @@ export function WorkspaceBrowser({
     return (
       <span className="flex flex-wrap items-center gap-1 text-[11px] text-soft-ink">
         <span className={`${chip} ${document.sourceType === "generated" ? "bg-[var(--accent-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-soft)] text-soft-ink"}`}>{document.sourceType === "generated" ? t("courses.wb.chipGenerated") : t("courses.wb.chipMaterial")}</span>
-        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{t("courses.wb.sharedBy", { name: sharedInfoOf(document).ownerName || t("courses.wb.anotherAccount") })} · {sharedInfoOf(document).permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={t("courses.wb.readOnlyTip")}>{t(isAssignedDocument(document) ? "courses.wb.assignedBy" : "courses.wb.sharedBy", { name: senderNameOf(document, folders) || t("courses.wb.anotherAccount") })}{dueDateOf(document) ? ` · ${t("courses.wb.due", { date: dueDateOf(document) })}${dueInfoOf(document).imposed ? `, ${t("courses.wb.setBy", { name: senderNameOf(document, folders) || t("courses.wb.theSender") })}` : ""}` : ""}</span> : null}
+        {sharedInfoOf(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={sharedInfoOf(document).permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}><span aria-hidden>📥 </span>{t("courses.wb.sharedBy", { name: sharedInfoOf(document).ownerName || t("courses.wb.anotherAccount") })} · {sharedInfoOf(document).permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : isSharedDocument(document) ? <span className={`${chip} bg-[#e8f2ff] text-[#0058b0]`} title={t("courses.wb.readOnlyTip")}><span aria-hidden>📥 </span>{t(isAssignedDocument(document) ? "courses.wb.assignedBy" : "courses.wb.sharedBy", { name: senderNameOf(document, folders) || t("courses.wb.anotherAccount") })}{dueDateOf(document) ? ` · ${t("courses.wb.due", { date: dueDateOf(document) })}${dueInfoOf(document).imposed ? `, ${t("courses.wb.setBy", { name: senderNameOf(document, folders) || t("courses.wb.theSender") })}` : ""}` : ""}</span> : null}
+        <VisibilityChips document={document} />
         {isFavourite(document) ? <span className={`${chip} bg-[#fff3cd] text-[#8a5a00]`}>★</span> : null}
         {row?.resource.meta?.questionCount ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{t("courses.wb.nQuestions", { count: row.resource.meta.questionCount })}</span> : null}
         {resourceDifficulty(document) ? <span className={`${chip} bg-[var(--surface-soft)] text-soft-ink`}>{resourceDifficulty(document)}</span> : null}
@@ -765,6 +767,8 @@ export function WorkspaceBrowser({
           ) : null}
         </div>
 
+        <WhoCanSeeCard className="mb-3" />
+
         {status ? (
           <p className="mb-3 text-xs text-[var(--accent-ink)]" role="status">
             {status}{isWorking ? " …" : ""}
@@ -873,6 +877,7 @@ export function WorkspaceBrowser({
                       <span className="shrink-0 text-sm" aria-hidden>{folder.isSubject ? "🗂" : shortcut ? "🔗" : "📁"}</span>
                       <span className="flex-1 min-w-0 truncate text-sm font-semibold text-ink" onClick={() => toggleNode(folder.id)}>{folder.name}</span>
                       {total ? <span className="shrink-0 text-[11px] text-soft-ink">{total}</span> : null}
+                      {folder.shared ? null : <FolderVisibilityChip folderId={folder.isSubject ? "" : folder.folderId} subjectId={folder.isSubject ? folder.subjectId : ""} />}
                       {folder.shared ? <span className={`${chip} shrink-0 bg-[#e8f2ff] text-[#0058b0]`} title={folder.shared.permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{folder.shared.permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : null}
                       {folder.shared ? (
                         <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>

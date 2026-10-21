@@ -1,5 +1,15 @@
 # Implementation Log
 
+## 2026-10-21 (students: who can see my things)
+
+- Students see, with plain tags, who can see each thing: 🔒 Only you, 👀 Teacher / Parent can see (their connected teacher or
+  parent sees generated work, plans and scores; uploads only by name), 👥 Shared with Ana (live shares they gave, also inherited
+  from a shared folder or topic), 📥 Shared by / Assigned by (things others gave them). On Courses files and folders, the phone
+  Library, plan cards, the phone Study plan list and the open plan ("Ms Rivera (teacher) can see this plan and how far you got").
+- Every quiz and flashcard deck says before and after whether the score is seen only by the student or also by named teachers
+  and parents; the Progress pages say the same. A "Who can see my things?" card explains it with a legend.
+- `modules/accounts/visibility.js` + `VisibilityTags.js`; no server or database change.
+
 ## 2026-10-20 (security pass before the school rollout)
 
 - **Logged-out requests could reach any account's items by id.** The public demo (no session, or a logged-in browser whose

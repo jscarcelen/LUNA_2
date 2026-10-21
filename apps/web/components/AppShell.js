@@ -17,6 +17,7 @@ import { ShareDialog } from "../modules/accounts/ShareDialog";
 import { SendPracticeDialog } from "../modules/accounts/SendPracticeDialog";
 import { SendQuestionsDialog } from "../modules/accounts/SendQuestionsDialog";
 import { accountsApi } from "../modules/accounts/api";
+import { VisibilityProvider } from "../modules/accounts/VisibilityTags";
 import { onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
 import { saveBlockToLibrary } from "../modules/template-studio/engine/blocks";
 import { WorkspacePage } from "../modules/workspace";
@@ -133,6 +134,8 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     pageRef.current = value;
     setPageState(value);
   }
+  // Stable for the "Who can see my things?" card (it only ever opens People).
+  const openPageStable = useCallback((target) => setPage(target), []);
   useEffect(() => {
     try { window.history.replaceState({ ...(window.history.state || {}), lunaPage: pageRef.current }, ""); } catch { /* history unavailable */ }
     function onPop(event) {
@@ -1043,6 +1046,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
   }
 
   return (
+    <VisibilityProvider account={account} workspaces={workspaces} refreshKey={`${page}|${shareNotice}`} onOpenPage={openPageStable}>
     <div className={`app-shell${menuOpen ? " nav-open" : ""}`}>
       {/* Phone only: tapping the dimmed page closes the workspace sheet. */}
       <button className="nav-scrim" type="button" aria-label={t("shell.closeMenu")} onClick={() => setMenuOpen(false)} />
@@ -1101,5 +1105,6 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
       <FeedbackWidget page={page} title={title} role={role} account={account} launcher={false} />
       <AskLunaMenu variant="floating" claimed={readerClaims > 0} />
     </div>
+    </VisibilityProvider>
   );
 }

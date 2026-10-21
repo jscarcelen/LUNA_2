@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { gradeActivity } from "./engine/activity";
 import { SourceNote } from "./SourceNote";
+import { ScoreAudienceNote } from "../accounts/VisibilityTags";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
@@ -127,11 +128,13 @@ export function FlashcardDeck({ activity, look = null, onSubmit, onClose }) {
             <>
               <p className="m-0 text-3xl font-bold text-ink">{attempt.score} / {attempt.total}</p>
               <p className="m-0 text-sm text-soft-ink">{t("practice.deck.knewThese")}{missed.length ? t("practice.deck.toSeeAgain", { count: missed.length }) : t("practice.deck.perfect")}</p>
+              <ScoreAudienceNote className="mt-1" />
             </>
           ) : (
             <>
               <p className="m-0 text-lg font-bold text-ink">{t("practice.deck.whole")}</p>
               <p className="m-0 mt-1 text-sm text-soft-ink">{t.plural("practice.deck.rated", rated)}</p>
+              <ScoreAudienceNote className="mt-1" />
               <button type="button" className={`${primaryBtn} mt-3`} onClick={finish}>{t("practice.deck.save")}</button>
             </>
           )}

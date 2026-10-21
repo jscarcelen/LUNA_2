@@ -43,3 +43,13 @@ link, a pending link or someone else's workspace is the same 404). Without `stud
 
 Remembered per account: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected) set by `POST /api/accounts/tour`
 and read by `app/platform/page.js`; without the migration the browser keeps it under `luna.tour.v1.<accountId>` (`lib/tourSeen.js`).
+
+## "Who can see this?" for students
+
+`visibility.js` (pure, tested in `tests/accounts/visibility.test.js`) decides it from the student's accepted connections and the live
+shares they gave (`/api/accounts/links` + `/api/accounts/grants`): a connected teacher/parent sees plans, quizzes, summaries and scores
+in full and uploads by name only (the same rule as `redactTreeForGuardian`); notes are always private; a peer never sees scores.
+`VisibilityTags.js` renders it: `VisibilityProvider` (mounted by `AppShell`, students of the real platform only; renders nothing until
+loaded and nothing in the demo or for teachers/parents), `VisibilityChips` (🔒 Only you · 👀 Teacher can see · 👥 Shared with Ana on files,
+quizzes and plans: Courses tree, phone Library, plan cards, phone Study), `FolderVisibilityChip`, `PlanAudienceNote` (open plan),
+`ScoreAudienceNote` (quiz/flashcard start and result, Progress pages) and `WhoCanSeeCard` (explainer + legend, Courses and phone Library).

@@ -6,7 +6,8 @@ import { joinAttempts } from "../performance/metrics";
 import { deadlineText, dueText, planTasks, studyActivities } from "./model.js";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
 import { VisibilityChips } from "../accounts/VisibilityTags.js";
-import { Bar, ChipRow, Empty, MobileScreen, Segmented, Skeleton, TypeIcon, cardClass, secondaryClass } from "./ui.js";
+import { planFiles } from "../plans/planFiles.js";
+import { Bar, ChipRow, Empty, MobileScreen, Row, Segmented, Skeleton, TypeIcon, cardClass, secondaryClass } from "./ui.js";
 
 /** A step's status in words, and the one action that goes with it. */
 const STATUS = {
@@ -38,7 +39,15 @@ export function MobileStudy({ workspace = null, loading = false, drafts = {}, in
     const entries = rankPlans(rows, joinAttempts(documents), { limit: 50 });
     return planTasks(entries, rows, workspace, drafts, t);
   }, [workspace, drafts, t]);
+  // The files each plan uses (its material and what Luna made for it), by plan id.
+  const filesByPlan = useMemo(() => {
+    const documents = subjects.flatMap((subject) => subject.documents || []);
+    return new Map(planRowsOf(workspace).map((row) => [row.document.id, planFiles(row.plan, documents, t)]));
+  }, [workspace, t]);
   const [openDone, setOpenDone] = useState({});
+  const [openFiles, setOpenFiles] = useState({});
+  const [filesView, setFilesView] = useState("list");
+  const subjectOf = (documentId) => subjects.find((subject) => (subject.documents || []).some((document) => document.id === documentId))?.id || "";
   const documentById = (id) => subjects.flatMap((subject) => subject.documents || []).find((document) => document.id === id) || null;
   const subjectsWithWork = subjects.filter((subject) => (subject.documents || []).some((document) => (document.tags || []).includes("activity") || (document.tags || []).includes("resource")));
 
@@ -92,6 +101,8 @@ export function MobileStudy({ workspace = null, loading = false, drafts = {}, in
               const todo = plan.steps.filter((step) => step.status !== "done");
               const done = plan.steps.filter((step) => step.status === "done");
               const showDone = Boolean(openDone[plan.planId]);
+              const files = filesByPlan.get(plan.planId) || [];
+              const showFiles = Boolean(openFiles[plan.planId]);
               return (
                 <article key={plan.planId} className={`${cardClass} overflow-hidden`}>
                   <header className="grid gap-2 p-4">
@@ -140,6 +151,36 @@ export function MobileStudy({ workspace = null, loading = false, drafts = {}, in
                             </li>
                           ))}
                         </ol>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {files.length ? (
+                    <div className="border-t border-ink/8">
+                      <button type="button" className="flex min-h-[44px] w-full items-center justify-between px-4 text-[14px] font-semibold text-soft-ink" aria-expanded={showFiles} onClick={() => setOpenFiles((previous) => ({ ...previous, [plan.planId]: !showFiles }))}>
+                        <span>{showFiles ? t("mobile.plan.hideFiles", { count: files.length }) : t("mobile.plan.showFiles", { count: files.length })}</span>
+                        <span aria-hidden>{showFiles ? "▴" : "▾"}</span>
+                      </button>
+                      {showFiles ? (
+                        <div className="grid gap-2 px-4 pb-3">
+                          <Segmented label={t("plans.files.view")} options={[["list", t("plans.files.list")], ["gallery", t("plans.files.gallery")]]} value={filesView} onChange={setFilesView} />
+                          {filesView === "gallery" ? (
+                            <div className="grid grid-cols-2 gap-2">
+                              {files.map((file) => (
+                                <button key={file.id} type="button" aria-label={t("plans.files.open", { name: file.name })} className="flex min-h-[112px] min-w-0 flex-col items-start gap-2 rounded-2xl border border-ink/8 bg-white p-3 text-left active:bg-[var(--surface-soft)]" onClick={() => onOpen?.(file.document, subjectOf(file.id))}>
+                                  <TypeIcon typeId={file.typeId} made={file.kind === "made"} />
+                                  <span className="line-clamp-2 text-[14px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{file.name}</span>
+                                  <span className="mt-auto truncate text-[12px] text-soft-ink">{file.type}</span>
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="divide-y divide-ink/8 overflow-hidden rounded-2xl border border-ink/8">
+                              {files.map((file) => (
+                                <Row key={file.id} icon={<TypeIcon typeId={file.typeId} made={file.kind === "made"} />} title={file.name} detail={[file.type, file.kind === "made" ? t("plans.files.made") : t("plans.files.material")].join(" · ")} ariaLabel={t("plans.files.open", { name: file.name })} onClick={() => onOpen?.(file.document, subjectOf(file.id))} />
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ) : null}
                     </div>
                   ) : null}

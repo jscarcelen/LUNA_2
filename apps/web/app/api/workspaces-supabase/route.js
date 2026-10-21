@@ -36,6 +36,7 @@ import { createSupabaseAdminClient, getDemoOwnerUserId, isSupabaseConfigured } f
 import { accountIdForFresh, hasRevokedSession, ownerUserIdForFresh } from "../../../lib/session.js";
 import { guardDemoAction, guardWorkspaceAction } from "../../../lib/workspaceGuard.js";
 import { denyAnonymousAi } from "../../../lib/aiAccess.js";
+import { denyOverStorage, meteredAi, setAiActivity } from "../../../lib/aiUsage.js";
 import { loadGrantContext, purgeGrantsFor } from "../../../lib/grantsRepository.js";
 import { loadExamDatesMap, syncPlanLinks } from "../../../lib/examDatesRepository.js";
 import { listTreeWithShared } from "../../../lib/sharedTree.js";
@@ -81,7 +82,7 @@ export async function GET(request) {
   }
 }
 
-export async function POST(request) {
+export const POST = meteredAi("readingFiles", async function POST(request) {
   if (!isSupabaseConfigured()) return cfgError();
 
   try {
@@ -89,6 +90,8 @@ export async function POST(request) {
     const ownerUserId = await ownerUserIdForFresh(request);
     const body = await request.json();
     const action = body?.action;
+    // Reading an upload is "reading files"; any other AI this route does (topics of a saved resource) is "concepts".
+    if (action !== "uploadDocuments" && action !== "reprocessDocument") setAiActivity("concepts");
     let payload = body?.payload || {};
     // The owner whose data an action writes to: the account itself, or (for edits through a live share) the owner of the original.
     let dataOwnerId = ownerUserId;
@@ -225,6 +228,11 @@ export async function POST(request) {
     }
 
     if (action === "uploadDocuments") {
+      // A full account (its own files, or the owner's when uploading into a shared folder) cannot add more.
+      if (isAccount) {
+        const full = await denyOverStorage(dataOwnerId, request);
+        if (full) return full;
+      }
       const files = Array.isArray(payload.files) ? payload.files : [];
       const uploadResult = await uploadTxtDocuments(payload.subjectId, files, {
         folderIds: Array.isArray(payload.folderIds) ? payload.folderIds : [],
@@ -375,4 +383,4 @@ export async function POST(request) {
     const refused = error?.name === "MoveError" && Number(error.status) >= 400 && Number(error.status) < 500;
     return NextResponse.json({ error: String(error.message || error) }, { status: refused ? Number(error.status) : 500 });
   }
-}
+});

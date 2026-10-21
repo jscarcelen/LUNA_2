@@ -16,7 +16,7 @@ export const INACTIVE_MONTHS = 24;
 export const INACTIVITY_NOTICE_DAYS = 30;
 export const FEEDBACK_SCREENSHOT_DAYS = 90;
 /** Deleted explicitly, in this order (children before parents), by `owner_user_id`. Missing tables are skipped. */
-export const OWNER_TABLES = ["activity_drafts", "mark_reviews", "attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
+export const OWNER_TABLES = ["ai_usage_events", "activity_drafts", "mark_reviews", "attempts", "student_concept_state", "study_plans", "concepts", "document_block_templates", "feedback_items", "feature_requests", "workspaces"];
 const HEAVY_KEY = /base64|render_?html|screenshot/i;
 
 /** A copy of a value without the heavy original-file payloads (they are the user's own uploads: download them from the app). */

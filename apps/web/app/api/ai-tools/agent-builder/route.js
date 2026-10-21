@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { runAgentGeneration } from "../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { normalizeConfig } from "../../../../modules/ai-tools/pipeline/agentConfig.js";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -17,4 +18,4 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

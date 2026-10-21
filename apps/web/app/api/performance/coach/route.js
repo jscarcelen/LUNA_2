@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,7 +92,7 @@ Before answering, check that there are exactly five actions, that no two "why" s
  * to do — and returns it structured, so each recommendation becomes a button on the dashboard that
  * generates the practice, schedules it in a plan or opens the material it points at.
  */
-export async function POST(request) {
+export const POST = meteredAi("coach", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -166,4 +167,4 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: error.message || "Could not read the results." }, { status: 500 });
   }
-}
+});

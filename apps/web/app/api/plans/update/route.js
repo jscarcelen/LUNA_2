@@ -3,6 +3,7 @@ import { scrubPii } from "../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { planUpdateSchema } from "../../../../modules/plans/updatePlan.js";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ const list = (items, render) => (items.length ? items.map(render).join("\n") : "
  * finished steps, built resources, deadlines someone else set, agents outside the plan's scope — is enforced
  * by `applyPlanUpdate` on the client, whatever this answers. Luna 3 Pro at least.
  */
-export async function POST(request) {
+export const POST = meteredAi("studyPlans", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -95,4 +96,4 @@ Before you answer, check: the request is visibly applied; no done step is return
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

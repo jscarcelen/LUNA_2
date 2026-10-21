@@ -11,6 +11,17 @@
   into the open folder, or the upload box asks where. `modules/workspace/fileDrop.js` (tested); dropping just outside
   never makes the browser open the file.
 
+## 2026-10-21 (AI credits and storage circle)
+
+- A usage circle in the top bar of every logged-in account (next to the bell): the outer ring is the AI credits left this
+  month, the inner ring the storage used. Clicking it shows credits used by activity (making material, study plans, Ask
+  Luna, marking, reading files…) and storage by kind with the five biggest files. EN/ES, bottom sheet on phones.
+- AI use is now counted on the server: `meteredAi` (`lib/aiUsage.js`) wraps every AI route and counts the provider's own
+  token numbers, written to `ai_usage_events` after the response. 1 credit = 1,000 tokens; 1,000 credits a month for
+  students and parents, 3,000 for teachers; new AI work stops when they run out (marking answers and reading uploads go on).
+  Storage: 100 MB per account, uploads refused when full. Env overrides `LUNA_AI_MONTHLY_CREDITS`,
+  `LUNA_AI_MONTHLY_CREDITS_TEACHER`, `LUNA_STORAGE_LIMIT_MB`. The fake "2.4 GB of 10 GB" profile line is gone for accounts.
+
 ## 2026-10-21 (in-app confirmation dialogs)
 
 - Every browser `window.confirm` / `prompt` / `alert` ("luna2-share-web.vercel.app says … OK") is now LUNA's own box:

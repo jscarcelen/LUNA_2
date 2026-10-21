@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ const SCHEMA = {
  * goals. The list is a proposal — the person edits it — and it is what plans are built from, so it
  * is deliberately fine-grained: several resources ending up on the same concept is the point.
  */
-export async function POST(request) {
+export const POST = meteredAi("concepts", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -78,4 +79,4 @@ Before you answer, check that each goal can be traced to the questions or the sa
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

@@ -18,12 +18,13 @@
 import { NextResponse } from "next/server";
 import { MAX_ITEMS, gradeAnswers } from "../../../../modules/activities/gradeBatch.js";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-export async function POST(request) {
+export const POST = meteredAi("grading", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   let body = null;
@@ -44,4 +45,4 @@ export async function POST(request) {
     // Grading must never be what breaks the player: say it could not be done and let the client grade locally.
     return NextResponse.json({ graded: "local", results: [], note: String(error?.message || "The checker is not available.").slice(0, 200) });
   }
-}
+});

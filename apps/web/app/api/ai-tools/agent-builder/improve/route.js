@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { scrubPii } from "../../../../../lib/aiPrivacy.js";
 import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ Before answering, check that every patch traces back to the feedback and that ea
  * Turns natural-language feedback into patches to the agent SPEC (never to the sample output).
  * The model may only edit instructions, constraints and field descriptions.
  */
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -73,4 +74,4 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

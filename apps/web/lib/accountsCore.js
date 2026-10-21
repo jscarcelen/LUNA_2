@@ -25,6 +25,7 @@ export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_shari
 export const GROUPS_MIGRATION = "supabase/migrations/202610070001_groups_exam_dates.sql";
 export const CLASS_CODES_MIGRATION = "supabase/migrations/202610140001_class_codes.sql";
 export const MESSAGES_MIGRATION = "supabase/migrations/202610210001_class_messages.sql";
+export const SUBGROUPS_MIGRATION = "supabase/migrations/202610210002_class_subgroups.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const TOKEN_KINDS = ["verify_email", "reset_password"];
 export const TOKEN_TTL_MS = { verify_email: 48 * 60 * 60 * 1000, reset_password: 60 * 60 * 1000 };

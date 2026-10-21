@@ -55,7 +55,7 @@ export const accountsApi = {
   requestReview: (payload) => post("/api/attempts/review", payload),
   // groups of students (teacher / parent)
   groups: () => call("/api/accounts/groups"),
-  createGroup: ({ name, colour, memberIds }) => post("/api/accounts/groups", { action: "create", name, colour, memberIds }),
+  createGroup: ({ name, colour, memberIds, parentId }) => post("/api/accounts/groups", { action: "create", name, colour, memberIds, parentId }),
   updateGroup: (groupId, patch) => post("/api/accounts/groups", { action: "update", groupId, ...patch }),
   deleteGroup: (groupId) => post("/api/accounts/groups", { action: "delete", groupId }),
   addGroupMembers: (groupId, memberIds) => post("/api/accounts/groups", { action: "addMembers", groupId, memberIds }),
@@ -66,6 +66,7 @@ export const accountsApi = {
   checkClassCode: (code) => post("/api/accounts/classes/check", { code }),
   classes: () => call("/api/accounts/classes"),
   createClass: ({ name, schoolConsent }) => post("/api/accounts/classes", { action: "create", name, schoolConsent }),
+  addClassCode: (groupId, schoolConsent) => post("/api/accounts/classes", { action: "addCode", groupId, schoolConsent }),
   regenerateClassCode: (groupId) => post("/api/accounts/classes", { action: "regenerate", groupId }),
   setClassEnabled: (groupId, enabled) => post("/api/accounts/classes", { action: enabled ? "enable" : "disable", groupId }),
   joinClass: (code) => post("/api/accounts/classes", { action: "join", code }),

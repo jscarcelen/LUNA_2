@@ -149,6 +149,7 @@ beforeEach(() => {
   repo.resetSchemaCache();
   repo.resetSharingCache();
   groupsRepo.resetGroupsCache();
+  groupsRepo.resetSubgroupsCache();
   clearAccountLimits();
   mail.sent.length = 0;
   teacher = account({ email: "rivera@school.edu", display_name: "Prof. Rivera", role: "teacher" });
@@ -436,5 +437,58 @@ describe("rate limits and the time budget for big sends", () => {
     const response = await post(shareRoute, "/api/accounts/share", teacher, { mode: "assign", documentId: quiz.id, groupIds: [group.id], dueDate: "2026-12-01" });
     expect(response.status).toBe(200);
     expect((await response.json()).summary.delivered).toBe(2);
+  });
+});
+
+/* ------------------------------------------------------------------ groups inside a class */
+
+describe("groups inside a class", () => {
+  it("names and nesting (pure)", () => {
+    expect(rules.subgroupStoredName("3B", "  Readers ")).toBe("3B · Readers");
+    expect(rules.subgroupShortName("3B · Readers", "3B")).toBe("Readers");
+    expect(rules.subgroupStoredName("x".repeat(60), "Readers").length).toBeLessThanOrEqual(rules.MAX_GROUP_NAME);
+    const tree = rules.classesWithSubgroups([{ id: "c", name: "3B" }, { id: "s", name: "3B · Readers", parentId: "c" }, { id: "o", name: "Orphan", parentId: "gone" }]);
+    expect(tree.map((entry) => [entry.id, entry.subgroups.map((group) => group.shortName)])).toEqual([["c", ["Readers"]], ["o", []]]);
+    expect(rules.consistentGroupChoice(["s"], [{ id: "c" }, { id: "s", parentId: "c" }]).sort()).toEqual(["c", "s"]);
+  });
+
+  it("a group inside a class only holds the class's students and is stored as 'Class · Group'", async () => {
+    const klass = await groupsRepo.createGroup(teacher, { name: "3B", memberIds: [maria.id, tom.id] });
+    await expect(groupsRepo.createGroup(teacher, { name: "Readers", memberIds: [ana.id], parentId: klass.id })).rejects.toMatchObject({ status: 400 });
+    const readers = await groupsRepo.createGroup(teacher, { name: "Readers", memberIds: [maria.id], parentId: klass.id });
+    expect(readers).toMatchObject({ name: "3B · Readers", parentId: klass.id, memberCount: 1 });
+    await expect(groupsRepo.addMembers(teacher, readers.id, [ana.id])).rejects.toMatchObject({ status: 400 });
+    // the same short name can live in two classes
+    const other3c = await groupsRepo.createGroup(teacher, { name: "3C", memberIds: [ana.id] });
+    expect((await groupsRepo.createGroup(teacher, { name: "Readers", memberIds: [ana.id], parentId: other3c.id })).name).toBe("3C · Readers");
+    // one level only, and never inside someone else's class
+    await expect(groupsRepo.createGroup(teacher, { name: "Deeper", parentId: readers.id })).rejects.toMatchObject({ status: 400 });
+    const theirs = await groupsRepo.createGroup(other, { name: "Theirs", memberIds: [zed.id] });
+    await expect(groupsRepo.createGroup(teacher, { name: "Sneaky", parentId: theirs.id })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("renaming the class renames its groups; leaving the class leaves its groups; deleting the class deletes them (never a student)", async () => {
+    const klass = await groupsRepo.createGroup(teacher, { name: "3B", memberIds: [maria.id, tom.id] });
+    const readers = await groupsRepo.createGroup(teacher, { name: "Readers", memberIds: [maria.id, tom.id], parentId: klass.id });
+    await groupsRepo.updateGroup(teacher, klass.id, { name: "3C" });
+    await groupsRepo.updateGroup(teacher, readers.id, { name: "Writers" });
+    expect((await groupsRepo.listGroups(teacher)).groups.map((group) => group.name)).toEqual(["3C", "3C · Writers"]);
+    await groupsRepo.removeMembers(teacher, klass.id, [tom.id]);
+    expect((await groupsRepo.listGroups(teacher)).groups.find((group) => group.id === readers.id).memberIds).toEqual([maria.id]);
+    // ticking only the inner group also puts the student back in the class
+    await groupsRepo.setMemberGroups(teacher, tom.id, [readers.id]);
+    expect((await groupsRepo.groupIdsOfStudent(teacher, tom.id)).sort()).toEqual([klass.id, readers.id].sort());
+    await groupsRepo.deleteGroup(teacher, klass.id);
+    expect(db.table("account_groups")).toHaveLength(0);
+    expect(db.table("account_group_members")).toHaveLength(0);
+    expect(db.table("accounts").filter((row) => row.role === "student")).toHaveLength(4);
+  });
+
+  it("the route creates a group inside a class", async () => {
+    const klass = await groupsRepo.createGroup(teacher, { name: "3B", memberIds: [maria.id] });
+    const response = await post(groupsRoute, "/api/accounts/groups", teacher, { action: "create", name: "Table 1", memberIds: [maria.id], parentId: klass.id });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.group).toMatchObject({ name: "3B · Table 1", parentId: klass.id });
   });
 });

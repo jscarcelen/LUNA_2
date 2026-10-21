@@ -6,7 +6,7 @@
  *
  * GET  /api/accounts/groups  -> { groups: [{ id, name, colour, memberIds, memberCount }], students: [{ id, displayName, email }] }
  * POST /api/accounts/groups  Body:
- *        { action: "create", name, colour?, memberIds?: [] }
+ *        { action: "create", name, colour?, memberIds?: [], parentId? }  (parentId = a group inside that class)
  *      | { action: "update", groupId, name?, colour? }
  *      | { action: "delete", groupId }                         (never deletes or disconnects a student)
  *      | { action: "addMembers", groupId, memberIds: [] }
@@ -51,7 +51,7 @@ export async function POST(request) {
     }
     const action = String(body?.action || "");
     let result;
-    if (action === "create") result = { group: await createGroup(account, { name: body?.name, colour: body?.colour, memberIds: list(body?.memberIds) }) };
+    if (action === "create") result = { group: await createGroup(account, { name: body?.name, colour: body?.colour, memberIds: list(body?.memberIds), parentId: String(body?.parentId || "") }) };
     else if (action === "update") result = { group: await updateGroup(account, String(body?.groupId || ""), { name: body?.name, colour: body?.colour }) };
     else if (action === "delete") result = await deleteGroup(account, String(body?.groupId || ""));
     else if (action === "addMembers") result = await addMembers(account, String(body?.groupId || ""), list(body?.memberIds));

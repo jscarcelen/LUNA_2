@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { accountsApi, roleLabel } from "./api";
 import { ClassCodeCard } from "./ClassCodeCard";
+import { ClassesGallery } from "./ClassesGallery";
 import { ReceivedMessages } from "./MessagesTab";
 import { SHARING_MIGRATION, SetupNotice } from "./SetupNotice";
 import { kindExposesPerformance, relationLabel } from "./shared";
@@ -97,6 +98,12 @@ export function ConnectionsPage({ account, onOpenPage }) {
 
   return (
     <section className="tw-scope grid gap-3">
+      {account.role === "teacher" ? (
+        <>
+          <ClassesGallery onOpenPage={onOpenPage} onChanged={load} />
+          <h2 className="m-0 mt-4 text-[28px] font-bold tracking-tight text-ink">{t("classes.network")}</h2>
+        </>
+      ) : null}
       <ReceivedMessages />
       <ClassCodeCard account={account} onChanged={load} />
       <div className={`${card} p-5`}>

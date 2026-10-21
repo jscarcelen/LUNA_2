@@ -5,6 +5,7 @@
  * GET  /api/accounts/classes  (teacher) -> { classes: [{ id, name, code, enabled, schoolConsent, schoolConsentAt, members: [{ id, displayName, email }] }] }
  * POST /api/accounts/classes  Body:
  *        { action: "create", name, schoolConsent?: boolean }   (teacher; schoolConsent = "the school holds parental consent for under-14s")
+ *      | { action: "addCode", groupId, schoolConsent?: boolean } (teacher; a join code for a class made without one)
  *      | { action: "regenerate", groupId }                      (teacher; the old code stops working)
  *      | { action: "enable" | "disable", groupId }              (teacher)
  *      | { action: "join", code }                               (student; links to the teacher already accepted and adds them to the class)
@@ -13,7 +14,7 @@
  */
 import { LinkError } from "../../../../lib/accountsCore.js";
 import { clientIp, errorResponse, json, rejectCrossSite, rejectUnconfigured, requireAccount } from "../../../../lib/accountsApi.js";
-import { createClass, joinClassByCode, listClasses, regenerateClassCode, setClassEnabled } from "../../../../lib/classesRepository.js";
+import { addClassCode, createClass, joinClassByCode, listClasses, regenerateClassCode, setClassEnabled } from "../../../../lib/classesRepository.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,7 @@ export async function POST(request) {
     const action = String(body?.action || "");
     const groupId = String(body?.groupId || "");
     if (action === "create") return json(await createClass(account, { name: body?.name, schoolConsent: body?.schoolConsent === true }));
+    if (action === "addCode") return json(await addClassCode(account, groupId, { schoolConsent: body?.schoolConsent === true }));
     if (action === "regenerate") return json(await regenerateClassCode(account, groupId));
     if (action === "enable" || action === "disable") return json(await setClassEnabled(account, groupId, action === "enable"));
     if (action === "join") {

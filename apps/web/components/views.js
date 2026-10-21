@@ -18,6 +18,7 @@ import {
 } from "../modules/core";
 import { parsePlan } from "../modules/plans/plan";
 import { deletePlanEverything, planDeletionScope } from "../modules/plans/folders";
+import { askConfirm, askText, showNotice } from "../modules/ui/dialogs.js";
 
 function getUploadedDocuments(documents = []) {
   return documents.filter((doc) => doc.sourceType !== "generated");
@@ -2055,8 +2056,8 @@ export function WorkspacesManagerView({
     setRenameFolderName("");
   }
 
-  function handleRemoveFolder(folderId) {
-    if (!window.confirm("Remove this folder? Documents remain and only lose folder assignments.")) return;
+  async function handleRemoveFolder(folderId) {
+    if (!(await askConfirm({ title: "Remove this folder?", message: "Documents remain and only lose folder assignments.", confirmLabel: "Remove", danger: true }))) return;
     onRemoveFolder(folderId);
     setUploadFolderIds((prev) => prev.filter((id) => id !== folderId));
     if (activeFolderId === folderId) setActiveFolderId("");
@@ -2076,8 +2077,8 @@ export function WorkspacesManagerView({
     setRenameTopicTagTo("");
   }
 
-  function handleRemoveTopicTag(tag) {
-    if (!window.confirm("Remove this topic tag from this subject and linked docs?")) return;
+  async function handleRemoveTopicTag(tag) {
+    if (!(await askConfirm({ title: "Remove this topic tag from this subject and linked docs?", confirmLabel: "Remove", danger: true }))) return;
     onRemoveTopicTag(tag.name);
   }
 
@@ -2094,20 +2095,20 @@ export function WorkspacesManagerView({
     setRenameDocName("");
   }
 
-  function handleRemoveDoc(documentId) {
+  async function handleRemoveDoc(documentId) {
     // A study plan takes its folder and the material generated into it along with it.
     const planDoc = documents.find((item) => item.id === documentId);
     const plan = planDoc ? parsePlan(planDoc) : null;
     if (plan) {
       const scope = planDeletionScope(planDoc, plan, { folders, documents });
       const parts = [scope.folderId ? `its folder "${scope.folderName}"` : "", scope.generatedIds.length ? `${scope.generatedIds.length} generated resource${scope.generatedIds.length === 1 ? "" : "s"}` : ""].filter(Boolean);
-      if (!window.confirm(`Delete the study plan "${plan.name}"${parts.length ? ` together with ${parts.join(" and ")}` : ""}? Uploaded material is kept.`)) return;
+      if (!(await askConfirm({ title: `Delete the study plan "${plan.name}"${parts.length ? ` together with ${parts.join(" and ")}` : ""}?`, message: "Uploaded material is kept.", confirmLabel: "Delete", danger: true }))) return;
       deletePlanEverything(scope, { planDocumentId: documentId, documents, folders, onRemoveDocument, onUpdateDocumentMeta, onRemoveFolder });
       if (previewDoc?.id === documentId) setPreviewDoc(null);
       if (scope.treeIds.includes(activeFolderId)) setActiveFolderId("");
       return;
     }
-    if (!window.confirm("Remove this document?")) return;
+    if (!(await askConfirm({ title: "Remove this document?", confirmLabel: "Remove", danger: true }))) return;
     onRemoveDocument(documentId);
     if (previewDoc?.id === documentId) setPreviewDoc(null);
   }
@@ -2141,7 +2142,7 @@ export function WorkspacesManagerView({
 
       downloadBase64File(data.download.contentBase64, data.download.fileName, data.download.mimeType);
     } catch (error) {
-      window.alert(String(error.message || error));
+      showNotice({ title: "Download failed", message: String(error.message || error) });
     }
   }
 
@@ -2166,7 +2167,7 @@ export function WorkspacesManagerView({
 
       downloadBase64File(data.download.contentBase64, data.download.fileName, data.download.mimeType);
     } catch (error) {
-      window.alert(String(error.message || error));
+      showNotice({ title: "Download failed", message: String(error.message || error) });
     }
   }
 
@@ -2699,10 +2700,10 @@ export function WorkspacesManagerView({
     setTemplateFolderRenameName("");
   }
 
-  function removeTemplateFolder(folderId) {
+  async function removeTemplateFolder(folderId) {
     const id = String(folderId || "").trim();
     if (!id || id === "tpl-folder-root") return;
-    if (!window.confirm("Delete this template folder? Templates inside move to root.")) return;
+    if (!(await askConfirm({ title: "Delete this template folder?", message: "Templates inside move to root.", confirmLabel: "Delete", danger: true }))) return;
     const descendants = new Set([id]);
     let changed = true;
     while (changed) {
@@ -3128,7 +3129,7 @@ export function WorkspacesManagerView({
       return;
     }
 
-    const confirmed = window.confirm(`Delete template "${active.name || "Untitled"}"?`);
+    const confirmed = await askConfirm({ title: `Delete template "${active.name || "Untitled"}"?`, confirmLabel: "Delete", danger: true });
     if (!confirmed) return;
 
     if (typeof onDeleteDocumentBlockTemplate === "function") {
@@ -3326,9 +3327,10 @@ export function WorkspacesManagerView({
     return { cell, row, table, columnIndex, rowIndex };
   }
 
-  function addTableToEditContent() {
-    const rows = Number(window.prompt("Number of rows", "3") || 0);
-    const columns = Number(window.prompt("Number of columns", "3") || 0);
+  async function addTableToEditContent() {
+    const rows = Number((await askText({ title: "Number of rows", defaultValue: "3", confirmLabel: "Next" })) || 0);
+    if (!rows) return;
+    const columns = Number((await askText({ title: "Number of columns", defaultValue: "3", confirmLabel: "Add table" })) || 0);
     if (!rows || !columns || rows < 1 || columns < 1) return;
 
     const rowHtml = "<tr>" + new Array(columns).fill("<td>Cell</td>").join("") + "</tr>";
@@ -3565,8 +3567,8 @@ export function WorkspacesManagerView({
     runEditContentCommand("insertText", wrapper);
   }
 
-  function insertEditContentImage() {
-    const imageUrl = window.prompt("Paste image URL or data URL");
+  async function insertEditContentImage() {
+    const imageUrl = await askText({ title: "Paste image URL or data URL", placeholder: "https://…", confirmLabel: "Insert" });
     const nextUrl = String(imageUrl || "").trim();
     if (!nextUrl) return;
     runEditContentCommand("insertImage", nextUrl);
@@ -6242,8 +6244,8 @@ export function WorkspacesManagerView({
                                 <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "bold")}><b>B</b></button>
                                 <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "italic")}><i>I</i></button>
                                 <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "underline")}><u>U</u></button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "foreColor", window.prompt("Text color (hex or css)", "#111827") || "")}>Text Color</button>
-                                <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "hiliteColor", window.prompt("Cell background color", "#fff59d") || "")}>Cell Background</button>
+                                <button className="table-btn" type="button" onClick={async () => runBlockHtmlCommand("table", "foreColor", (await askText({ title: "Text color (hex or css)", defaultValue: "#111827", confirmLabel: "Apply" })) || "")}>Text Color</button>
+                                <button className="table-btn" type="button" onClick={async () => runBlockHtmlCommand("table", "hiliteColor", (await askText({ title: "Cell background color", defaultValue: "#fff59d", confirmLabel: "Apply" })) || "")}>Cell Background</button>
                                 <button className="table-btn" type="button" onClick={() => runBlockHtmlCommand("table", "insertText", "$\\placeholder$")}>Insert $...$</button>
                               </div>
                               <label className="search full" style={{ marginTop: "8px" }}>
@@ -6373,7 +6375,7 @@ export function WorkspacesManagerView({
                 <details className="rich-editor-group">
                   <summary>Insert</summary>
                   <div className="inline-actions rich-editor-toolbar" style={{ marginTop: "8px", flexWrap: "wrap" }}>
-                    <button className="table-btn" type="button" onClick={() => runEditContentCommand("createLink", window.prompt("Paste link URL") || "")}>Link / URL</button>
+                    <button className="table-btn" type="button" onClick={async () => runEditContentCommand("createLink", (await askText({ title: "Paste link URL", placeholder: "https://…", confirmLabel: "Add link" })) || "")}>Link / URL</button>
                     <button className="table-btn" type="button" onClick={insertEditContentImage}>Image URL</button>
                     <button className="table-btn" type="button" onClick={openEditContentImageFilePicker}>Image File</button>
                     <button className="table-btn" type="button" onClick={addTableToEditContent}>Table</button>

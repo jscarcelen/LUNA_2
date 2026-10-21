@@ -10,6 +10,7 @@ import { CONCEPT_LEVELS, newConcept, resourceConcepts } from "./concepts";
 import { VersionsPanel } from "./VersionsPanel";
 import { displayName } from "../ui/displayName";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -108,7 +109,7 @@ export function ResourceDetail({
       {reading ? <ReaderView resource={row.resource} menuItems={landed ? [
         { label: t("courses.rd.tab.concepts"), icon: "◎", onSelect: () => { setLanded(false); setReading(false); setTab("concepts"); } },
         onRegenerate ? { label: t("courses.wb.regenerate"), icon: "✨", onSelect: () => onRegenerate(row) } : null,
-        onDelete ? { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.rd.confirmDeleteUndo", { name: displayName(row.resource.name) }))) { onDelete(row); onClose?.(); } } } : null
+        onDelete ? { label: t("common.delete"), icon: "🗑", danger: true, onSelect: async () => { if (await askConfirm({ message: t("courses.rd.confirmDeleteUndo", { name: displayName(row.resource.name) }), confirmLabel: t("common.delete"), danger: true })) { onDelete(row); onClose?.(); } } } : null
       ] : []} chat={{ documentId: row.document.id }} highlights={row.resource.highlights || []} onSaveHighlights={(list) => onSaveHighlights?.(row, list)} onSubmit={(attempt) => onSubmitAttempt?.(attempt, row.document.id)} onUpdate={onUpdate ? () => onUpdate(row) : undefined} onClose={() => { if (landed) onClose?.(); else setReading(false); }} /> : null}
       <div className={`mx-auto grid gap-3 ${tab === "style" ? "max-w-6xl" : "max-w-4xl"}`}>
         <header className={`${card} flex flex-wrap items-start justify-between gap-3 p-5`}>
@@ -127,7 +128,7 @@ export function ResourceDetail({
             {resourceBlocks(row.resource) || row.resource.activity?.questions?.length ? <button type="button" className={primaryBtn} onClick={() => setReading(true)}>{row.resource.activity?.questions?.length ? t("courses.rd.openHtml") : t("courses.rd.read")}</button> : null}
             {onUpdate ? <button type="button" className={ghostBtn} onClick={() => onUpdate(row)}>✦ {t("courses.wb.update")}</button> : null}
             {onRegenerate ? <button type="button" className={ghostBtn} onClick={() => onRegenerate(row)}>{t("courses.rd.regenEdit")}</button> : null}
-            {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={() => { if (window.confirm(t("courses.rd.confirmDelete", { name: displayName(row.resource.name) }))) { onDelete(row); onClose?.(); } }}>{t("common.delete")}</button> : null}
+            {onDelete ? <button type="button" className={`${ghostBtn} text-[var(--color-danger)]`} onClick={async () => { if (await askConfirm({ message: t("courses.rd.confirmDelete", { name: displayName(row.resource.name) }), confirmLabel: t("common.delete"), danger: true })) { onDelete(row); onClose?.(); } }}>{t("common.delete")}</button> : null}
             <button type="button" className={ghostBtn} onClick={onClose}>{t("common.close")}</button>
           </div>
         </header>

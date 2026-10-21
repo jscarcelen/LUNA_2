@@ -187,6 +187,7 @@ export default {
   "dialogs.exam.sendBtn": "Send exam date",
   "dialogs.exam.confirmCancel": "Cancel “{title}”? It disappears for the {nouns}. Their study plans keep the date as their own deadline.",
   "dialogs.exam.cancelled": "Cancelled “{title}”.",
+  "dialogs.exam.cancelIt": "Cancel the date",
   "dialogs.exam.plansKept.one": "{count} plan kept the date as their own deadline.",
   "dialogs.exam.plansKept.other": "{count} plans kept the date as their own deadline.",
   "dialogs.exam.dbStep": "Exam dates need one database step",

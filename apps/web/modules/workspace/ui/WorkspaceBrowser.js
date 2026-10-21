@@ -28,6 +28,7 @@ import { requestLeaveShare } from "../../accounts/shareEvents";
 import { displayName, nameToSave } from "../../ui/displayName";
 import { useT } from "../../../lib/i18n/LocaleProvider.js";
 import { DEFAULT_SUBJECT_COLOR } from "../../core/contracts.js";
+import { askConfirm, askText } from "../../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -257,24 +258,19 @@ export function WorkspaceBrowser({
     return onCreateFolder?.(name, parent.kind === "folder" ? parent.folderId : "", parent.subjectId);
   }
   /**
-   * Rename through the browser's own box: it can be cleared and retyped freely; an empty name is refused
-   * with a reason (and the box opens again) instead of being ignored. Cancel leaves the name as it was.
+   * Rename in LUNA's own box: it can be cleared and retyped freely; an empty name is refused with a reason
+   * under the box instead of being ignored. Cancel leaves the name as it was.
    */
-  function askName(current) {
-    let typed = window.prompt(t("courses.wb.newName"), current);
-    while (typed !== null) {
-      const checked = nameToSave(typed);
-      if (checked.ok) return checked.name;
-      typed = window.prompt(`${t("courses.sr.nameNeeded")} ${t("courses.wb.newName")}`, "");
-    }
-    return null;
+  async function askName(current) {
+    const typed = await askText({ title: t("common.rename"), label: t("courses.wb.newName"), defaultValue: current, confirmLabel: t("common.rename"), validate: (value) => (nameToSave(value).ok ? "" : t("courses.sr.nameNeeded")) });
+    return typed === null ? null : nameToSave(typed).name;
   }
-  function renameDocument(document) {
-    const name = askName(displayName(document.name));
+  async function renameDocument(document) {
+    const name = await askName(displayName(document.name));
     if (name !== null) onRenameDocument?.(document.id, nameToSave(name, document.name).name, document.subjectId);
   }
-  function promptRenameFolder(folder) {
-    const name = askName(folder.name);
+  async function promptRenameFolder(folder) {
+    const name = await askName(folder.name);
     if (name !== null) renameFolder(folder.id, name);
   }
   function renameFolder(id, name) {
@@ -312,7 +308,7 @@ export function WorkspaceBrowser({
     const docs = selectedIds.map((id) => allDocuments.find((item) => item.id === id)).filter(Boolean).filter((document) => !isSharedDocument(document) && !sharedInfoOf(document));
     const parts = [docs.length ? t.plural("courses.wb.nFiles", docs.length) : "", folderIds.length ? t.plural("courses.wb.nFoldersInside", folderIds.length) : ""].filter(Boolean);
     if (!parts.length) { setStatus(t("courses.wb.cannotDelete")); return; }
-    if (!window.confirm(t("courses.wb.confirmDeleteMany", { parts: parts.join(t("courses.wb.and")) }))) return;
+    if (!(await askConfirm({ message: t("courses.wb.confirmDeleteMany", { parts: parts.join(t("courses.wb.and")) }), confirmLabel: t("common.delete"), danger: true }))) return;
     if (docs.length) removeDocuments(docs.map((document) => document.id));
     for (const folderNodeId of folderIds) await removeFolder(folderNodeId);
     clearSelection();
@@ -426,9 +422,9 @@ export function WorkspaceBrowser({
     onUpdateDocumentMeta?.(document.id, { folderIds: raw?.folderIds || [], tags: next }, document.subjectId);
   }
 
-  function editTags(document) {
+  async function editTags(document) {
     const keep = (document.tags || []).filter((entry) => entry === "resource" || entry === "favourite" || entry === "activity" || String(entry).includes(":"));
-    const value = window.prompt(t("courses.wb.tagsPrompt"), resourceTags(document).join(", "));
+    const value = await askText({ title: t("courses.wb.tagsPrompt"), defaultValue: resourceTags(document).join(", "), confirmLabel: t("common.save") });
     if (value === null) return;
     const raw = rawDocuments.find((item) => item.id === document.id);
     onUpdateDocumentMeta?.(document.id, { folderIds: raw?.folderIds || [], tags: [...keep, ...value.split(",").map((entry) => entry.trim()).filter(Boolean)] }, document.subjectId);
@@ -489,7 +485,7 @@ export function WorkspaceBrowser({
     if (!files.length || !onUpload) return;
     if (!currentSubjectId) {
       // No subjects exist yet — ask for one so the upload has a home.
-      const name = window.prompt(t("courses.wb.namePrompt"));
+      const name = await askText({ title: t("courses.wb.namePrompt"), label: t("courses.tree.folderName"), confirmLabel: t("common.create") });
       if (!name?.trim()) { setStatus(t("courses.wb.uploadCancelled")); return; }
       const created = await onCreateSubject?.(name.trim());
       const subjectId = created?.id || workspace?.subjects?.[0]?.id || "";
@@ -657,7 +653,7 @@ export function WorkspaceBrowser({
             onMoveDocuments ? { label: selectedIds.length > 1 && selectedIds.includes(document.id) ? t("courses.wb.moveSelected", { count: selectedIds.length }) : t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ documentIds: selectedIds.length > 1 && selectedIds.includes(document.id) ? selectedIds : [document.id] }) } : null,
             { label: t("courses.wb.tags"), icon: "🏷", onSelect: () => editTags(document) },
             { label: t("common.rename"), icon: "✎", onSelect: () => renameDocument(document) },
-            { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteOne", { name: displayName(document.name) }))) removeDocuments([document.id]); } }
+            { label: t("common.delete"), icon: "🗑", danger: true, onSelect: async () => { if (await askConfirm({ message: t("courses.wb.confirmDeleteOne", { name: displayName(document.name) }), confirmLabel: t("common.delete"), danger: true })) removeDocuments([document.id]); } }
             ]),
             sharedWithMe?.permission === "edit" ? { label: t("common.rename"), icon: "✎", onSelect: () => renameDocument(document) } : null,
             sharedWithMe?.root ? { label: t("courses.wb.leaveShare"), icon: "↩", onSelect: () => requestLeaveShare(sharedWithMe.grantId) } : null,
@@ -819,11 +815,11 @@ export function WorkspaceBrowser({
       <RowMenu
         label={t("courses.wb.actionsFor", { name: folder.name })}
         items={[
-          (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: () => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
+          (onCreateFolder || onCreateSubject) ? { label: t("courses.tree.newSub"), icon: "＋", onSelect: async () => { const name = await askText({ title: t("courses.tree.newSub"), label: t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") }); if (name?.trim()) createFolder(name.trim(), folder.id); } } : null,
           { label: t("common.rename"), icon: "✎", onSelect: () => promptRenameFolder(folder) },
           onShareDocument ? { label: t("courses.wb.share"), icon: "↗", onSelect: () => onShareDocument({ kind: folder.isSubject ? "subject" : "folder", id: folder.isSubject ? folder.subjectId : folder.folderId, name: folder.name }) } : null,
           onMoveFolder && !folder.isSubject ? { label: t("courses.wb.moveTo"), icon: "⇄", onSelect: () => setMovePicker({ folderNodeId: folder.id }) } : null,
-          { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("courses.wb.confirmDeleteFolder", { name: folder.name }))) removeFolder(folder.id); } }
+          { label: t("common.delete"), icon: "🗑", danger: true, onSelect: async () => { if (await askConfirm({ message: t("courses.wb.confirmDeleteFolder", { name: folder.name }), confirmLabel: t("common.delete"), danger: true })) removeFolder(folder.id); } }
         ]}
       />
     </span>
@@ -908,7 +904,7 @@ export function WorkspaceBrowser({
             <summary className="cursor-pointer list-none px-1 text-xs font-semibold text-soft-ink hover:text-ink [&::-webkit-details-marker]:hidden"><span className="mr-1 inline-block transition group-open:rotate-90" aria-hidden>▸</span>{t("common.more")}</summary>
             <div className="mt-1.5 grid gap-1.5">
               {onCreateSubject ? (
-                <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ {t("courses.tree.newFolder")}</button>
+                <button type="button" className={ghostBtn} onClick={async () => { const name = await askText({ title: t("courses.tree.newFolder"), label: t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") }); if (name?.trim()) onCreateSubject(name.trim()); }}>＋ {t("courses.tree.newFolder")}</button>
               ) : null}
               <button type="button" className={ghostBtn} disabled={isWorking} onClick={() => folderRef.current?.click()}>⇪ {t("courses.wb.uploadFolder")}</button>
               {!needsReview.length ? (
@@ -1053,7 +1049,7 @@ export function WorkspaceBrowser({
                       {folder.shared ? <span className={`${chip} shrink-0 bg-[#e8f2ff] text-[#0058b0]`} title={folder.shared.permission === "edit" ? t("courses.wb.sharedEditTip") : t("courses.wb.sharedViewTip")}>{folder.shared.permission === "edit" ? t("courses.wb.canEdit") : t("courses.wb.canView")}</span> : null}
                       {folder.shared ? (
                         <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100" onClick={(e) => e.stopPropagation()}>
-                          {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => { const name = window.prompt(t("courses.tree.folderName")); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
+                          {folder.shared.permission === "edit" && onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={async () => { const name = await askText({ title: t("courses.tree.newSub"), label: t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") }); if (name?.trim()) createFolder(name.trim(), folder.id); }}>＋</button> : null}
                           {folder.shared.permission === "edit" && folder.folderId && !String(folder.folderId).startsWith("subj~") ? <button type="button" title={t("common.rename")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => promptRenameFolder(folder)}>✎</button> : null}
                           {folder.shared.root ? <button type="button" title={t("courses.wb.leaveShare")} className="rounded-lg px-1.5 py-0.5 text-[11px] text-soft-ink hover:bg-ink/8" onClick={() => requestLeaveShare(folder.shared.grantId)}>↩</button> : null}
                         </span>

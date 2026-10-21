@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "./dialogs.js";
 
 /**
  * The folder tree shared by the workspace and by the resources library.
@@ -109,7 +110,7 @@ export function FolderTree({
           <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition group-hover:opacity-100 max-[760px]:opacity-100">
             {onCreateFolder ? <button type="button" title={t("courses.tree.newSub")} className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setAdding(node.id); setNewName(""); setOpen((current) => ({ ...current, [node.id]: true })); }}>＋</button> : null}
             {onRenameFolder ? <button type="button" title={t("common.rename")} className="w-7 text-xs text-soft-ink hover:text-ink" onClick={() => { setRenaming(node.id); setDraftName(node.name); }}>✎</button> : null}
-            {onRemoveFolder ? <button type="button" title={t("courses.tree.deleteFolder")} className="w-7 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(t("courses.tree.confirmDelete", { name: node.name }))) onRemoveFolder(node.id); }}>🗑</button> : null}
+            {onRemoveFolder ? <button type="button" title={t("courses.tree.deleteFolder")} className="w-7 text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={async () => { if (await askConfirm({ message: t("courses.tree.confirmDelete", { name: node.name }), confirmLabel: t("common.delete"), danger: true })) onRemoveFolder(node.id); }}>🗑</button> : null}
           </span>
         </div>
         {adding === node.id ? (

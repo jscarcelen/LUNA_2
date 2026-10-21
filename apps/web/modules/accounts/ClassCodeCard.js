@@ -6,6 +6,7 @@ import { SetupNotice } from "./SetupNotice";
 import { card, field, ghostBtn, kicker, primaryBtn } from "./ui";
 import { CLASS_CODES_MIGRATION, formatClassCode } from "./classCodeText";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 function CopyButton({ text }) {
   const t = useT();
@@ -70,7 +71,7 @@ function TeacherClasses() {
           <p className="m-0 mt-2 font-mono text-4xl font-bold tracking-[0.25em] text-ink" aria-label={t("people.code.aria", { code: item.code.split("").join(" ") })} style={{ opacity: item.enabled ? 1 : 0.4 }}>{formatClassCode(item.code)}</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             <CopyButton text={item.code} />
-            <button type="button" className={ghostBtn} disabled={busy} onClick={() => { if (window.confirm(t("people.code.confirmNew"))) run(accountsApi.regenerateClassCode(item.id)); }}>{t("people.code.new")}</button>
+            <button type="button" className={ghostBtn} disabled={busy} onClick={async () => { if (await askConfirm({ message: t("people.code.confirmNew"), confirmLabel: t("people.code.new") })) run(accountsApi.regenerateClassCode(item.id)); }}>{t("people.code.new")}</button>
             <button type="button" className={ghostBtn} disabled={busy} onClick={() => run(accountsApi.setClassEnabled(item.id, !item.enabled))}>{item.enabled ? t("people.code.turnOff") : t("people.code.turnOn")}</button>
           </div>
           <p className="m-0 mt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-soft-ink">{t("people.code.joined", { count: item.members.length })}</p>

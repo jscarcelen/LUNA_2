@@ -49,5 +49,10 @@ export default {
   "common.skip": "Omitir",
   "common.more": "Más",
   "common.none": "Ninguno",
-  "common.all": "Todos"
+  "common.all": "Todos",
+  "common.discard": "Descartar",
+  "common.keepEditing": "Seguir editando",
+  "common.leave": "Salir",
+  "common.keep": "Mantener",
+  "common.startAgain": "Empezar de nuevo"
 };

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { displayName } from "./displayName";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "./dialogs.js";
 
 /**
  * The documents of the selected folder, as a grid of cards or an indented list.
@@ -87,7 +88,7 @@ export function DocumentBrowser({
       if (meta && event.key === "v" && clipboard.length && onCopy) { onCopy(clipboard); event.preventDefault(); }
       if (meta && event.key === "a" && documents.length) { onSelectionChange?.(documents.map((item) => item.id)); event.preventDefault(); }
       if ((event.key === "Backspace" || event.key === "Delete") && selectedIds.length && onDelete) {
-        if (window.confirm(t.plural("courses.browser.confirmDelete", selectedIds.length))) onDelete(selectedIds);
+        askConfirm({ message: t.plural("courses.browser.confirmDelete", selectedIds.length), confirmLabel: t("common.delete"), danger: true }).then((ok) => { if (ok) onDelete(selectedIds); });
         event.preventDefault();
       }
     }
@@ -123,7 +124,7 @@ export function DocumentBrowser({
           {onCopy ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => setClipboard(selectedIds)}>{t("common.copy")}</button> : null}
           {onCopy && clipboard.length ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onCopy(clipboard)}>{t("courses.browser.paste", { count: clipboard.length })}</button> : null}
           {onDownload ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold" onClick={() => onDownload(selectedIds)}>⤓ {t("common.download")}</button> : null}
-          {onDelete ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold text-[var(--color-danger)]" onClick={() => { if (window.confirm(t.plural("courses.browser.confirmDelete", selectedIds.length))) onDelete(selectedIds); }}>{t("common.delete")}</button> : null}
+          {onDelete ? <button type="button" className="rounded-full border border-ink/15 bg-white px-2.5 py-1 font-semibold text-[var(--color-danger)]" onClick={async () => { if (await askConfirm({ message: t.plural("courses.browser.confirmDelete", selectedIds.length), confirmLabel: t("common.delete"), danger: true })) onDelete(selectedIds); }}>{t("common.delete")}</button> : null}
           <button type="button" className="ml-auto text-soft-ink hover:underline" onClick={() => onSelectionChange?.([])}>{t("courses.browser.clear")}</button>
         </div>
       ) : null}

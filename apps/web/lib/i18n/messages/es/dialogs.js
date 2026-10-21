@@ -187,6 +187,7 @@ export default {
   "dialogs.exam.sendBtn": "Enviar fecha de examen",
   "dialogs.exam.confirmCancel": "¿Cancelar «{title}»? Desaparece para tus {nouns}. Sus planes de estudio conservan la fecha como su propia fecha límite.",
   "dialogs.exam.cancelled": "Has cancelado «{title}».",
+  "dialogs.exam.cancelIt": "Cancelar la fecha",
   "dialogs.exam.plansKept.one": "{count} plan conservó la fecha como su propia fecha límite.",
   "dialogs.exam.plansKept.other": "{count} planes conservaron la fecha como su propia fecha límite.",
   "dialogs.exam.dbStep": "Las fechas de examen necesitan un paso en la base de datos",

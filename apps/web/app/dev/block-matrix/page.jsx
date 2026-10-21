@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { builtInBlocks } from "../../../modules/template-studio/engine/blocks";
+import { askConfirm } from "../../../modules/ui/dialogs.js";
 
 export const dynamic = "force-dynamic";
 
@@ -428,7 +429,7 @@ function BlockRow({ block, override, onUpdate, onDelete, expanded, onToggle }) {
         {/* Delete */}
         <td style={{ padding: "8px 10px" }} onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => { if (confirm(`Hide "${name}" from this matrix?\n(Does NOT remove it from blocks.ts)`)) onDelete(); }}
+            onClick={async () => { if (await askConfirm({ title: `Hide "${name}" from this matrix?`, message: "Does NOT remove it from blocks.ts.", confirmLabel: "Hide", danger: true })) onDelete(); }}
             title="Hide block (soft delete — restore with the banner button)"
             style={{ background: "none", border: "none", color: "#fca5a5", fontSize: 15, cursor: "pointer", padding: "2px 5px", borderRadius: 4, lineHeight: 1 }}>
             🗑
@@ -538,8 +539,8 @@ export default function BlockMatrixPage() {
     const blob = new Blob([JSON.stringify(overrides, null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "block-matrix-overrides.json"; a.click();
   }
-  function resetAll() {
-    if (!confirm("Reset ALL overrides? Cannot be undone.")) return;
+  async function resetAll() {
+    if (!(await askConfirm({ title: "Reset ALL overrides?", message: "Cannot be undone.", confirmLabel: "Reset", danger: true }))) return;
     setOverrides({}); saveOverrides({});
   }
   function restoreDeleted() {

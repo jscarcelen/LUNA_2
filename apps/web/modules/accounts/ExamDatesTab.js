@@ -11,6 +11,7 @@ import { card, dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
 import { dueLabel } from "../plans/plan";
 import { shortDate } from "../plans/deadlines";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 const who = (person) => person.displayName || person.email;
 const nounKey = (noun) => (noun === "child" ? "child" : "student");
@@ -173,7 +174,7 @@ export function ExamDatesTab({ account, groups, students, workspaces, scope, nou
   }
 
   async function cancel(item) {
-    if (!window.confirm(t("dialogs.exam.confirmCancel", { title: item.title, nouns }))) return;
+    if (!(await askConfirm({ message: t("dialogs.exam.confirmCancel", { title: item.title, nouns }), confirmLabel: t("dialogs.exam.cancelIt"), cancelLabel: t("common.keep"), danger: true }))) return;
     setBusyId(item.batchId);
     const result = await accountsApi.cancelExamDate(item.batchId);
     setBusyId("");

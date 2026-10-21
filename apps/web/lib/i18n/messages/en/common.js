@@ -49,5 +49,10 @@ export default {
   "common.skip": "Skip",
   "common.more": "More",
   "common.none": "None",
-  "common.all": "All"
+  "common.all": "All",
+  "common.discard": "Discard",
+  "common.keepEditing": "Keep editing",
+  "common.leave": "Leave",
+  "common.keep": "Keep it",
+  "common.startAgain": "Start again"
 };

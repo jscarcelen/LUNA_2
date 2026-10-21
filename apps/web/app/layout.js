@@ -1,6 +1,7 @@
 import "./globals.css";
 import { SiteFeedback } from "../modules/feedback/SiteFeedback";
 import { PwaSetup } from "../modules/pwa/PwaSetup";
+import { DialogHost } from "../modules/ui/dialogs.js";
 import { LocaleProvider } from "../lib/i18n/LocaleProvider.js";
 import { getServerLocale } from "../lib/i18n/server.js";
 
@@ -33,6 +34,8 @@ export default async function RootLayout({ children }) {
           {/* Beta feedback tool (temporary, see modules/feedback/README.md); the app mounts its own inside AppShell. */}
           <SiteFeedback />
           <PwaSetup />
+          {/* LUNA's own confirm / text / notice boxes (modules/ui/dialogs.js), used instead of the browser's. */}
+          <DialogHost />
         </LocaleProvider>
       </body>
     </html>

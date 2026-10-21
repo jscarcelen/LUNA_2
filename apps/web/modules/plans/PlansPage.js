@@ -36,6 +36,7 @@ import { ExamDatePicker, ExamDatesCard, PlanExamLink } from "./ExamDates";
 import { displayName } from "../ui/displayName";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
 import { tEn } from "../../lib/i18n/index.js";
+import { askText } from "../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -866,7 +867,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 </div>
               );
             })}
-            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={() => { const title = window.prompt(plan.receivedFrom ? t("plans.page.promptOwn") : t("plans.page.prompt")); if (title) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ {(plan.deadlines || []).some((entry) => deadlineOrigin(entry, { receivedFrom: plan.receivedFrom }).imposed) ? t("plans.page.addOwn") : t("plans.page.addDeadline")}</button>
+            <button type="button" className={`${ghostBtn} justify-self-start`} onClick={async () => { const title = await askText({ title: t("plans.page.addDeadline"), message: plan.receivedFrom ? t("plans.page.promptOwn") : t("plans.page.prompt"), confirmLabel: t("common.add") }); if (title?.trim()) updateOpen((current) => ({ ...current, deadlines: [...(current.deadlines || []), newDeadline(title, "", "exam")] })); }}>＋ {(plan.deadlines || []).some((entry) => deadlineOrigin(entry, { receivedFrom: plan.receivedFrom }).imposed) ? t("plans.page.addOwn") : t("plans.page.addDeadline")}</button>
             <PlanExamLink plan={plan} examDates={examDates} busy={busy} onLink={async (examDateId) => { const result = await onLinkPlanToExamDate?.(examDateId, open.document.id); setStatus(result?.ok ? t("plans.page.linked") : (result?.error || t("plans.page.linkFailed"))); }} />
           </div>
         </section>

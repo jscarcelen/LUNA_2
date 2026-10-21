@@ -6,6 +6,7 @@ import { roleProfiles } from "./data";
 import { ROLE_LABEL, accountsApi } from "../modules/accounts/api";
 import { AccountSettings } from "../modules/accounts/AccountSettings";
 import { NotificationsBell } from "../modules/accounts/NotificationsBell";
+import { UsageMeter } from "../modules/usage/UsageMeter";
 import { PageHelp } from "./PageHelp";
 import { AskLunaMenu } from "../modules/chat/AskLunaMenu";
 import { useT } from "../lib/i18n/LocaleProvider.js";
@@ -46,6 +47,7 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
       <div className="top-account">
         <LanguageSwitch className="top-lang" />
         <AskLunaMenu variant="bar" claimed={askLunaClaimed} />
+        {account ? <UsageMeter /> : null}
         {account ? <NotificationsBell onOpenPage={onOpenPage} /> : null}
         <CreditsBadge />
         <div className="profile-wrap">
@@ -65,8 +67,9 @@ export function TopBar({ title, shortTitle = "", page = "dashboard", role = "stu
                   ))}
                 </div>
               )}
-              <p className="profile-menu-storage">{t("shell.storage", { used: storage.usedGb, total: storage.totalGb })}</p>
-              <div className="storage-meter"><span style={{ width: `${pct}%` }} /></div>
+              {/* A real account has the usage circle (real numbers); the demo keeps its sample storage line. */}
+              {account ? null : <><p className="profile-menu-storage">{t("shell.storage", { used: storage.usedGb, total: storage.totalGb })}</p>
+              <div className="storage-meter"><span style={{ width: `${pct}%` }} /></div></>}
               {moreLinks.length ? (
                 <nav className="profile-menu-more" aria-label={t("mobile.more")}>
                   {moreLinks.map((link) => <button key={link.page} type="button" onClick={() => { setOpen(false); onOpenPage?.(link.page); }}>{link.label}</button>)}

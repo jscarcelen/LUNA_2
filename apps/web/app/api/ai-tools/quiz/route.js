@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { runQuizGeneration } from "../../../../modules/ai-tools/pipeline/quizGenerator.js";
 import { renderQuizExports } from "../../../../modules/ai-tools/render/exporters.js";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ function normalizeConfig(input = {}) {
   };
 }
 
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -56,4 +57,4 @@ export async function POST(request) {
     }
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
+});

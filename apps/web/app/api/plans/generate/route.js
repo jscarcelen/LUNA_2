@@ -5,6 +5,7 @@ import { ensureAgentUse } from "../../../../modules/plans/agentUse.js";
 import { CONSOLIDATED_KEY, ensureConsolidatedStep, needsConsolidatedView } from "../../../../modules/plans/master.js";
 import { localPlan } from "../../../../modules/plans/localPlan.js";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +71,7 @@ function schemaFor(keys) {
  * part of the input — weak concepts and the learner's recent scores steer how much time each topic
  * gets, so the plan a struggling learner receives is not the plan a confident one receives.
  */
-export async function POST(request) {
+export const POST = meteredAi("studyPlans", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -223,4 +224,4 @@ Before you answer, check the schedule against the rules:${consolidated ? " the f
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

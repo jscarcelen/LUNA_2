@@ -2,6 +2,7 @@ import { runAgentGeneration } from "../../../../../modules/ai-tools/pipeline/age
 import { normalizeConfig } from "../../../../../modules/ai-tools/pipeline/agentConfig.js";
 import { ownerUserIdForFresh, runAsOwner } from "../../../../../lib/session.js";
 import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../../lib/aiUsage.js";
 
 // Streams generation progress as newline-delimited JSON. Node runtime is required (Supabase +
 // chunking); streaming keeps the connection alive on Vercel so long generations don't hit the
@@ -11,7 +12,7 @@ export const dynamic = "force-dynamic";
 // The Summary Notes Consolidator reads many documents in several passes, so it gets the longest window.
 export const maxDuration = 300;
 
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   const body = await request.json().catch(() => ({}));
@@ -57,4 +58,4 @@ export async function POST(request) {
       "X-Accel-Buffering": "no"
     }
   });
-}
+});

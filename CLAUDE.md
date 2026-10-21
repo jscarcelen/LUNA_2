@@ -278,6 +278,7 @@ See `apps/web/modules/README.md`.
 production/preview on Vercel, a dev fallback is used locally), `LUNA_MAIL_FROM`, `LUNA_SMTP_URL` (SMTP provider, wins over Resend),
 `LUNA_FEEDBACK_ADMIN_KEY` (opens the temporary beta feedback board at `/feedback-admin`; see `apps/web/modules/feedback/README.md`),
 `LUNA_LEGAL_NAME`, `LUNA_LEGAL_ADDRESS`, `LUNA_PRIVACY_EMAIL` (operator shown on /terms, /privacy, /ai), `CRON_SECRET` (authorises the daily privacy job `/api/cron/privacy`: deletion purge),
+`LUNA_AI_MONTHLY_CREDITS`, `LUNA_AI_MONTHLY_CREDITS_TEACHER`, `LUNA_STORAGE_LIMIT_MB` (usage limits, see `apps/web/modules/usage/README.md`),
 `LUNA_DEMO_AI` (`on` lets the logged-out public demo use the AI routes in production; off by default, see `lib/aiAccess.js`),
 `RESEND_API_KEY`, `LUNA_PUBLIC_URL` (outgoing email; none configured = dev console preview / production "Email is not set up yet").
 

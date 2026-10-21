@@ -15,6 +15,7 @@ import plans from "./en/plans.js";
 import practice from "./en/practice.js";
 import progress from "./en/progress.js";
 import shell from "./en/shell.js";
+import usage from "./en/usage.js";
 
 /** English UI text: the source of truth. Flat dotted keys; `{name}` placeholders; plurals as `key.one` / `key.other`. One file per area in ./en/. */
 export default {
@@ -34,5 +35,6 @@ export default {
   ...plans,
   ...practice,
   ...progress,
-  ...shell
+  ...shell,
+  ...usage
 };

@@ -15,6 +15,7 @@ const post = (path, body) => call(path, { method: "POST", headers: { "Content-Ty
 
 export const accountsApi = {
   me: () => call("/api/accounts/me"),
+  usage: () => call("/api/accounts/usage"),
   signup: (form) => post("/api/accounts/signup", form),
   login: (form) => post("/api/accounts/login", form),
   logout: () => post("/api/accounts/logout", {}),

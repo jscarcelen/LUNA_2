@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { scrubPii } from "../../../../../lib/aiPrivacy.js";
 import { resolveAgentModel } from "../../../../../modules/ai-tools/pipeline/agentBuilder.js";
 import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,7 +52,7 @@ Before answering, check that every target ref exists in the outline, that scope 
  * turns the request into a precise revision brief with a checklist the new result must meet, and
  * names the original constraints the request overrides.
  */
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -97,4 +98,4 @@ export async function POST(request) {
     // The iteration still works with the user's own words.
     return NextResponse.json({ understood: "", brief: "", checklist: [], relax: [], keep: [], improved: false, error: String(error.message || error) });
   }
-}
+});

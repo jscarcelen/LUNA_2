@@ -3,6 +3,7 @@ import { chat, designComponent, DESIGN_RULES } from "../../../../modules/templat
 import { builtInBlocks } from "../../../../modules/template-studio/engine/blocks";
 import { flattenFields } from "../../../../modules/template-studio/engine/model";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,7 +99,7 @@ function matchBlock(section, blocks) {
  * image and a nod to templates they already have) and Luna designs it end to end — brief, sections,
  * views — and hands back a template they can edit like any other.
  */
-export async function POST(request) {
+export const POST = meteredAi("templates", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -210,4 +211,4 @@ Before answering, check that canvas matches the [Format:] tag, that exactly one 
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

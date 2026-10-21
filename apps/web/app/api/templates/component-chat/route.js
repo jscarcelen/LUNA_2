@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { designComponent } from "../../../../modules/template-studio/server/designer";
 import { denyAnonymousAi } from "../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const maxDuration = 120;
  * Component chatbot: the user describes a block in plain words and Luna designs it (fields +
  * layout) through the internal design agent. Premium feature.
  */
-export async function POST(request) {
+export const POST = meteredAi("templates", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -26,4 +27,4 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

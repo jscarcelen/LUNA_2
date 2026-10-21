@@ -15,6 +15,7 @@ import plans from "./es/plans.js";
 import practice from "./es/practice.js";
 import progress from "./es/progress.js";
 import shell from "./es/shell.js";
+import usage from "./es/usage.js";
 
 /** Spanish UI text (tú). A key missing here falls back to English (lib/i18n/index.js). Same keys and {placeholders} as en.js, enforced by tests/i18n. One file per area in ./es/. */
 export default {
@@ -34,5 +35,6 @@ export default {
   ...plans,
   ...practice,
   ...progress,
-  ...shell
+  ...shell,
+  ...usage
 };

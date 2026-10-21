@@ -2,6 +2,7 @@ import { runChat } from "../../../modules/chat/engine.js";
 import { createSupabaseAdminClient } from "../../../lib/supabaseClient.js";
 import { ownerUserIdForFresh, runAsOwner } from "../../../lib/session.js";
 import { denyAnonymousAi } from "../../../lib/aiAccess.js";
+import { meteredAi } from "../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ async function recordRequest(summary, ownerUserId) {
   }
 }
 
-export async function POST(request) {
+export const POST = meteredAi("askLuna", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   const body = await request.json().catch(() => ({}));
@@ -37,4 +38,4 @@ export async function POST(request) {
     }
   }));
   return new Response(stream, { headers: { "Content-Type": "application/x-ndjson; charset=utf-8", "Cache-Control": "no-store, no-transform", "X-Accel-Buffering": "no" } });
-}
+});

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { denyAnonymousAi } from "../../../../../lib/aiAccess.js";
+import { meteredAi } from "../../../../../lib/aiUsage.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ Before answering, check that core keeps the original intent, adds no new input o
  * model — same intent, ambiguities resolved from the inputs/outputs, missing rules added, empty
  * field descriptions completed. The creator never sees prompts; they see better results.
  */
-export async function POST(request) {
+export const POST = meteredAi("creating", async function POST(request) {
   const blocked = await denyAnonymousAi(request);
   if (blocked) return blocked;
   try {
@@ -74,4 +75,4 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: String(error.message || error) }, { status: 500 });
   }
-}
+});

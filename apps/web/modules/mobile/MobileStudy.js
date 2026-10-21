@@ -5,6 +5,7 @@ import { planRowsOf, rankPlans } from "../dashboard/home";
 import { joinAttempts } from "../performance/metrics";
 import { deadlineText, dueText, planTasks, studyActivities } from "./model.js";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { VisibilityChips } from "../accounts/VisibilityTags.js";
 import { Bar, ChipRow, Empty, MobileScreen, Segmented, Skeleton, TypeIcon, cardClass, secondaryClass } from "./ui.js";
 
 /** A step's status in words, and the one action that goes with it. */
@@ -99,6 +100,7 @@ export function MobileStudy({ workspace = null, loading = false, drafts = {}, in
                       <div className="min-w-0 flex-1">
                         <h2 className="m-0 text-[17px] font-semibold leading-snug text-ink [overflow-wrap:anywhere]">{plan.name}</h2>
                         <p className="m-0 text-[13px] text-soft-ink">{[plan.subjectName, plan.deadline ? deadlineText(plan.deadline, t) : ""].filter(Boolean).join(" · ")}</p>
+                        <VisibilityChips document={(workspace.subjects || []).flatMap((subject) => subject.documents || []).find((document) => document.id === plan.planId)} wrapClassName="mt-1 flex flex-wrap gap-1" />
                       </div>
                     </div>
                     {plan.total ? (

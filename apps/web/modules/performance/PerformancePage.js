@@ -29,6 +29,7 @@ import { publish, readStores } from "../marketplace/market";
 import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { displayName } from "../ui/displayName";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { ScoreAudienceNote } from "../accounts/VisibilityTags";
 
 /** A filter control never grows past this, whatever the longest option is called. */
 const field = "min-w-[9rem] max-w-[15rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
@@ -463,6 +464,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
   return (
     <section className="tw-scope grid gap-4">
       <SubjectTabs workspaces={workspaces} selectedWorkspaceId={selectedWorkspaceId} selectedSubjectId={selectedSubjectId} onSelectSubject={onSelectSubject} />
+      {isOwn && !looking ? <ScoreAudienceNote what="progress" /> : null}
 
       {/* The short version: three numbers and what to work on. Everything else is under "See details". */}
       <div className="grid gap-3 sm:grid-cols-3" aria-label={t("progress.pg.summary")}>

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { libraryGroups, uploadSubjects } from "./model.js";
 import { AddMaterialSheet } from "./AddMaterialSheet.js";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { VisibilityChips, WhoCanSeeCard } from "../accounts/VisibilityTags.js";
 import { Empty, MobileScreen, Row, RowList, Segmented, SectionTitle, Skeleton, TypeIcon, primaryClass } from "./ui.js";
 
 const PER_SUBJECT = 6;
@@ -48,6 +49,7 @@ export function MobileLibrary({ workspace = null, loading = false, selectedSubje
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#8e8e93" strokeWidth="2" strokeLinecap="round" className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2" aria-hidden><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
               <input type="search" enterKeyHint="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("mobile.library.search")} className="min-h-[44px] w-full rounded-full border-0 bg-[rgba(118,118,128,0.12)] pl-10 pr-4 text-[16px] text-ink outline-none focus:ring-2 focus:ring-[var(--accent-soft)]" />
             </label>
+            <WhoCanSeeCard />
             <Segmented label={t("mobile.library.show")} options={[["all", t("mobile.all")], ["source", t("mobile.library.added")], ["made", t("mobile.library.byLuna")]]} value={kind} onChange={setKind} />
           </div>
           {groups.length ? groups.map((group) => {
@@ -65,6 +67,7 @@ export function MobileLibrary({ workspace = null, loading = false, selectedSubje
                       icon={<TypeIcon typeId={item.typeId} made={item.kind === "made"} />}
                       title={item.name}
                       detail={[item.type, item.folderName].filter(Boolean).join(" · ")}
+                      extra={<VisibilityChips document={documentById(item.id)} wrapClassName="mt-1 flex flex-wrap gap-1" />}
                       ariaLabel={`${item.name}, ${item.type}`}
                       onClick={() => onOpen?.(documentById(item.id), item.subjectId)}
                     />

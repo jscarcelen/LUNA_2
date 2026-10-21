@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { progressModel, whenLabel, formatScore } from "./model.js";
 import { Bar, Empty, MobileScreen, SectionTitle, Skeleton, cardClass } from "./ui.js";
+import { ScoreAudienceNote } from "../accounts/VisibilityTags.js";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
 
 /**
@@ -32,6 +33,7 @@ export function MobileProgress({ workspace = null, loading = false, learner = ""
   const { overall } = model;
   return (
     <MobileScreen title={t("mobile.tab.progress")} label={t("mobile.tab.progress")}>
+      <ScoreAudienceNote what="progress" className="px-1 text-[13px]" />
       <div className="grid gap-2">
         <SectionTitle>{t("mobile.progress.learning")}</SectionTitle>
         <div className={`${cardClass} grid gap-4 p-4`}>

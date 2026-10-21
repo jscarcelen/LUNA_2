@@ -9,6 +9,7 @@ import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
 import { PlanCard, Ring } from "./PlanCard";
+import { PlanAudienceNote } from "../accounts/VisibilityTags";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
 import { executePlan } from "./execute";
 import { RevisePlanDialog } from "./RevisePlanDialog";
@@ -744,6 +745,7 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
                 {children.length ? ` · ${t.plural("plans.card.subPlans", children.length)} (${t("plans.page.inTotal", { done: wholeProgress.done, total: wholeProgress.total })})` : ""}
               </p>
               {plan.note ? <p className="m-0 mt-2 max-w-2xl text-sm text-ink">{plan.note}</p> : null}
+              <PlanAudienceNote document={open.document} className="mt-2" />
               {(() => {
                 const names = conceptNames(graphConcepts);
                 if (!names.length) return null;

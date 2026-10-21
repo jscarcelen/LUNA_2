@@ -79,13 +79,14 @@ export function Empty({ title, text, actions = [] }) {
 }
 
 /** A tappable row: icon, title, a line under it, and what is at the right (a label or a chevron). */
-export function Row({ icon = null, title, detail = "", trailing = null, onClick, ariaLabel }) {
+export function Row({ icon = null, title, detail = "", extra = null, trailing = null, onClick, ariaLabel }) {
   return (
     <button type="button" onClick={onClick} aria-label={ariaLabel} className="flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left transition active:bg-[var(--surface-soft)]">
       {icon}
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[16px] font-semibold text-ink">{title}</span>
         {detail ? <span className="block truncate text-[13px] text-soft-ink">{detail}</span> : null}
+        {extra}
       </span>
       {trailing ?? <span aria-hidden className="shrink-0 text-lg text-[#c7c7cc]">›</span>}
     </button>

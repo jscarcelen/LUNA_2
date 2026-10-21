@@ -129,6 +129,37 @@ export async function createClass(owner, input) {
   return listClasses(owner);
 }
 
+/**
+ * Gives one of the teacher's existing groups (a class made in My students, without a code) a join code. A group
+ * inside a class cannot have one: students join the class, then the teacher places them.
+ */
+export async function addClassCode(owner, groupId, { schoolConsent = false } = {}) {
+  assertTeacher(owner);
+  assertEmailVerified(owner, "create a class");
+  await assertClassCodesReady();
+  throttleWrite(owner);
+  const client = createSupabaseAdminClient();
+  const id = String(groupId || "").trim();
+  const { data: group, error } = await client.from("account_groups").select("*").eq("id", id).maybeSingle();
+  if (error) throw error;
+  if (!id || !group || group.owner_id !== owner.id) throw new LinkError("not_found", "That class was not found.", 404);
+  if (group.parent_group_id) throw new LinkError("bad_request", "A group inside a class cannot have its own code.", 400);
+  const { data: existing, error: codeError } = await client.from("class_codes").select("group_id").eq("group_id", group.id).maybeSingle();
+  if (codeError) throw codeError;
+  if (!existing) {
+    const now = new Date().toISOString();
+    await withUniqueCode((code) => client.from("class_codes").insert({
+      group_id: group.id,
+      owner_id: owner.id,
+      code,
+      enabled: true,
+      school_consent_at: schoolConsent === true ? now : null,
+      school_consent_by: schoolConsent === true ? owner.id : null
+    }));
+  }
+  return listClasses(owner);
+}
+
 async function ownedClass(client, owner, groupId) {
   const id = String(groupId || "").trim();
   if (!id) throw new LinkError("bad_request", "Choose a class.");

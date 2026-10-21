@@ -65,4 +65,8 @@ describe("role copy", () => {
     expect(classSpecs([], [{ id: "a" }])[0].name).toBe("All my students");
     expect(classSpecs([], [])).toEqual([]);
   });
+  it("groups inside a class stay on the class card, not as classes of their own", () => {
+    const groups = [{ id: "g1", name: "Year 10", memberIds: ["a", "b"] }, { id: "g1r", name: "Year 10 · Readers", parentId: "g1", memberIds: ["a"] }];
+    expect(classSpecs(groups, [{ id: "a" }, { id: "b" }]).map((entry) => entry.name)).toEqual(["Year 10"]);
+  });
 });

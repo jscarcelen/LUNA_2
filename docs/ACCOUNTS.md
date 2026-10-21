@@ -371,3 +371,17 @@ a group has two more tabs (the old "Sent" list is folded into the first):
 * Edits to a shared resource's classification/concepts are refused (read-only), the UI shows a failed-action message.
 * Real auth provider and RLS policies (this is a first version on service-role access).
 * The Teacher/Parent "Performance" page of their own workspace still uses per-browser learner names; use My students.
+
+## Teacher classes gallery and groups inside a class
+
+*People & connections* starts, for a teacher, with **Your classes** (`modules/accounts/ClassesGallery.js`; the Classes tab links to it with
+"Manage people and connections"): one card per class (a top-level group) with its students, the join code (copy, joining on/off, new code,
+or "Give this class a join code" for a class made in My students: `POST /api/accounts/classes {action:"addCode"}`), its **groups**, and
+"Let students see material" (opens *What this class can see*), "Add or remove students", "Message", "Open class"; plus an "Add new class" tile
+and the students not in any class.
+
+A **group inside a class** is an `account_groups` row with `parent_group_id` (migration `supabase/migrations/202610210002_class_subgroups.sql`,
+feature-detected: creating one answers `503 setupNeeded` until applied). Rules (`lib/groupsRepository.js`, pure helpers in `modules/accounts/groups.js`):
+its members must be members of the class; one level only; it is stored as "3B · Readers" (names stay unique per owner, the send dialogs show
+the full name, the card shows "Readers") and renamed with the class; leaving the class leaves its groups; deleting the class deletes its groups
+(never a student); ticking an inner group in "Groups…" also puts the student in the class. Home's class cards show classes only.

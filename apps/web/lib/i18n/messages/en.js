@@ -1,4 +1,5 @@
 import auth from "./en/auth.js";
+import classes from "./en/classes.js";
 import classroom from "./en/classroom.js";
 import landing from "./en/landing.js";
 import common from "./en/common.js";
@@ -18,6 +19,7 @@ import shell from "./en/shell.js";
 /** English UI text: the source of truth. Flat dotted keys; `{name}` placeholders; plurals as `key.one` / `key.other`. One file per area in ./en/. */
 export default {
   ...auth,
+  ...classes,
   ...classroom,
   ...landing,
   ...common,

@@ -12,7 +12,7 @@
  * (a 503 `setupNeeded` naming the file).
  */
 import { createSupabaseAdminClient } from "./supabaseClient.js";
-import { GROUPS_MIGRATION, LinkError, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
+import { GROUPS_MIGRATION, LinkError, SUBGROUPS_MIGRATION, isSetupNeededError, setupNeededBody } from "./accountsCore.js";
 import { limits } from "./accountLimits.js";
 import { findAccountsByIds, listGuardianStudents } from "./accountsRepository.js";
 import {
@@ -20,10 +20,13 @@ import {
   MAX_GROUP_MEMBERS,
   activeMembership,
   canOwnGroups,
+  consistentGroupChoice,
   groupsOfMember,
   normalizeColour,
   normalizeGroupName,
-  resolveRecipients
+  resolveRecipients,
+  subgroupShortName,
+  subgroupStoredName
 } from "../modules/accounts/groups.js";
 
 /* ------------------------------------------------------------------ is the migration applied? */
@@ -62,9 +65,40 @@ export async function assertGroupsReady(what) {
   if (!(await supportsGroups())) throw new GroupsSetupError(what);
 }
 
+/* Groups inside a class need 202610210002 (the parent_group_id column); everything else works without it. */
+let subgroupCapability = { ok: null, checkedAt: 0 };
+
+export function resetSubgroupsCache() {
+  subgroupCapability = { ok: null, checkedAt: 0 };
+}
+
+const missingColumn = (error) => /42703|PGRST204/.test(String(error?.code || "")) || /parent_group_id/.test(String(error?.message || ""));
+
+export async function supportsSubgroups() {
+  if (subgroupCapability.ok === true) return true;
+  if (subgroupCapability.ok === false && Date.now() - subgroupCapability.checkedAt < RECHECK_MISSING_MS) return false;
+  const { error } = await createSupabaseAdminClient().from("account_groups").select("parent_group_id").limit(1);
+  if (!error) {
+    subgroupCapability = { ok: true, checkedAt: Date.now() };
+    return true;
+  }
+  if (missingColumn(error) || isSetupNeededError(error)) {
+    subgroupCapability = { ok: false, checkedAt: Date.now() };
+    return false;
+  }
+  throw error;
+}
+
+async function assertSubgroupsReady() {
+  if (await supportsSubgroups()) return;
+  const error = new LinkError("setup_needed", `Groups inside a class need one database step: apply ${SUBGROUPS_MIGRATION} (Supabase SQL editor or MCP apply_migration), then reload.`, 503);
+  error.setup = setupNeededBody(SUBGROUPS_MIGRATION);
+  throw error;
+}
+
 /* ------------------------------------------------------------------ reading */
 
-const groupFromRow = (row) => ({ id: row.id, ownerId: row.owner_id, name: row.name, colour: row.colour || "", createdAt: row.created_at || "" });
+const groupFromRow = (row) => ({ id: row.id, ownerId: row.owner_id, name: row.name, colour: row.colour || "", parentId: row.parent_group_id || "", createdAt: row.created_at || "" });
 
 function assertOwner(owner) {
   if (!owner?.id || !canOwnGroups(owner.role)) throw new LinkError("not_allowed", "Only a teacher or a parent can group students.", 403);
@@ -145,19 +179,39 @@ function throttle(owner) {
   limits.groupWritesBySender.fail(owner.id);
 }
 
-export async function createGroup(owner, { name, colour, memberIds = [] }) {
+/** The class a group inside a class belongs to: one of the owner's top-level groups, or a 404. */
+async function parentClass(client, owner, parentId) {
+  const parent = await ownedGroup(client, owner, parentId);
+  if (parent.parent_group_id) throw new LinkError("bad_request", "A group inside a class cannot hold groups of its own.", 400);
+  return parent;
+}
+
+/** The class's current members (only they can be in a group inside it). */
+async function currentMemberIds(client, owner, groupId) {
+  const students = await listGuardianStudents(owner);
+  const memberships = await selectMemberships(client, [groupId]);
+  return new Set(activeMembership(memberships, new Set(students.map((student) => student.id))).get(groupId) || []);
+}
+
+function assertInClass(memberIds, classMembers) {
+  if ((memberIds || []).some((id) => !classMembers.has(id))) throw new LinkError("not_in_class", "Only students in this class can be in its groups.", 400);
+}
+
+export async function createGroup(owner, { name, colour, memberIds = [], parentId = "" }) {
   assertOwner(owner);
   await assertGroupsReady();
   throttle(owner);
-  const clean = normalizeGroupName(name);
-  if (!clean) throw new LinkError("bad_request", "Give the group a name.");
   const client = createSupabaseAdminClient();
+  const parent = String(parentId || "").trim() ? (await assertSubgroupsReady(), await parentClass(client, owner, parentId)) : null;
+  const clean = parent ? subgroupStoredName(parent.name, name) : normalizeGroupName(name);
+  if (!clean) throw new LinkError("bad_request", "Give the group a name.");
   const existing = await selectGroupRows(client, owner.id);
   if (existing.length >= MAX_GROUPS_PER_OWNER) throw new LinkError("too_many", `You can have up to ${MAX_GROUPS_PER_OWNER} groups.`, 400);
   if (existing.some((row) => normalizeGroupName(row.name).toLowerCase() === clean.toLowerCase())) throw new LinkError("name_taken", "You already have a group with that name.", 409);
   const members = await assertLinkedStudents(owner, memberIds);
   if (members.length > MAX_GROUP_MEMBERS) throw new LinkError("too_many", `A group holds at most ${MAX_GROUP_MEMBERS} students.`, 400);
-  const { data, error } = await client.from("account_groups").insert({ owner_id: owner.id, name: clean, colour: normalizeColour(colour) }).select("*").single();
+  if (parent) assertInClass(members, await currentMemberIds(client, owner, parent.id));
+  const { data, error } = await client.from("account_groups").insert({ owner_id: owner.id, name: clean, colour: normalizeColour(colour), ...(parent ? { parent_group_id: parent.id } : {}) }).select("*").single();
   if (error) {
     if (error.code === "23505") throw new LinkError("name_taken", "You already have a group with that name.", 409);
     throw error;
@@ -175,11 +229,17 @@ export async function updateGroup(owner, groupId, { name, colour }) {
   const client = createSupabaseAdminClient();
   const group = await ownedGroup(client, owner, groupId);
   const patch = { updated_at: new Date().toISOString() };
+  const rows = await selectGroupRows(client, owner.id);
+  const parent = group.parent_group_id ? rows.find((row) => row.id === group.parent_group_id) : null;
+  // A class renamed from "3B" to "3C" keeps its groups' names in step ("3B · Readers" -> "3C · Readers").
+  const children = rows.filter((row) => row.parent_group_id === group.id);
+  const renamedChildren = [];
   if (name !== undefined) {
-    const clean = normalizeGroupName(name);
+    const clean = parent ? subgroupStoredName(parent.name, name) : normalizeGroupName(name);
     if (!clean) throw new LinkError("bad_request", "Give the group a name.");
-    const others = (await selectGroupRows(client, owner.id)).filter((row) => row.id !== group.id);
-    if (others.some((row) => normalizeGroupName(row.name).toLowerCase() === clean.toLowerCase())) throw new LinkError("name_taken", "You already have a group with that name.", 409);
+    for (const child of children) renamedChildren.push({ id: child.id, name: subgroupStoredName(clean, subgroupShortName(child.name, group.name)) });
+    const taken = new Set(rows.filter((row) => row.id !== group.id && !children.some((child) => child.id === row.id)).map((row) => normalizeGroupName(row.name).toLowerCase()));
+    if ([clean, ...renamedChildren.map((child) => child.name)].some((value) => taken.has(value.toLowerCase()))) throw new LinkError("name_taken", "You already have a group with that name.", 409);
     patch.name = clean;
   }
   if (colour !== undefined) patch.colour = normalizeColour(colour);
@@ -187,6 +247,11 @@ export async function updateGroup(owner, groupId, { name, colour }) {
   if (error) {
     if (error.code === "23505") throw new LinkError("name_taken", "You already have a group with that name.", 409);
     throw error;
+  }
+  for (const child of renamedChildren) {
+    if (child.name === children.find((row) => row.id === child.id)?.name) continue;
+    const { error: childError } = await client.from("account_groups").update({ name: child.name, updated_at: patch.updated_at }).eq("id", child.id);
+    if (childError) throw childError;
   }
   return { ...groupFromRow({ ...group, ...patch }) };
 }
@@ -197,9 +262,11 @@ export async function deleteGroup(owner, groupId) {
   await assertGroupsReady();
   const client = createSupabaseAdminClient();
   const group = await ownedGroup(client, owner, groupId);
-  const { error: memberError } = await client.from("account_group_members").delete().eq("group_id", group.id);
+  // The groups inside a class go with it (the database cascades too; this keeps it explicit and works without it).
+  const ids = [group.id, ...(await selectGroupRows(client, owner.id)).filter((row) => row.parent_group_id === group.id).map((row) => row.id)];
+  const { error: memberError } = await client.from("account_group_members").delete().in("group_id", ids);
   if (memberError) throw memberError;
-  const { error } = await client.from("account_groups").delete().eq("id", group.id);
+  const { error } = await client.from("account_groups").delete().in("id", ids);
   if (error) throw error;
   return { id: group.id };
 }
@@ -210,6 +277,7 @@ export async function addMembers(owner, groupId, memberIds) {
   const client = createSupabaseAdminClient();
   const group = await ownedGroup(client, owner, groupId);
   const wanted = await assertLinkedStudents(owner, memberIds);
+  if (group.parent_group_id) assertInClass(wanted, await currentMemberIds(client, owner, group.parent_group_id));
   const stored = await selectMemberships(client, [group.id]);
   const students = await listGuardianStudents(owner);
   const linked = new Set(students.map((student) => student.id));
@@ -233,7 +301,9 @@ export async function removeMembers(owner, groupId, memberIds) {
   const group = await ownedGroup(client, owner, groupId);
   const ids = [...new Set((memberIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
   if (!ids.length) return { removed: 0 };
-  const { error } = await client.from("account_group_members").delete().eq("group_id", group.id).in("member_id", ids);
+  // Leaving a class also means leaving the groups inside it.
+  const groupIds = [group.id, ...(await selectGroupRows(client, owner.id)).filter((row) => row.parent_group_id === group.id).map((row) => row.id)];
+  const { error } = await client.from("account_group_members").delete().in("group_id", groupIds).in("member_id", ids);
   if (error) throw error;
   return { removed: ids.length };
 }
@@ -250,8 +320,10 @@ export async function setMemberGroups(owner, memberId, groupIds) {
   const client = createSupabaseAdminClient();
   const rows = await selectGroupRows(client, owner.id);
   const mine = new Set(rows.map((row) => row.id));
-  const wanted = [...new Set((groupIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
-  if (wanted.some((id) => !mine.has(id))) throw new LinkError("not_found", "That group was not found.", 404);
+  const picked = [...new Set((groupIds || []).map((id) => String(id || "").trim()).filter(Boolean))];
+  if (picked.some((id) => !mine.has(id))) throw new LinkError("not_found", "That group was not found.", 404);
+  // Ticking a group inside a class also puts the student in the class.
+  const wanted = consistentGroupChoice(picked, rows.map((row) => ({ id: row.id, parentId: row.parent_group_id || "" })));
   const memberships = await selectMemberships(client, rows.map((row) => row.id));
   const has = new Set(memberships.filter((row) => row.memberId === student).map((row) => row.groupId));
   const students = await listGuardianStudents(owner);

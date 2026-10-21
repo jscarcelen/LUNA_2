@@ -164,3 +164,61 @@ export async function runPool(items, worker, { concurrency = 4, deadline = Infin
   await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, items.length || 1)) }, lane));
   return results;
 }
+
+/* ------------------------------------------------------------------ groups inside a class */
+
+/**
+ * A teacher's class is a top-level group; inside it they can make smaller groups ("Readers", "Table 2"): a group with
+ * `parentId`, whose members are always some of the class's members. Names stay unique per owner, so a group inside a
+ * class is stored as "3B · Readers" (what the send dialogs and the Groups bar show) and drawn as "Readers" on the class
+ * card. One level only: a group inside a class cannot hold groups of its own.
+ */
+export const SUBGROUP_SEPARATOR = " · ";
+export const MAX_SUBGROUP_NAME = 30;
+
+/** "3B" + "Readers" -> "3B · Readers", cut so the whole fits MAX_GROUP_NAME (the class part gives way first). */
+export function subgroupStoredName(parentName, name) {
+  const short = normalizeGroupName(name).slice(0, MAX_SUBGROUP_NAME).trim();
+  if (!short) return "";
+  const room = MAX_GROUP_NAME - short.length - SUBGROUP_SEPARATOR.length;
+  const parent = normalizeGroupName(parentName).slice(0, Math.max(0, room)).trim();
+  return parent ? `${parent}${SUBGROUP_SEPARATOR}${short}` : short;
+}
+
+/** The name drawn inside the class card: the stored name without "3B · ". */
+export function subgroupShortName(storedName, parentName = "") {
+  const stored = text(storedName);
+  const parent = normalizeGroupName(parentName);
+  if (parent && stored.startsWith(`${parent}${SUBGROUP_SEPARATOR}`)) return stored.slice(parent.length + SUBGROUP_SEPARATOR.length);
+  const at = stored.indexOf(SUBGROUP_SEPARATOR);
+  return at >= 0 ? stored.slice(at + SUBGROUP_SEPARATOR.length) : stored;
+}
+
+/**
+ * The owner's groups as classes, each with the groups inside it (`subgroups`, each with `shortName`). A group whose
+ * class is gone is shown as a class of its own (it never disappears).
+ */
+export function classesWithSubgroups(groups = []) {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  const isChild = (group) => Boolean(group.parentId && byId.has(group.parentId));
+  return groups.filter((group) => !isChild(group)).map((group) => ({
+    ...group,
+    subgroups: groups.filter((child) => isChild(child) && child.parentId === group.id).map((child) => ({ ...child, shortName: subgroupShortName(child.name, group.name) }))
+  }));
+}
+
+/**
+ * The per-student "Groups…" choice, kept consistent with classes: choosing a group inside a class also puts the student
+ * in the class, and leaving a class takes them out of its groups.
+ * @param {string[]} wanted the group ids ticked
+ * @param {Array<{ id: string, parentId?: string }>} groups the owner's groups
+ */
+export function consistentGroupChoice(wanted, groups = []) {
+  const byId = new Map(groups.map((group) => [group.id, group]));
+  const chosen = new Set(wanted || []);
+  for (const id of [...chosen]) {
+    const parent = byId.get(id)?.parentId;
+    if (parent && byId.has(parent)) chosen.add(parent);
+  }
+  return [...chosen];
+}

@@ -70,7 +70,11 @@ export function TeacherHome({ account = false, onSendPractice, onOpenPage }) {
   const specs = useMemo(() => (people.students === null || groups === null ? null : classSpecs(groups, people.students, t)), [people.students, groups, t]);
   return (
     <section className="tw-scope grid gap-5">
-      <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{t("people.home.yourClasses")}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="m-0 text-[32px] font-bold tracking-tight text-ink">{t("people.home.yourClasses")}</h2>
+        {/* Classes, students, groups and join codes are all managed on one page. */}
+        {account ? <button type="button" className="inline-flex items-center gap-2 rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-semibold text-ink transition hover:bg-[var(--surface-soft)]" onClick={() => onOpenPage?.("connections")}><span aria-hidden className="text-[var(--accent)]">👥</span>{t("classes.manage")}</button> : null}
+      </div>
       {specs === null ? (
         <div className="grid gap-3" aria-busy="true">{[0, 1].map((index) => <div key={index} className="h-40 animate-pulse rounded-[18px] bg-ink/5" />)}</div>
       ) : specs.length ? (

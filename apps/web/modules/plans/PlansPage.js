@@ -8,6 +8,8 @@ import { parseResource } from "../resources/resource";
 import { conceptIndex, resourceConcepts } from "../resources/concepts";
 import { joinAttempts } from "../performance/metrics";
 import { PlanCalendar } from "./PlanCalendar";
+import { PlanFiles } from "./PlanFiles";
+import { planFiles } from "./planFiles";
 import { PlanCard, Ring } from "./PlanCard";
 import { PlanAudienceNote } from "../accounts/VisibilityTags";
 import { GeneratePlanDialog } from "./GeneratePlanDialog";
@@ -721,6 +723,15 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
     const wholeProgress = planProgress(whole, attempts);
     const weeks = planWeeks(plan);
     const parent = plans.find((row) => row.document.id === plan.parentPlanId) || null;
+    const files = planFiles(plan, workspaceDocuments, t);
+    // A file of the plan opens like its step would: a quiz to do (a parent only reads it), made material in the reader, an upload in the document reader.
+    function openFile(file) {
+      const resource = parseResource(file.document);
+      const step = plan.items.find((item) => item.resourceId === file.id);
+      if (resource?.activity?.questions?.length && !readOnly) setPlaying({ activity: resource.activity, resource, resourceDocument: file.document, documentId: file.id, itemId: step?.id, planDocumentId: open.document.id });
+      else if (resource) setReading({ resource, document: file.document });
+      else setReadingDoc({ ...file.document, focus: null });
+    }
 
     // Precompute concept diff for the rebuild-preview modal
     const addedConcepts = rebuildPreview
@@ -1065,6 +1076,11 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           )}
         </section>
 
+        {/* ── Files the plan uses — gallery / list, each opens ── */}
+        <section className={`${card} p-5`}>
+          <PlanFiles files={files} onOpen={openFile} emptyText={readOnly ? t("plans.files.emptyReadOnly") : t("plans.files.empty")} />
+        </section>
+
         {/* ── Student model — full width ── */}
         <section className={`${card} p-5`}>
           <p className={`${kicker} flex items-center gap-1.5`}>{t("plans.page.whatYouKnow")}<InfoDot info={METRIC_INFO.studentModel} label={t("plans.page.whatYouKnowLabel")} /></p>
@@ -1290,10 +1306,10 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
             document={readingDoc}
             documents={workspaceDocuments}
             onClose={() => setReadingDoc(null)}
-            onSaveGeneratedQuizDocument={onSaveGeneratedQuizDocument}
-            onUpdateGeneratedDocument={onUpdateGeneratedDocument}
+            onSaveGeneratedQuizDocument={readOnly ? undefined : onSaveGeneratedQuizDocument}
+            onUpdateGeneratedDocument={readOnly ? undefined : onUpdateGeneratedDocument}
             onDownloadDocument={onDownloadDocument}
-            onUpdateDocumentContent={onUpdateDocumentContent}
+            onUpdateDocumentContent={readOnly ? undefined : onUpdateDocumentContent}
             focus={readingDoc.focus}
             scrollTo={readingDoc.scrollTo}
             workspaceId={selectedWorkspaceId}
@@ -1304,12 +1320,12 @@ export function PlansPage({ role = "student", workspaces = [], selectedWorkspace
           <ReaderView
             onOpenSource={openSource}
             resource={reading.resource}
-            onUpdate={reading.document && canUpdateResource(reading.resource) ? () => setUpdatingResource({ document: reading.document, resource: reading.resource }) : undefined}
+            onUpdate={!readOnly && reading.document && canUpdateResource(reading.resource) ? () => setUpdatingResource({ document: reading.document, resource: reading.resource }) : undefined}
             chat={{ documentId: reading.document?.id, planId: open.document.id }}
             originals={masterOriginals(reading.resource)}
             onDownloadOriginalById={originalDownloader(workspaceDocuments, onDownloadDocument)}
             highlights={reading.resource?.highlights || []}
-            onSaveHighlights={(list) => saveHighlights(reading.document, reading.resource, list)}
+            onSaveHighlights={readOnly ? undefined : (list) => saveHighlights(reading.document, reading.resource, list)}
             onClose={() => setReading(null)}
           />
         ) : null}

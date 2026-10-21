@@ -112,6 +112,8 @@ export default {
   "mobile.plan.showDone": "Ver completados ({count})",
   "mobile.plan.hideDone": "Ocultar completados ({count})",
   "mobile.plan.openFull": "Abrir el plan completo",
+  "mobile.plan.showFiles": "Archivos ({count})",
+  "mobile.plan.hideFiles": "Ocultar archivos ({count})",
   "mobile.plan.empty": "Aún no tienes plan de estudio",
   "mobile.plan.emptyText": "Un plan de estudio reparte tu trabajo hasta la fecha del examen, con un test o una lectura en cada paso.",
   "mobile.plan.planIt": "Planéalo por mí",

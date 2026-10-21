@@ -22,3 +22,7 @@ deterministic checks), revised/updated by the sibling routes, and built by `exec
   step's OWN uploaded document with `readingFocus` = the step's concepts, so the part is the material's own text about those topics.
 - Plan generation itself does not cut documents into chunks: the planner sees document names and the concept map
   (`/api/concepts`); the text of a topic is cut only when a reading step is built.
+
+## Files in a plan
+
+`planFiles.js` lists the files a plan uses (material first, then what Luna made, each once, with the number of steps using it); `PlanFiles.js` shows them as a Gallery or List (choice remembered per browser) and opens one on click. Used by the plan page, the phone's Study tab (`mobile/MobileStudy.js`) and the read-only plans in `accounts/LinkedStudentsPage.js`.

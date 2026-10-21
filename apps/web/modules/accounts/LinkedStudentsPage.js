@@ -5,6 +5,10 @@ import { PerformancePage } from "../performance/PerformancePage";
 import { joinAttempts } from "../performance/metrics";
 import { dueLabel, parsePlan, planProgress } from "../plans/plan";
 import { PlanDeadlines } from "../plans/DeadlineBadge";
+import { PlanFiles } from "../plans/PlanFiles";
+import { planFiles } from "../plans/planFiles";
+import { parseResource } from "../resources/resource";
+import { ReaderView } from "../reader/ReaderView";
 import { SubjectTabs } from "../ui/SubjectTabs";
 import { accountsApi } from "./api";
 import { ExamDatesTab } from "./ExamDatesTab";
@@ -77,12 +81,18 @@ function ChildDangerZone({ student, onErased }) {
   );
 }
 
-/** A student's study plans, read-only: how far each is, what is next, what is late, and who set each deadline. */
-function ReadOnlyPlans({ documents, folders = [], studentName }) {
+/**
+ * A student's study plans, read-only: how far each is, what is next, what is late, who set each deadline, and the files
+ * each plan uses. What Luna made opens in the reader; uploaded material comes here by name only (redactTreeForGuardian).
+ * `allDocuments` is the whole workspace, because a plan's material can sit in another topic.
+ */
+function ReadOnlyPlans({ documents, allDocuments = documents, folders = [], studentName }) {
   const t = useT();
+  const [reading, setReading] = useState(null); // { resource, document } opened from a plan's files
   const attempts = useMemo(() => joinAttempts(documents), [documents]);
   const plans = useMemo(() => documents.map((document) => ({ document, plan: parsePlan(document, { folders }) })).filter((row) => row.plan), [documents, folders]);
   if (!plans.length) return <p className={`${card} p-5 text-sm text-soft-ink`}>{t("people.ls.noPlans", { name: studentName })}</p>;
+  const readable = (file) => (file.kind === "made" ? parseResource(file.document) : null);
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {plans.map(({ document, plan }) => {
@@ -107,9 +117,13 @@ function ReadOnlyPlans({ documents, folders = [], studentName }) {
                 </li>
               ))}
             </ul>
+            <div className="mt-2 border-t border-ink/8 pt-3">
+              <PlanFiles compact files={planFiles(plan, allDocuments, t)} canOpen={(file) => Boolean(readable(file))} onOpen={(file) => setReading({ resource: readable(file), document: file.document })} lockedHint={t("plans.files.nameOnly")} emptyText={t("plans.files.emptyReadOnly")} />
+            </div>
           </article>
         );
       })}
+      {reading ? <ReaderView resource={reading.resource} title={reading.resource?.name || ""} highlights={reading.resource?.highlights || []} onClose={() => setReading(null)} /> : null}
     </div>
   );
 }
@@ -299,7 +313,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, onOpe
               {data && tab === "plans" ? (
                 <div className="grid gap-3">
                   <SubjectTabs workspaces={data.workspaces} selectedWorkspaceId={workspaceId} selectedSubjectId={subjectId} onSelectSubject={setSubjectId} />
-                  <ReadOnlyPlans documents={subject?.documents || []} folders={subject?.folders || []} studentName={student.displayName || nounWord(noun, t)} />
+                  <ReadOnlyPlans documents={subject?.documents || []} allDocuments={(data.workspaces.find((workspace) => workspace.id === workspaceId)?.subjects || []).flatMap((entry) => entry.documents || [])} folders={subject?.folders || []} studentName={student.displayName || nounWord(noun, t)} />
                 </div>
               ) : null}
 

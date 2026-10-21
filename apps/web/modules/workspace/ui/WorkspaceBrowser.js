@@ -598,7 +598,7 @@ export function WorkspaceBrowser({
     const here = hereId ? folders.find((entry) => entry.id === hereId) : null;
     const inside = here && !(here.shared && here.shared.permission !== "edit") && !sharedTopic(here.subjectId) ? here : null;
     if (!inside && !onCreateSubject) return;
-    const name = await askText({ title: t("courses.wb.createFolder"), label: inside ? t("courses.wb.createInside", { name: inside.name }) : t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") });
+    const name = await askText({ title: inside ? t("courses.wb.createInside", { name: inside.name }) : t("courses.wb.createFolder"), label: t("courses.tree.folderName"), placeholder: t("courses.tree.folderName"), confirmLabel: t("common.create") });
     if (name?.trim()) createFolder(name.trim(), inside ? inside.id : "");
   }
 

@@ -194,7 +194,7 @@ export default {
   "courses.wb.addFolderTip": "Sube una carpeta de tu ordenador con todo lo que contiene.",
   "courses.wb.createFolder": "Crear carpeta",
   "courses.wb.createFolderTip": "Crea una carpeta nueva y vacía aquí.",
-  "courses.wb.createInside": "Nombre de la nueva carpeta dentro de «{name}»:",
+  "courses.wb.createInside": "Nueva carpeta en «{name}»",
   "courses.wb.dropHere": "Suelta para añadirlos aquí. Después eliges la carpeta.",
   "courses.wb.dropInto": "Suelta para añadirlos a {path}",
   "courses.wb.resetFilters": "Restablecer",

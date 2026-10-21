@@ -194,7 +194,7 @@ export default {
   "courses.wb.addFolderTip": "Upload a folder from your computer with everything inside it.",
   "courses.wb.createFolder": "Create folder",
   "courses.wb.createFolderTip": "Make a new, empty folder here.",
-  "courses.wb.createInside": "Name of the new folder inside “{name}”:",
+  "courses.wb.createInside": "New folder in “{name}”",
   "courses.wb.dropHere": "Drop to add these here. You choose the folder next.",
   "courses.wb.dropInto": "Drop to add these to {path}",
   "courses.wb.resetFilters": "Reset",

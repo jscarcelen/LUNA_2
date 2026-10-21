@@ -20,6 +20,7 @@ import { usePhone } from "../ui/PhoneCollapse";
 import { draftProgress } from "./drafts.js";
 import { loadAllDrafts } from "./draftStore.js";
 import { PhotoQuizMaker } from "./PhotoQuizMaker";
+import { askConfirm } from "../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -245,7 +246,7 @@ export function ActivitiesPage({ role = "student", profileName = "", workspaces 
                 const menu = [
                   { label: r.dueInfo.imposed ? t("practice.menu.ownDate") : t("practice.menu.deadline"), icon: "◷", onSelect: () => setEditingDue(r.document.id) },
                   canUpdateResource(r.parsed) ? { label: t("practice.menu.update"), icon: "✦", title: t("practice.menu.updateHint"), onSelect: () => setUpdating(r) } : null,
-                  onRemoveDocument ? { label: t("common.delete"), icon: "🗑", danger: true, onSelect: () => { if (window.confirm(t("practice.confirmDelete", { title: displayName(r.parsed.activity.title) }))) onRemoveDocument(r.document.id); } } : null
+                  onRemoveDocument ? { label: t("common.delete"), icon: "🗑", danger: true, onSelect: async () => { if (await askConfirm({ message: t("practice.confirmDelete", { title: displayName(r.parsed.activity.title) }), confirmLabel: t("common.delete"), danger: true })) onRemoveDocument(r.document.id); } } : null
                 ];
                 return (
                   <div key={r.document.id} className={`grid gap-3 rounded-2xl border p-3 transition ${selected === r.document.id ? "border-[var(--accent)]/40 bg-[var(--accent-soft)]/30" : "border-ink/10"}`}>

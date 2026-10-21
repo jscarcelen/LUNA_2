@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AREAS, KINDS, STATUSES, areaLabelOf, buildBrief, countByArea, shortId, titleOf } from "../../lib/feedbackCore.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 /**
  * The owner's board: every piece of feedback as a card, filterable by status / area / kind, with the screenshot, the quoted
@@ -97,7 +98,7 @@ export function FeedbackBoard() {
   }
 
   async function remove() {
-    if (!window.confirm(`Delete ${chosen.length} feedback item${chosen.length === 1 ? "" : "s"} for good?`)) return;
+    if (!(await askConfirm({ title: `Delete ${chosen.length} feedback item${chosen.length === 1 ? "" : "s"} for good?`, confirmLabel: "Delete", danger: true }))) return;
     const response = await call("/api/feedback/admin", { method: "DELETE", body: JSON.stringify({ ids: chosen.map((item) => item.id) }) });
     if (response.ok) { setPicked(new Set()); await load(); setNotice("Deleted."); }
   }

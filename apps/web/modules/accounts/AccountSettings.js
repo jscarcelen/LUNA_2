@@ -8,6 +8,7 @@ import { SetupNotice } from "./SetupNotice";
 import { field, ghostBtn, kicker, primaryBtn } from "./ui";
 import { LanguageSwitch } from "../../lib/i18n/LanguageSwitch.js";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 const label = "mb-1 block text-xs font-semibold text-ink";
 const hint = "m-0 mt-1 text-[11px] leading-snug text-soft-ink";
@@ -65,7 +66,7 @@ export function AccountSettings({ account, onClose, onAccountChange }) {
   const [deletePw, setDeletePw] = useState({ value: "", busy: false, error: "" });
   async function deleteAccount(event) {
     event.preventDefault();
-    if (deletePw.busy || !window.confirm(t("misc.acct.confirmDelete"))) return;
+    if (deletePw.busy || !(await askConfirm({ message: t("misc.acct.confirmDelete"), confirmLabel: t("common.delete"), danger: true }))) return;
     setDeletePw({ ...deletePw, busy: true, error: "" });
     const result = await accountsApi.deleteAccount(deletePw.value);
     if (result.ok) { window.location.assign("/?deleted=1"); return; }

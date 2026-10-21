@@ -30,6 +30,7 @@ import { ActivityPlayer } from "../activities/ActivityPlayer";
 import { displayName } from "../ui/displayName";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
 import { ScoreAudienceNote } from "../accounts/VisibilityTags";
+import { askConfirm, askText } from "../ui/dialogs.js";
 
 /** A filter control never grows past this, whatever the longest option is called. */
 const field = "min-w-[9rem] max-w-[15rem] truncate rounded-xl border border-ink/12 bg-white px-2.5 py-1.5 text-xs text-ink";
@@ -253,7 +254,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
               </p>
               <div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--surface-soft)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${Math.round(progress.onTrack * 100)}%` }} /></div>
               <p className="m-0 mt-1 text-[11px] text-soft-ink">{t("progress.pg.atTarget", { mastered: progress.mastered, total: progress.total })}{progress.done ? ` · ${t("progress.pg.average", { pct: percent(progress.average) })}` : ""}</p>
-              {onRemoveDocument ? <button type="button" className={`${ghostBtn} mt-2 text-[var(--color-danger)]`} onClick={() => { if (window.confirm(t("progress.pg.deleteGoal", { title: goal.title }))) onRemoveDocument(goal.documentId); }}>{t("common.delete")}</button> : null}
+              {onRemoveDocument ? <button type="button" className={`${ghostBtn} mt-2 text-[var(--color-danger)]`} onClick={async () => { if (await askConfirm({ message: t("progress.pg.deleteGoal", { title: goal.title }), confirmLabel: t("common.delete"), danger: true })) onRemoveDocument(goal.documentId); }}>{t("common.delete")}</button> : null}
             </div>
           );
         })}
@@ -510,7 +511,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                 {viewName(entry, role, t)}
               </button>
             ))}
-            <button type="button" className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" title={t("progress.pg.newView")} onClick={() => { const next = blankView(role, window.prompt(t("progress.pg.nameView"), t("progress.pg.beforeExam")) || t("progress.pg.newViewName")); setViews(upsertView(role, next)); setViewId(next.id); setCustomising(true); }}>{t("progress.pg.addView")}</button>
+            <button type="button" className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-soft-ink hover:bg-[var(--surface-soft)]" title={t("progress.pg.newView")} onClick={async () => { const named = await askText({ title: t("progress.pg.nameView"), defaultValue: t("progress.pg.beforeExam"), confirmLabel: t("common.create") }); if (named === null) return; const next = blankView(role, named.trim() || t("progress.pg.newViewName")); setViews(upsertView(role, next)); setViewId(next.id); setCustomising(true); }}>{t("progress.pg.addView")}</button>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-1.5">
             <button type="button" className={ghostBtn} onClick={() => setCustomising((value) => !value)}>{customising ? t("common.done") : t("progress.pg.arrange")}</button>
@@ -553,7 +554,7 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
                 <option value="">{role === "teacher" ? t("progress.pg.wholeClass") : t("progress.pg.allChildren")}</option>
                 {learners.map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
-              <button type="button" className={ghostBtn} onClick={() => { const name = window.prompt(role === "teacher" ? t("progress.pg.studentName") : t("progress.pg.childName")); if (name) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
+              <button type="button" className={ghostBtn} onClick={async () => { const name = await askText({ title: role === "teacher" ? t("progress.pg.studentName") : t("progress.pg.childName"), confirmLabel: t("common.add") }); if (name?.trim()) { setLearners(addLearner(name)); setLearner(name.trim()); } }}>＋</button>
             </label>
           ) : null}
           {planId || learner || custom || range ? <button type="button" className="text-xs font-semibold text-soft-ink hover:underline" onClick={() => { setPlanId(""); setLearner(""); setCustom(false); setRange(0); setFilters(EMPTY_FILTERS); }}>{t("progress.pg.reset")}</button> : null}
@@ -568,8 +569,8 @@ export function PerformancePage({ role = "student", profileName = "", workspaces
           role={role}
           canDelete={view.id !== `default_${role}`}
           onChange={changeView}
-          onSaveAs={() => { const name = window.prompt(t("progress.pg.nameView"), t("progress.pg.copyOf", { name: viewName(view, role, t) })); if (!name) return; const next = duplicateView(view, name); setViews(upsertView(role, next)); setViewId(next.id); }}
-          onDelete={() => { if (!window.confirm(t("progress.pg.deleteView", { name: viewName(view, role, t) }))) return; const remaining = removeView(role, view.id); setViews(remaining); setViewId(remaining[0].id); setCustomising(false); }}
+          onSaveAs={async () => { const name = await askText({ title: t("progress.pg.nameView"), defaultValue: t("progress.pg.copyOf", { name: viewName(view, role, t) }), confirmLabel: t("common.save") }); if (!name?.trim()) return; const next = duplicateView(view, name); setViews(upsertView(role, next)); setViewId(next.id); }}
+          onDelete={async () => { if (!(await askConfirm({ message: t("progress.pg.deleteView", { name: viewName(view, role, t) }), confirmLabel: t("common.delete"), danger: true }))) return; const remaining = removeView(role, view.id); setViews(remaining); setViewId(remaining[0].id); setCustomising(false); }}
           onPublish={publishView}
           onReset={() => { const remaining = removeView(role, view.id); const restored = readViews(role); setViews(restored); setViewId(restored[0].id); void remaining; }}
         />

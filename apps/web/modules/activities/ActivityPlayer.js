@@ -20,6 +20,7 @@ import { useT } from "../../lib/i18n/LocaleProvider.js";
 import { usePhone } from "../ui/PhoneCollapse";
 import { countAnswered, isAnswered, isDraftEmpty, makeDraft, resumeState } from "./drafts.js";
 import { clearDraft, loadDraft, storeDraft } from "./draftStore.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const primaryBtn = "inline-flex items-center justify-center rounded-full bg-[var(--accent)] px-5 py-2 text-sm font-semibold text-white transition hover:bg-[#0077ed] disabled:opacity-50";
@@ -329,7 +330,7 @@ function QuestionList({ activity, onSubmit, onClose, onProgress, look = null, do
     if (onClose) onClose();
   }
   async function startOver() {
-    if (!window.confirm(t("practice.draft.confirmStartOver"))) return;
+    if (!(await askConfirm({ message: t("practice.draft.confirmStartOver"), confirmLabel: t("common.startAgain"), danger: true }))) return;
     await clearDraft({ scope: draftRef.current.scope, server: draftRef.current.server, key: draftKey });
     draftRef.current.dirty = false;
     setAnswers({}); setConfidence({}); setWork({}); setChecked({}); modelGrades.current = {}; setIndex(0); setReviewing(false); setResumed(null); setSaveState("");

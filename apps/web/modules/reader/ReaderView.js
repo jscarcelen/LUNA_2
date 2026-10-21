@@ -19,6 +19,7 @@ import { RowMenu } from "../ui/RowMenu";
 import { displayName } from "../ui/displayName";
 import { HIGHLIGHT_COLORS, anchorFromRange, clearHighlights, highlightAt, markedHtml, overlapping, paintHighlights, supportsHighlights } from "./highlights";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm, askText } from "../ui/dialogs.js";
 
 const ghostBtn = "inline-flex items-center justify-center rounded-full border border-ink/15 bg-white px-3 py-1.5 text-xs font-semibold text-ink transition hover:bg-[var(--surface-soft)] disabled:opacity-40";
 
@@ -173,8 +174,8 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
   function insertMath() {
     askFormula("", (tex) => exec("insertHTML", mathHtml(tex, false)));
   }
-  function insertTable() {
-    const answer = window.prompt(t("courses.rv.tablePrompt"));
+  async function insertTable() {
+    const answer = await askText({ title: t("courses.rv.table"), message: t("courses.rv.tablePrompt"), placeholder: "3x4", confirmLabel: t("common.add") });
     if (!answer?.trim()) return;
     const size = /^\s*(\d+)\s*[x×]\s*(\d+)\s*$/i.exec(answer);
     const rows = size
@@ -219,14 +220,14 @@ export function ReaderView({ title = "", resource, activity = null, html: htmlOv
     setDirty(false);
     setArticleKey((key) => key + 1);
   }
-  function cancelEditing() {
-    if (dirty && !window.confirm(t("courses.rv.discard"))) return;
+  async function cancelEditing() {
+    if (dirty && !(await askConfirm({ message: t("courses.rv.discard"), confirmLabel: t("common.discard"), cancelLabel: t("common.keepEditing"), danger: true }))) return;
     stopEditing();
   }
   async function saveEditing() {
     const article = rootRef.current?.querySelector("article");
     if (!article || !onSaveContent) return;
-    if (!window.confirm(t("courses.rv.confirmSave"))) return;
+    if (!(await askConfirm({ message: t("courses.rv.confirmSave"), confirmLabel: t("common.save") }))) return;
     const copy = article.cloneNode(true);
     copy.querySelectorAll("[contenteditable]").forEach((element) => element.removeAttribute("contenteditable"));
     copy.removeAttribute("contenteditable");

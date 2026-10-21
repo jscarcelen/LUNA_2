@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { aiToolsRegistry } from "../registry";
 import { requestShare, useSharingAvailable } from "../../accounts/shareEvents";
+import { askConfirm } from "../../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -57,7 +58,7 @@ function AgentCard({ document, onOpen, onEdit, onDelete }) {
             type="button"
             title="Delete this tool"
             className="rounded-full border border-ink/12 px-2 py-1.5 text-xs text-soft-ink transition hover:border-[var(--color-danger)]/40 hover:text-[var(--color-danger)]"
-            onClick={() => { if (window.confirm(`Delete “${parsed.name || document.name}”? This cannot be undone.`)) onDelete(document.id); }}
+            onClick={async () => { if (await askConfirm({ title: `Delete “${parsed.name || document.name}”?`, message: "This cannot be undone.", confirmLabel: "Delete", danger: true })) onDelete(document.id); }}
           >
             🗑
           </button>

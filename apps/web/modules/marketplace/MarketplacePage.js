@@ -5,6 +5,7 @@ import { KINDS, PRICING_TYPE_LABELS, SUBJECTS, addReview, listingsOfStore, newSt
 import { parsePlan, PLAN_TAG } from "../plans/plan";
 import { parseResource, RESOURCE_TAG } from "../resources/resource";
 import { builtInBlocks, readBlockLibrary } from "../template-studio/engine/blocks";
+import { askConfirm } from "../ui/dialogs.js";
 
 const card = "rounded-[18px] border border-ink/8 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_rgba(0,0,0,0.05)]";
 const kicker = "m-0 text-[11px] font-semibold uppercase tracking-[0.12em] text-soft-ink";
@@ -66,7 +67,7 @@ export function MarketplacePage({
 
   // Report a listing (illegal, infringing or misleading content): goes to the same inbox as beta feedback, with the listing named.
   async function report(listing) {
-    if (typeof window !== "undefined" && !window.confirm(`Report “${listing.name}” to the LUNA team?`)) return;
+    if (!(await askConfirm({ title: `Report “${listing.name}” to the LUNA team?`, confirmLabel: "Report" }))) return;
     try {
       const response = await fetch("/api/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "problem", message: `REPORTED LISTING: ${listing.name} (id ${listing.id}, store ${listing.storeId || "?"}). Please review it against the marketplace rules.`, page: "/marketplace" }) });
       setStatus(response.ok ? "Thanks — we will review that listing." : "Could not send the report. Try again, or write to us.");

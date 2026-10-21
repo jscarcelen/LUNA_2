@@ -48,6 +48,7 @@ import { useOpener } from "../modules/mobile/MobileOpener";
 import { STUDENT_PHONE_QUERY } from "../modules/mobile/phone";
 import { loadAllDrafts } from "../modules/activities/draftStore";
 import { draftProgress } from "../modules/activities/drafts";
+import { askConfirm } from "../modules/ui/dialogs.js";
 
 const defaultPage = { student: "dashboard", teacher: "dashboard", parent: "dashboard" };
 const WORKSPACES_API = "/api/workspaces-supabase";
@@ -84,7 +85,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     setSharingAvailable(true);
     const stop = onShareRequested(openShare);
     const stopLeave = onLeaveRequested(async (grantId) => {
-      if (!window.confirm(t("shell.leaveConfirm"))) return;
+      if (!(await askConfirm({ message: t("shell.leaveConfirm"), confirmLabel: t("common.leave"), danger: true }))) return;
       const result = await accountsApi.leaveGrant(grantId);
       setShareNotice(result.ok ? t("shell.leftShare") : result.error);
       if (result.ok) loadWorkspaces();
@@ -631,7 +632,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (result.status === 409 && result.data?.requiresForce) {
       const c = result.data.cascade || {};
       const message = `Workspace has ${c.subjects || 0} subjects, ${c.folders || 0} folders, ${c.topicTags || 0} topic tags, and ${c.documents || 0} documents. Force delete?`;
-      if (!window.confirm(message)) return;
+      if (!(await askConfirm({ message, confirmLabel: t("common.delete"), danger: true }))) return;
       const forced = await postWorkspaceAction("removeWorkspace", { workspaceId, force: true });
       if (forced.ok && workspaceId === selectedWorkspaceId) {
         selectFallback(forced.data.workspaces || []);
@@ -717,7 +718,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (result.status === 409 && result.data?.requiresForce) {
       const c = result.data.cascade || {};
       const message = `Subject has ${c.folders || 0} folders, ${c.topicTags || 0} topic tags, and ${c.documents || 0} documents. Force delete?`;
-      if (!window.confirm(message)) return;
+      if (!(await askConfirm({ message, confirmLabel: t("common.delete"), danger: true }))) return;
       const forced = await postWorkspaceAction("removeSubject", {
         workspaceId: selectedWorkspaceId,
         subjectId,

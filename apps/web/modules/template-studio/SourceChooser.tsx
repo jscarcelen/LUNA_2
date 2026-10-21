@@ -6,6 +6,7 @@ import { TemplateMatrix } from "./TemplateMatrix";
 import { KIND_LABEL, templateComponents, templateKind, type TemplateKind } from "./matrix";
 import { card, kicker, primaryBtn } from "./ui";
 import { requestShare, useSharingAvailable } from "../accounts/shareEvents";
+import { askConfirm } from "../ui/dialogs.js";
 
 export interface SavedTemplateRow { id: string; name: string; folderId?: string; templateV3?: unknown; docModel?: unknown; dataFields?: unknown[] }
 
@@ -80,7 +81,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
                 <div className="mt-1 flex items-center gap-1">
                   {onMoveToFolder ? <select className="min-w-0 flex-1 rounded-lg border border-ink/10 px-2 py-1 text-[11px] text-soft-ink" value={templateFolderOf(row)} onChange={(event) => onMoveToFolder(row, event.target.value)}><option value="">Unfiled</option>{folders.map((f) => <option key={f} value={f}>📁 {f}</option>)}</select> : null}
                   {shareButton(row)}
-                  {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg border border-ink/10 text-xs text-soft-ink hover:border-[rgba(215,0,21,0.4)] hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${row.name}"? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
+                  {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg border border-ink/10 text-xs text-soft-ink hover:border-[rgba(215,0,21,0.4)] hover:text-[var(--color-danger)]" onClick={async () => { if (await askConfirm({ title: `Delete "${row.name}"?`, message: "This cannot be undone.", confirmLabel: "Delete", danger: true })) onDelete(row); }}>🗑</button> : null}
                 </div>
               </div>
             ))}
@@ -104,7 +105,7 @@ export function SourceChooser({ templates, busy, agents = [], onNewTemplate, onU
                   <span className="shrink-0 text-xs text-soft-ink">{(row.dataFields || []).length} fields</span>
                 </button>
                 {shareButton(row)}
-                {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={() => { if (window.confirm(`Delete "${row.name}"? This cannot be undone.`)) onDelete(row); }}>🗑</button> : null}
+                {onDelete ? <button type="button" title="Delete" className="grid size-7 shrink-0 place-items-center rounded-lg text-xs text-soft-ink hover:text-[var(--color-danger)]" onClick={async () => { if (await askConfirm({ title: `Delete "${row.name}"?`, message: "This cannot be undone.", confirmLabel: "Delete", danger: true })) onDelete(row); }}>🗑</button> : null}
               </div>
             ))}
             {!shown.length ? <p className="m-0 text-sm text-soft-ink">No templates yet.</p> : null}

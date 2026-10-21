@@ -1,5 +1,13 @@
 # Implementation Log
 
+## 2026-10-21 (in-app confirmation dialogs)
+
+- Every browser `window.confirm` / `prompt` / `alert` ("luna2-share-web.vercel.app says … OK") is now LUNA's own box:
+  `modules/ui/dialogs.js` (`askConfirm`, `askText`, `showNotice`, one `<DialogHost />` in `app/layout.js`). Buttons say what
+  they do (Delete, Rename, Leave…), destructive ones are red and start focused on Cancel, Escape / tapping outside cancels,
+  it is a bottom sheet on phones, and Cancel/OK follow EN/ES. Rename refuses an empty name under the box instead of reopening it.
+- `tests/ui/no-browser-dialogs.test.js` fails if a browser dialog comes back.
+
 ## 2026-10-21 (students: who can see my things, #7)
 
 - Students see, with plain tags, who can see each thing: 🔒 Only you, 👀 Teacher / Parent can see (their connected teacher or

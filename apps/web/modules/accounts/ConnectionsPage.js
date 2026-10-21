@@ -8,6 +8,7 @@ import { SHARING_MIGRATION, SetupNotice } from "./SetupNotice";
 import { kindExposesPerformance, relationLabel } from "./shared";
 import { card, chip, dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
 import { useT } from "../../lib/i18n/LocaleProvider.js";
+import { askConfirm } from "../ui/dialogs.js";
 
 const dueText = (date, t) => (date ? new Date(`${date}T00:00:00`).toLocaleDateString(t.locale === "es" ? "es-ES" : undefined, { day: "numeric", month: "short" }) : "");
 const KIND_WORD = { document: true, folder: true, subject: true };
@@ -145,7 +146,7 @@ export function ConnectionsPage({ account, onOpenPage }) {
                 <Person other={row.other} label={relationLabel(row.kind, account.role, row.other.role, t)} />
                 <span className="flex gap-1.5">
                   {row.other.role === "student" && account.role !== "student" && kindExposesPerformance(row.kind) ? <button type="button" className={ghostBtn} onClick={() => onOpenPage?.("students")}>{account.role === "parent" ? t("people.conn.seePerf") : t("people.conn.openStudent")}</button> : null}
-                  <button type="button" className={dangerBtn} disabled={busy} onClick={() => { if (window.confirm(t("people.conn.confirmRemove", { name: row.other.displayName || row.other.email }))) run(accountsApi.changeLink("remove", row.id)).then(() => load()); }}>{t("common.remove")}</button>
+                  <button type="button" className={dangerBtn} disabled={busy} onClick={async () => { if (await askConfirm({ message: t("people.conn.confirmRemove", { name: row.other.displayName || row.other.email }), confirmLabel: t("common.remove"), danger: true })) run(accountsApi.changeLink("remove", row.id)).then(() => load()); }}>{t("common.remove")}</button>
                 </span>
               </li>
             ))}
@@ -177,7 +178,7 @@ export function ConnectionsPage({ account, onOpenPage }) {
                   <span className="block truncate text-sm font-semibold text-ink">{item.itemName || kindA(item.itemKind, t)}</span>
                   <span className="block text-[11px] text-soft-ink">{t("people.conn.kindFrom", { kind: kindWord(item.itemKind, t), name: item.owner.displayName || t("people.conn.someone") })} · {item.permission === "edit" ? t("people.conn.canEditYou") : t("people.conn.viewOnly")}</span>
                 </span>
-                <button type="button" className={ghostBtn} disabled={busy} onClick={() => { if (window.confirm(t("people.conn.confirmLeave"))) changeGrant(accountsApi.leaveGrant(item.id)); }}>{t("people.conn.leave")}</button>
+                <button type="button" className={ghostBtn} disabled={busy} onClick={async () => { if (await askConfirm({ message: t("people.conn.confirmLeave"), confirmLabel: t("common.leave"), danger: true })) changeGrant(accountsApi.leaveGrant(item.id)); }}>{t("people.conn.leave")}</button>
               </li>
             ))}
           </ul>

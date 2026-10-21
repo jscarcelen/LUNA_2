@@ -50,3 +50,13 @@ export function onLeaveRequested(listener) {
   leaveListeners.add(listener);
   return () => leaveListeners.delete(listener);
 }
+
+/** The Share dialog closed (something may have been shared or assigned): screens that list what is shared reload. */
+const finishedListeners = new Set();
+export function announceShareFinished() {
+  for (const listener of finishedListeners) listener();
+}
+export function onShareFinished(listener) {
+  finishedListeners.add(listener);
+  return () => finishedListeners.delete(listener);
+}

@@ -1,4 +1,5 @@
 import auth from "./es/auth.js";
+import classroom from "./es/classroom.js";
 import landing from "./es/landing.js";
 import common from "./es/common.js";
 import courses from "./es/courses.js";
@@ -17,6 +18,7 @@ import shell from "./es/shell.js";
 /** Spanish UI text (tú). A key missing here falls back to English (lib/i18n/index.js). Same keys and {placeholders} as en.js, enforced by tests/i18n. One file per area in ./es/. */
 export default {
   ...auth,
+  ...classroom,
   ...landing,
   ...common,
   ...courses,

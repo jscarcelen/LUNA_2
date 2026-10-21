@@ -53,6 +53,11 @@ function ClassCard({ entry, onSendPractice, onOpenPage }) {
         </>
       )}
       <button type="button" className={primaryBtn} onClick={() => onSendPractice?.({ name: entry.name, groupIds: entry.groupIds, recipientIds: entry.recipientIds })}>{t("people.home.sendTo", { name: entry.name })}</button>
+      {/* The two other everyday jobs for a class: write to it (and its parents), and check what it can open. */}
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <button type="button" className={linkBtn} onClick={() => onOpenPage?.(`students?${entry.id ? `group=${entry.id}&` : ""}tab=messages`)}>{t("classroom.home.message")}</button>
+        <button type="button" className={linkBtn} onClick={() => onOpenPage?.(`students?${entry.id ? `group=${entry.id}&` : ""}tab=access`)}>{t("classroom.home.access")}</button>
+      </div>
     </article>
   );
 }

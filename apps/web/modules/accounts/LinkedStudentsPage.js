@@ -9,6 +9,8 @@ import { SubjectTabs } from "../ui/SubjectTabs";
 import { accountsApi } from "./api";
 import { ExamDatesTab } from "./ExamDatesTab";
 import { MarkReviewsTab } from "./MarkReviewsTab";
+import { MessagesTab } from "./MessagesTab";
+import { SharingOverviewTab } from "./SharingOverviewTab";
 import { GroupView } from "./GroupView";
 import { GroupDots, GroupsBar, StudentGroupsMenu } from "./GroupsBar";
 import { SetupNotice } from "./SetupNotice";
@@ -124,7 +126,7 @@ const tabButton = (active) => `rounded-full border px-3.5 py-1.5 text-xs font-se
  *    opens their individual view.
  *  - Tabs: Performance · Study plans · Sent · Exam dates (dates you send to groups or students; they plan for them).
  */
-export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initialGroupId = "", onSendQuestions }) {
+export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, onOpenPlan, onOpenDocument, initialGroupId = "", initialTab = "", onSendQuestions }) {
   const t = useT();
   const [students, setStudents] = useState(null);
   const [setupNeeded, setSetupNeeded] = useState(false);
@@ -133,7 +135,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
   const [selectedId, setSelectedId] = useState("");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState("performance");
+  const [tab, setTab] = useState(() => (["performance", "access", "plans", "messages", "reviews", "exams"].includes(initialTab) ? initialTab : "performance"));
   const [sent, setSent] = useState([]);
   const [workspaceId, setWorkspaceId] = useState("");
   const [subjectId, setSubjectId] = useState("");
@@ -141,6 +143,10 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
   const [groupsSetup, setGroupsSetup] = useState(null);
   const [notice, setNotice] = useState("");
   const noun = account.role === "parent" ? "child" : "student";
+  const reloadSent = useCallback(async () => {
+    const result = await accountsApi.shared();
+    if (result.ok) setSent(result.data.sent || []);
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -153,7 +159,7 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
       setStudents(list);
       setSelectedId((current) => current || (initialGroupId ? "" : list[0]?.id || ""));
     });
-    accountsApi.shared().then((result) => { if (live && result.ok) setSent(result.data.sent || []); });
+    reloadSent();
     accountsApi.groups().then((result) => {
       if (!live) return;
       if (result.setupNeeded) { setGroupsSetup({ migration: result.migration || "" }); return; }
@@ -183,7 +189,6 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
   const groupsOfStudent = useCallback((id) => groups.filter((entry) => entry.memberIds.includes(id)), [groups]);
   const student = students?.find((entry) => entry.id === selectedId) || null;
   const subject = data?.workspaces?.find((workspace) => workspace.id === workspaceId)?.subjects?.find((entry) => entry.id === subjectId) || null;
-  const sentToStudent = sent.filter((item) => item.recipient.id === selectedId);
   const inGroupView = Boolean(group) && !selectedId;
 
   // Choosing a group shows the group view (no student selected); "All students" goes back to one student at a time.
@@ -197,9 +202,15 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
 
   if (setupNeeded) return <section className="tw-scope grid gap-3"><SetupNotice /></section>;
 
+  // "What … can see" replaces the old "Sent" list: it shows what was sent AND what was not, with the actions on each row.
+  const studentName = student ? student.displayName || nounWord(noun, t) : "";
   const tabs = inGroupView
-    ? [["performance", t("people.ls.tab.group")], ["plans", t("people.ls.tab.plans")], ["sent", t("people.ls.tab.sent", { name: group.name })], ["exams", t("people.ls.tab.exams")]]
-    : student ? [["performance", t("people.ls.tab.performance")], ["reviews", t("people.ls.tab.reviews")], ["plans", t("people.ls.tab.plans")], ["sent", t("people.ls.tab.sent", { name: student.displayName || nounWord(noun, t) })], ["exams", t("people.ls.tab.exams")]] : [["exams", t("people.ls.tab.exams")]];
+    ? [["performance", t("people.ls.tab.group")], ["access", t("classroom.tab.access", { name: group.name })], ["plans", t("people.ls.tab.plans")], ["messages", t("classroom.tab.messages")], ["exams", t("people.ls.tab.exams")]]
+    : student ? [["performance", t("people.ls.tab.performance")], ["access", t("classroom.tab.access", { name: studentName })], ["plans", t("people.ls.tab.plans")], ["messages", t("classroom.tab.messages")], ["reviews", t("people.ls.tab.reviews")], ["exams", t("people.ls.tab.exams")]] : [["exams", t("people.ls.tab.exams")]];
+  const connectedIds = (students || []).map((entry) => entry.id);
+  const audience = inGroupView
+    ? { kind: "group", ids: group.memberIds.filter((id) => connectedIds.includes(id)), name: group.name, groupId: group.id }
+    : student ? { kind: "student", ids: [student.id], name: studentName } : null;
 
   return (
     <section className="tw-scope grid gap-3">
@@ -248,7 +259,17 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
             ) : null}
           </div>
 
-          {tab === "exams" ? (
+          {tab === "plans" && audience && account?.role === "teacher" ? (
+            <p className={`${card} m-0 flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs text-soft-ink`}>
+              <span>{t("classroom.plansHint", { name: audience.name })}</span>
+              <button type="button" className={ghostBtn} onClick={() => setTab("access")}>{t("classroom.plansHintBtn")}</button>
+            </p>
+          ) : null}
+          {tab === "access" && audience ? (
+            <SharingOverviewTab key={`access-${audience.kind}-${audience.groupId || audience.ids[0]}`} account={account} workspaces={workspaces} audience={audience} sent={sent} onSentChanged={reloadSent} onOpenPlan={onOpenPlan} onOpenDocument={onOpenDocument} />
+          ) : tab === "messages" && audience ? (
+            <MessagesTab key={`messages-${audience.kind}-${audience.groupId || audience.ids[0]}`} account={account} audience={audience} allIds={connectedIds} />
+          ) : tab === "exams" ? (
             <ExamDatesTab account={account} groups={groups} students={students} workspaces={workspaces} scope={{ groupId: inGroupView ? groupId : "", studentId: student ? selectedId : "" }} noun={noun} onNotice={setNotice} />
           ) : inGroupView ? (
             <GroupView key={`${group.id}:${group.memberIds.join(",")}`} group={group} tab={tab} sent={sent} noun={noun} onOpenStudent={openStudent} />
@@ -284,22 +305,6 @@ export function LinkedStudentsPage({ account, workspaces = [], onOpenPage, initi
 
               {tab === "reviews" && student ? <MarkReviewsTab key={`reviews-${student.id}`} student={student} canDecide={account?.role === "teacher"} /> : null}
 
-              {tab === "sent" ? (
-                <div className={`${card} p-5`}>
-                  <p className={kicker}>{t("people.ls.whatSent")}</p>
-                  {sentToStudent.length ? (
-                    <ul className="m-0 mt-2 grid list-none gap-1.5 p-0">
-                      {sentToStudent.map((item) => (
-                        <li key={item.id} className="rounded-xl border border-ink/10 px-3 py-2">
-                          <span className="block truncate text-sm font-semibold text-ink">{item.title}</span>
-                          <span className="block text-[11px] text-soft-ink">{item.mode === "assign" ? t("people.gv.assigned") : t("people.gv.shared")}{item.dueDate ? ` · ${t("people.ls.dueLocked", { due: dueLabel(item.dueDate, t) })}` : ""}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : <p className="m-0 mt-2 text-sm text-soft-ink">{t("people.ls.sentNone")}</p>}
-                  <button type="button" className={`${ghostBtn} mt-3`} onClick={() => onOpenPage?.("workspaces")}>{t("people.ls.openWs")}</button>
-                </div>
-              ) : null}
             </>
           )}
           {account?.role === "parent" && student && tab !== "exams" && !inGroupView ? <ChildDangerZone key={`danger-${student.id}`} student={student} onErased={(id) => { setStudents((list) => (list || []).filter((entry) => entry.id !== id)); setSelectedId(""); }} /> : null}

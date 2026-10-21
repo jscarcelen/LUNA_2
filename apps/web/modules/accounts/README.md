@@ -43,3 +43,8 @@ link, a pending link or someone else's workspace is the same 404). Without `stud
 
 Remembered per account: `accounts.tour_seen_at` (migration `202610190001_account_tour_seen.sql`, feature-detected) set by `POST /api/accounts/tour`
 and read by `app/platform/page.js`; without the migration the browser keeps it under `luna.tour.v1.<accountId>` (`lib/tourSeen.js`).
+
+## Classroom tools (teacher)
+
+- `SharingOverviewTab.js` + pure `sharingStatus.js` — "What {name} can see": shared / not shared per topic, folder and file for a student or group, with Share, Assign, Stop sharing, Change date, Send latest version, Edit plan.
+- `MessagesTab.js` + pure `messages.js` — "Messages": write to a student, group or all students and (teachers) their parents; `ReceivedMessages` is the inbox on the Connections page. Server: `lib/messagesRepository.js`, `/api/accounts/messages`.

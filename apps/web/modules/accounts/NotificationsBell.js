@@ -124,6 +124,7 @@ export function NotificationsBell({ onOpenPage }) {
             {events.map((event) => (
               <li key={event.id} className={`rounded-xl px-3 py-2 ${event.unread ? "bg-[rgba(0,113,227,0.07)]" : ""}`}>
                 <p className="m-0 text-sm text-ink [overflow-wrap:anywhere]">{describeEvent(event, t)}</p>
+                {event.type === "message" && event.body ? <p className="m-0 mt-1 line-clamp-4 whitespace-pre-line rounded-lg bg-[var(--surface-soft)] px-2 py-1.5 text-xs text-ink [overflow-wrap:anywhere]">{event.body}</p> : null}
                 <p className="m-0 mt-0.5 text-[11px] text-soft-ink">{timeAgo(event.at, Date.now(), t)}</p>
               </li>
             ))}

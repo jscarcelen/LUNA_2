@@ -183,6 +183,27 @@ export function examDateMail({ to, sender, title, date, subjectHint = "", notes 
   });
 }
 
+/**
+ * A message from a teacher (or parent) to a student, or to a parent about their child. The text is the sender's own,
+ * escaped; the sender's email is included so a reply goes straight to them (Luna messages are one way).
+ * @param {{ to: string, sender: object, subject: string, body: string, aboutStudentName?: string, url: string }} args
+ */
+export function classMessageMail({ to, sender, subject, body, aboutStudentName = "", url }) {
+  const who = whoLine(sender);
+  const title = oneLine(subject).slice(0, 120) || "A message";
+  const about = oneLine(aboutStudentName).slice(0, 80);
+  const lines = String(body || "").split(/\n{2,}/).map((part) => part.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean).slice(0, 30);
+  const paragraphs = [about ? `${who} sent you a message about ${about}:` : `${who} sent you a message:`, `“${title}”`, ...lines, `To answer, write to ${oneLine(sender?.email) || "them"} from your own email.`];
+  return build({
+    to,
+    subject: `${nameOf(sender)}: ${title}`,
+    heading: about ? `A message about ${about}` : "You have a new message",
+    paragraphs,
+    button: { label: "Open Luna", url },
+    footer: "You only get messages from your teachers and from the teachers of your children. You can end a connection at any time from the Connections page."
+  });
+}
+
 /** A request for an address with no account yet: minimal, honest, sent at most once a week per sender and address. */
 export function invitationMail({ to, sender, url }) {
   const who = whoLine(sender);

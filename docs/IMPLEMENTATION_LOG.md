@@ -1,5 +1,17 @@
 # Implementation Log
 
+## 2026-10-21 (teacher classroom tools)
+
+- **What each class / student can see.** My students has a "What {name} can see" tab for a student or group: every topic,
+  folder and file of the teacher's workspace marked green (can see / can edit, also through a folder or topic), orange (only
+  some of the group, or an assigned copy with its due date) or grey (not shared), with Share / Assign / Stop sharing right on
+  the row. Pure coverage rules in `modules/accounts/sharingStatus.js` (tested).
+- **Dates and plans.** Assigned work shows its due date on the row with *Change date* and *Send latest version* (re-assigns,
+  keeping the student's ticks and notes); plans have *Edit plan*. The Study plans tab points there.
+- **Messages to students and parents.** New Messages tab (student, group or all students; teachers can include parents, who
+  are reached through their child and never named). Bell + Connections inbox + one email each; "seen by" counts; delete for
+  everyone. Table `class_messages` (migration `202610210001`, applied).
+- Fixed `students?group=…` links from the teacher Home (they opened nothing); `students?tab=messages|access` opens a tab.
 ## 2026-10-21 (workspace gallery view)
 
 - Courses page (`modules/workspace/ui/WorkspaceBrowser.js`) has a **List / Gallery** switch next to the folder title,

@@ -32,6 +32,7 @@ export function describeEvent(event, t = tEn) {
   if (event.type === "exam_date") return event.subjectHint ? t("dialogs.bell.examDateHint", { who, title: event.title, hint: event.subjectHint, date: shortDate(event.examDate, t) }) : t("dialogs.bell.examDate", { who, title: event.title, date: shortDate(event.examDate, t) });
   if (event.type === "exam_date_changed") return t("dialogs.bell.examChanged", { who, title: event.title, date: shortDate(event.examDate, t) });
   if (event.type === "exam_date_cancelled") return t("dialogs.bell.examCancelled", { who, title: event.title });
+  if (event.type === "message") return event.aboutName ? t("classroom.bell.messageAbout", { who, title: event.title, name: event.aboutName }) : t("classroom.bell.message", { who, title: event.title });
   if (event.type === "grant") return t(event.permission === "edit" ? "dialogs.bell.grantEdit" : "dialogs.bell.grantView", { who, title: event.title });
   if (event.type === "shared" && ["agent", "template", "component"].includes(event.itemType)) return t(`dialogs.bell.shared.${event.itemType}`, { who, title: event.title });
   if (event.type === "shared") return t("dialogs.bell.shared", { who, title: event.title });

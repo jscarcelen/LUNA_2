@@ -10,7 +10,7 @@ import { limits } from "./accountLimits.js";
 import { consumeToken, invalidateTokens, issueToken, peekToken } from "./accountTokens.js";
 import { clearPendingInvites, findAccountByEmail, findAccountById, findAccountsByIds, markEmailVerified, requestLink, setAccountPassword, supportsVerification, attachPendingLinks } from "./accountsRepository.js";
 import { sendMail } from "./mailer.js";
-import { assignMail, examDateMail, invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, shareMail, verifyEmailMail } from "./mailTemplates.js";
+import { assignMail, classMessageMail, examDateMail, invitationMail, linkAcceptedMail, linkRequestMail, resetPasswordMail, shareMail, verifyEmailMail } from "./mailTemplates.js";
 import { runPool } from "../modules/accounts/groups.js";
 import { createSupabaseAdminClient } from "./supabaseClient.js";
 
@@ -279,6 +279,31 @@ export async function notifyExamDates(sender, rows, kind, baseUrl) {
     }, { concurrency: 5 });
   } catch (error) {
     console.warn("[accounts] could not send the exam date emails:", error?.message || error);
+  }
+  return { sent };
+}
+
+/** One email per recipient of a message (best effort, after the response, capped per sender). Never throws. */
+export async function notifyMessages(sender, rows, baseUrl) {
+  let sent = 0;
+  try {
+    const list = (rows || []).filter((row) => row?.recipient_id);
+    const people = new Map((await findAccountsByIds(list.flatMap((row) => [row.recipient_id, row.about_student_id]))).map((row) => [row.id, row]));
+    await runPool(list, async (row) => {
+      const recipient = people.get(row.recipient_id);
+      if (!recipient || limits.batchMailBySender.isBlocked(sender.id)) return { ok: false };
+      limits.batchMailBySender.fail(sender.id);
+      try {
+        const about = row.audience === "parent" ? people.get(row.about_student_id)?.display_name || "" : "";
+        const result = await sendMail(classMessageMail({ to: recipient.email, sender: { displayName: sender.display_name, role: sender.role, email: sender.email }, subject: row.subject, body: row.body, aboutStudentName: about, url: pathUrl(baseUrl, "/platform?page=connections") }));
+        if (result.delivered) sent += 1;
+      } catch (error) {
+        console.warn("[accounts] could not send the message email:", error?.message || error);
+      }
+      return { ok: true };
+    }, { concurrency: 5 });
+  } catch (error) {
+    console.warn("[accounts] could not send the message emails:", error?.message || error);
   }
   return { sent };
 }

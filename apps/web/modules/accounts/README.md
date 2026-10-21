@@ -53,3 +53,8 @@ in full and uploads by name only (the same rule as `redactTreeForGuardian`); not
 loaded and nothing in the demo or for teachers/parents), `VisibilityChips` (🔒 Only you · 👀 Teacher can see · 👥 Shared with Ana on files,
 quizzes and plans: Courses tree, phone Library, plan cards, phone Study), `FolderVisibilityChip`, `PlanAudienceNote` (open plan),
 `ScoreAudienceNote` (quiz/flashcard start and result, Progress pages) and `WhoCanSeeCard` (explainer + legend, Courses and phone Library).
+
+## Classroom tools (teacher)
+
+- `SharingOverviewTab.js` + pure `sharingStatus.js` — "What {name} can see": shared / not shared per topic, folder and file for a student or group, with Share, Assign, Stop sharing, Change date, Send latest version, Edit plan.
+- `MessagesTab.js` + pure `messages.js` — "Messages": write to a student, group or all students and (teachers) their parents; `ReceivedMessages` is the inbox on the Connections page. Server: `lib/messagesRepository.js`, `/api/accounts/messages`.

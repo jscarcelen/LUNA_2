@@ -607,11 +607,11 @@ export async function linkedStudentWorkspaces(viewer, studentId) {
 
 /* ------------------------------------------------------------------ sent / received log */
 
-export async function listSharedItems(accountId, limit = 100) {
+export async function listSharedItems(accountId, limit = 1000) {
   const client = createSupabaseAdminClient();
   const { data, error } = await client
     .from("shared_items")
-    .select("id, mode, item_type, title, sender_id, recipient_id, copy_document_id, due_date, note, created_at, updated_at")
+    .select("id, mode, item_type, title, sender_id, recipient_id, source_document_id, copy_document_id, due_date, note, created_at, updated_at")
     .or(`sender_id.eq.${accountId},recipient_id.eq.${accountId}`)
     .order("updated_at", { ascending: false })
     .limit(limit);
@@ -628,14 +628,16 @@ export async function listSharedItems(accountId, limit = 100) {
     dueSetBy: row.mode === "assign" && row.due_date ? (byId.get(row.sender_id)?.display_name || "") : "",
     note: row.note || "",
     copyDocumentId: row.copy_document_id || "",
+    sourceDocumentId: row.source_document_id || "",
     sentAt: row.updated_at || row.created_at,
     sender: { id: row.sender_id, displayName: byId.get(row.sender_id)?.display_name || "", role: byId.get(row.sender_id)?.role || "" },
     recipient: { id: row.recipient_id, displayName: byId.get(row.recipient_id)?.display_name || "", role: byId.get(row.recipient_id)?.role || "" }
   });
   const rows = (data || []).map(shape);
   return {
+    // The sender sees which of their own documents each copy came from (to change its date or send it again).
     sent: rows.filter((row) => row.sender.id === accountId).map(({ copyDocumentId, ...rest }) => rest),
-    received: rows.filter((row) => row.recipient.id === accountId)
+    received: rows.filter((row) => row.recipient.id === accountId).map(({ sourceDocumentId, ...rest }) => rest)
   };
 }
 

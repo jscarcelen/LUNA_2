@@ -24,6 +24,7 @@ export const LEGAL_MIGRATION = "supabase/migrations/202610130001_legal_complianc
 export const SHARING_MIGRATION = "supabase/migrations/202610060001_network_sharing_grants.sql";
 export const GROUPS_MIGRATION = "supabase/migrations/202610070001_groups_exam_dates.sql";
 export const CLASS_CODES_MIGRATION = "supabase/migrations/202610140001_class_codes.sql";
+export const MESSAGES_MIGRATION = "supabase/migrations/202610210001_class_messages.sql";
 export const DECLINE_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const TOKEN_KINDS = ["verify_email", "reset_password"];
 export const TOKEN_TTL_MS = { verify_email: 48 * 60 * 60 * 1000, reset_password: 60 * 60 * 1000 };
@@ -389,7 +390,7 @@ export function authorizeDelivery({ mode, sender, recipient, link }) {
 
 /* ------------------------------------------------------------------ setup detection */
 
-const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens|share_grants|account_groups|account_group_members|exam_dates|exam_date_plans|class_codes|class_joins)([^a-z_]|$)/;
+const OUR_TABLES = /(^|[^a-z_])(accounts|account_links|shared_items|account_tokens|share_grants|account_groups|account_group_members|exam_dates|exam_date_plans|class_codes|class_joins|class_messages)([^a-z_]|$)/;
 
 /** Did this database error come from the accounts migration not having been applied yet? */
 export function isSetupNeededError(error) {

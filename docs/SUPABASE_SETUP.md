@@ -140,6 +140,7 @@ Supported actions currently mirror the mock route:
 - `202610190001_account_tour_seen.sql` — `accounts.tour_seen_at` (first-run tour remembered per account; feature-detected, falls back to localStorage keyed by account id).
 - `202610190002_activity_drafts.sql` — `activity_drafts` (quiz "Save and finish later": one draft per account and activity, deleted on submit; never counted as an attempt). Feature-detected: `/api/activities/drafts` answers `setupNeeded` and the player keeps drafts in localStorage keyed by account + activity until it is applied.
 - `202610200001_revoke_public_function_execute.sql` — revokes EXECUTE on the four `public` functions from `public`, `anon` and `authenticated` (the service role keeps it). Defence in depth like the RLS migration: the app never calls them through the public API roles. Nothing to feature-detect.
+- `202610210001_class_messages.sql` — `class_messages` (a teacher's / parent's messages to students and, for teachers, their parents: one row per recipient, `batch_id` per send, `read_at` / `hidden_at` / `revoked_at`). Feature-detected: `/api/accounts/messages` answers `setupNeeded` until applied. **Applied to production 2026-10-21.**
 
 ## Function region
 

@@ -18,7 +18,7 @@ import { SendPracticeDialog } from "../modules/accounts/SendPracticeDialog";
 import { SendQuestionsDialog } from "../modules/accounts/SendQuestionsDialog";
 import { accountsApi } from "../modules/accounts/api";
 import { VisibilityProvider } from "../modules/accounts/VisibilityTags";
-import { onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
+import { announceShareFinished, onLeaveRequested, onShareRequested, setSharingAvailable } from "../modules/accounts/shareEvents";
 import { saveBlockToLibrary } from "../modules/template-studio/engine/blocks";
 import { WorkspacePage } from "../modules/workspace";
 import { DashboardPage } from "../modules/dashboard";
@@ -338,7 +338,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
     if (page === "dashboard") return home;
     // The real platform only: connections to other accounts, and a connected student's performance.
     if (account && page === "connections") return <ConnectionsPage account={account} onOpenPage={setPage} />;
-    if (account && page === "students" && role !== "student") return <LinkedStudentsPage account={account} workspaces={workspaces} onOpenPage={setPage} initialGroupId={new URLSearchParams(page.split("?")[1] || "").get("group") || ""} onSendQuestions={(action, student) => setQuestionsTarget({ action, student })} />;
+    if (account && (page === "students" || page.startsWith("students?")) && role !== "student") return <LinkedStudentsPage key={page} account={account} workspaces={workspaces} onOpenPage={setPage} onOpenPlan={({ documentId, subjectId }) => { if (subjectId) setSelectedSubjectId(subjectId); setPage(`plans?open=${documentId}`); }} onOpenDocument={(documentId) => setPage(`workspaces?doc=${documentId}`)} initialGroupId={new URLSearchParams(page.split("?")[1] || "").get("group") || ""} initialTab={new URLSearchParams(page.split("?")[1] || "").get("tab") || ""} onSendQuestions={(action, student) => setQuestionsTarget({ action, student })} />;
     if (page === "performance") {
       return (
         <PerformancePage
@@ -1076,7 +1076,7 @@ export function AppShell({ account: accountProp = null, initialPage = "", tourSe
       <BottomTabs navItems={mobileStudent ? mobileTabs(t) : navItems} page={page} onPageChange={setPage} />
       {openerOverlay}
       {account && shareTarget ? (
-        <ShareDialog account={account} item={shareTarget} onClose={() => setShareTarget(null)} onDone={(message) => setShareNotice(message)} />
+        <ShareDialog account={account} item={shareTarget} onClose={() => { setShareTarget(null); announceShareFinished(); }} onDone={(message) => setShareNotice(message)} />
       ) : null}
       {account && practiceTarget ? (
         <SendPracticeDialog

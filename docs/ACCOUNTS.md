@@ -330,6 +330,28 @@ Migration `supabase/migrations/202610140001_class_codes.sql` (feature-detected; 
 - **Under 14 (school consent)**: when creating a class the teacher can tick "I confirm the school holds parental consent for students under 14 who join with this code". The class then stores `school_consent_at` and `school_consent_by` (the teacher). Only such a class lets a student under 14 sign up with its code and be approved by that confirmation instead of the guardian email (`decideClassJoin` in `lib/classCodes.js`; checked on the server before the account is created, so a wrong or non-consenting code creates nothing). Any other class keeps the guardian email flow (`needsGuardian`). `class_joins.school_consent` records which joins relied on it. The Terms/Privacy texts (EN/ES) say so in the Children section.
 - Routes: `GET/POST /api/accounts/classes` (create, regenerate, enable, disable, join), `POST /api/accounts/classes/check`; sign-up accepts `classCode`. Code: `lib/classCodes.js` (pure, tested in `tests/class-codes.test.ts`), `lib/classesRepository.js`, `modules/accounts/ClassCodeCard.js`.
 
+## Teacher classroom tools: what each class can see, dates, messages
+
+In **My students** (and from each class card on the teacher's Home: "Message this class", "What this class can see") a student or
+a group has two more tabs (the old "Sent" list is folded into the first):
+
+* **What {name} can see** (`modules/accounts/SharingOverviewTab.js`, pure rules in `sharingStatus.js`): every topic, folder and file
+  of the teacher's own workspace with a status: green *Can see / Can edit* (a live grant, also "through" a folder or topic, following
+  `lib/grants.js` coverage), orange *only some of them* (a group) or *Assigned · due …* / *Copy sent* (copies), grey *Not shared*.
+  Filters (Everything / Shared / Not shared) and a search box. Row actions: *Share…* / *Assign…* (the Share dialog opens with the
+  student or group already chosen), *Stop sharing* (revokes the direct grants of those people), *Change date* / *Add a due date* and
+  *Send latest version* on assigned copies (re-assigns through `/api/accounts/share`, which refreshes the copy and keeps the
+  receiver's layer), *Edit plan* / *Open*. `GET /api/accounts/share` now gives the sender `sourceDocumentId` on each sent copy.
+* **Messages** (`MessagesTab.js`; table `class_messages`, migration `supabase/migrations/202610210001_class_messages.sql`, feature
+  detected): write to the student, the group or all your students, and (teachers only) **their parents**: every parent connected to a
+  chosen student by an accepted `parent_student` link, each person once, never named to the teacher. One row per recipient, rows of a
+  send share `batch_id`; the sender sees "Seen by 8 of 12 students · 5 of 9 parents" and can delete a send for everyone. Recipients
+  see it in the bell (`type: "message"`, with the text) and in **Connections → Messages**, and get one email (`classMessageMail`,
+  with the sender's address so a reply goes to them; capped by `batchMailBySender`). Opening the bell or Connections marks them
+  read. A row stays visible only while the sender is still connected to the student and a parent is still that student's parent
+  (`isLiveForRecipient`). Route: `GET/POST /api/accounts/messages` (`send`, `delete`, `hide`, `read`); repository
+  `lib/messagesRepository.js`; pure rules `modules/accounts/messages.js`.
+
 ## Not done yet
 
 * SMS verification of the phone number (needs an SMS provider; the column is ready), email deliverability (SPF/DKIM/DMARC

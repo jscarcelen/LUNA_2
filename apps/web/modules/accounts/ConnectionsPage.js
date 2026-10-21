@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { accountsApi, roleLabel } from "./api";
 import { ClassCodeCard } from "./ClassCodeCard";
+import { ReceivedMessages } from "./MessagesTab";
 import { SHARING_MIGRATION, SetupNotice } from "./SetupNotice";
 import { kindExposesPerformance, relationLabel } from "./shared";
 import { card, chip, dangerBtn, field, ghostBtn, kicker, primaryBtn } from "./ui";
@@ -95,6 +96,7 @@ export function ConnectionsPage({ account, onOpenPage }) {
 
   return (
     <section className="tw-scope grid gap-3">
+      <ReceivedMessages />
       <ClassCodeCard account={account} onChanged={load} />
       <div className={`${card} p-5`}>
         <p className={kicker}>{t("people.conn.build")}</p>

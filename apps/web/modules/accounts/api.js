@@ -76,7 +76,13 @@ export const accountsApi = {
   cancelExamDate: (batchId) => post("/api/accounts/exam-dates", { action: "cancel", batchId }),
   dismissExamDate: (examDateId) => post("/api/accounts/exam-dates", { action: "dismiss", examDateId }),
   restoreExamDate: (examDateId) => post("/api/accounts/exam-dates", { action: "restore", examDateId }),
-  linkPlanToExamDate: (examDateId, planDocumentId) => post("/api/accounts/exam-dates", { action: "link", examDateId, planDocumentId })
+  linkPlanToExamDate: (examDateId, planDocumentId) => post("/api/accounts/exam-dates", { action: "link", examDateId, planDocumentId }),
+  // messages (teacher / parent write to students and their parents; everyone reads what was sent to them)
+  messages: () => call("/api/accounts/messages"),
+  sendMessage: (payload) => post("/api/accounts/messages", { action: "send", ...payload }),
+  deleteMessage: (batchId) => post("/api/accounts/messages", { action: "delete", batchId }),
+  hideMessage: (messageId) => post("/api/accounts/messages", { action: "hide", messageId }),
+  readMessages: () => post("/api/accounts/messages", { action: "read" })
 };
 
 export const ROLE_LABEL = { student: "Student", teacher: "Teacher", parent: "Parent" };

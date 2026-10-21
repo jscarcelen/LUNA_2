@@ -10,6 +10,27 @@
   and parents; the Progress pages say the same. A "Who can see my things?" card explains it with a legend.
 - `modules/accounts/visibility.js` + `VisibilityTags.js`; no server or database change.
 
+## 2026-10-21 (teacher classroom tools)
+
+- **What each class / student can see.** My students has a "What {name} can see" tab for a student or group: every topic,
+  folder and file of the teacher's workspace marked green (can see / can edit, also through a folder or topic), orange (only
+  some of the group, or an assigned copy with its due date) or grey (not shared), with Share / Assign / Stop sharing right on
+  the row. Pure coverage rules in `modules/accounts/sharingStatus.js` (tested).
+- **Dates and plans.** Assigned work shows its due date on the row with *Change date* and *Send latest version* (re-assigns,
+  keeping the student's ticks and notes); plans have *Edit plan*. The Study plans tab points there.
+- **Messages to students and parents.** New Messages tab (student, group or all students; teachers can include parents, who
+  are reached through their child and never named). Bell + Connections inbox + one email each; "seen by" counts; delete for
+  everyone. Table `class_messages` (migration `202610210001`, applied).
+- Fixed `students?group=…` links from the teacher Home (they opened nothing); `students?tab=messages|access` opens a tab.
+## 2026-10-21 (workspace gallery view)
+
+- Courses page (`modules/workspace/ui/WorkspaceBrowser.js`) has a **List / Gallery** switch next to the folder title,
+  remembered per browser (`localStorage` `luna.workspace.view`; the list stays the default).
+- Gallery: every top-level folder is a big coloured tile (subject colour, or a stable colour from the palette when it
+  still has the default); opening one shows its folders as tiles and its documents as cards, one level at a time, with a
+  clickable path back. Same data, filters, ⋯ menus, checkboxes, drag and drop and upload target as the tree; no new
+  requests (it reads the tree already loaded).
+
 ## 2026-10-20 (security pass before the school rollout)
 
 - **Logged-out requests could reach any account's items by id.** The public demo (no session, or a logged-in browser whose

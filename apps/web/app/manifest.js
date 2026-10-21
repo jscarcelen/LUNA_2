@@ -1,11 +1,14 @@
-/** Lets phones install Luna to the home screen and open it like an app (no browser bars). */
+/**
+ * Lets phones install Luna to the home screen and open it like an app (no browser bars). The app opens
+ * on /platform, not the landing page: logged in goes to Home, logged out is sent to /login.
+ */
 export default function manifest() {
   return {
     name: "LUNA",
     short_name: "LUNA",
     description: "Study smarter: your material, AI agents, study plans and progress in one place.",
     id: "/",
-    start_url: "/",
+    start_url: "/platform",
     scope: "/",
     lang: "en",
     categories: ["education"],
